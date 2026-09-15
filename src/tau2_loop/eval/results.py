@@ -206,8 +206,9 @@ def _ratio(flags: list[bool]) -> str:
 
 def _sim_error(sim: Any) -> str | None:
     reason = str(getattr(sim.termination_reason, "value", sim.termination_reason))
-    if reason in {"agent_error", "user_error", "too_many_errors", "max_steps", "timeout"}:
+    info = getattr(sim, "info", None) or {}
+    if isinstance(info, dict) and info.get("error"):
+        return f"{reason}: {str(info['error'])[:160]}"
+    if reason not in {"agent_stop", "user_stop"}:
         return reason
-    if sim.reward_info is not None and sim.reward_info.info and "error" in sim.reward_info.info:
-        return str(sim.reward_info.info["error"])[:200]
     return None

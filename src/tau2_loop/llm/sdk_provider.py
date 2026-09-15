@@ -77,7 +77,7 @@ async def _query(system_prompt: str, user_prompt: str, model: str, effort: str) 
         tools=[],  # no built-in tools: the model can only answer
         allowed_tools=[],
         permission_mode="bypassPermissions",
-        max_turns=1,
+        max_turns=4,  # one reply; headroom because the CLI has ended a tool-less reply as 'max turns (1)'
         cwd=str(cwd),
         env=subscription_env(),
         setting_sources=[],
@@ -122,8 +122,8 @@ def run_query(system_prompt: str, user_prompt: str, model: str, effort: str = EF
             last = SdkResult("", 0, 0, None, 0, None, error=f"{type(e).__name__}: {e}"[:500])
         finally:
             loop.close()
-        if last.error is None and last.text:
-            return last
+        if last.text:
+            return last  # a reply came back; an error next to it (e.g. a max-turns note) is recorded, not retried
         if attempt < RETRIES - 1:
             time.sleep(RETRY_WAIT_S[attempt])
     assert last is not None
