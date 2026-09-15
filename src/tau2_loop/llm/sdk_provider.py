@@ -185,6 +185,9 @@ def register() -> None:
     with _registered:
         if _is_registered:
             return
+        litellm.suppress_debug_info = (
+            True  # the cost lookup fails on our model id; tau2 records 0.0
+        )
         handler = ClaudeSdkProvider()
         existing = [m for m in (litellm.custom_provider_map or []) if m.get("provider") != PROVIDER]
         litellm.custom_provider_map = [*existing, {"provider": PROVIDER, "custom_handler": handler}]
