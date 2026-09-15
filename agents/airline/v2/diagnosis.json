@@ -1,0 +1,128 @@
+{
+  "diagnoses": [
+    {
+      "task_id": "24",
+      "symptom": "Agent believed 2024-05-24/25 flights were already flown (compared against real-world 2026-09-15) and transferred to a human instead of cancelling-ineligible-and-booking as expected.",
+      "root_cause": "Agent used a real-world notion of 'today' instead of the policy's stated current time (2024-05-15).",
+      "surface": "both",
+      "change": "Kept v1's current-time grounding instruction in system.md plus a helper.py extra_context reminder restating the policy's exact current-time line.",
+      "verified_in_session": true,
+      "verification": "This exact change already fixed task 24 in cycle 1 (v0->v1); reused verbatim here. Ran `uv run python -c` to confirm helper.extra_context() extracts '2024-05-15 15:00:00 EST' from data/tasks/airline.json's policy."
+    },
+    {
+      "task_id": "22",
+      "symptom": "Agent claimed a basic-economy cabin upgrade was impossible because it judged the flight already flown by real-world date.",
+      "root_cause": "Same real-world-date substitution bug as task 24.",
+      "surface": "both",
+      "change": "Same current-time grounding fix as task 24.",
+      "verified_in_session": true,
+      "verification": "Reused the change that already fixed task 22 in cycle 1; verified the reminder text is generated correctly (see task 24 verification)."
+    },
+    {
+      "task_id": "11",
+      "symptom": "Agent transferred to a human instead of downgrading the reservation to basic economy, again citing 'flight already flown' based on real-world date.",
+      "root_cause": "Same real-world-date substitution bug.",
+      "surface": "both",
+      "change": "Same current-time grounding fix as task 24.",
+      "verified_in_session": true,
+      "verification": "Reused the change that already fixed task 11 in cycle 1."
+    },
+    {
+      "task_id": "44",
+      "symptom": "Agent said flight-duration/layover data was unavailable and asked to transfer, instead of using search tools to compute durations.",
+      "root_cause": "Agent treated schedule/duration questions as unanswerable rather than deriving them from search_direct_flight/search_onestop_flight/get_reservation_details plus calculate.",
+      "surface": "system.md",
+      "change": "Kept v1's 'DO NOT GIVE UP TOO EARLY' instruction requiring the agent to retrieve schedule times via search tools and compute durations before ever considering a transfer.",
+      "verified_in_session": true,
+      "verification": "This exact instruction already fixed task 44 in cycle 1; reused verbatim."
+    },
+    {
+      "task_id": "39",
+      "symptom": "Agent checked only 1 of 7 reservations, wrongly declared it already-flown, and transferred instead of iterating all reservations and cancelling only the eligible ones.",
+      "root_cause": "Two stacked bugs: (1) real-world-date substitution (fixed by the date-grounding instruction) and (2) the agent stopped after checking a single reservation instead of retrieving get_reservation_details for every id in the user's reservation list, so it never reached the per-reservation eligibility policy at all. Bug (2) is why the date fix alone (tried in cycle 1) did not fix this task.",
+      "surface": "system.md",
+      "change": "Added a new instruction requiring get_reservation_details to be called on every reservation id from get_user_details before concluding anything, whenever the request could span multiple reservations (e.g. 'cancel all my flights').",
+      "verified_in_session": false,
+      "verification": "Not run in a simulation (not permitted); reasoning verified against the transcript, which shows only reservation 8C8K4E was fetched before the agent transferred, while the gold trace fetches all 7."
+    },
+    {
+      "task_id": "14",
+      "symptom": "Agent falsely told the user it could not check gift card/certificate balances ('you may need to contact your bank'), and later never itself stated the $327/$1000/$1786 totals required by COMMUNICATE — the user supplied the sums and the agent merely agreed.",
+      "root_cause": "Agent did not recognize that get_user_details' payment_methods field already contains every balance, and had no instruction to proactively state summed totals itself rather than passively confirming the user's own arithmetic. Compounded by the real-world-date bug causing a transfer before payment was ever discussed.",
+      "surface": "system.md",
+      "change": "Added an instruction stating balances are always available from get_user_details and must never be described as unavailable, plus a requirement to state individual AND summed totals for multiple gift cards/certificates in the agent's own words; kept the date-grounding fix to stop the erroneous transfer.",
+      "verified_in_session": false,
+      "verification": "Not run in a simulation; reasoning verified against the transcript line 'I don't have the ability to check balances on gift cards and certificates' despite get_user_details later returning exactly those balances."
+    },
+    {
+      "task_id": "25",
+      "symptom": "Agent believed the original flight date (2024-05-17) had passed (real-world date bug), asked the user for new dates, then searched many future dates that returned no flights, ending the conversation out of scope.",
+      "root_cause": "Real-world-date substitution bug: 2024-05-17 is after the policy's current time (2024-05-15) and should have been treated as bookable immediately.",
+      "surface": "both",
+      "change": "Same current-time grounding fix as task 24; no task-specific payment logic was hard-coded since the certificate-threshold rule is scenario-specific instruction from the user, not policy, and must be followed generically (covered by the new 'follow the user's payment instructions exactly' rule).",
+      "verified_in_session": false,
+      "verification": "Not run in a simulation; reasoning verified against the transcript's explicit 'today is September 15, 2026' claim about a 2024-05-17 flight."
+    },
+    {
+      "task_id": "23",
+      "symptom": "Agent again used the real-world date to declare the reservation's flights already flown, then failed to state the required $327/$1000/$1286 totals itself and ended the call once it (wrongly) believed there were no other reservations to modify.",
+      "root_cause": "Same real-world-date substitution bug plus the same 'let the user state the totals' gap as task 14.",
+      "surface": "system.md",
+      "change": "Same date-grounding fix plus the new balances/summed-totals instruction from task 14.",
+      "verified_in_session": false,
+      "verification": "Not run in a simulation; reasoning verified against the transcript where the user, not the agent, states '$327 in gift cards... $1,000 in travel certificates' and the agent merely says 'You're correct.'"
+    }
+  ],
+  "prompt_diff_summary": "Kept v1's two instruction blocks (current-time grounding, and search-before-giving-up on durations) verbatim, and added three new instruction blocks: (1) balances are always readable from get_user_details and multi-card sums must be stated by the agent itself, (2) get_reservation_details must be called on every reservation id from get_user_details before concluding anything spans multiple reservations, (3) follow the user's explicit payment-split instructions exactly and execute the confirmed action on the very next turn instead of asking for confirmation twice; also appended one sentence to the date-grounding block telling the agent to fold a matched-record finding and its policy consequence into a single message instead of spending an extra turn only confirming which record it found, to avoid the turn-budget regression that broke task 19 in v1.",
+  "helper_diff_summary": "Unchanged from v1: extra_context(policy) extracts the policy's 'The current time is ...' sentence via regex and re-appends it as a reminder block at the end of the system prompt.",
+  "expected_to_fix": ["24", "22", "11", "44", "39", "14", "25", "23"],
+  "risks": [
+    "Task 19 regressed in v1 because an extra confirmation turn ('is this the correct reservation?') pushed the final cancel_reservation call past the point where the simulated user said ###STOP###. The new sentence added to the date-grounding block explicitly tells the agent to fold the matched-record statement and policy consequence into one message instead of asking a separate confirmation question, which should restore v0's single-message pattern for that task; risk remains if the model still asks an extra question for other reasons.",
+    "The new 'call get_reservation_details on every reservation id' rule could add tool calls (and turns) to tasks that only need one reservation, potentially slowing down simple single-reservation flows; the instruction is scoped to only trigger when the request could span multiple reservations or the matching reservation is not yet certain, to limit this to the cases that actually need it.",
+    "The new balances/summed-totals rule and payment-instructions rule are generic and do not reference any task's specific numbers, so they should generalize to the held-out test split's different customers without overfitting."
+  ],
+  "changes": [
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — WHAT \"TODAY\" MEANS:",
+      "what": "Reused v1's current-time grounding block verbatim, and appended one new sentence instructing the agent to state a matched record and its policy consequence in the same message instead of spending an extra turn only confirming which record it found.",
+      "why": "This block already fixed tasks 11/22/24 in cycle 1; the appended sentence targets the exact turn-budget mechanism that made this same addition break task 19 (extra 'is this the correct reservation?' turn pushed the cancel_reservation call past the user's ###STOP###).",
+      "task_ids": ["24", "22", "11", "39", "14", "25", "23"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — DO NOT GIVE UP TOO EARLY:",
+      "what": "Reused v1's instruction verbatim requiring the agent to retrieve schedule/duration data with search tools and calculate instead of claiming it is unavailable.",
+      "why": "This exact block already fixed task 44 in cycle 1 (agent had said duration info was unavailable and offered to transfer).",
+      "task_ids": ["44"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — PAYMENT METHOD BALANCES ARE ALREADY AVAILABLE TO YOU:",
+      "what": "New block stating get_user_details' payment_methods already contains every balance, forbidding claims that balances are unavailable, and requiring the agent itself to state summed totals for multiple gift cards/certificates.",
+      "why": "Task 14 transcript: agent said 'I don't have the ability to check balances... you may need to contact your bank' despite get_user_details later returning exactly those balances; tasks 14 and 23 both failed COMMUNICATE checks because the user, not the agent, stated the required $327/$1000 sums.",
+      "task_ids": ["14", "23"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — CHECK EVERY RESERVATION BEFORE YOU CONCLUDE:",
+      "what": "New block requiring get_reservation_details to be called on every reservation id returned by get_user_details before deciding anything, whenever the request could span multiple reservations or the matching one isn't yet certain.",
+      "why": "Task 39 transcript: agent fetched only reservation 8C8K4E out of 7 reservations, wrongly concluded it was already flown, and transferred, never reaching the 6 other reservations the gold trace checks (including the 2 it should have cancelled).",
+      "task_ids": ["39"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — FOLLOW THE USER'S PAYMENT INSTRUCTIONS EXACTLY:",
+      "what": "New block requiring the agent to follow user-specified payment-split rules (order of methods, thresholds, one-certificate-per-reservation) exactly using the calculate tool, and to execute a confirmed action on the very next turn instead of asking for confirmation a second time.",
+      "why": "Task 25 required an unusual certificate-vs-gift-card threshold rule stated only by the user; task 23 required a per-passenger certificate split across three separate bookings. Neither rule is safe to hard-code since the test split has different customers, so the fix is a generic 'follow the user's explicit payment instructions' rule.",
+      "task_ids": ["25", "23"]
+    },
+    {
+      "file": "helper.py",
+      "anchor": "def extra_context(policy: str) -> str:",
+      "what": "Kept v1's extra_context hook unchanged, which re-appends the policy's exact current-time sentence as a reminder at the end of the system prompt.",
+      "why": "This hook was already present in the held v1 challenger and did not contribute to v1's one regression (task 19, traced to system.md's added confirmation turn, not to this reminder); no reason to change it.",
+      "task_ids": ["24", "22", "11", "39", "14", "25", "23"]
+    }
+  ]
+}

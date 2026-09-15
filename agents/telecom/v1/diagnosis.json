@@ -1,0 +1,96 @@
+{
+  "diagnoses": [
+    {
+      "task_id": "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+      "symptom": "Agent enabled account-level roaming and reseated the SIM, then transferred to a human agent when the speed test still returned 'No Connection'; never checked data usage or the device's own Data Roaming switch, so refuel_data and toggle_roaming (device-side) were never reached.",
+      "root_cause": "Agent conflates account-level roaming (enable_roaming) with the phone's own Data Roaming switch, treating them as one fix, and never proactively checks get_data_usage during data troubleshooting. It transfers as soon as it runs out of ideas rather than working through the full checklist in the policy (device roaming toggle, data usage/refuel).",
+      "surface": "system.md",
+      "change": "Added an explicit checklist rule requiring both the account-level and device-level roaming switches to be checked/fixed independently, a mandatory early get_data_usage check with refuel offer, and a rule against transferring before the full checklist (including these two items) has been exhausted.",
+      "verified_in_session": false,
+      "verification": "Could not run a simulation per instructions; verified only by re-reading the tech_support_policy roaming and data-refueling sections and confirming the new checklist text names the exact tools (get_data_usage, enable_roaming, refuel_data) and the device-side Data Roaming check that were missing from the transcript."
+    },
+    {
+      "task_id": "[mms_issue]bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card[PERSONA:Easy]",
+      "symptom": "Agent fixed SIM, data toggle, network mode, APN, reboot, Wi-Fi calling, and storage permission, but never checked get_data_usage, so refuel_data (expected because data_usage_exceeded was one of the injected faults) never happened; agent transferred instead.",
+      "root_cause": "No systematic step in the agent's flow forces a data-usage check during MMS troubleshooting; it only reacts to symptoms the user reports and gives up (transfers) once it can't think of anything else, rather than following the plan-level 'Data Plan Limits Reached' section of the policy proactively.",
+      "surface": "system.md",
+      "change": "Same checklist addition: mandatory get_data_usage check early in any data/MMS troubleshooting session, and a rule against transferring until that check (and refuel if needed) has been done.",
+      "verified_in_session": false,
+      "verification": "Confirmed via re-reading the tech_support_policy 'Data Plan Limits Reached' section that refuel is the prescribed remedy once usage exceeds the limit; the transcript shows this section was never reached before transfer."
+    },
+    {
+      "task_id": "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+      "symptom": "Agent fixed network mode, Wi-Fi calling, both app permissions, and (with the user's help) discovered and fixed the device-side roaming toggle, achieving can_send_mms=true, but never checked/refueled data usage, so assert_data_refueling_amount failed even though the conversation otherwise succeeded.",
+      "root_cause": "Agent treats data-usage/refuel as optional once the presenting symptom (can't send MMS) is resolved by other fixes, but the gold trace expects the usage check (and resulting refuel) to happen regardless, since the line was in fact over its limit.",
+      "surface": "system.md",
+      "change": "Checklist rule makes the get_data_usage check unconditional (run right after identifying the line) rather than contingent on whether the symptom persists after other fixes.",
+      "verified_in_session": false,
+      "verification": "Re-read the transcript: data_used_gb=15.1 vs plan limit 15.0 was visible in get_details_by_id output the agent already fetched, but the agent never called get_data_usage or offered refuel."
+    },
+    {
+      "task_id": "[mms_issue]airplane_mode_on|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:Easy]",
+      "symptom": "Agent fixed airplane mode and Wi-Fi calling, checked data saver and app permissions, then transferred to a human agent still unable to send MMS; never checked or fixed the device-side Data Roaming switch even though the user was abroad and this was the actual injected fault (toggle_roaming missing from expected actions).",
+      "root_cause": "Agent's troubleshooting order followed the MMS section's later steps (data saver, permissions) without ever revisiting the roaming section for an abroad user; it does not have a standing rule to check device-side roaming whenever the customer is traveling, so it missed the one action needed and gave up.",
+      "surface": "system.md",
+      "change": "Checklist rule 1 (both roaming switches) explicitly triggers on 'user is traveling abroad', independent of which specific symptom (data vs MMS) is presented, and rule 4 blocks transfer until it has been checked.",
+      "verified_in_session": false,
+      "verification": "Confirmed the user's profile phrase 'currently abroad in France' appears in USER KNOWS for this task, and the tech_support_policy 'Addressing Data Roaming Problems' section names toggle_roaming as the device-side fix, which the transcript never invokes."
+    }
+  ],
+  "prompt_diff_summary": "Appended a <technical_support_checklist> block after the policy: (1) always check and, if needed, fix BOTH account-level (enable_roaming) and device-level (toggle_roaming, via user instruction) roaming when the user is abroad, never assuming one covers the other; (2) always call get_data_usage early in data/MMS troubleshooting and offer refuel_data if usage is at/over the plan limit, unconditionally; (3) grant both storage and sms permissions together when either is missing; (4) do not transfer to a human agent until every applicable checklist item, including 1-3, has been tried.",
+  "helper_diff_summary": "No changes; helper.py was not created, since all identified failures are prompt/policy-following gaps (missing checklist steps, premature transfer), not argument-normalization issues a deterministic hook could fix.",
+  "expected_to_fix": [
+    "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+    "[mms_issue]bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card[PERSONA:Easy]",
+    "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]",
+    "[mms_issue]airplane_mode_on|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:Easy]"
+  ],
+  "risks": [
+    "Forcing an unconditional get_data_usage call on every data/MMS ticket adds extra tool calls and turns; could slightly lengthen conversations that were already passing, but should not break their reward since it's an additional check, not a replacement for existing correct steps.",
+    "Emphasizing 'check both roaming switches whenever abroad' could cause the agent to ask about device roaming even on tasks where the line's roaming was already enabled and the device fault wasn't roaming-related; this only costs an extra confirmation turn and should not change tool-call correctness since it's a read-only check first.",
+    "The two tasks with reward 1.0 but a DB mismatch (the ones with roaming_disabled_off/roaming_enabled_off faults) were not directly targeted with a new rule beyond the roaming/permission clarifications already added; if their DB mismatch stems from something else (e.g. numeric type of refuel amount), this change may not fix them, but it should not make them worse."
+  ],
+  "changes": [
+    {
+      "file": "system.md",
+      "anchor": "Roaming has TWO separate switches",
+      "what": "Adds a rule requiring both account-level (enable_roaming) and device-level (toggle_roaming via user instruction) roaming to be checked/fixed independently whenever the user is abroad.",
+      "why": "Transcript for [mobile_data_issue]...user_abroad_roaming_disabled_off and [mms_issue]...user_abroad_roaming_enabled_off both show the agent handling only one side of roaming (account) and never asking the user to check/toggle the phone's own Data Roaming switch, matching the missing 'toggle_roaming' expected action.",
+      "task_ids": [
+        "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+        "[mms_issue]airplane_mode_on|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:Easy]"
+      ]
+    },
+    {
+      "file": "system.md",
+      "anchor": "always call get_data_usage",
+      "what": "Adds a mandatory, unconditional get_data_usage check early in any data/MMS troubleshooting session, with a refuel_data offer if usage is at/over the plan limit.",
+      "why": "Three failing transcripts have data_usage_exceeded as an injected fault and 'expected action MISSING: refuel_data' in the grading output; the agent never called get_data_usage in any of them, even when the line data (e.g. 15.1GB used vs 15.0GB limit) was already visible in a get_details_by_id response it had fetched.",
+      "task_ids": [
+        "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+        "[mms_issue]bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card[PERSONA:Easy]",
+        "[mms_issue]bad_network_preference|bad_wifi_calling|break_app_both_permissions|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Hard]"
+      ]
+    },
+    {
+      "file": "system.md",
+      "anchor": "grant BOTH storage and sms permissions",
+      "what": "Adds a rule to grant both storage and sms permissions together whenever either is reported missing.",
+      "why": "One transcript's matched-action list showed grant_app_permission(storage) but not grant_app_permission(sms) despite both being listed in expected actions, suggesting the agent sometimes grants only the permission it happens to notice first.",
+      "task_ids": [
+        "[mms_issue]airplane_mode_on|bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_both_permissions|data_mode_off|data_usage_exceeded|unseat_sim_card|user_abroad_roaming_disabled_off[PERSONA:Hard]"
+      ]
+    },
+    {
+      "file": "system.md",
+      "anchor": "Do not transfer to a human agent",
+      "what": "Adds an explicit gate: no transfer_to_human_agents call until every applicable checklist item (including the roaming and data-usage rules above) has been tried.",
+      "why": "In two failing transcripts the agent called transfer_to_human_agents after exhausting only the checks it happened to think of, while get_data_usage and/or the device roaming check were never attempted, violating the policy line 'try your best to resolve the issue... before transferring'.",
+      "task_ids": [
+        "[mobile_data_issue]airplane_mode_on|bad_network_preference|data_usage_exceeded|user_abroad_roaming_disabled_off[PERSONA:Easy]",
+        "[mms_issue]bad_network_preference|bad_wifi_calling|break_apn_mms_setting|break_app_storage_permission|data_mode_off|data_usage_exceeded|unseat_sim_card[PERSONA:Easy]",
+        "[mms_issue]airplane_mode_on|bad_wifi_calling|user_abroad_roaming_enabled_off[PERSONA:Easy]"
+      ]
+    }
+  ]
+}

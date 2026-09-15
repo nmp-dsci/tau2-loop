@@ -39,12 +39,35 @@ p < 0.05); a promotion runs the test split once, for the record.
 |---|---|
 | M0 scaffold, splits, viewer shell | done |
 | M1 subscription adapter on mock | done — 8/10 on mock with all three roles live |
-| M2 v0 baselines on train, all four domains | running |
-| M3 loop cycles | — |
-| M4 holdout · M4b findings page | — |
+| M2 v0 baselines on train, all four domains | done — gate re-scores 80/80 |
+| M3 loop cycles | done — airline ×2, retail, telecom; banking not run (subscription window) |
+| M4 holdout · M4b findings page | done — `.lavish/s01_build-findings.html` |
 | M5 keyless demo image on App Runner | image builds and runs locally; deploy needs the author's one-off bootstrap |
 
-Results tables land here at M4, every number with its denominator and its run folder.
+## Results
+
+Haiku 4.5 for agent, user simulator and judge; one trial; concurrency 3; seed 300;
+lean harness. Train is the 20-task split the optimiser sees; test is the 20 it
+never sees, run once on promotion. p is the one-sided exact McNemar test on the
+paired train tasks; promote at p < 0.05.
+
+| Domain | v0 train | Challenger train | Fixed / broke | p | Verdict | Champion test |
+|---|---|---|---|---|---|---|
+| airline | 12/20 `20260915T075151Z_airline_v0_train` | v1 15/20 `20260915T124751Z_airline_v1_train` · v2 16/20 `20260915T132148Z_airline_v2_train` | 4/1 · 4/0 | 0.188 · 0.062 | hold ×2, v0 champion | — |
+| retail | 14/20 `20260915T080153Z_retail_v0_train` | v1 16/20 `20260915T172708Z_retail_v1_train` | 3/1 | 0.312 | hold, v0 champion | — |
+| telecom | 14/20 `20260915T081700Z_telecom_v0_train` | v1 19/20 `20260915T174430Z_telecom_v1_train` | 5/0 | 0.031 | **promote**, v1 champion | **19/20** `20260915T181840Z_telecom_v1_test` |
+| banking_knowledge | 4/20 `20260915T121036Z_banking_knowledge_v0_train` | — | — | — | no cycle yet | — |
+
+Every run folder under `runs/` holds `run.json`, `results.jsonl`, one trace per
+conversation and the agent version it ran; `tau2loop gate` replays them through
+tau2's evaluators. Per-domain ledgers are in `loop/<domain>/ledger.jsonl`.
+
+Two harness findings worth knowing before reading the traces: the Claude CLI
+tells every session the real date and the account's email, and Haiku used both
+inside the simulation (airline v0 refused "already flown" 2024 flights; retail
+v0 looked customers up by the account address). Replies and run folders are now
+redacted (`tau2_loop.llm.redact`); the date is handled in the airline prompts.
+Details and next steps: `.lavish/s01_build-findings.html`.
 
 ## Setup
 
