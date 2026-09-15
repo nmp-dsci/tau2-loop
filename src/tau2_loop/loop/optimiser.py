@@ -38,7 +38,14 @@ from tau2_loop.agent.versions import (
 from tau2_loop.config import AGENTS_DIR, ROOT, RUNS_DIR
 from tau2_loop.data.splits import read_task_extract
 from tau2_loop.eval.results import TaskResult
-from tau2_loop.llm import EFFORT, Effort, require_live, resolve_model, subscription_env
+from tau2_loop.llm import (
+    EFFORT,
+    Effort,
+    redact_tree,
+    require_live,
+    resolve_model,
+    subscription_env,
+)
 from tau2_loop.loop.ledger import read_ledger, render_history
 
 MAX_TURNS = 120
@@ -446,6 +453,7 @@ async def run_optimiser(
     (new_dir / "optimiser_transcript.json").write_text(
         json.dumps(out.transcript, ensure_ascii=False, indent=1)
     )
+    redact_tree(new_dir)  # the optimiser quotes traces; the account email must not land in agents/
     return out
 
 

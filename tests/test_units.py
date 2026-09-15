@@ -209,3 +209,19 @@ def test_seconds_until_reset_parses_the_cli_message() -> None:
     )  # not a limit msg
     assert seconds_until_reset("session limit reached", now) == 15 * 60
     assert seconds_until_reset("ProcessError: boom", now) is None
+
+
+def test_redaction_removes_the_account_email(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI names its account in every session; nothing we write may carry the address."""
+    import tau2_loop.llm as llm
+
+    monkeypatch.setattr(llm, "account_email", lambda: "someone@example.com")
+    assert llm.redact("email someone@example.com please") == f"email {llm.REDACTED_EMAIL} please"
+    (tmp_path / "a.json").write_text('{"x": "someone@example.com"}')
+    (tmp_path / "b.txt").write_text("clean")
+    assert llm.redact_tree(tmp_path) == 1
+    assert "someone" not in (tmp_path / "a.json").read_text()
+    monkeypatch.setattr(llm, "account_email", lambda: "")
+    assert llm.redact("keep@example.com") == "keep@example.com"

@@ -40,7 +40,14 @@ from litellm.types.utils import (
 )
 
 from tau2_loop.config import WORKSPACE_DIR
-from tau2_loop.llm import EFFORT, SDK_PREFIX, require_live, resolve_model, subscription_env
+from tau2_loop.llm import (
+    EFFORT,
+    SDK_PREFIX,
+    redact,
+    require_live,
+    resolve_model,
+    subscription_env,
+)
 from tau2_loop.llm.prompting import Reply, build_prompt, parse_reply
 
 PROVIDER = SDK_PREFIX.rstrip("/")
@@ -108,7 +115,8 @@ async def _query(system_prompt: str, user_prompt: str, model: str, effort: str) 
                 res.error = f"{msg.subtype}: {(msg.errors or [''])[0]}"[:500]
             if not texts and msg.result:
                 texts.append(str(msg.result))
-    res.text = "\n".join(t for t in texts if t).strip()
+    # The CLI names the account in every session; the address must not reach a conversation.
+    res.text = redact("\n".join(t for t in texts if t).strip())
     res.duration_ms = int((time.time() - started) * 1000)
     return res
 

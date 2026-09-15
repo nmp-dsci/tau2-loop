@@ -9,7 +9,9 @@ before any session starts.
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Literal
 
 from tau2_loop.config import settings
@@ -112,6 +114,49 @@ def subscription_env() -> dict[str, str]:
     # would be paid per turn; this switch stops it.
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
     return env
+
+
+REDACTED_EMAIL = "account-email@redacted.invalid"
+
+
+def account_email() -> str:
+    """The subscription account's email, from the CLI's own config; '' when unknown.
+
+    The CLI tells every session whose account it runs under. That sentence
+    reaches the task agent as context, and Haiku on retail v0 used the address
+    as the customer's in 20/20 conversations (`find_user_id_by_email`), which
+    both wasted the first turn and put a real address in every trace.
+    """
+    try:
+        cfg = json.loads((Path.home() / ".claude.json").read_text())
+        return str(cfg.get("oauthAccount", {}).get("emailAddress", "")).strip()
+    except (OSError, ValueError):
+        return ""
+
+
+def redact(text: str) -> str:
+    """Replace the account email wherever a model reply or a file mentions it."""
+    email = account_email()
+    return text.replace(email, REDACTED_EMAIL) if email else text
+
+
+def redact_tree(root: Path) -> int:
+    """Rewrite every text file under `root` that mentions the account email; returns the count."""
+    email = account_email()
+    if not email:
+        return 0
+    n = 0
+    for p in root.rglob("*"):
+        if not p.is_file():
+            continue
+        try:
+            text = p.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        if email in text:
+            p.write_text(text.replace(email, REDACTED_EMAIL))
+            n += 1
+    return n
 
 
 # The harness knobs a run records (`run.json.harness`): DABStep-loop s02 measured

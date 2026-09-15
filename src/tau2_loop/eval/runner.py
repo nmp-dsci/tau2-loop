@@ -30,7 +30,7 @@ from tau2_loop.eval.results import (
     summarise,
     write_results,
 )
-from tau2_loop.llm import HARNESS, sdk_model
+from tau2_loop.llm import HARNESS, redact_tree, sdk_model
 
 console = Console()
 
@@ -217,6 +217,7 @@ def _finish(
     run_dir: Path, meta: RunMeta, results: list[TaskResult], track: bool
 ) -> tuple[RunMeta, list[TaskResult]]:
     write_results(run_dir / "results.jsonl", results)
+    redact_tree(run_dir)  # belt to the provider's braces: nothing under runs/ names the account
     summary = summarise(results)
     meta.finished_at = datetime.now(UTC).isoformat()
     meta.summary = asdict(summary)
