@@ -30,13 +30,20 @@ def rescore_run(run_id: str) -> dict[str, Any]:
         raise FileNotFoundError(f"{run_id}: no tau2_results.json to re-score")
     results = Results.model_validate(json.loads(p.read_text()))
     domain = results.info.environment_info.domain_name
-    env_kwargs: dict[str, Any] = (
-        {"retrieval_variant": "bm25"} if domain == "banking_knowledge" else {}
-    )
     tasks = {t.id: t for t in results.tasks}
     out: dict[str, Any] = {}
     for sim in results.simulations:
         task = tasks[sim.task_id]
+        # The same environment the live evaluation built (banking: retrieval variant,
+        # the task for golden retrieval, the read-log allowlist), else the replay differs.
+        env_kwargs: dict[str, Any] = {}
+        if domain == "banking_knowledge":
+            from tau2.data_model.simulation import TextRunConfig
+            from tau2.runner.build import _build_env_kwargs
+
+            env_kwargs = _build_env_kwargs(
+                TextRunConfig(domain=domain, retrieval_config="bm25"), task
+            )
         recorded = float(sim.reward_info.reward) if sim.reward_info else 0.0
         basis = set(task.evaluation_criteria.reward_basis) if task.evaluation_criteria else set()
         components: dict[str, float] = {}
@@ -68,7 +75,8 @@ def rescore_run(run_id: str) -> dict[str, Any]:
                     reward *= float(ri.reward)
             if RewardType.NL_ASSERTION in basis:
                 nl = sim.reward_info.nl_assertions if sim.reward_info else None
-                nl_reward = 1.0 if nl and all(a.met for a in nl) else 0.0
+                # tau2 scores a task with no assertions to check as 1.0 for this component
+                nl_reward = 1.0 if all(a.met for a in (nl or [])) else 0.0
                 components["nl_assertions(recorded)"] = nl_reward
                 reward *= nl_reward
         key = f"{sim.task_id}#t{int(sim.trial or 0) + 1}"
