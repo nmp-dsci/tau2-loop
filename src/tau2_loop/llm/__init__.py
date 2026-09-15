@@ -107,4 +107,15 @@ def subscription_env() -> dict[str, str]:
     if settings().billing == "subscription":
         env["ANTHROPIC_API_KEY"] = ""
         env["CLAUDECODE"] = ""
+    # DABStep-loop s02: the CLI names every session with a separate Haiku call
+    # (≈1.9k tokens). Here every model call is its own session, so that call
+    # would be paid per turn; this switch stops it.
+    env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
     return env
+
+
+# The harness knobs a run records (`run.json.harness`): DABStep-loop s02 measured
+# a 27k-token prefix of connector tool schemas the CLI inherits from the
+# user-level claude.ai config on every API call unless the session is told to
+# use only the MCP servers it is given. Nothing here touches an agent's files.
+HARNESS = "lean"  # strict MCP, no session-title call

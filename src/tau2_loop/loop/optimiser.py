@@ -379,6 +379,7 @@ async def run_optimiser(
         model=resolve_model(model),
         effort=effort,
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        strict_mcp_config=True,
         permission_mode="bypassPermissions",
         max_turns=MAX_TURNS,
         cwd=str(ROOT),

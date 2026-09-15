@@ -30,7 +30,7 @@ from tau2_loop.eval.results import (
     summarise,
     write_results,
 )
-from tau2_loop.llm import sdk_model
+from tau2_loop.llm import HARNESS, sdk_model
 
 console = Console()
 
@@ -63,6 +63,9 @@ class RunMeta:
     tool_mode: str = "json"
     sampling: str = "cli-default"  # the SDK exposes no temperature; tau2's 0.0 does not apply
     dry_run: bool = False
+    harness: str = (
+        "baseline"  # llm.HARNESS at run time; "baseline" = inherited connector tools + title call
+    )
 
 
 def new_run_id(domain: str, version: AgentVersion, split: str) -> str:
@@ -151,6 +154,7 @@ def run_eval(
         task_ids=ids,
         tool_mode=version.config.tool_mode,
         dry_run=dry_run,
+        harness=HARNESS,
     )
     _write_meta(run_dir, meta)
     (run_dir / "agent").mkdir(exist_ok=True)

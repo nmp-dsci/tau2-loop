@@ -78,6 +78,7 @@ async def _query(system_prompt: str, user_prompt: str, model: str, effort: str) 
         system_prompt=system_prompt,
         tools=[],  # no built-in tools: the model can only answer
         allowed_tools=[],
+        strict_mcp_config=True,  # no inherited connector tools: 27k tokens a call otherwise (s02)
         permission_mode="bypassPermissions",
         max_turns=4,  # one reply; headroom because the CLI has ended a tool-less reply as 'max turns (1)'
         cwd=str(cwd),
