@@ -93,3 +93,8 @@ def test_parse_without_tools_is_verbatim() -> None:
 def test_parse_braces_inside_strings() -> None:
     r = parse_reply('{"content": "use {curly} braces", "tool_calls": []}', True)
     assert r.content == "use {curly} braces"
+
+
+def test_parse_without_tools_unfences_json_for_the_judge() -> None:
+    r = parse_reply('```json\n{"results": [{"metExpectation": true}]}\n```', tools_present=False)
+    assert r.content == '{"results": [{"metExpectation": true}]}'

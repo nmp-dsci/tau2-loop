@@ -140,7 +140,9 @@ def parse_reply(text: str, tools_present: bool) -> Reply:
     """The model's text back into a Reply; a malformed JSON reply becomes a plain message."""
     raw = text.strip()
     if not tools_present:
-        return Reply(content=raw, raw=raw)
+        # A caller that asked for JSON (tau2's NL judge does json.loads on the reply) gets the
+        # object, not a fenced block around it; a plain sentence passes through untouched.
+        return Reply(content=_strip_fences(raw), raw=raw)
     candidate = _strip_fences(raw)
     obj = _first_json_object(candidate)
     if obj is None:
