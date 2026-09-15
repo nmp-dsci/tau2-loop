@@ -178,16 +178,17 @@ pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;backgroun
 <header class="hero"><div class="wrap">
 <p class="label">Plan · nmp-ai-portfolio/tau2-bench · 14 Sep 2026 · design source: project DESIGN.md (Field Guide), ported from DABStep-loop</p>
 <h1>A policy agent on τ²-bench, with a <em>scored</em> self-improving loop</h1>
-<p class="lead">Discovery is done: the benchmark ships every task and every answer key, so honesty comes from a split we keep ourselves and a pass^k number with its denominator. The build reuses DABStep-loop's loop wholesale and changes only what τ²-bench forces: the harness runs the tools, so the agent under test is a registry factory with two editable surfaces.</p>
-<div class="chips"><span class="chip ok">τ³-bench 1.0.1 · HEAD 2174a60</span><span class="chip">python ≥3.12</span><span class="chip">litellm + typer</span><span class="chip">MIT</span><span class="chip warn">retail scored by an LLM judge</span><span class="chip warn">no held-out set</span></div>
+<p class="lead">Discovery is done: the benchmark ships every task and every answer key, so honesty comes from a random 20 / 20 split we cut and commit ourselves, per domain, and a pass^k number with its denominator. The build reuses DABStep-loop's loop wholesale and changes only what τ²-bench forces: the harness runs the tools, so the agent under test is a registry factory with two editable surfaces — and every model call, ours and tau2's, is routed through the Claude subscription.</p>
+<div class="chips"><span class="chip ok">τ³-bench 1.0.1 · HEAD 2174a60</span><span class="chip ok">repo nmp-dsci/tau2-loop · public</span><span class="chip">python ≥3.12</span><span class="chip">4 domains · 20 train / 20 test each</span><span class="chip">MIT</span><span class="chip warn">subscription only — no API keys</span><span class="chip warn">retail scored by an LLM judge</span></div>
+<p class="small" style="margin-top:var(--s4)">Revised 15 Sep 2026 after review: all four scored domains with a random 20 / 20 split (§5), Haiku everywhere on the Claude subscription (§7), repo named <code>tau2-loop</code> (§10). Scope (§13) is still open.</p>
 </div></header>
 
 <section class="blk" id="s1"><div class="wrap">
-<div class="hd"><p class="label">01 · Goal</p><h2>1 · Goal — one command scores a versioned agent on airline, then the loop takes over</h2>
-<p>Same shape as DABStep-loop: <code>make eval</code> writes an immutable run folder with a pass rate, <code>make loop</code> runs one optimiser session that may edit two files, and a statistical gate decides promotion. What this build proves is the loop on the airline <code>train</code> split (30 tasks); the leaderboard run on all 50 × 4 trials comes after and is a separate decision.</p></div>
+<div class="hd"><p class="label">01 · Goal</p><h2>1 · Goal — one command scores a versioned agent per domain, then the loop takes over</h2>
+<p>Same shape as DABStep-loop: <code>make eval DOMAIN=airline</code> writes an immutable run folder with a pass rate, <code>make loop DOMAIN=airline</code> runs one optimiser session that may edit two files, and a statistical gate decides promotion. What this build proves is the loop on our own 20-task <code>train</code> split, in each of the four scored domains; a leaderboard run (all tasks × 4 trials) comes after and is a separate decision.</p></div>
 <div class="kpi">
-<div class="k"><b>5</b><span>domains in the repo: airline, retail, telecom, banking_knowledge, mock (<code>data/tau2/domains/</code>)</span></div>
-<div class="k"><b>30 / 20</b><span>airline train / test split, a partition of the 50 public tasks (<code>split_tasks.json</code>)</span></div>
+<div class="k"><b>4</b><span>scored domains: airline 50, retail 114, telecom 114, banking_knowledge 97 tasks (<code>data/tau2/domains/</code>); mock is the smoke test</span></div>
+<div class="k"><b>20 / 20</b><span>train / test per domain, drawn at random (seed 300) from the public <code>base</code> set and committed to <code>data/splits/</code></span></div>
 <div class="k"><b>84.0%</b><span>best airline pass^1 on the board (Claude Opus 4.5, 50 tasks, 4 trials) — pass^4 70.0%</span></div>
 <div class="k"><b>2</b><span>editable surfaces per agent version: <code>system.md</code>, <code>helper.py</code>; <code>agent.yaml</code> frozen</span></div>
 </div>
@@ -197,18 +198,18 @@ pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;backgroun
 <div class="hd"><p class="label">02 · Discovery</p><h2>2 · Discovery — nothing is held out, so the "test" split is ours to keep honest</h2>
 <p>Every domain ships its tasks with <code>evaluation_criteria</code> (reference actions, NL assertions, env assertions) in the repo. <code>train</code> and <code>test</code> exist for RL work and partition the public <code>base</code> set exactly; the README asks for <code>base</code> on the leaderboard. The board is a PR of your own trajectories to <code>taubench.com</code>, validated by <code>tau2 submit prepare | validate | verify-trajs</code> — self-reported, not graded on a hidden set.</p></div>
 <figure><p class="fig-title">Table · domains, task counts and splits</p>
-<div class="tw"><table><thead><tr><th>domain</th><th>tasks</th><th>train / test</th><th>agent tools</th><th>policy words</th><th>db</th><th>board top pass^1</th></tr></thead><tbody>
+<div class="tw"><table><thead><tr><th>domain</th><th>tasks</th><th>tau2 train / test</th><th>agent tools</th><th>policy words</th><th>db</th><th>board top pass^1</th></tr></thead><tbody>
 <tr class="pro"><td class="sub">airline<span class="path">data/tau2/domains/airline/</span></td><td class="num">50</td><td class="num">30 / 20</td><td class="num">15</td><td class="num">1,313</td><td class="num">db.json 7.0 MB</td><td class="num">84.0 (Opus 4.5)</td></tr>
 <tr><td class="sub">retail<span class="path">data/tau2/domains/retail/</span></td><td class="num">114</td><td class="num">74 / 40</td><td class="num">17</td><td class="num">1,158</td><td class="num">db.json 2.8 MB</td><td class="num">86.2 (Sonnet 4.5)</td></tr>
 <tr><td class="sub">telecom<span class="path">data/tau2/domains/telecom/</span></td><td class="num">114 base · 2,285 full</td><td class="num">74 / 40</td><td class="num">13 + 30 user</td><td class="num">1,025 + 2,686 manual</td><td class="num">db.toml 9.6 KB</td><td class="num">98.2 (Qwen3-Max) — saturated</td></tr>
 <tr><td class="sub">banking_knowledge<span class="path">data/tau2/domains/banking_knowledge/</span></td><td class="num">97</td><td class="num">none (base only)</td><td class="num">20</td><td class="num">built at runtime + 698 docs (2.8 MB)</td><td class="num">db.json 270 KB</td><td class="num">55.2 (Qwen 3.8 Max) — headroom</td></tr>
 <tr><td class="sub">mock<span class="path">data/tau2/domains/mock/</span></td><td class="num">10</td><td class="num">—</td><td class="num">5 + 2 user</td><td class="num">52</td><td class="num">281 B</td><td class="num">—</td></tr>
 </tbody></table></div>
-<figcaption>Airline is small, deterministic to score and under-saturated (84.0 vs 98.2 telecom); it is the loop's home. Source: <code>data/tau2/domains/*/tasks.json</code>, <code>split_tasks.json</code>, <code>web/leaderboard/public/submissions/</code> at HEAD <code>2174a60</code>.</figcaption></figure>
+<figcaption>tau2's own train / test columns are shown for reference only; §5 replaces them with a random 20 / 20 per domain. Telecom is near saturation (98.2), banking has the most headroom (55.2). Source: <code>data/tau2/domains/*/tasks.json</code>, <code>split_tasks.json</code>, <code>web/leaderboard/public/submissions/</code> at HEAD <code>2174a60</code>.</figcaption></figure>
 <div class="grid g3" style="margin-top:var(--s5)">
-<div class="panel card"><p class="label">Train / test</p><h3>Yes, but both are public</h3><p>train ∩ test = ∅ and train ∪ test = base in airline, retail and telecom. We optimise on <code>train</code>, report <code>test</code> only after a promotion, and never open a test trace during a loop cycle.</p></div>
-<div class="panel card"><p class="label">Holdout submission</p><h3>No — a PR of your own runs</h3><p>Leaderboard needs all tasks in a domain, ≥4 trials, same agent and user LLM across domains, <code>base</code> split; any scaffold change is <code>submission_type: custom</code>. Recommended user sim is <code>gpt-5.2</code>.</p></div>
-<div class="panel card"><p class="label">Enough data?</p><h3>30 train tasks × 4 trials = 120 signals</h3><p>DABStep-loop ran on 10 gold tasks. With a Haiku-class agent at roughly 60–70% on airline, expect 9–12 failing tasks per cycle — enough for a diagnosis each cycle, and retail's 74 adds a second domain later.</p></div>
+<div class="panel card"><p class="label">Train / test</p><h3>Yes, but both are public — so we cut our own</h3><p>tau2's <code>train</code> / <code>test</code> partition the public set (airline 30 / 20, retail 74 / 40, telecom 74 / 40; banking has none). We ignore them and draw a random 20 / 20 per domain from <code>base</code>; the remainder is an untouched reserve. Test is opened only after a promotion.</p></div>
+<div class="panel card"><p class="label">Holdout submission</p><h3>No — a PR of your own runs</h3><p>Leaderboard needs all tasks in a domain, ≥4 trials, same agent and user LLM across domains, <code>base</code> split; any scaffold change is <code>submission_type: custom</code>. A Claude user simulator instead of the recommended <code>gpt-5.2</code> makes ours <code>custom</code> regardless.</p></div>
+<div class="panel card"><p class="label">Enough data?</p><h3>20 train tasks × 4 domains = 80 conversations per full cycle</h3><p>DABStep-loop ran on 10 gold tasks. A Haiku agent at roughly 60–70% on airline and retail leaves 6–8 failures per domain per cycle, and banking (board top 55.2%) will fail more than half — enough for a diagnosis every cycle.</p></div>
 </div>
 </div></section>
 
@@ -252,44 +253,45 @@ pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;backgroun
 <ul class="qa">
 <li><b>Tools — supplied by the harness, not by us.</b> Airline exposes 15 <code>@is_tool</code> functions from <code>src/tau2/domains/airline/tools.py</code>; the orchestrator executes them. Our agent emits tool calls, it does not run them. The optimiser therefore cannot add a tool; it can add pre-call checks and state tracking in <code>helper.py</code>.</li>
 <li><b>RAG — not for airline or retail.</b> Stuff the policy. Restructuring the policy (ordering rules, adding a refusal checklist) is the main lever <code>system.md</code> has, and it is exactly what the top custom submissions did.</li>
-<li><b>Banking is the stretch, not the start.</b> Board top is 55.2% pass^1, so it is where a custom retrieval scaffold would be visible — but it needs the <code>knowledge</code> extra, per-task policy building and a retrieval config, and it has no train / test split.</li>
+<li><b>Banking runs with local BM25 retrieval.</b> Board top is 55.2% pass^1, so it is where a scaffold change is most visible. It needs the <code>knowledge</code> extra and a retrieval config; <code>bm25</code> (rank-bm25, no API) is the only one that runs on a subscription, so it is the frozen default in <code>agent.yaml</code>. Its 20 / 20 split is cut from all 97 tasks.</li>
 </ul></div>
 </div>
 </div></section>
 
 <section class="blk" id="s5"><div class="wrap">
-<div class="hd"><p class="label">05 · Domain</p><h2>5 · Domain — airline first, retail second, banking as the stretch</h2>
-<p>The decision is which domain the loop is built and proven on. The three candidates differ on scoring noise, cost per cycle and headroom.</p></div>
-<div class="grid g3">
-<div class="panel card pro"><p class="label">Recommended</p><h3>Airline — 50 tasks, exact scoring</h3><p>Train 30 / test 20. Deterministic DB-hash reward, no judge cost, 1.3k-word policy. Board top 84.0 / 70.0 (pass^1 / pass^4), so a Haiku baseline has visible room. Cheapest cycle.</p><p class="path">data/tau2/domains/airline</p></div>
-<div class="panel card"><p class="label">Second domain</p><h3>Retail — 114 tasks, judged</h3><p>Train 74 / test 40 gives the loop more failures to learn from, but 112 of 114 tasks gate on a gpt-4.1 judge: extra cost and a little variance per cycle. Add once the loop holds on airline to show generalisation.</p><p class="path">data/tau2/domains/retail</p></div>
-<div class="panel card"><p class="label">Stretch</p><h3>Banking knowledge — 97 tasks, RAG</h3><p>Most headroom on the board (55.2 top). Needs retrieval over 698 docs and a per-task policy; no split file, so we would cut our own. Worth a dedicated plan (s02) after airline and retail hold.</p><p class="path">data/tau2/domains/banking_knowledge</p></div>
-</div>
-<form class="q" data-lavish-question="domain" onsubmit="event.preventDefault();const c=new FormData(event.currentTarget).get('domain');const n=event.currentTarget.querySelector('textarea').value.trim();if(c)window.lavish.queuePrompt('Build the loop on the '+c+' domain first.'+(n?' Note: '+n:''),{tag:'choice',text:'Domain: '+c,element:event.currentTarget,data:{question:'domain',answer:c,note:n}});">
-<h3>Which domain does the loop start on?</h3><p class="why">Changes the split sizes, the scoring path and the per-cycle cost in §9.</p>
-<label><input type="radio" name="domain" value="airline" checked><span>Airline (recommended) — 30 train / 20 test, deterministic scoring</span></label>
-<label><input type="radio" name="domain" value="retail"><span>Retail — 74 / 40, LLM-judged, more failures per cycle</span></label>
-<label><input type="radio" name="domain" value="airline then retail in the same build"><span>Airline then retail in this build — prove the loop on airline, run retail once for generalisation</span></label>
-<textarea placeholder="Optional note"></textarea>
-<div class="row"><button class="btn" type="submit">Queue this answer</button></div></form>
+<div class="hd"><p class="label">05 · Domains</p><h2>5 · Domains — all four scored domains, a random 20 / 20 split each, cut once and committed</h2>
+<p>Decided in review: the loop runs on every scored domain, not airline alone. Each domain gets its own split drawn at random from the public <code>base</code> set with a fixed seed, written to <code>data/splits/&lt;domain&gt;.json</code> by <code>make splits</code>, and never regenerated — the file is the record, the seed is only how it was made. Mock (10 tasks) is the keyless smoke test and is never scored.</p></div>
+<figure><p class="fig-title">Table · the split per domain</p>
+<div class="tw"><table><thead><tr><th>domain</th><th>base</th><th>train</th><th>test</th><th>reserve (untouched)</th><th>scoring</th><th>tau2 extras needed</th></tr></thead><tbody>
+<tr><td class="sub">airline<span class="path">data/splits/airline.json</span></td><td class="num">50</td><td class="num">20</td><td class="num">20</td><td class="num">10</td><td class="v-ok">deterministic · DB hash</td><td>—</td></tr>
+<tr><td class="sub">retail<span class="path">data/splits/retail.json</span></td><td class="num">114</td><td class="num">20</td><td class="num">20</td><td class="num">74</td><td class="v-warn">LLM judge · Haiku on subscription</td><td>—</td></tr>
+<tr><td class="sub">telecom<span class="path">data/splits/telecom.json</span></td><td class="num">114</td><td class="num">20</td><td class="num">20</td><td class="num">74</td><td class="v-ok">deterministic · env assertions</td><td>user sim has 30 tools (dual control)</td></tr>
+<tr><td class="sub">banking_knowledge<span class="path">data/splits/banking_knowledge.json</span></td><td class="num">97</td><td class="num">20</td><td class="num">20</td><td class="num">57</td><td class="v-ok">deterministic · DB hash (9 tasks also ACTION)</td><td><code>knowledge</code> extra · <code>--retrieval-config bm25</code></td></tr>
+</tbody></table></div>
+<figcaption>80 train and 80 test conversations across the four domains; the 215-task reserve stays unopened until a leaderboard run. Random with <code>random.Random(300).sample(base_ids, 40)</code>, first 20 train, next 20 test.</figcaption></figure>
+<ul class="qa" style="margin-top:var(--s5)">
+<li><b>Why our own split rather than tau2's?</b> tau2's train / test are fixed lists chosen for RL work, and banking has none. A random draw with a committed seed is reproducible, uniform across domains, and the CI gate can re-derive the file and fail if it was edited by hand.</li>
+<li><b>Why 20 test and not the rest?</b> Test is run after every promotion. Keeping it to 20 keeps a promotion cheap on a subscription quota; the reserve remains available for a final all-tasks run.</li>
+<li><b>One loop or four?</b> Four ledgers, one per domain (<code>loop/&lt;domain&gt;/ledger.jsonl</code>), because the policy and therefore <code>system.md</code> differ per domain. <code>helper.py</code> may share code through a common module, but each domain's version folder is fingerprinted on its own.</li>
+</ul>
 </div></section>
 
 <section class="band-sec" id="s6"><div class="wrap">
 <div class="hd"><p class="label">06 · Architecture</p><h2>6 · Architecture — tau2 runs the environment; our agent is a registry factory with two surfaces</h2>
-<p>tau2's orchestrator drives a half-duplex turn loop between the user simulator, our agent and the domain environment. Our package wraps it: a factory registered in <code>tau2.registry</code> loads <code>agents/vN/system.md</code> and <code>helper.py</code>, calls the model under test, and returns an <code>AssistantMessage</code> with tool calls. Everything DABStep-loop owns — versions, runs, ledger, gate, MLflow, viewer — is copied and rewired to <code>tau2.runner.batch.run_tasks()</code>.</p></div>
+<p>tau2's orchestrator drives a half-duplex turn loop between the user simulator, our agent and the domain environment. Our package wraps it: a factory registered in <code>tau2.registry</code> loads <code>agents/&lt;domain&gt;/vN/system.md</code> and <code>helper.py</code>, calls the model under test, and returns an <code>AssistantMessage</code> with tool calls. Everything DABStep-loop owns — versions, runs, ledger, gate, MLflow, viewer — is copied and rewired to <code>tau2.runner.batch.run_tasks()</code>. One thing is new: a subscription adapter that stands in for tau2's LiteLLM calls.</p></div>
 <figure class="dia-frame"><p class="fig-title">Figure · one simulated conversation, and where our code sits</p>
 <svg class="dia" viewBox="0 0 960 330" role="img" aria-label="tau2 orchestrator in the centre exchanging messages with the user simulator on the left and our agent factory on the right; the environment with tools and database below the orchestrator; our agent reads system.md and helper.py from agents/vN; the evaluator writes reward to results.json which our run folder ingests.">
 <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
 <g id="rg-tau2"><title>tau2-bench (dependency, unmodified)</title><rect class="rg" x="20" y="20" width="560" height="290" rx="10"/><text class="cap" x="34" y="42">tau2-bench · dependency, unmodified</text></g>
 <g id="rg-ours"><title>tau2_loop (this repo)</title><rect class="rg" x="600" y="20" width="340" height="290" rx="10"/><text class="cap" x="614" y="42">tau2_loop · this repo</text></g>
-<g id="nd-user"><title>User simulator — gpt-4.1 by default, prompted with user_scenario</title><rect class="nd" x="40" y="120" width="150" height="64" rx="8"/><text class="tx k" x="115" y="147" text-anchor="middle">user simulator</text><text class="tx s" x="115" y="166" text-anchor="middle">LiteLLM · gpt-4.1 / gpt-5.2</text></g>
+<g id="nd-user"><title>User simulator — tau2's UserSimulator, its generate() routed to Haiku on the subscription</title><rect class="nd" x="40" y="120" width="150" height="64" rx="8"/><text class="tx k" x="115" y="147" text-anchor="middle">user simulator</text><text class="tx s" x="115" y="166" text-anchor="middle">haiku 4.5 via adapter</text></g>
 <g id="nd-orch"><title>Orchestrator — half-duplex turns, max 200 steps</title><rect class="nd" x="240" y="120" width="160" height="64" rx="8"/><text class="tx k" x="320" y="147" text-anchor="middle">orchestrator</text><text class="tx s" x="320" y="166" text-anchor="middle">run_tasks() · 200 steps max</text></g>
 <g id="nd-env"><title>Environment — 15 airline tools over db.json; the orchestrator executes tool calls here</title><rect class="nd" x="240" y="230" width="160" height="64" rx="8"/><text class="tx k" x="320" y="257" text-anchor="middle">environment</text><text class="tx s" x="320" y="276" text-anchor="middle">15 tools · db.json 7 MB</text></g>
 <g id="nd-eval"><title>Evaluator — DB hash, communicate check, pass^k; writes results.json</title><rect class="nd" x="420" y="230" width="150" height="64" rx="8"/><text class="tx k" x="495" y="257" text-anchor="middle">evaluator</text><text class="tx s" x="495" y="276" text-anchor="middle">DB hash · pass^k</text></g>
 <g id="nd-agent"><title>Our agent — registry factory; loads system.md and helper.py, calls the model under test, returns tool calls</title><rect class="nd hi" x="630" y="120" width="170" height="64" rx="8"/><text class="tx k" x="715" y="147" text-anchor="middle">agent factory</text><text class="tx s" x="715" y="166" text-anchor="middle">registry.register_agent_factory</text></g>
 <g id="nd-version"><title>agents/vN — system.md and helper.py editable, agent.yaml frozen</title><rect class="nd" x="630" y="230" width="170" height="64" rx="8"/><text class="tx k" x="715" y="257" text-anchor="middle">agents/vN/</text><text class="tx s" x="715" y="276" text-anchor="middle">system.md · helper.py · agent.yaml</text></g>
 <g id="nd-run"><title>runs/ — immutable run folder: run.json, results.jsonl, traces/, tau2 results.json</title><rect class="nd" x="830" y="120" width="100" height="64" rx="8"/><text class="tx k" x="880" y="147" text-anchor="middle">runs/</text><text class="tx s" x="880" y="166" text-anchor="middle">immutable</text></g>
-<g id="nd-model"><title>Model under test — claude-haiku-4-5 via the Anthropic SDK</title><rect class="nd ext" x="830" y="230" width="100" height="64" rx="8"/><text class="tx k" x="880" y="257" text-anchor="middle">model</text><text class="tx s" x="880" y="276" text-anchor="middle">haiku 4.5</text></g>
+<g id="nd-model"><title>Model under test — claude-haiku-4-5 via the Claude Agent SDK on the subscription</title><rect class="nd ext" x="830" y="230" width="100" height="64" rx="8"/><text class="tx k" x="880" y="257" text-anchor="middle">model</text><text class="tx s" x="880" y="276" text-anchor="middle">haiku 4.5 · Agent SDK</text></g>
 <g id="ed-user-orch"><title>user message and agent message exchanged each turn</title><path class="ed" d="M190 152 H238"/><path class="ed" d="M240 162 H192"/></g>
 <g id="ed-orch-agent"><title>orchestrator calls generate_next_message; agent returns AssistantMessage</title><path class="ed hi" d="M400 152 H628"/><path class="ed hi" d="M630 162 H402"/></g>
 <g id="ed-orch-env"><title>orchestrator executes tool calls in the environment</title><path class="ed" d="M320 184 V228"/></g>
@@ -308,12 +310,14 @@ pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;backgroun
   AGENTS.md · CLAUDE.md · DESIGN.md · README.md
   pyproject.toml   tau2-bench pinned as a git dep, python ≥3.12
   Makefile         every target wraps `uv run tau2loop …`
-  <b>agents/</b>v0/       system.md · helper.py · agent.yaml (frozen)
-  <b>runs/</b>&lt;ts&gt;_&lt;vN&gt;_&lt;split&gt;/
+  <b>data/splits/</b>     airline.json · retail.json · telecom.json · banking_knowledge.json (20 train / 20 test ids, seed 300)
+  <b>agents/</b>&lt;domain&gt;/v0/   system.md · helper.py · agent.yaml (frozen)
+  <b>runs/</b>&lt;ts&gt;_&lt;domain&gt;_&lt;vN&gt;_&lt;split&gt;/
                    run.json · results.jsonl · tau2/results.json · traces/&lt;task&gt;_tN.json
-  <b>loop/</b>            ledger.jsonl · registry.json · mlflow_snapshot.json
+  <b>loop/</b>&lt;domain&gt;/    ledger.jsonl · registry.json      loop/mlflow_snapshot.json
   <b>src/tau2_loop/</b>
-    agent/         factory.py (registry adapter) · llm.py (only place a model is named) · versions.py
+    llm/           sdk_generate.py (tau2 generate() contract over the Agent SDK) · llm.py (models, billing guard)
+    agent/         factory.py (registry adapter) · versions.py
     eval/          runner.py (run_tasks wrapper) · score.py (results.json → TaskResult) · compare.py (McNemar, gates)
     loop/          run.py · optimiser.py · ledger.py · reflect.py
     tracking/      mlflow_log.py · registry.py · gate.py (CI re-score)
@@ -323,39 +327,60 @@ pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;backgroun
   .lavish/         s00 this plan</pre>
 <div><p class="fig-title">What changes from DABStep-loop</p>
 <div class="tw"><table><thead><tr><th>plane</th><th>DABStep-loop</th><th>tau2-loop</th></tr></thead><tbody>
-<tr><td class="sub">agent session</td><td>Claude Agent SDK, one in-process python tool</td><td>registry factory; Anthropic SDK call per turn, tools owned by tau2</td></tr>
+<tr><td class="sub">agent session</td><td>Claude Agent SDK, one in-process python tool</td><td>registry factory; one Agent SDK session per conversation, tau2's tools exposed as proxy MCP tools</td></tr>
 <tr><td class="sub">eval</td><td>own runner + vendored scorer</td><td><code>run_tasks()</code> + parse <code>results.json</code>; scorer is tau2's</td></tr>
 <tr><td class="sub">trials</td><td>majority vote across passes</td><td>tau2 trials; gate on pass^1, report pass^4 only on 4-trial runs</td></tr>
 <tr><td class="sub">optimiser</td><td>Sonnet, Agent SDK, hooks confine writes to <code>agents/vN+1</code></td><td>unchanged</td></tr>
-<tr><td class="sub">gate</td><td>one-sided McNemar p &lt; 0.05 on 10 dev</td><td>same test on 30 train; then a single test-split run for the ledger</td></tr>
-<tr><td class="sub">billing</td><td>subscription for everything</td><td>API keys unavoidable: the user simulator is LiteLLM; optimiser can stay on subscription</td></tr>
+<tr><td class="sub">gate</td><td>one-sided McNemar p &lt; 0.05 on 10 dev</td><td>same test on 20 train per domain; then a single 20-task test run for the ledger</td></tr>
+<tr><td class="sub">billing</td><td>subscription for everything</td><td>unchanged — <code>sdk_generate.py</code> makes tau2's user simulator and judge run on the subscription too</td></tr>
+<tr><td class="sub">versions</td><td>one <code>agents/vN</code> line</td><td>one line per domain, <code>agents/&lt;domain&gt;/vN</code>, each with its own ledger</td></tr>
 </tbody></table></div></div>
 </div>
+
+<figure class="dia-frame" style="margin-top:var(--s5)"><p class="fig-title">Figure · the subscription adapter — one choke point, three callers</p>
+<svg class="dia" viewBox="0 0 960 230" role="img" aria-label="Three tau2 callers on the left — user simulator, retail NL judge, our agent factory — all call tau2.utils.llm_utils.generate; the adapter sdk_generate.py routes any model named claude-sdk/ to the Claude Agent SDK on the subscription; for the agent it opens one session per conversation and exposes tau2's tools as proxy MCP tools whose handlers wait for the orchestrator's tool result.">
+<g id="c-user"><title>tau2 UserSimulator — src/tau2/user/user_simulator.py:235 calls generate()</title><rect class="nd" x="20" y="30" width="200" height="48" rx="8"/><text class="tx k" x="120" y="50" text-anchor="middle">user simulator</text><text class="tx s" x="120" y="68" text-anchor="middle">user_simulator.py:235</text></g>
+<g id="c-judge"><title>tau2 NL-assertions judge — src/tau2/evaluator/evaluator_nl_assertions.py:121 calls generate()</title><rect class="nd" x="20" y="92" width="200" height="48" rx="8"/><text class="tx k" x="120" y="112" text-anchor="middle">retail NL judge</text><text class="tx s" x="120" y="130" text-anchor="middle">evaluator_nl_assertions.py:121</text></g>
+<g id="c-agent"><title>our agent factory — src/tau2_loop/agent/factory.py</title><rect class="nd hi" x="20" y="154" width="200" height="48" rx="8"/><text class="tx k" x="120" y="174" text-anchor="middle">agent factory (ours)</text><text class="tx s" x="120" y="192" text-anchor="middle">tools owned by tau2</text></g>
+<g id="c-gen"><title>tau2.utils.llm_utils.generate() — the single LLM entry point in tau2 (llm_utils.py:355)</title><rect class="nd" x="300" y="92" width="170" height="48" rx="8"/><text class="tx k" x="385" y="112" text-anchor="middle">generate()</text><text class="tx s" x="385" y="130" text-anchor="middle">llm_utils.py:355 · litellm</text></g>
+<g id="c-adapter"><title>sdk_generate.py — same signature as generate(); model prefix claude-sdk/ routes here, anything else raises under BILLING=subscription</title><rect class="nd hi" x="540" y="92" width="190" height="48" rx="8"/><text class="tx k" x="635" y="112" text-anchor="middle">sdk_generate.py</text><text class="tx s" x="635" y="130" text-anchor="middle">model = claude-sdk/haiku-4-5</text></g>
+<g id="c-sdk"><title>Claude Agent SDK on the subscription — ANTHROPIC_API_KEY blanked by llm.py so nothing can bill per token</title><rect class="nd ext" x="800" y="92" width="140" height="48" rx="8"/><text class="tx k" x="870" y="112" text-anchor="middle">Agent SDK</text><text class="tx s" x="870" y="130" text-anchor="middle">subscription · no key</text></g>
+<g id="c-proxy"><title>agent path only: one ClaudeSDKClient session per conversation; each tau2 tool is a proxy MCP tool whose handler returns the call to the orchestrator and awaits its result</title><rect class="nd" x="540" y="164" width="190" height="48" rx="8"/><text class="tx k" x="635" y="184" text-anchor="middle">proxy MCP tools</text><text class="tx s" x="635" y="202" text-anchor="middle">1 session per conversation</text></g>
+<path class="ed" d="M220 54 Q260 54 298 110"/><path class="ed" d="M220 116 H298"/><path class="ed hi" d="M220 178 Q260 178 298 122"/>
+<path class="ed" d="M470 116 H538"/><path class="ed" d="M730 116 H798"/>
+<path class="ed dash" d="M635 164 V142"/>
+<text class="tx s" x="505" y="106" text-anchor="middle">claude-sdk/*</text>
+</svg>
+<figcaption>Text roles (user simulator, judge, optimiser) are a plain SDK query; only the agent needs a live session with proxy tools. Fallback if the proxy contract misbehaves: JSON tool calls in text, parsed into <code>ToolCall</code>s. Source: <code>src/tau2/utils/llm_utils.py:355</code>, callers at the lines shown.</figcaption></figure>
 </div></section>
 
 <section class="blk" id="s7"><div class="wrap">
-<div class="hd"><p class="label">07 · Agent v0</p><h2>7 · Agent v0 — Haiku 4.5, the policy verbatim, no helper</h2>
-<p>v0 must be an honest baseline: tau2's own <code>AGENT_INSTRUCTION</code> plus the unmodified <code>policy.md</code> as <code>system.md</code>, an empty <code>helper.py</code>, and <code>agent.yaml</code> freezing model, temperature 0, max steps 200. The board's cheapest GPT-5.2 airline run cost $0.114 per trajectory; a Haiku agent is cheaper per turn, so the optimiser has headroom on both score and cost to show.</p></div>
-<form class="q" data-lavish-question="model" onsubmit="event.preventDefault();const c=new FormData(event.currentTarget).get('model');const u=new FormData(event.currentTarget).get('user');if(c&&u)window.lavish.queuePrompt('Agent under test: '+c+'. User simulator: '+u+'.',{tag:'choice',text:'Model: '+c+' · user sim: '+u,element:event.currentTarget,data:{question:'model',agent:c,user:u}});">
-<h3>Model under test and user simulator</h3><p class="why">The model is frozen in <code>agent.yaml</code> so every version comparison is prompt-vs-prompt. The user simulator must be identical across every run in a ledger, and across domains for a submission.</p>
-<p class="label">Agent under test</p>
-<label><input type="radio" name="model" value="claude-haiku-4-5" checked><span>claude-haiku-4-5 (recommended) — cheapest, most room to improve, matches DABStep-loop</span></label>
-<label><input type="radio" name="model" value="claude-sonnet-5"><span>claude-sonnet-5 — closer to the board's top rows, less visible loop gain, ~5× cost</span></label>
-<p class="label">User simulator</p>
-<label><input type="radio" name="user" value="gpt-4.1" checked><span>gpt-4.1 (recommended for the loop) — tau2's default, cheapest, parity with most board rows</span></label>
-<label><input type="radio" name="user" value="gpt-5.2"><span>gpt-5.2 — the leaderboard's recommended simulator; use for the final submission run only</span></label>
-<div class="row"><button class="btn" type="submit">Queue this answer</button></div></form>
+<div class="hd"><p class="label">07 · Agent v0</p><h2>7 · Agent v0 — Haiku 4.5 in every role, on the subscription, the policy verbatim, no helper</h2>
+<p>Decided in review: there are no API keys, so every model call runs through the Claude Agent SDK on the subscription, and the default model in every role is <code>claude-haiku-4-5</code>. v0 is an honest baseline: tau2's own <code>AGENT_INSTRUCTION</code> plus the unmodified <code>policy.md</code> as <code>system.md</code>, an empty <code>helper.py</code>, and <code>agent.yaml</code> freezing model, temperature 0, max steps 200 and (banking) <code>retrieval: bm25</code>.</p></div>
+<div class="grid g2">
+<div class="tw"><table><thead><tr><th>role</th><th>model</th><th>frozen where</th><th>note</th></tr></thead><tbody>
+<tr class="pro"><td class="sub">agent under test</td><td class="num">claude-haiku-4-5</td><td><code>agents/&lt;domain&gt;/vN/agent.yaml</code></td><td>the thing the loop improves; never changes within a ledger</td></tr>
+<tr><td class="sub">user simulator</td><td class="num">claude-haiku-4-5</td><td><code>loop/&lt;domain&gt;/ledger.jsonl</code> header</td><td>identical for every run in a ledger; changing it starts a new ledger</td></tr>
+<tr><td class="sub">retail NL judge</td><td class="num">claude-haiku-4-5</td><td>same header</td><td>replaces tau2's gpt-4.1 default; judge verdicts logged per task so a re-grade is possible</td></tr>
+<tr><td class="sub">optimiser · reflector</td><td class="num">claude-sonnet-5</td><td><code>llm.py</code></td><td>as in DABStep-loop; the one role where a stronger model earns its quota</td></tr>
+</tbody></table></div>
+<ul class="qa">
+<li><b>Is a Haiku user simulator good enough?</b> Unknown until M2. The user simulator sets the difficulty: a weak one forgets its own instructions and can make tasks easier or noisier. The ledger header records it, so a later switch to Sonnet is a new ledger with its own baseline, not a silent change. Raise it in §13 if you want Sonnet from the start.</li>
+<li><b>Does a Claude judge change retail's score?</b> Yes, relative to the board (gpt-4.1 judge). Our numbers are internally consistent — same judge for champion and challenger — but a retail leaderboard row would be <code>custom</code> with the judge named in the methodology notes.</li>
+<li><b>What does the subscription cost us?</b> Quota, not dollars: a per-window message budget shared with your own Claude Code use. §9 is now in conversations and SDK turns, and the loop's concurrency is capped so a cycle does not exhaust a window.</li>
+</ul>
+</div>
 </div></section>
 
 <section class="band-sec" id="s8"><div class="wrap">
 <div class="hd"><p class="label">08 · The loop</p><h2>8 · The loop — DABStep-loop's mechanics, gated on train, reported on test</h2>
-<p>One cycle is one optimiser session. It reads the ledger first (what was tried, per task), the champion's surfaces, and one evidence block per failing train task: the user scenario, the policy clauses cited in <code>description.relevant_policies</code>, the reference actions vs the actions taken, the DB diff, and a condensed trace. It must write <code>diagnosis.json</code> and change both surfaces. The harness runs the challenger on the same 30 train tasks and promotes only on a McNemar win.</p></div>
+<p>One cycle is one optimiser session. It reads the ledger first (what was tried, per task), the champion's surfaces, and one evidence block per failing train task in that domain: the user scenario, the policy clauses cited in <code>description.relevant_policies</code>, the reference actions vs the actions taken, the DB diff, and a condensed trace. It must write <code>diagnosis.json</code> and change both surfaces. The harness runs the challenger on the same 20 train tasks and promotes only on a McNemar win. Each domain has its own ledger and champion; <code>make loop DOMAIN=retail</code> runs one cycle there.</p></div>
 <figure class="dia-frame"><p class="fig-title">Figure · one supervised cycle</p>
 <svg class="dia" viewBox="0 0 960 150" role="img" aria-label="Six steps left to right: champion run on train, failures extracted, optimiser session writes agents/vN+1, challenger run on train, McNemar gate, promote or hold; a test-split run happens only after promote; the ledger records every step.">
 <g id="st1"><title>1 · champion run on train (reused if fingerprint matches)</title><rect class="nd" x="10" y="40" width="140" height="56" rx="8"/><text class="tx k" x="80" y="64" text-anchor="middle">champion · train</text><text class="tx s" x="80" y="82" text-anchor="middle">reuse if fingerprint matches</text></g>
 <g id="st2"><title>2 · failures = reward &lt; 1 or error</title><rect class="nd" x="170" y="40" width="120" height="56" rx="8"/><text class="tx k" x="230" y="64" text-anchor="middle">failures</text><text class="tx s" x="230" y="82" text-anchor="middle">reward &lt; 1 · errors</text></g>
 <g id="st3"><title>3 · one Sonnet optimiser session, writes only agents/vN+1, must write diagnosis.json</title><rect class="nd hi" x="310" y="40" width="160" height="56" rx="8"/><text class="tx k" x="390" y="64" text-anchor="middle">optimiser session</text><text class="tx s" x="390" y="82" text-anchor="middle">Sonnet · writes agents/vN+1 only</text></g>
-<g id="st4"><title>4 · challenger run on the same train tasks</title><rect class="nd" x="490" y="40" width="140" height="56" rx="8"/><text class="tx k" x="560" y="64" text-anchor="middle">challenger · train</text><text class="tx s" x="560" y="82" text-anchor="middle">same 30 tasks, same seed</text></g>
+<g id="st4"><title>4 · challenger run on the same train tasks</title><rect class="nd" x="490" y="40" width="140" height="56" rx="8"/><text class="tx k" x="560" y="64" text-anchor="middle">challenger · train</text><text class="tx s" x="560" y="82" text-anchor="middle">same 20 tasks, same seed</text></g>
 <g id="st5"><title>5 · one-sided exact McNemar, promote at p &lt; 0.05</title><rect class="nd" x="650" y="40" width="120" height="56" rx="8"/><text class="tx k" x="710" y="64" text-anchor="middle">gate</text><text class="tx s" x="710" y="82" text-anchor="middle">McNemar p &lt; .05</text></g>
 <g id="st6"><title>6 · promote: register champion, run test split once for the ledger; hold: folder stays as a starting point</title><rect class="nd hi" x="790" y="40" width="160" height="56" rx="8"/><text class="tx k" x="870" y="64" text-anchor="middle">promote → test run</text><text class="tx s" x="870" y="82" text-anchor="middle">hold → kept as a starting point</text></g>
 <path class="ed" d="M150 68 H168"/><path class="ed" d="M290 68 H308"/><path class="ed hi" d="M470 68 H488"/><path class="ed" d="M630 68 H648"/><path class="ed" d="M770 68 H788"/>
@@ -365,61 +390,58 @@ pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;backgroun
 <ul class="qa" style="margin-top:var(--s5)">
 <li><b>What can the optimiser change in a tool-owned environment?</b> <code>system.md</code>: policy restructuring, a pre-write confirmation rule, a refusal checklist, a state summary format. <code>helper.py</code>: functions the factory calls around the model — validate a tool call's arguments against what the user has actually confirmed, track booked / cancelled state, block a write until the required reads have happened. No new tools, no model change.</li>
 <li><b>Why not unsupervised, like DABStep's cycle 6?</b> Not needed: every tau2 task has a key. The unsupervised extension (families, probes, invariants) stays out of this build; it becomes relevant only if we optimise on the 2,285-task telecom set.</li>
-<li><b>Trials during the loop.</b> One trial per cycle keeps a cycle under $5 and the McNemar table clean. pass^4 is computed only on the 4-trial runs in §11, so it never appears without its 200-conversation denominator.</li>
+<li><b>Trials during the loop.</b> One trial per cycle keeps a cycle to 20 conversations and the McNemar table clean. pass^4 is computed only on 4-trial runs, so it never appears without its denominator.</li>
 </ul>
 </div></section>
 
 <section class="blk" id="s9"><div class="wrap">
-<div class="hd"><p class="label">09 · Budget</p><h2>9 · Budget — a train cycle under $5; the 4-trial submission run about $30</h2>
-<p>tau2 publishes no run-cost guidance; the numbers below are derived from the board's cost fields (GPT-5.2 airline $0.114 per trajectory, Opus 4.5 about $0.40) and Haiku 4.5 pricing, and are marked provisional until <code>runs/</code> holds a real <code>cost_usd</code>.</p></div>
-<div class="tw"><table><thead><tr><th>run</th><th>conversations</th><th>agent cost</th><th>user sim cost (gpt-4.1)</th><th>total</th><th>status</th></tr></thead><tbody>
-<tr><td class="sub">v0 smoke, 5 tasks</td><td class="num">5</td><td class="num">≈ $0.10</td><td class="num">≈ $0.25</td><td class="num">≈ $0.35</td><td class="v-warn">partial — estimate</td></tr>
-<tr><td class="sub">train cycle (champion reused)</td><td class="num">30</td><td class="num">≈ $0.60</td><td class="num">≈ $1.50</td><td class="num">≈ $2–3 + optimiser on subscription</td><td class="v-warn">partial — estimate</td></tr>
-<tr><td class="sub">test run after a promotion</td><td class="num">20</td><td class="num">≈ $0.40</td><td class="num">≈ $1.00</td><td class="num">≈ $1.50</td><td class="v-warn">partial — estimate</td></tr>
-<tr><td class="sub">submission run, base × 4 trials, gpt-5.2 user</td><td class="num">200</td><td class="num">≈ $4</td><td class="num">≈ $20–25</td><td class="num">≈ $25–30</td><td class="v-warn">partial — estimate</td></tr>
+<div class="hd"><p class="label">09 · Budget</p><h2>9 · Budget — quota, not dollars: a train cycle is 20 conversations, a full sweep 80</h2>
+<p>On the subscription the cost is a share of a rolling message window, spent by the agent, the user simulator, the judge (retail) and the optimiser. tau2 publishes no turn counts; the board's cost fields imply roughly 10–20 model calls per airline conversation. Every row is provisional until <code>runs/</code> holds a measured <code>agent_usage</code>, which M2 replaces it with.</p></div>
+<div class="tw"><table><thead><tr><th>run</th><th>conversations</th><th>SDK calls (agent + user, ≈15 + 15 each)</th><th>optimiser</th><th>status</th></tr></thead><tbody>
+<tr><td class="sub">mock smoke, 10 tasks</td><td class="num">10</td><td class="num">≈ 300</td><td class="num">—</td><td class="v-warn">partial — estimate</td></tr>
+<tr><td class="sub">v0 baseline, one domain, train</td><td class="num">20</td><td class="num">≈ 600</td><td class="num">—</td><td class="v-warn">partial — estimate</td></tr>
+<tr><td class="sub">v0 baseline, all four domains, train</td><td class="num">80</td><td class="num">≈ 2,400</td><td class="num">—</td><td class="v-warn">partial — estimate</td></tr>
+<tr><td class="sub">one loop cycle (champion reused)</td><td class="num">20</td><td class="num">≈ 600</td><td class="num">1 Sonnet session, ≤ 120 turns</td><td class="v-warn">partial — estimate</td></tr>
+<tr><td class="sub">test run after a promotion</td><td class="num">20</td><td class="num">≈ 600</td><td class="num">—</td><td class="v-warn">partial — estimate</td></tr>
 </tbody></table></div>
-<p class="small" style="margin-top:var(--s3)">Every row is replaced by the measured <code>agent_cost + user_cost</code> from <code>results.json</code> after M2. Redis LLM cache (<code>LLM_CACHE_ENABLED</code>) is switched on for the loop so a reused champion costs nothing.</p>
+<p class="small" style="margin-top:var(--s3)">Mechanisms: <code>--max-concurrency</code> capped at 3 so a cycle spreads across a window instead of tripping the limit; champion runs reused by fingerprint; tau2's LiteLLM cache is irrelevant on this path, so the adapter keeps its own on-disk cache keyed by (model, messages, tools) for exact repeats.</p>
 </div></section>
 
 <section class="band-sec" id="s10"><div class="wrap">
-<div class="hd"><p class="label">10 · Repo</p><h2>10 · Repo — public under nmp-dsci from the first commit, secrets never</h2>
-<p>DABStep-loop's <code>.gitignore</code>, <code>.env.example</code>, pre-commit (gitleaks + ruff) and the billing guard in <code>llm.py</code> come across unchanged. tau2-bench is a pinned git dependency, never vendored — its 816 MB stays out of our history. Run folders and traces are committed, as in DABStep-loop, because the run folder is the record.</p></div>
-<form class="q" data-lavish-question="repo" onsubmit="event.preventDefault();const c=new FormData(event.currentTarget).get('repo');if(c)window.lavish.queuePrompt('Name the public GitHub repo '+c+' under nmp-dsci.',{tag:'choice',text:'Repo: '+c,element:event.currentTarget,data:{question:'repo',answer:c}});">
-<h3>Repository name</h3><p class="why">The local folder is <code>tau2-bench</code>, which is also the upstream's name. The sibling is <code>nmp-dsci/DABStep-loop</code>.</p>
-<label><input type="radio" name="repo" value="tau2-loop" checked><span>tau2-loop (recommended) — matches DABStep-loop; folder renamed to match</span></label>
-<label><input type="radio" name="repo" value="tau2-bench-agent"><span>tau2-bench-agent — keeps the benchmark name first</span></label>
-<label><input type="radio" name="repo" value="tau2-bench"><span>tau2-bench — same as the folder, but collides with the upstream name in listings</span></label>
-<div class="row"><button class="btn" type="submit">Queue this answer</button></div></form>
+<div class="hd"><p class="label">10 · Repo</p><h2>10 · Repo — <code>nmp-dsci/tau2-loop</code> is live and public; the folder is renamed at M0</h2>
+<p>Decided in review and done: <a href="https://github.com/nmp-dsci/tau2-loop">github.com/nmp-dsci/tau2-loop</a> holds this plan as its first commit. The local folder <code>nmp-ai-portfolio/tau2-bench</code> is renamed to <code>tau2-loop</code> as the first step of M0 (after this review session ends, since Lavish is bound to the current path). DABStep-loop's <code>.gitignore</code>, <code>.env.example</code>, pre-commit (gitleaks + ruff) and the billing guard in <code>llm.py</code> come across unchanged; tau2-bench is a pinned git dependency, never vendored, so its 816 MB stays out of our history. Run folders and traces are committed, because the run folder is the record.</p></div>
 </div></section>
 
 <section class="blk" id="s11"><div class="wrap">
-<div class="hd"><p class="label">11 · Milestones</p><h2>11 · Milestones — this build proves the loop on 30 train tasks, then decides the submission</h2></div>
+<div class="hd"><p class="label">11 · Milestones</p><h2>11 · Milestones — the adapter first, then a baseline in every domain, then the loop</h2></div>
 <div class="ms">
-<div class="m"><div class="n">M0<span>scaffold</span></div><div><h4>Repo, package, docs, CI green with no key</h4><p>Copy DABStep-loop's skeleton, rename to <code>tau2_loop</code>, pin tau2-bench, port <code>llm.py</code> billing guard, three doc files, offline tests. <code>make eval --dry-run</code> runs the mock domain end to end without a key.</p></div></div>
-<div class="m"><div class="n">M1<span>factory</span></div><div><h4>Agent v0 registered and passing the mock domain</h4><p><code>factory.py</code> implements <code>get_init_state</code> / <code>generate_next_message</code> against <code>examples/agents/minimal_text_agent.py</code>'s contract; contract test replays a saved conversation offline.</p></div></div>
-<div class="m"><div class="n">M2<span>first score</span></div><div><h4>v0 scored on airline train, one trial, in <code>runs/</code> and MLflow</h4><p><code>results.json</code> parsed to <code>results.jsonl</code> with reward, <code>db_check</code>, <code>action_checks</code>, cost and turns; traces one file per task; §9 replaced with measured cost.</p></div></div>
-<div class="m"><div class="n">M3<span>loop</span></div><div><h4>Two cycles run; ledger shows one promote or one hold with a p-value</h4><p>Optimiser prompt adapted to tau2 evidence (scenario, policy clauses, reference vs taken actions, DB diff). Hooks confine writes; fingerprint and CI gate enforced.</p></div></div>
-<div class="m"><div class="n">M4<span>holdout</span></div><div><h4>Test split run once for the promoted champion; README results table with denominators</h4><p>Train and test numbers side by side; McNemar p in the table; case for or against a leaderboard run written down.</p></div></div>
+<div class="m"><div class="n">M0<span>scaffold</span></div><div><h4>Folder renamed, package, docs, splits, CI green with no key</h4><p>Rename the folder to <code>tau2-loop</code>; copy DABStep-loop's skeleton as <code>tau2_loop</code>; pin tau2-bench at <code>2174a60</code>; port <code>llm.py</code> billing guard; three doc files; <code>make splits</code> writes the four 20 / 20 files; offline tests including "splits re-derive from seed 300".</p></div></div>
+<div class="m"><div class="n">M1<span>adapter</span></div><div><h4>Subscription adapter proven on the mock domain, all three roles</h4><p><code>sdk_generate.py</code> satisfies tau2's <code>generate()</code> contract; <code>factory.py</code> runs one session per conversation with proxy tools; tau2's own <code>UserSimulator</code> and NL judge run through it unchanged. Mock domain (10 tasks) passes end to end with no key in the environment. This is the milestone with the technical risk.</p></div></div>
+<div class="m"><div class="n">M2<span>baselines</span></div><div><h4>v0 scored on train in all four domains, one trial, in <code>runs/</code> and MLflow</h4><p><code>results.json</code> parsed to <code>results.jsonl</code> with reward, <code>db_check</code>, <code>action_checks</code>, judge verdicts, usage and turns; traces one file per task; §9 replaced with measured calls. Banking runs with <code>bm25</code>.</p></div></div>
+<div class="m"><div class="n">M3<span>loop</span></div><div><h4>Two cycles on airline, one on each other domain; every ledger shows a verdict with a p-value</h4><p>Optimiser prompt adapted to tau2 evidence (scenario, policy clauses, reference vs taken actions, DB diff, judge reasoning). Hooks confine writes to <code>agents/&lt;domain&gt;/vN+1</code>; fingerprint and CI gate enforced.</p></div></div>
+<div class="m"><div class="n">M4<span>holdout</span></div><div><h4>Test split run once per promoted champion; README results table per domain with denominators</h4><p>Train and test numbers side by side for each domain; McNemar p in the table; the case for or against a leaderboard run written down.</p></div></div>
 <div class="m"><div class="n">M5<span>viewer</span></div><div><h4>Run viewer: task → trace → policy clause in two clicks</h4><p>FastAPI + the DABStep React shell; pages Overview, Tasks, Runs, Trace, Agents, Loop. Deploy pattern reused if wanted.</p></div></div>
-<div class="m"><div class="n">M6<span>decide</span></div><div><h4>Separate decision: 4-trial base run with gpt-5.2 user and a <code>custom</code> submission PR</h4><p>Out of this build's scope; §9 gives the cost. Retail second-domain run and the banking stretch become s01 / s02 plans.</p></div></div>
+<div class="m"><div class="n">M6<span>decide</span></div><div><h4>Separate decision: 4-trial all-tasks run and a <code>custom</code> submission PR</h4><p>Out of this build's scope. A submission is <code>custom</code> (Claude user simulator and judge) and needs the 215-task reserve run too; that is an s01 plan with its own quota estimate.</p></div></div>
 </div>
 </div></section>
 
 <section class="band-sec" id="s12"><div class="wrap">
 <div class="hd"><p class="label">12 · Risks</p><h2>12 · Risks — each has a mechanism in the plan, not a hope</h2></div>
 <div class="tw"><table><thead><tr><th>risk</th><th>why it bites here</th><th>mechanism</th></tr></thead><tbody>
-<tr><td class="sub">Optimiser overfits 30 train tasks</td><td>Small split; the prompt could encode task-specific facts (a reservation id, a name)</td><td>CI gate greps <code>system.md</code> / <code>helper.py</code> for any <code>known_info</code> string from the task set; test split reported after every promotion</td></tr>
+<tr><td class="sub">Optimiser overfits 20 train tasks</td><td>Small split; the prompt could encode task-specific facts (a reservation id, a name)</td><td>CI gate greps <code>system.md</code> / <code>helper.py</code> for any <code>known_info</code> string from the task set; test split reported after every promotion</td></tr>
 <tr><td class="sub">User-simulator variance</td><td>Same task can go differently across runs even at temperature 0, so a "fix" may be noise</td><td>Fixed <code>--seed</code>, identical simulator per ledger, McNemar not raw delta; a held challenger is re-run before rejection if p is borderline</td></tr>
-<tr><td class="sub">Cost runs away</td><td>Every eval is 30 paid conversations on two providers</td><td><code>llm.py</code> guard, champion reuse by fingerprint, Redis cache, <code>--num-trials 1</code> in the loop, 4 trials only on demand with a <code>typer.confirm</code></td></tr>
+<tr><td class="sub">Proxy-tool session breaks the turn contract</td><td>The agent path needs the SDK to emit a tool call, pause, and resume with the orchestrator's result; an SDK version change or a timeout can leave a session mid-tool</td><td>M1 proves it on mock before anything else; contract test replays a saved conversation; per-session <code>asyncio.wait_for</code>; fallback is JSON tool calls in text parsed into <code>ToolCall</code>s</td></tr>
+<tr><td class="sub">Subscription window exhausted</td><td>80 conversations × ~30 calls in one sweep can trip the rolling limit and stall the run</td><td><code>--max-concurrency 3</code>; <code>--auto-resume</code> on tau2 so a stalled run continues, not restarts; champion reuse by fingerprint; <code>--num-trials 1</code> in the loop</td></tr>
+<tr><td class="sub">Haiku user simulator drifts from its script</td><td>A weak simulator forgets <code>task_instructions</code>, making a task easier or unscorable</td><td>Simulator frozen in the ledger header; tau2's <code>--auto-review</code> user-only reviewer flags off-script turns and the count is logged per run; switching to Sonnet is a new ledger</td></tr>
 <tr><td class="sub">Registry contract drifts</td><td>tau2 is at 1.0.1 and moving (voice, banking added in 2026)</td><td>Pinned commit in <code>pyproject.toml</code>; offline contract test replays a saved conversation through the factory</td></tr>
-<tr><td class="sub">Retail judge noise, if retail is added</td><td>112 / 114 tasks depend on a gpt-4.1 judge</td><td><code>tau2 evaluate-trajs</code> re-grades saved trajectories; judge model pinned in <code>agent.yaml</code>; judge disagreements logged per task</td></tr>
+<tr><td class="sub">Retail judge noise</td><td>112 / 114 retail tasks depend on the NL judge, now Haiku</td><td><code>tau2 evaluate-trajs</code> re-grades saved trajectories; judge model in the ledger header; per-assertion verdicts and reasoning logged so a disputed grade can be re-run</td></tr>
 <tr><td class="sub">Leaderboard rejects the run</td><td>Needs all tasks, ≥4 trials, same LLMs across domains, <code>base</code> split</td><td><code>tau2 submit validate</code> and <code>verify-trajs</code> run in CI on any run tagged <code>kind=submission</code></td></tr>
 </tbody></table></div>
 </div></section>
 
 <section class="blk" id="s13"><div class="wrap">
 <div class="hd"><p class="label">13 · Approve</p><h2>13 · Approve — this build is M0 to M4; the viewer and the submission are separate calls</h2>
-<p>Answer §5, §7 and §10 above, then queue the scope here. Anything you annotate on the page comes back with it.</p></div>
+<p>Domain, model and repo are settled above. The remaining call is scope; use the note for anything else (for example a Sonnet user simulator from the start, or a different seed).</p></div>
 <form class="q" data-lavish-question="scope" onsubmit="event.preventDefault();const c=new FormData(event.currentTarget).get('scope');const n=event.currentTarget.querySelector('textarea').value.trim();if(c)window.lavish.queuePrompt('Approved scope: '+c+'.'+(n?' Notes: '+n:'')+' Proceed with the tau2-loop build per s00.',{tag:'approve',text:'Scope: '+c,element:event.currentTarget,data:{question:'scope',answer:c,note:n}});">
 <h3>Scope of this build</h3>
 <label><input type="radio" name="scope" value="M0-M4" checked><span>M0–M4 (recommended) — scaffold, factory, first score, two loop cycles, holdout table</span></label>
