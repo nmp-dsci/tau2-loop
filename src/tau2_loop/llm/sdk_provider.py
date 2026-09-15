@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import threading
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 import litellm
@@ -110,11 +112,39 @@ async def _query(system_prompt: str, user_prompt: str, model: str, effort: str) 
     return res
 
 
+_RESET_RE = re.compile(r"resets\s+(\d{1,2})(?::(\d{2}))?\s*([ap]m)", re.I)
+MAX_WAIT_S = 6 * 3600
+
+
+def seconds_until_reset(error: str, now: datetime | None = None) -> int | None:
+    """The wait a subscription 'session limit · resets 4:40pm' message asks for, in local time.
+
+    The CLI reports the window's reset as a local clock time; the next such time
+    (today or tomorrow) is the earliest a call can succeed. None when the error
+    is not a session-limit one."""
+    if "session limit" not in error.lower():
+        return None
+    m = _RESET_RE.search(error)
+    now = now or datetime.now()
+    if not m:
+        return 15 * 60
+    hour, minute, ampm = int(m.group(1)), int(m.group(2) or 0), m.group(3).lower()
+    hour = hour % 12 + (12 if ampm == "pm" else 0)
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return min(int((target - now).total_seconds()) + 60, MAX_WAIT_S)
+
+
 def run_query(system_prompt: str, user_prompt: str, model: str, effort: str = EFFORT) -> SdkResult:
-    """One SDK query on a private event loop, so it works from tau2's worker threads."""
+    """One SDK query on a private event loop, so it works from tau2's worker threads.
+
+    A subscription window that has run out is waited for, not failed: the whole
+    batch pauses until the reset the CLI names, then carries on."""
     require_live()
     last: SdkResult | None = None
-    for attempt in range(RETRIES):
+    attempt = 0
+    while attempt < RETRIES:
         loop = asyncio.new_event_loop()
         try:
             last = loop.run_until_complete(_query(system_prompt, user_prompt, model, effort))
@@ -124,8 +154,16 @@ def run_query(system_prompt: str, user_prompt: str, model: str, effort: str = EF
             loop.close()
         if last.text:
             return last  # a reply came back; an error next to it (e.g. a max-turns note) is recorded, not retried
-        if attempt < RETRIES - 1:
-            time.sleep(RETRY_WAIT_S[attempt])
+        wait = seconds_until_reset(last.error or "")
+        if wait is not None:
+            print(
+                f"[claude-sdk] session limit reached; waiting {wait // 60} min for the window to reset"
+            )
+            time.sleep(wait)
+            continue  # the wait is not an attempt
+        attempt += 1
+        if attempt < RETRIES:
+            time.sleep(RETRY_WAIT_S[attempt - 1])
     assert last is not None
     if last.error is None:
         last.error = "empty reply"

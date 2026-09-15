@@ -193,3 +193,19 @@ def test_registry_and_ledger_are_per_domain(
     assert "BROKE" in led.prior_attempts("airline", "3")[0]["root_cause"]
     assert reg.read_registry("telecom")["champion"] is None
     assert json.loads(json.dumps(reg.read_all()))["airline"]["domain"] == "airline"
+
+
+def test_seconds_until_reset_parses_the_cli_message() -> None:
+    from datetime import datetime
+
+    from tau2_loop.llm.sdk_provider import seconds_until_reset
+
+    msg = "ResultError: You've hit your session limit · resets 4:40pm (Australia/Sydney) (exit code: 1)"
+    now = datetime(2026, 9, 15, 14, 0)
+    assert seconds_until_reset(msg, now) == (2 * 3600 + 40 * 60) + 60
+    assert seconds_until_reset(msg, datetime(2026, 9, 15, 17, 0)) == 6 * 3600  # capped: tomorrow
+    assert (
+        seconds_until_reset("resets 12am", datetime(2026, 9, 15, 23, 0)) is None
+    )  # not a limit msg
+    assert seconds_until_reset("session limit reached", now) == 15 * 60
+    assert seconds_until_reset("ProcessError: boom", now) is None
