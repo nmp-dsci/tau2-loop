@@ -212,6 +212,20 @@ def test_registry_and_ledger_are_per_domain(
     assert json.loads(json.dumps(reg.read_all()))["airline"]["domain"] == "airline"
 
 
+def test_tau2_sha_reads_the_actual_submodule_pin(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tau2_loop.eval import runner
+
+    assert runner._tau2_sha() == runner.TAU2_SHA_FALLBACK  # the real submodule is pinned here
+
+    monkeypatch.setattr(runner, "ROOT", Path("/nonexistent-path-for-test"))
+    assert runner._tau2_sha() == runner.TAU2_SHA_FALLBACK  # git fails -> fallback, not a crash
+
+    meta = runner.RunMeta(
+        "r", "airline", "v0", "fp", "m", "u", "j", "train", 20, 1, 3, 300, "t", "t"
+    )
+    assert meta.tau2_sha == runner.TAU2_SHA_FALLBACK
+
+
 def test_seconds_until_reset_parses_the_cli_message() -> None:
     from datetime import datetime
 
@@ -242,3 +256,29 @@ def test_redaction_removes_the_account_email(
     assert "someone" not in (tmp_path / "a.json").read_text()
     monkeypatch.setattr(llm, "account_email", lambda: "")
     assert llm.redact("keep@example.com") == "keep@example.com"
+
+
+def test_ledger_entries_are_redacted_on_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Diagnosis/transcript text can quote the account email; the ledger must never store it."""
+    import tau2_loop.llm as llm
+    from tau2_loop.loop import ledger as led
+
+    monkeypatch.setattr(llm, "account_email", lambda: "someone@example.com")
+    monkeypatch.setattr(led, "ledger_path", lambda d: tmp_path / d / "ledger.jsonl")
+    led.append_entry(
+        "airline",
+        {
+            "cycle": 1,
+            "diagnoses": "customer emailed someone@example.com about a refund",
+        },
+    )
+    raw = (tmp_path / "airline" / "ledger.jsonl").read_text()
+    assert "someone@example.com" not in raw
+    assert llm.REDACTED_EMAIL in raw
+
+    led.update_entry("airline", 1, prompt_diff_summary="cc someone@example.com")
+    entries = led.read_ledger("airline")
+    assert "someone@example.com" not in json.dumps(entries)
+    assert entries[0]["prompt_diff_summary"] == f"cc {llm.REDACTED_EMAIL}"

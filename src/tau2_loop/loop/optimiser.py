@@ -278,9 +278,7 @@ def _broken_trace_paths(outcome: dict[str, Any]) -> list[str]:
     except (OSError, FileNotFoundError):
         return []
     by_task = {r.task_id: r.trace for r in results}
-    return [
-        f"runs/{challenger_run}/traces/{by_task[tid]}" for tid in broken if tid in by_task
-    ]
+    return [f"runs/{challenger_run}/traces/{by_task[tid]}" for tid in broken if tid in by_task]
 
 
 def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:

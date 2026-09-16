@@ -57,6 +57,15 @@ def test_runs_ledger_experiments_shapes() -> None:
     assert c.get("/api/runs/nope").status_code == 404
 
 
+def test_trace_endpoint_404s_on_directory_name_instead_of_crashing() -> None:
+    c = client()
+    run_id = "20260915T014228Z_mock_v0_all"
+    ok = c.get(f"/api/runs/{run_id}/traces/create_task_1.json")
+    assert ok.status_code == 200
+    assert c.get(f"/api/runs/{run_id}/traces/%2e%2e").status_code == 404
+    assert c.get(f"/api/runs/{run_id}/traces/nope.json").status_code == 404
+
+
 def test_trace_events_flatten_messages() -> None:
     t = {
         "messages": [
