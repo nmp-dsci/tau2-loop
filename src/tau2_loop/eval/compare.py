@@ -8,13 +8,13 @@ when p < alpha. With twenty tasks the test is blunt by construction — five
 fixes and no breaks is the smallest result that clears 0.05 (p = 1/32) — so
 the verdict carries b, c and p, not just a word.
 
-Second path, from the s01 review: a challenger that breaks nothing has no
-observed downside, so it is also promoted when it fixes at least
-DOMINANCE_MIN_FIXED tasks and breaks none ("dominance"). That is a decision
-rule, not a significance test: 3 / 0 is p = 0.125, and twenty clean tasks are
-consistent with an unobserved regression rate of ~14%. The held-out test run
-that follows every promotion is what keeps it honest, and the ledger records
-which rule fired.
+Second path, decided at the s01 review: a challenger that breaks nothing has
+no observed downside, so it is also promoted when it fixes at least one task
+and breaks none ("dominance", DOMINANCE_MIN_FIXED = 1). That is a decision
+rule, not a significance test — 1 / 0 is p = 0.5, a coin flip, and twenty
+clean tasks are consistent with an unobserved regression rate of ~14%. The
+held-out test run that follows every promotion is what keeps it honest, and
+the ledger records which rule fired so the two kinds never blur.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from math import comb
 from tau2_loop.eval.results import TaskResult, summarise
 
 ALPHA = 0.05
-DOMINANCE_MIN_FIXED = 3  # promote on fixed ≥ this and broke == 0, whatever p says
+DOMINANCE_MIN_FIXED = 1  # promote on fixed ≥ this and broke == 0, whatever p says
 
 
 def mcnemar_one_sided(b: int, c: int) -> float:
