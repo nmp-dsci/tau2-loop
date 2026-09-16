@@ -42,7 +42,7 @@ p < 0.05); a promotion runs the test split once, for the record.
 | M2 v0 baselines on train, all four domains | done — gate re-scores 80/80 |
 | M3 loop cycles | done — airline ×2, retail, telecom; banking not run (subscription window) |
 | M4 holdout · M4b findings page | done — `.lavish/s01_build-findings.html` |
-| M5 keyless demo image on App Runner | image builds and runs locally; deploy needs the author's one-off bootstrap |
+| M5 keyless demo image on App Runner | parked — bootstrap role, ECR repo and image (`5518ad7`) are in AWS; the service is blocked by the account's 2-per-region App Runner cap (both regions full). Resume: lift the quota or free a slot, then `terraform apply` in `infra/terraform/demo` |
 
 ## Results
 
