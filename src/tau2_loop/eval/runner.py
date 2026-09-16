@@ -11,6 +11,7 @@ Nothing is kept only in MLflow.
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,7 +20,7 @@ from typing import Any
 from rich.console import Console
 
 from tau2_loop.agent.versions import AgentVersion, load_version
-from tau2_loop.config import DOMAINS, RUNS_DIR, SMOKE_DOMAIN, SPLIT_SEED, quiet_tau2, settings
+from tau2_loop.config import DOMAINS, ROOT, RUNS_DIR, SMOKE_DOMAIN, SPLIT_SEED, quiet_tau2, settings
 from tau2_loop.data.splits import split_ids
 from tau2_loop.eval.results import (
     Summary,
@@ -36,6 +37,23 @@ console = Console()
 
 USER_MODEL = "haiku"
 JUDGE_MODEL = "haiku"
+
+TAU2_SHA_FALLBACK = "2174a60"
+
+
+def _tau2_sha() -> str:
+    """The submodule's actual pinned commit; the fallback covers the demo image, which has no git."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT / "vendor" / "tau2-bench"), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+        return out.stdout.strip() or TAU2_SHA_FALLBACK
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return TAU2_SHA_FALLBACK
 
 
 @dataclass
@@ -55,7 +73,7 @@ class RunMeta:
     started_at: str
     finished_at: str | None = None
     code_sha: str = "unknown"
-    tau2_sha: str = "2174a60"
+    tau2_sha: str = field(default_factory=_tau2_sha)
     summary: dict[str, Any] | None = None
     mlflow_run_id: str | None = None
     note: str = ""

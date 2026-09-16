@@ -37,10 +37,11 @@ from tau2_loop.agent.versions import (
 )
 from tau2_loop.config import AGENTS_DIR, ROOT, RUNS_DIR
 from tau2_loop.data.splits import read_task_extract
-from tau2_loop.eval.results import TaskResult
+from tau2_loop.eval.results import TaskResult, read_results
 from tau2_loop.llm import (
     EFFORT,
     Effort,
+    redact,
     redact_tree,
     require_live,
     resolve_model,
@@ -266,6 +267,22 @@ and records the outcome next to your diagnosis in the ledger.
 """
 
 
+def _broken_trace_paths(outcome: dict[str, Any]) -> list[str]:
+    """Map each broken task id to its own trace file in the challenger's run."""
+    broken = outcome.get("broken") or []
+    challenger_run = outcome.get("challenger_run")
+    if not challenger_run or not broken:
+        return []
+    try:
+        results = read_results(RUNS_DIR / str(challenger_run) / "results.jsonl")
+    except (OSError, FileNotFoundError):
+        return []
+    by_task = {r.task_id: r.trace for r in results}
+    return [
+        f"runs/{challenger_run}/traces/{by_task[tid]}" for tid in broken if tid in by_task
+    ]
+
+
 def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:
     """Earlier challengers of this champion that the gate held: real progress the next version may reuse."""
     out: list[dict[str, Any]] = []
@@ -285,12 +302,7 @@ def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:
                     "passes": o.get("passes"),
                     "fixed": o.get("fixed"),
                     "broken": o.get("broken"),
-                    "broken_traces": [
-                        f"runs/{o.get('challenger_run')}/traces/"
-                        for _ in (o.get("broken") or [])[:1]
-                    ]
-                    if o.get("challenger_run")
-                    else [],
+                    "broken_traces": _broken_trace_paths(o),
                 }
             )
     return out
@@ -348,7 +360,7 @@ async def run_optimiser(
     domain = champion.domain
     new_name = next_version_name(domain)
     new_dir = _copy_champion(champion, new_name)
-    allowed_prefix = str(new_dir.resolve())
+    allowed_dir = new_dir.resolve()
     before = tree_checksum(new_dir)
 
     async def guard_writes(
@@ -356,8 +368,12 @@ async def run_optimiser(
     ) -> dict[str, Any]:
         """Refuse a Write/Edit outside agents/<domain>/v(n+1)/ and any touch of agent.yaml."""
         path = str(input_data.get("tool_input", {}).get("file_path", ""))
-        resolved = str(Path(path).resolve()) if path else ""
-        ok = resolved.startswith(allowed_prefix) and not resolved.endswith("agent.yaml")
+        resolved = Path(path).resolve() if path else None
+        ok = (
+            resolved is not None
+            and resolved.is_relative_to(allowed_dir)
+            and resolved.name != "agent.yaml"
+        )
         if ok:
             return {}
         return {
@@ -442,7 +458,7 @@ async def run_optimiser(
     diag_path = new_dir / "diagnosis.json"
     if diag_path.exists():
         try:
-            out.diagnosis = json.loads(diag_path.read_text())
+            out.diagnosis = json.loads(redact(diag_path.read_text()))
         except json.JSONDecodeError as e:
             out.error = (out.error + "; " if out.error else "") + f"diagnosis.json unreadable: {e}"
     else:
@@ -451,7 +467,7 @@ async def run_optimiser(
     if all(new_version.files().get(s) == champion.files().get(s) for s in SURFACES):
         out.error = (out.error + "; " if out.error else "") + "no change to either surface"
     (new_dir / "optimiser_transcript.json").write_text(
-        json.dumps(out.transcript, ensure_ascii=False, indent=1)
+        redact(json.dumps(out.transcript, ensure_ascii=False, indent=1))
     )
     redact_tree(new_dir)  # the optimiser quotes traces; the account email must not land in agents/
     return out

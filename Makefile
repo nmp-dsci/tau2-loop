@@ -77,7 +77,7 @@ test: ## pytest (offline)
 
 lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 	uv run ruff format --check src tests && uv run ruff check src tests && uv run mypy
-	@test -d frontend/node_modules && (cd frontend && npm run lint:design) || true
+	@if [ -d frontend/node_modules ]; then cd frontend && npm run lint:design; fi
 
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests

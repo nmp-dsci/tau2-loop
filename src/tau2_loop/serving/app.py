@@ -210,7 +210,7 @@ def create_app() -> FastAPI:
     @app.get("/api/runs/{run_id}/traces/{name}")
     def trace(run_id: str, name: str) -> dict[str, Any]:
         p = RUNS_DIR / run_id / "traces" / name
-        if "/" in name or not p.exists():
+        if "/" in name or not p.is_file():
             raise HTTPException(404, "no trace")
         t = json.loads(p.read_text())
         return {

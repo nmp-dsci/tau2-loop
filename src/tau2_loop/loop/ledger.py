@@ -14,6 +14,18 @@ from datetime import UTC, datetime
 from typing import Any
 
 from tau2_loop.config import ledger_path
+from tau2_loop.llm import redact
+
+
+def _redact_entry(value: Any) -> Any:
+    """Recursively redact the account email out of every string an entry carries."""
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, dict):
+        return {k: _redact_entry(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_entry(v) for v in value]
+    return value
 
 
 def read_ledger(domain: str) -> list[dict[str, Any]]:
@@ -32,12 +44,14 @@ def append_entry(domain: str, entry: dict[str, Any]) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     entry.setdefault("domain", domain)
     entry.setdefault("at", datetime.now(UTC).isoformat())
+    entry = _redact_entry(entry)
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def update_entry(domain: str, cycle: int, **fields: Any) -> None:
     """Rewrite the ledger with `fields` merged into the entry for `cycle`."""
+    fields = _redact_entry(fields)
     entries = read_ledger(domain)
     for e in entries:
         if e.get("cycle") == cycle:
