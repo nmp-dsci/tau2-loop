@@ -122,6 +122,23 @@ def test_compare_pairs_by_task_and_trial() -> None:
     assert v.champion_passed == 10 and v.challenger_passed == 15
     worse = compare(champ, [_r(str(i), i < 13 and i != 0) for i in range(20)])
     assert worse.broken == ["0"] and not worse.promote
+    assert v.rule == "mcnemar"
+
+
+def test_dominance_promotes_a_clean_gain_below_significance() -> None:
+    """3 fixed / 0 broken is p = 0.125 — held by McNemar, promoted by dominance; 4/1 is neither."""
+    champ = [_r(str(i), i < 12) for i in range(20)]
+    clean3 = compare(champ, [_r(str(i), i < 15) for i in range(20)])
+    assert clean3.promote and clean3.rule == "dominance" and clean3.p_value == pytest.approx(1 / 8)
+    assert "dominance" in clean3.reason
+    clean2 = compare(champ, [_r(str(i), i < 14) for i in range(20)])
+    assert not clean2.promote and clean2.rule == "none"
+    four_one = compare(champ, [_r(str(i), (i < 16 and i != 0)) for i in range(20)])
+    assert four_one.fixed == ["12", "13", "14", "15"] and four_one.broken == ["0"]
+    assert not four_one.promote
+    assert not compare(
+        champ, [_r(str(i), i < 15) for i in range(20)], dominance_min_fixed=None
+    ).promote
 
 
 # ── billing ──────────────────────────────────────────────────────────────

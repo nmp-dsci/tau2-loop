@@ -7,6 +7,14 @@ coin flip, so the one-sided p-value is P(X ≤ c | n = b + c, p = ½). Promote
 when p < alpha. With twenty tasks the test is blunt by construction — five
 fixes and no breaks is the smallest result that clears 0.05 (p = 1/32) — so
 the verdict carries b, c and p, not just a word.
+
+Second path, from the s01 review: a challenger that breaks nothing has no
+observed downside, so it is also promoted when it fixes at least
+DOMINANCE_MIN_FIXED tasks and breaks none ("dominance"). That is a decision
+rule, not a significance test: 3 / 0 is p = 0.125, and twenty clean tasks are
+consistent with an unobserved regression rate of ~14%. The held-out test run
+that follows every promotion is what keeps it honest, and the ledger records
+which rule fired.
 """
 
 from __future__ import annotations
@@ -17,6 +25,7 @@ from math import comb
 from tau2_loop.eval.results import TaskResult, summarise
 
 ALPHA = 0.05
+DOMINANCE_MIN_FIXED = 3  # promote on fixed ≥ this and broke == 0, whatever p says
 
 
 def mcnemar_one_sided(b: int, c: int) -> float:
@@ -38,6 +47,7 @@ class Verdict:
     p_value: float = 1.0
     alpha: float = ALPHA
     reason: str = ""
+    rule: str = "none"  # "mcnemar" | "dominance" | "none"
 
 
 def _key(r: TaskResult) -> str:
@@ -45,7 +55,10 @@ def _key(r: TaskResult) -> str:
 
 
 def compare(
-    champion: list[TaskResult], challenger: list[TaskResult], alpha: float = ALPHA
+    champion: list[TaskResult],
+    challenger: list[TaskResult],
+    alpha: float = ALPHA,
+    dominance_min_fixed: int | None = DOMINANCE_MIN_FIXED,
 ) -> Verdict:
     a = {_key(r): r for r in champion if r.correct is not None}
     b_ = {_key(r): r for r in challenger if r.correct is not None}
@@ -54,9 +67,16 @@ def compare(
     broken = [t for t in common if a[t].correct and not b_[t].correct]
     sa, sb = summarise([a[t] for t in common]), summarise([b_[t] for t in common])
     p = mcnemar_one_sided(len(fixed), len(broken))
-    promote = p < alpha
+    significant = p < alpha
+    dominant = dominance_min_fixed is not None and not broken and len(fixed) >= dominance_min_fixed
+    promote = significant or dominant
+    rule = "mcnemar" if significant else "dominance" if dominant else "none"
     reason = (
         f"McNemar one-sided: fixed {len(fixed)}, broke {len(broken)}, p = {p:.3f} "
-        f"{'<' if promote else '≥'} α = {alpha}"
+        f"{'<' if significant else '≥'} α = {alpha}"
     )
-    return Verdict(promote, sa.passed, sb.passed, len(common), fixed, broken, p, alpha, reason)
+    if dominant and not significant:
+        reason += f" · promoted by dominance: broke 0, fixed ≥ {dominance_min_fixed}"
+    return Verdict(
+        promote, sa.passed, sb.passed, len(common), fixed, broken, p, alpha, reason, rule
+    )

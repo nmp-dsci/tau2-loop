@@ -116,6 +116,7 @@ async def run_cycle(
     outcome: dict[str, Any] = {
         "verdict": "promote" if verdict.promote else "hold",
         "reason": verdict.reason,
+        "rule": verdict.rule,
         "p_value": verdict.p_value,
         "passes": f"{verdict.champion_passed} → {verdict.challenger_passed}",
         "fixed": verdict.fixed,
