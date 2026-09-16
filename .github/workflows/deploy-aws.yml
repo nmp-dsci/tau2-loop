@@ -1,0 +1,79 @@
+name: Deploy (AWS demo)
+
+# Merging to main ships the demo: build and push the image (App Runner
+# auto-deploys :latest), reconcile Terraform, then smoke-test the live URL.
+# Auth is GitHub OIDC into the tau2loop-github-deploy role — no stored AWS keys.
+# Waits for CI: a red main never ships.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-1
+  DEPLOY_ROLE_ARN: arn:aws:iam::089783391188:role/tau2loop-github-deploy
+  SERVICE_NAME: tau2loop-demo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform apply (ECR before the first push)
+        working-directory: infra/terraform/demo
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve -target=aws_ecr_repository.demo
+
+      - name: Build & push demo image (linux/amd64)
+        run: ./scripts/aws_build_push.sh
+
+      - name: Terraform apply (full)
+        working-directory: infra/terraform/demo
+        run: terraform apply -input=false -auto-approve
+
+      - name: Wait for App Runner to reach RUNNING
+        run: |
+          ARN=$(aws apprunner list-services \
+            --query "ServiceSummaryList[?ServiceName=='${SERVICE_NAME}'].ServiceArn" --output text)
+          for _ in $(seq 1 60); do
+            STATUS=$(aws apprunner describe-service --service-arn "$ARN" --query "Service.Status" --output text)
+            echo "status: $STATUS"
+            [ "$STATUS" = "RUNNING" ] && exit 0
+            if [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "DELETE_FAILED" ]; then exit 1; fi
+            sleep 20
+          done
+          echo "timed out waiting for RUNNING" >&2; exit 1
+
+      - name: Smoke test the live URL
+        run: ./scripts/demo_smoke.sh "$(terraform -chdir=infra/terraform/demo output -raw service_url)"
+
+      - name: Report the deployed URL
+        run: |
+          URL=$(terraform -chdir=infra/terraform/demo output -raw service_url)
+          { echo "### Demo deployed"; echo; echo "$URL"; echo; echo "Rollback: retag a previous \`:sha\` image as \`:latest\` in ECR."; } >> "$GITHUB_STEP_SUMMARY"

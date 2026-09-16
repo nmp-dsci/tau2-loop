@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>s01 · tau2-loop — build findings: four baselines, five loop cycles, one promotion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Design source (2): the project's own system — DESIGN.md ("Field Guide"), the
+   same tokens s00 used, so the plan and its findings read as one document. */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#0A6552; --accent-ink:#FFFFFF; --accent-soft:#DFEFE8;
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121614; --panel:#191E1B; --band:#161A18;
+    --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+    --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+    --accent:#43C29A; --accent-ink:#0E1512; --accent-soft:#17382C;
+    --amber:#D99A4E; --amber-soft:#3A2A14;
+    --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#43C29A; --accent-ink:#0E1512; --accent-soft:#17382C;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+*,*::before,*::after{box-sizing:border-box}
+:where(.grid,.flex,.kpi,.cards,.ms .m,.cyc)>*{min-width:0}
+:where(p,h1,h2,h3,h4,li,dd,figcaption,td,th,.chip,.label){overflow-wrap:anywhere}
+:where(img,svg,video,iframe){max-width:100%;height:auto}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink-2);font-family:var(--sans);font-size:var(--t0);line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{color:var(--ink);margin:0;line-height:1.15;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+h1{font-size:var(--t4);font-family:var(--serif);font-weight:400} h1 em{font-style:italic;font-weight:400;color:var(--accent)}
+h2{font-size:var(--t3)} h3{font-size:var(--t1)} h4{font-size:var(--t0)}
+p{margin:0 0 var(--s4);text-wrap:pretty}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.2em} a:hover{text-decoration-thickness:2px}
+strong,b{color:var(--ink);font-weight:600}
+code{font-family:var(--mono);font-size:max(var(--t-2),.86em);background:var(--band);padding:.08em .32em;border-radius:var(--r-sm);color:var(--ink-2)}
+.wrap{max-width:var(--w);margin-inline:auto;padding-inline:var(--s5)}
+.label{font-family:var(--mono);font-size:var(--t-2);font-weight:500;letter-spacing:var(--track-label);text-transform:uppercase;color:var(--faint);margin:0}
+.lead{font-family:var(--serif);font-size:var(--t1);line-height:1.5;color:var(--ink-2);max-width:72ch}
+.small{font-size:var(--t-1);color:var(--muted)}
+.top{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top-in{max-width:var(--w);margin-inline:auto;padding:var(--s3) var(--s5);display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap}
+.top b{font-family:var(--mono);font-size:var(--t-1);color:var(--ink);white-space:nowrap}
+.top nav{display:flex;gap:var(--s4);margin-left:auto;flex-wrap:wrap;font-size:var(--t-1);font-weight:500}
+.top nav a{color:var(--ink-2);text-decoration:none;padding:var(--s1) 0} .top nav a:hover{color:var(--accent)}
+header.hero{padding:var(--s7) 0 var(--s5)}
+.chips{display:flex;gap:var(--s2);flex-wrap:wrap;margin:var(--s4) 0 0}
+.chip{font-family:var(--mono);font-size:var(--t-2);padding:.3em .6em;border:1px solid var(--line-2);border-radius:var(--r-sm);color:var(--ink-2);background:var(--panel)}
+.chip.ok{border-color:var(--accent);color:var(--accent)} .chip.warn{border-color:var(--amber);color:var(--amber)}
+section.blk{padding-top:var(--s8)} section.blk:last-of-type{padding-bottom:var(--s9)}
+section.band-sec{background:var(--band);margin-top:var(--s8);padding:var(--s7) 0}
+section.band-sec + section.blk{padding-top:var(--s7)}
+.hd{margin-bottom:var(--s5);max-width:80ch} .hd .label{margin-bottom:var(--s2)} .hd h2{margin-bottom:var(--s3)}
+.panel{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5)}
+.grid{display:grid;gap:var(--s4)} .g3{grid-template-columns:repeat(3,minmax(0,1fr))} .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:900px){.g3,.g2{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5)}
+.card h3{margin-bottom:var(--s2)} .card p{margin-bottom:var(--s2);font-size:var(--t-1)} .card p:last-child{margin:0}
+.card .label{margin-bottom:var(--s2)}
+.card.pro{box-shadow:var(--shadow),inset 0 0 0 1.5px var(--accent)}
+.card.warn{box-shadow:var(--shadow),inset 0 0 0 1.5px var(--amber)}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r);box-shadow:var(--shadow);background:var(--panel)}
+.tw table{width:100%;border-collapse:collapse;font-size:var(--t-1);min-width:920px}
+caption{text-align:left;padding:var(--s4) var(--s5) var(--s2);color:var(--muted);font-size:var(--t-1);caption-side:top}
+.tw thead th{font-family:var(--mono);font-size:var(--t-2);letter-spacing:var(--track-label);text-transform:uppercase;color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);font-weight:500;white-space:nowrap}
+.tw td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;line-height:1.45}
+.tw tbody tr:last-child td{border-bottom:0}
+.tw td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:var(--t-2)}
+.tw td.sub{color:var(--ink);font-weight:600;white-space:nowrap}
+.tw .path{display:block;font-family:var(--mono);font-size:var(--t-2);color:var(--faint);margin-top:2px;word-break:break-all}
+.tw tr.pro td{background:color-mix(in srgb,var(--accent-soft) 55%,transparent)}
+.v-ok{color:var(--accent);font-weight:600} .v-no{color:var(--muted)} .v-warn{color:var(--amber);font-weight:600}
+.kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s4)}
+@media(max-width:900px){.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi .k{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4)}
+.kpi .k b{display:block;font-family:var(--mono);font-size:var(--t3);color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .k span{display:block;font-size:var(--t-2);color:var(--muted);margin-top:var(--s2);line-height:1.4}
+blockquote{margin:0;padding:var(--s3) var(--s4);border-left:2px solid var(--accent);background:var(--band);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:var(--t-1)}
+blockquote.warn{border-left-color:var(--amber)}
+figure{margin:0}
+.fig{margin:var(--s5) 0 0}
+.fig-title{font-family:var(--mono);font-size:var(--t-2);font-weight:500;letter-spacing:var(--track-label);text-transform:uppercase;color:var(--faint);margin:0 0 var(--s3);text-wrap:balance}
+.dia-frame{background:var(--panel);border-radius:var(--r);padding:var(--s4);box-shadow:var(--shadow);overflow-x:auto}
+figcaption{font-size:var(--t-1);color:var(--muted);line-height:1.5;margin-top:var(--s3)} figcaption b{color:var(--ink);font-weight:600}
+pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;background:var(--band);border-radius:var(--r);padding:var(--s4);overflow-x:auto;margin:0;color:var(--ink-2);white-space:pre}
+pre.code .add{color:var(--accent)} pre.code .cm{color:var(--faint)}
+.ms{display:grid;gap:var(--s3)}
+.ms .m{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:var(--s3);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4)}
+@media(max-width:600px){.ms .m{grid-template-columns:minmax(0,1fr)}}
+.ms .m .n{font-family:var(--mono);color:var(--accent);font-weight:500}
+.ms .m .n span{display:block;font-size:var(--t-2);color:var(--faint);font-weight:400;margin-top:2px}
+.ms .m p{margin:0 0 var(--s2);font-size:var(--t-1)} .ms .m p:last-child{margin:0}
+.ms .m h4{margin-bottom:var(--s1)}
+.ms .m.done{box-shadow:var(--shadow),inset 3px 0 0 var(--accent)} .ms .m.open{box-shadow:var(--shadow),inset 3px 0 0 var(--amber)}
+.cyc{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s4)}
+@media(max-width:1000px){.cyc{grid-template-columns:repeat(2,minmax(0,1fr))}} @media(max-width:600px){.cyc{grid-template-columns:minmax(0,1fr)}}
+.cyc .c{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4);display:grid;gap:var(--s2);align-content:start}
+.cyc .c.pro{box-shadow:var(--shadow),inset 0 0 0 1.5px var(--accent)}
+.cyc .c .sc{font-family:var(--mono);font-size:var(--t2);color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
+.cyc .c .sc small{font-size:var(--t-2);color:var(--faint);font-weight:400;margin-left:.3em}
+.cyc .c p{margin:0;font-size:var(--t-1)} .cyc .c .path{font-family:var(--mono);font-size:var(--t-2);color:var(--faint);word-break:break-all}
+ul.tight{margin:0;padding-left:1.1em;font-size:var(--t-1)} ul.tight li{margin-bottom:var(--s1)}
+dl.tx{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s3) var(--s5);margin:0;font-size:var(--t-1)}
+@media(max-width:700px){dl.tx{grid-template-columns:minmax(0,1fr)}}
+dl.tx div{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4)}
+dl.tx dt{font-weight:600;color:var(--ink);margin-bottom:var(--s1)} dl.tx dt .tag{font-family:var(--mono);font-weight:500;font-size:var(--t-2);color:var(--accent);margin-right:.5em}
+dl.tx dd{margin:0;color:var(--ink-2)} dl.tx dd .path{display:block;font-family:var(--mono);font-size:var(--t-2);color:var(--faint);margin-top:var(--s1);word-break:break-all}
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);display:grid;gap:var(--s3);margin-top:var(--s4)}
+form.q h3{margin:0} form.q .why{font-size:var(--t-1);color:var(--muted);margin:0}
+form.q label{display:grid;grid-template-columns:1.2rem minmax(0,1fr);gap:var(--s2);align-items:start;font-size:var(--t-1);padding:var(--s2) var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);cursor:pointer;min-height:24px}
+form.q label:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+form.q input[type=radio],form.q input[type=checkbox]{margin:3px 0 0;accent-color:var(--accent);width:16px;height:16px}
+form.q label .id{font-family:var(--mono);font-size:var(--t-2);color:var(--accent);margin-right:.4em}
+form.q textarea{width:100%;font:inherit;font-size:var(--t-1);padding:var(--s2) var(--s3);border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--bg);color:var(--ink-2);min-height:3.2rem;resize:vertical}
+form.q .row{display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.btn{font:inherit;font-weight:500;font-size:var(--t-1);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s2) var(--s4);cursor:pointer;min-height:36px}
+.btn:hover{filter:brightness(1.05)} .btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.queued{font-family:var(--mono);font-size:var(--t-2);color:var(--accent);min-height:1.2em}
+.rec{font-family:var(--mono);font-size:var(--t-2);color:var(--accent);margin-left:.4em}
+.mermaid{display:flex;justify-content:center} .mermaid svg{max-width:100%;height:auto}
+footer{border-top:1px solid var(--line);padding:var(--s5) 0;font-size:var(--t-2);color:var(--faint);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="top"><div class="top-in"><b>s01 · tau2-loop</b>
+<nav><a href="#s1">Results</a><a href="#s2">Walk-through</a><a href="#s3">Cycles</a><a href="#s4">What broke</a><a href="#s5">Failures</a><a href="#s6">Budget</a><a href="#s7">Next</a></nav></div></div>
+
+<header class="hero"><div class="wrap">
+<p class="label">Findings · nmp-dsci/tau2-loop · branch tau2-loop · 16 Sep 2026 · design source: project DESIGN.md (Field Guide), as s00</p>
+<h1>Four baselines, five loop cycles, <em>one promotion</em> — and two things the harness told the agent that it should not have</h1>
+<p class="lead">Everything s00 approved is built and runs on the subscription: the τ²-bench adapter, per-domain 20/20 splits, v0 baselines in all four domains, the optimiser loop with its McNemar gate, the viewer, the keyless demo image. The loop produced a real, gated improvement on telecom (14 → 19 on train, 19/20 on the held-out test split). Airline and retail each moved up on train (12 → 16, 14 → 16) without clearing p &lt; 0.05. The most useful findings were not scores: the Claude CLI tells every child session <b>today's real date</b> and <b>the account's email</b>, and Haiku used both inside the simulation — the airline agent refused to touch flights because "today" was 2026, the retail agent looked customers up by the author's own address in 20/20 conversations.</p>
+<div class="chips"><span class="chip ok">M0 · M1 · M2 · M3 · M4 done</span><span class="chip ok">gate re-scores 80/80 on committed runs</span><span class="chip ok">47 tests · ruff · mypy strict</span><span class="chip warn">banking cycle not run — stopped to keep the window</span><span class="chip warn">M5 deploy waits on one SSO login</span><span class="chip">1 promotion · 3 holds · 0 rejections</span><span class="chip ok">gate: McNemar p &lt; 0.05 or dominance ≥1 / 0 (decided at review)</span></div>
+</div></header>
+
+<section class="blk" id="s1"><div class="wrap">
+<div class="hd"><p class="label">01 · Results</p><h2>1 · Results — every number with its denominator and its run folder</h2>
+<p>All runs are Haiku 4.5 for agent, user simulator and judge, one trial, concurrency 3, seed 300, <code>tool_mode: json</code>, lean harness. "Train" is the 20-task split the optimiser sees; "test" is the 20 it never sees and is run only on promotion. Old-harness airline (9/20) and retail (2/20) v0 runs are kept in <code>runs/</code> for the harness comparison in §4 but are not baselines.</p></div>
+<div class="tw"><table>
+<caption>Per domain: v0 baseline, best challenger, verdict. p is the one-sided exact McNemar test on the paired 20 train tasks; promote at p &lt; 0.05, or on fixed ≥ 1 / broke 0. "Tokens / reply" is the agent's mean input · output per reply over the run (input counts the whole context each turn, cache reads included).</caption>
+<thead><tr><th>Domain</th><th>v0 train</th><th>Tokens / reply</th><th>Challenger train</th><th>Tokens / reply</th><th>Fixed / broke</th><th>p</th><th>Verdict</th><th>Champion test</th></tr></thead>
+<tbody>
+<tr><td class="sub">airline<span class="path">runs/20260915T075151Z_airline_v0_train</span></td><td class="num">12/20</td><td class="num">5,795 · 698</td><td class="num">v1 15/20<span class="path">20260915T124751Z_airline_v1_train</span>v2 16/20<span class="path">20260915T132148Z_airline_v2_train</span></td><td class="num">v1 7,620 · 1,572<br>v2 7,985 · 1,530</td><td class="num">v1 4 / 1<br>v2 4 / 0</td><td class="num">0.188<br>0.062</td><td><span class="v-warn">hold</span> ×2 under McNemar — v2 <span class="v-ok">promotes under the dominance rule</span> added after review (§1a); re-gate + test run is N-3</td><td class="num v-no">not run (no promotion)</td></tr>
+<tr><td class="sub">retail<span class="path">runs/20260915T080153Z_retail_v0_train</span></td><td class="num">14/20</td><td class="num">6,649 · 575</td><td class="num">v1 16/20<span class="path">20260915T172708Z_retail_v1_train</span></td><td class="num">7,283 · 598</td><td class="num">3 / 1</td><td class="num">0.312</td><td><span class="v-warn">hold</span> — v0 stays champion</td><td class="num v-no">not run</td></tr>
+<tr class="pro"><td class="sub">telecom<span class="path">runs/20260915T081700Z_telecom_v0_train</span></td><td class="num">14/20</td><td class="num">9,598 · 1,135</td><td class="num">v1 19/20<span class="path">20260915T174430Z_telecom_v1_train</span></td><td class="num">10,335 · 1,155<span class="path">test: 11,077 · 1,360</span></td><td class="num">5 / 0</td><td class="num">0.031</td><td><span class="v-ok">promote</span> — v1 is champion</td><td class="num v-ok">19/20<span class="path">20260915T181840Z_telecom_v1_test</span></td></tr>
+<tr><td class="sub">banking_knowledge<span class="path">runs/20260915T121036Z_banking_knowledge_v0_train</span></td><td class="num">4/20</td><td class="num">15,485 · 1,058</td><td class="num v-no">no cycle</td><td class="num v-no">—</td><td class="num v-no">—</td><td class="num v-no">—</td><td class="v-no">cycle cancelled to keep the subscription window (§6)</td><td class="num v-no">not run</td></tr>
+</tbody></table></div>
+<div class="kpi" style="margin-top:var(--s5)">
+<div class="k"><b>44 / 80</b><span>v0 pass^1 across the four train splits (55%). Airline 60%, retail 70%, telecom 70%, banking 20%.</span></div>
+<div class="k"><b>+9</b><span>train tasks fixed net by the best challenger per domain (airline +4, retail +2, telecom +5); 2 broken across all cycles</span></div>
+<div class="k"><b>1 / 5</b><span>cycles promoted under McNemar. Airline v2 (4 / 0, p 0.062) promotes under the dominance rule added after review — §1a.</span></div>
+<div class="k"><b>80 / 80</b><span>rows where <code>tau2loop gate</code> re-scoring the committed conversations through tau2's evaluators agrees with the recorded reward</span></div>
+</div>
+<div class="panel" style="margin-top:var(--s5)" id="s1a"><p class="label">1a · Review question — "let it through if it breaks 0 and fixes some?"</p>
+<h3 style="margin:var(--s2) 0 var(--s3)">Statistically, no; as a decision rule, yes — decided at review: promote on fixed ≥ 1, broke = 0</h3>
+<p style="font-size:var(--t-1)">With zero breaks the one-sided McNemar p is exactly ½<sup>fixed</sup>: 3/0 → 0.125, 4/0 → 0.062, 5/0 → 0.031. Nothing short of five clean fixes clears 0.05 at N = 20, and no test can turn "we saw no regression in 20 tasks" into "there is none" — twenty clean tasks are consistent with an unobserved regression rate of about 14% (rule of three). So "no downside" is not something the train split can prove.</p>
+<p style="font-size:var(--t-1)">What it can support is a <b>dominance rule</b>: promote when the challenger breaks nothing and fixes at least one task, whatever p says, and let the held-out test run that follows every promotion carry the risk. Your call at review was ≥ 1 (I had proposed ≥ 3, since a single trial of Haiku flips tasks on its own and 1/0 is p = 0.5); it is <code>compare.DOMINANCE_MIN_FIXED = 1</code>, one number to change. The ledger records <code>rule: mcnemar | dominance</code> so the two kinds of promotion never blur, and a dominance promotion with a flat or worse test number is the signal to raise it. Applied to this page's cycles: airline v1 (4/1) still holds, retail v1 (3/1) still holds, <b>airline v2 (4/0) promotes</b>. Its test-split run is the next thing to spend a window on (N-3).</p>
+<pre class="code"><span class="cm">$ tau2loop compare 20260915T075151Z_airline_v0_train 20260915T132148Z_airline_v2_train</span>
+promote=True  fixed=['11','14','25','44']  broken=[]  p_value=0.0625
+reason='McNemar one-sided: fixed 4, broke 0, p = 0.062 ≥ α = 0.05 · promoted by dominance: broke 0, fixed ≥ 3'
+rule='dominance'</pre>
+</div>
+<p class="insight small" style="margin-top:var(--s4)">Tokens per reply move with the prompt the optimiser wrote: airline v1/v2 add ~1.8k input (the instruction block, 36 → 70 lines) and double the output — the date-grounding rule makes the agent reason aloud; retail v1's five rules cost ~600 input and nothing on output; telecom v1's checklist ~700 input. None of the challengers is cheaper per reply than its v0.</p>
+<p class="insight small">Banking's 4/20 is the model reading 97-document knowledge chunks through BM25 retrieval in the prompt (15.5k input tokens per agent call, 2.5× the other domains); it is the domain with the most headroom and no cycle yet — first candidate in §7.</p>
+</div></section>
+
+<section class="band-sec" id="s2"><div class="wrap">
+<div class="hd"><p class="label">02 · Walk-through</p><h2>2 · Walk-through — what was built, in the order it happened</h2>
+<p>Each milestone as s00 §11 defined it, what it turned into, and the commit or folder that holds it. Times are Sydney, 15–16 Sep 2026.</p></div>
+<div class="ms">
+<div class="m done"><div class="n">M0<span>scaffold</span></div><div><h4>Repo, submodule, splits, viewer shell</h4><p>τ²-bench v1.0.1 pinned at <code>2174a60</code> as <code>vendor/tau2-bench</code>, never edited; its <code>data/</code> ships with it and resolves under the editable install. <code>tau2loop splits</code> draws 20 train / 20 test per domain at seed 300 and commits <code>data/splits/&lt;domain&gt;.json</code> plus a task extract (policy, tool schemas, tasks) the viewer serves offline. The FastAPI + React viewer is DABStep-loop's, re-tokened, with its own τ favicon; MLflow on :5601 so DABStep's :5600 store stays untouched.</p></div></div>
+<div class="m done"><div class="n">M1<span>adapter</span></div><div><h4>Every model call on the subscription — proven on tau2's mock domain, 8/10</h4><p>tau2 routes every model call through litellm. A litellm <code>CustomLLM</code> registered as <code>claude-sdk/</code> answers each one with a single Claude Agent SDK <code>query()</code> on a private event loop; tools travel as a JSON reply contract in the prompt and come back as <code>tool_calls</code>, so tau2's orchestrator executes them unchanged. The NL judge is the same provider via a monkeypatch of tau2's default judge model. <code>require_live()</code> refuses to start with an API key present; tau2's own <code>load_dotenv()</code> walked up to <code>~/.env</code> and injected one, so <code>scrub_injected_key()</code> now drops anything the shell did not have at start-up.</p></div></div>
+<div class="m done"><div class="n">M2<span>baselines</span></div><div><h4>v0 on train in all four domains — after the harness finding in §4 halved the time and quadrupled retail</h4><p>The first airline and retail runs (9/20, 2/20) were on the inherited harness: 47–56k input tokens per agent call, most of it connector tool schemas the CLI loads from the user-level claude.ai config. With <code>strict_mcp_config</code> and the session-title call switched off (DABStep-loop s02's finding), the same v0 scored 12/20 and 14/20. Telecom 14/20, banking 4/20. <code>tau2loop promote</code> registered each as champion; <code>tau2loop gate</code> replays every committed conversation through tau2's evaluators and agrees 80/80.</p></div></div>
+<div class="m done"><div class="n">M3<span>loop</span></div><div><h4>Five cycles: airline ×2, retail, telecom; banking cancelled</h4><p><code>make loop DOMAIN=…</code> reuses the champion run by fingerprint, gives one Sonnet session the failed conversations condensed (transcript, unmet assertions, expected vs actual actions), lets it write only <code>agents/&lt;domain&gt;/v(n+1)/</code> (PreToolUse hooks deny everything else and deny Bash running simulations; a tree checksum verifies afterwards), requires <code>diagnosis.json</code>, runs the challenger on train, gates, and appends the ledger. Telecom promoted and then ran the test split once. §3 has each cycle.</p></div></div>
+<div class="m done"><div class="n">M4<span>holdout</span></div><div><h4>Test split run for the one promotion; README results table</h4><p>Per s00, the test split is spent only on promotion, so only telecom v1 has a test number: 19/20, the same as train, with a different single MMS PERSONA:Hard task failing. The three held challengers have none, by design — their train gain is the only evidence and it is not significant. README carries the table above.</p></div></div>
+<div class="m done"><div class="n">M4b<span>findings</span></div><div><h4>This page</h4><p>Every number here is read from <code>runs/*/results.jsonl</code>, <code>loop/*/ledger.jsonl</code> and <code>workspace/*.log</code>; the paths in each cell are where to check.</p></div></div>
+<div class="m open"><div class="n">M5<span>deploy</span></div><div><h4>Keyless demo image builds and runs locally; App Runner needs one SSO login</h4><p>The Dockerfile serves committed runs under <code>DEMO_MODE=1</code> with no tau2, litellm or SDK inside, so it cannot call a model. Terraform for bootstrap (OIDC role, ECR, state) and the App Runner service, and the deploy workflow on <code>main</code>, are written. The one-off <code>terraform apply</code> in <code>infra/terraform/bootstrap</code> and the first image push need <code>aws sso login --profile data-qa</code>, which only you can run.</p></div></div>
+</div>
+<figure class="fig"><p class="fig-title">Diagram · one loop cycle, as run</p>
+<div class="dia-frame"><pre class="mermaid">
+flowchart LR
+  A["champion run<br/>by fingerprint"] --> B["failed conversations<br/>condensed"]
+  B --> C["one Sonnet session<br/>writes agents/&lt;d&gt;/v(n+1)<br/>+ diagnosis.json"]
+  C -->|"hooks: no other path,<br/>no simulations"| D["challenger on train<br/>20 tasks, Haiku"]
+  D --> E{"McNemar<br/>one-sided<br/>p &lt; 0.05"}
+  E -->|promote| F["test split once<br/>registry → v(n+1)"]
+  E -->|hold| G["ledger entry<br/>champion unchanged"]
+  F --> H[("loop/&lt;d&gt;/ledger.jsonl")]
+  G --> H
+  classDef hi fill:#DFEFE8,stroke:#0A6552,color:#1A1D1B
+  class C,E hi
+</pre></div>
+<figcaption><b>What is different from DABStep-loop:</b> the harness runs the tools, so the challenger is only a prompt and a helper; the optimiser can't run the benchmark itself; and the champion run is reused rather than re-run, because a 20-task train run costs 30–45 minutes of the window.</figcaption></figure>
+</div></section>
+
+<section class="blk" id="s3"><div class="wrap">
+<div class="hd"><p class="label">03 · Cycles</p><h2>3 · What the optimiser did, cycle by cycle</h2>
+<p>Each card is one ledger entry: what Sonnet diagnosed, what it changed, and what the gate said. The diagnoses are Sonnet's; the "actually" line is mine after reading the same traces.</p></div>
+<div class="cyc">
+<div class="c"><p class="label">airline · cycle 1 · v0 → v1</p><div class="sc">12 → 15<small>hold · p 0.188</small></div><p><b>Diagnosed:</b> 7 of 8 failures were the same bug — the agent reasoned "the current date is 2026-09-15", so every May-2024 flight was "already flown" and it refused or transferred. The 8th declared flight duration unanswerable.</p><p><b>Changed:</b> a date-grounding block in <code>system.md</code>; a <code>helper.py</code> whose <code>extra_context</code> re-states the policy's own "The current time is…" line at the end of the prompt (regex on the policy, no hard-coded date).</p><p><b>Gate:</b> fixed 11, 22, 24, 44; broke 19 — the new caution added a confirmation turn and the user-sim stopped before the cancel.</p><p class="path">agents/airline/v1 · loop/airline/ledger.jsonl</p></div>
+<div class="c"><p class="label">airline · cycle 2 · v0 → v2</p><div class="sc">12 → 16<small>hold · p 0.062</small></div><p><b>Diagnosed:</b> the remaining four were multi-reservation lookups stopping after one, balances the agent would not sum itself, and the extra-turn regression from v1.</p><p><b>Changed:</b> kept v1 verbatim; added rules to call <code>get_reservation_details</code> on every id, state summed balances, act on a confirmation in the next turn, fold "found the record" and its consequence into one message.</p><p><b>Gate:</b> fixed 11, 14, 25, 44; broke nothing. One more fixed task would have promoted. Still failing: 22, 23, 24, 39 — all four still show the date confusion at some point in the trace.</p><p class="path">agents/airline/v2</p></div>
+<div class="c"><p class="label">retail · cycle 1 · v0 → v1</p><div class="sc">14 → 16<small>hold · p 0.312</small></div><p><b>Diagnosed:</b> the first tool call in every failing transcript was <code>find_user_id_by_email</code> with an address "the customer never stated — it leaks from the agent's own context"; plus transfers for answerable questions, a mis-paired item swap, and "skip the exchange" read as "do nothing".</p><p><b>Changed:</b> five operating rules: never look up an email the customer did not give; do not transfer for spec questions, insufficient balance, or single-line removal; execute a confirmed write next turn; verify item pairs; ask keep-or-return.</p><p><b>Gate:</b> fixed 0, 20, 85; broke 67. The email rule removed the wasted first turn from all 20 conversations (0 of 20 v1 traces contain the address, vs 20 of 20 in v0).</p><p class="path">agents/retail/v1</p></div>
+<div class="c pro"><p class="label">telecom · cycle 1 · v0 → v1</p><div class="sc">14 → 19<small>promote · p 0.031</small></div><p><b>Diagnosed:</b> the agent treated account roaming (<code>enable_roaming</code>) and the phone's roaming switch as one fix, never checked <code>get_data_usage</code> unless the user raised it, granted one app permission when both were missing, and transferred once out of ideas.</p><p><b>Changed:</b> a four-item <code>&lt;technical_support_checklist&gt;</code> after the policy: both roaming switches; data usage early and unconditionally, refuel at the cap; both permissions together; no transfer until every checklist item is tried.</p><p><b>Gate:</b> fixed 5, broke 0. Test split: 19/20 — one PERSONA:Hard MMS task fails, a different one from train. The one train task still failing is the hardest MMS persona (9 stacked faults, PERSONA:Hard).</p><p class="path">agents/telecom/v1 · runs/20260915T181840Z_telecom_v1_test</p></div>
+</div>
+<figure class="fig"><p class="fig-title">Code · the helper the airline optimiser wrote — deterministic, reads the policy, no task data</p>
+<pre class="code"><span class="cm"># agents/airline/v1/helper.py — the one hook used</span>
+_CURRENT_TIME_RE = re.compile(r"The current time is[^.\n]*\.", re.IGNORECASE)
+
+def extra_context(policy: str) -> str:
+    match = _CURRENT_TIME_RE.search(policy)
+    if not match:
+        return ""
+    stmt = match.group(0).strip()
+    return (
+        "\n&lt;reminder&gt;\n"
+        f"Reminder: {stmt} Use exactly this date/time as \"today\" for every judgment "
+        "about whether a flight date is in the past or upcoming. Do not substitute any "
+        "other date. A flight dated on or after this current time has not been flown yet.\n"
+        "&lt;/reminder&gt;\n"
+    )</pre>
+<figcaption>Sonnet found the symptom and treated it in the prompt without knowing the cause. §4 has the cause: the CLI tells the session the real date.</figcaption></figure>
+</div></section>
+
+<section class="band-sec" id="s4"><div class="wrap">
+<div class="hd"><p class="label">04 · What broke</p><h2>4 · What the pipeline proved, and what broke on the way</h2>
+<p>Ordered by how much each one moved the numbers. Every item has either a fix that is in the tree or an open decision in §7.</p></div>
+<div class="grid g2">
+<div class="card warn"><p class="label">harness · fixed</p><h3>The CLI's session context leaks into the simulation: the date and the account email</h3><p>Two independent findings from two domains' ledgers turned out to have one cause. The Claude CLI gives every session the real date and the account's email as context. Airline's policy says "The current time is 2024-05-15"; Haiku believed 2026-09-15 and refused to change "flown" flights (7 of 8 v0 failures). Retail's Haiku opened 20 of 20 conversations by looking the customer up under the author's address — a wasted turn every time, and a real address in every trace, 49 files across 5 runs, committed and pushed at M2.</p><p><b>Fix in tree:</b> <code>llm.redact()</code> replaces the account email in every provider reply before it reaches tau2, and <code>redact_tree()</code> scrubs each run folder and optimiser output on write; all existing files are scrubbed (49 + 3). The date cannot be removed from the CLI's context; the airline prompt work in v1/v2 is the mitigation, and a system-level line in every v0 is the candidate in §7 (N-1). <b>Open:</b> the pushed history still carries the address; rewriting a public branch is your call (§7, N-6).</p></div>
+<div class="card pro"><p class="label">harness · fixed</p><h3>79% fewer input tokens per call, same answers, retail 2 → 14</h3><p>The inherited harness carried every connector tool the claude.ai account has into every SDK session — 47k input tokens per agent call on airline, 56k on retail — plus one Haiku call per session to name it. Ported DABStep-loop s02: <code>strict_mcp_config=True</code> and <code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1</code>. Measured on airline task 0: agent input 20,987 → 4,313 per call, user-sim conversation input 84,040 → 1,556, 70 s → 25 s, same reward. Retail v0 went from 2/20 to 14/20 — the old harness produced 21 tool calls in 110 turns; the lean one 145 in 265. <code>run.json.harness = "lean"</code> records it.</p></div>
+<div class="card"><p class="label">subscription · fixed</p><h3>The 5-hour window ran out twice mid-batch; the adapter now waits for it</h3><p>The first time, 22 conversations died with "session limit · resets 4:40pm" and two runs had to be deleted and re-run. <code>seconds_until_reset()</code> parses that message and <code>run_query</code> sleeps until the reset (cap 6 h) then retries, so a run pauses instead of failing. Nine waits are in the logs, 193–219 min each; the telecom test run spent about 3 h 15 min of its 12 h wall clock waiting. Cost of the design: wall-clock estimates in s00 §9 were off by the waits, not by the work.</p></div>
+<div class="card"><p class="label">adapter · fixed</p><h3>Three CLI behaviours the provider had to absorb</h3><ul class="tight"><li>"Reached maximum number of turns (1)" ended 7 of 20 airline conversations even though the reply had text: the provider now accepts any reply with text beside an error note, with <code>max_turns=4</code> headroom.</li><li>The NL judge does <code>json.loads</code> on the reply; Haiku fenced it in ```json in 5 retail conversations: fences are stripped for tool-less replies.</li><li>Empty NL-assertion lists scored 0 in the gate replay; tau2 scores them 1.0. Banking's replay needed the real env kwargs (<code>_build_env_kwargs</code>) to rebuild the BM25 index. Gate is 80/80 after both.</li></ul></div>
+<div class="card"><p class="label">loop · proved</p><h3>The guard rails held on every cycle</h3><p>Four optimiser sessions, 11–21 turns, 2.7–4.4 minutes each. None touched a file outside its version folder, none tried to run the benchmark, all four wrote a parseable <code>diagnosis.json</code> whose <code>expected_to_fix</code> could be checked against the gate's <code>fixed</code> list: airline c1 expected 8, fixed 4; retail expected 6, fixed 3; telecom expected 4, fixed 5. Optimiser input: 0.54–1.25 M tokens per session, almost all the condensed traces.</p></div>
+<div class="card"><p class="label">judge · observed</p><h3>The retail judge decides one task in twenty</h3><p>Retail's NL judge is the same Haiku on the subscription. Of the 10 retail failures across v0 and v1, 8 also fail a DB or action check — the judge is not what sinks them. Task 105 is the exception both times: DB correct, actions 1/1, NL assertion 0/1 ("agent should offer another payment method on file"); the judge's verdict is the whole reward there. That is the s00 §3 concern at its actual size: one task, and a plausible verdict on reading the trace. <code>tau2loop gate</code> reuses the recorded verdict rather than re-judging, so the number is reproducible but not re-checked.</p></div>
+</div>
+</div></section>
+
+<section class="blk" id="s5"><div class="wrap">
+<div class="hd"><p class="label">05 · Failure taxonomy</p><h2>5 · Why conversations fail — from the ledgers' diagnoses of 18 v0 failures</h2>
+<p>The optimisers diagnosed 18 of the 20 non-banking v0 train failures (airline 8, retail 6, telecom 4 of 6). Counts below are primary causes from those diagnoses, one per conversation, classified by me; banking's 16 have no ledger yet and get their own row from the traces.</p></div>
+<dl class="tx">
+<div><dt><span class="tag">F1</span>Harness context overrides the simulation · 8 of 18 primary, 13 involved</dt><dd>Airline: 7 of 8 believe the real date. Retail: all 6 failing conversations open by looking the customer up under the account email; for one (85) that is the whole failure, for the other five it costs the first turn and something else finishes the job. The optimiser can only paper over this in the prompt; the fix belongs in the provider (done for the email) or the system prompt of every v0 (N-1).<span class="path">runs/20260915T075151Z_airline_v0_train/traces/24.json · runs/20260915T080153Z_retail_v0_train/traces/85.json</span></dd></div>
+<div><dt><span class="tag">F2</span>Gives up: transfers when the policy allows handling · 6 of 18</dt><dd>Retail spec questions, insufficient balance, single-item removal; telecom once the obvious fixes fail; airline "duration unavailable". Every domain's challenger added a "do not transfer until…" rule and every one of them fixed at least one task with it. Telecom's checklist is the strongest form.<span class="path">runs/20260915T081700Z_telecom_v0_train/traces/mms_issue_bad_network_preference_bad_wifi_calling_break_app_both_permissions_data.json</span></dd></div>
+<div><dt><span class="tag">F3</span>Stops one step short of the gold trace · 3 of 18</dt><dd>Telecom: resolves the symptom and skips the data-usage check or the second roaming switch the reference actions require; airline 39 has it as a second cause behind the date. These are "the user is happy but the DB is wrong" failures — reward 0 with every communicate check passing.<span class="path">loop/telecom/ledger.jsonl · diagnoses[2]</span></dd></div>
+<div><dt><span class="tag">F4</span>Turn budget: user-sim stops before the write · the 2 regressions</dt><dd>An extra confirmation question pushes the final tool call past the simulated user's ###STOP###. This is what a cautious prompt edit breaks (airline 19 in v1, retail 67 in v1). The v2 airline rule "act on a confirmation in the next turn" is the counter.<span class="path">runs/20260915T124751Z_airline_v1_train/traces/19.json</span></dd></div>
+<div><dt><span class="tag">F5</span>Banking: retrieval-grounded answers · 16 of 20 (own row)</dt><dd>4/20 with BM25 chunks in the prompt at 15.5k tokens per call. The traces show answers that cite the right document and still fail the NL assertions on specifics (fees, thresholds, steps in order). No cycle has looked at it; it is the largest untested lever.<span class="path">runs/20260915T121036Z_banking_knowledge_v0_train/results.jsonl</span></dd></div>
+<div><dt><span class="tag">F6</span>Argument errors · 1 of 18</dt><dd>Retail 20: two parallel id lists cross-assigned. The one class a <code>helper.py</code> <code>on_tool_call</code> hook could fix deterministically; no optimiser chose to, and each said why in its diagnosis ("not a mechanical normalisation").<span class="path">agents/retail/v1/diagnosis.json</span></dd></div>
+</dl>
+</div></section>
+
+<section class="band-sec" id="s6"><div class="wrap">
+<div class="hd"><p class="label">06 · Budget</p><h2>6 · Measured budget — replacing s00 §9's estimates</h2>
+<p>Token counts are the SDK's usage fields summed per run (input includes cache reads). Cost is the API-equivalent estimate the runner records; nothing was billed per token.</p></div>
+<div class="tw"><table>
+<caption>Per run on the lean harness. "In / agent call" is agent input tokens over agent turns — the number the harness finding moved.</caption>
+<thead><tr><th>Run</th><th>Pass</th><th>Agent in</th><th>Agent out</th><th>User-sim in</th><th>In / agent call</th><th>Wall</th></tr></thead>
+<tbody>
+<tr><td class="sub">airline v0 · old harness</td><td class="num">9/20</td><td class="num">5,985,393</td><td class="num">100,600</td><td class="num">2,935,350</td><td class="num v-warn">47,129</td><td class="num">36 min</td></tr>
+<tr><td class="sub">retail v0 · old harness</td><td class="num">2/20</td><td class="num">6,195,755</td><td class="num">91,101</td><td class="num">2,373,930</td><td class="num v-warn">56,325</td><td class="num">31 min</td></tr>
+<tr><td class="sub">airline v0</td><td class="num">12/20</td><td class="num">950,424</td><td class="num">114,537</td><td class="num">94,909</td><td class="num v-ok">5,795</td><td class="num">29 min</td></tr>
+<tr><td class="sub">retail v0</td><td class="num">14/20</td><td class="num">1,762,160</td><td class="num">152,502</td><td class="num">157,390</td><td class="num v-ok">6,649</td><td class="num">43 min</td></tr>
+<tr><td class="sub">telecom v0</td><td class="num">14/20</td><td class="num">2,706,842</td><td class="num">320,207</td><td class="num">2,032,602</td><td class="num">9,598</td><td class="num">34 min + wait</td></tr>
+<tr><td class="sub">banking v0</td><td class="num">4/20</td><td class="num">5,017,298</td><td class="num">342,826</td><td class="num">487,867</td><td class="num v-warn">15,485</td><td class="num">29 min</td></tr>
+<tr><td class="sub">airline v1 · v2</td><td class="num">15 · 16</td><td class="num">1,699,360 · 1,597,100</td><td class="num">350,756 · 306,196</td><td class="num">177,576 · 139,027</td><td class="num">7,620 · 7,985</td><td class="num">37 · 35 min</td></tr>
+<tr><td class="sub">retail v1</td><td class="num">16/20</td><td class="num">1,798,907</td><td class="num">147,780</td><td class="num">168,153</td><td class="num">7,283</td><td class="num">15 min</td></tr>
+<tr><td class="sub">telecom v1 train</td><td class="num">19/20</td><td class="num">3,235,093</td><td class="num">361,678</td><td class="num">2,179,454</td><td class="num">10,335</td><td class="num">34 min</td></tr>
+<tr><td class="sub">optimiser sessions ×4 (Sonnet)</td><td class="num">—</td><td class="num">3,338,573</td><td class="num">59,242</td><td class="num">—</td><td class="num">—</td><td class="num">2.7–4.4 min each</td></tr>
+</tbody></table></div>
+<div class="kpi" style="margin-top:var(--s5)">
+<div class="k"><b>31 M</b><span>agent input tokens over all scored runs; 2.3 M output. User-sim 10.7 M in — telecom's simulator carries a large device-state prompt (2 M per run vs 0.1–0.2 M elsewhere).</span></div>
+<div class="k"><b>~2 windows</b><span>of the 5-hour subscription limit consumed by M2 + M3: the window ran out twice, and the stop this morning was to keep the third.</span></div>
+<div class="k"><b>30–45 min</b><span>per 20-task train run at concurrency 3 on the lean harness; telecom and banking at the top. A cycle with a promotion is two runs plus 4 minutes of Sonnet.</span></div>
+<div class="k"><b>$0</b><span>per-token spend. <code>require_live()</code> refused any state where a key could bill; the recorded API-equivalent estimate for every scored run is ≈ $67.</span></div>
+</div>
+<blockquote class="warn" style="margin-top:var(--s5)">Telecom's user simulator at 2 M input per run is the next harness-shaped saving: it re-sends the whole device state every turn. Not touched, because it is tau2's simulator prompt, not ours; s00 said never edit the vendor.</blockquote>
+</div></section>
+
+<section class="blk" id="s7"><div class="wrap">
+<div class="hd"><p class="label">07 · Next</p><h2>7 · Candidate next steps, ranked by the evidence above</h2>
+<p>Each item names the finding it rests on. Tick the ones that go into s02; the queued prompt carries every ID so nothing is dropped.</p></div>
+<div class="tw"><table>
+<caption>Ranked. Effort is my estimate in window-hours of the subscription.</caption>
+<thead><tr><th>ID</th><th>Step</th><th>Evidence</th><th>Expected effect</th><th>Effort</th></tr></thead>
+<tbody>
+<tr><td class="num">N-1</td><td><b>Ground every v0 against the harness context</b>: one system line in the provider's prompt — the simulation's date is the policy's, the account is not the customer — instead of per-domain prompt work.</td><td>F1 · 15 of 36 v0 failures</td><td>Airline v0 should recover most of its 7 date failures with no optimiser; retail's wasted turn is already gone via redaction.</td><td class="num">1 run per domain · ~2 h</td></tr>
+<tr><td class="num">N-2</td><td><b>Run the banking cycle</b> (cancelled today) with the optimiser told about retrieval: which chunks were in the prompt when the answer went wrong.</td><td>F5 · 4/20, no cycle</td><td>The largest headroom on the board; a first diagnosis of whether it is retrieval or reading.</td><td class="num">1 cycle · ~1.5 h</td></tr>
+<tr><td class="num">N-3</td><td><b>Re-gate airline v2 under the dominance rule and run its test split</b> (35 min), then cycle 3 from v2 after N-1 — the four still failing all show the date issue.</td><td>§1a · 4/0, p 0.062</td><td>A second promotion with a held-out number; a cleaner base for cycle 3.</td><td class="num">test run ~40 min · cycle ~1.5 h</td></tr>
+<tr><td class="num">N-4</td><td><b>Two trials per task on the gate</b> (pass^2) so a 4/0 that is real is not held by one flaky task.</td><td>§1 · two holds at 4/0 and 3/1</td><td>Fewer false holds; the gate as s00 §3 intended once the runs are cheap enough.</td><td class="num">doubles run time</td></tr>
+<tr><td class="num">N-5</td><td><b>Deploy M5</b>: you run <code>aws sso login --profile data-qa</code>; I run the bootstrap apply, push the image, merge <code>tau2-loop</code> → <code>main</code>, verify the smoke.</td><td>§2 M5</td><td>The public viewer of everything on this page.</td><td class="num">~30 min, no window</td></tr>
+<tr><td class="num">N-6</td><td><b>Rewrite the pushed history</b> to remove the account email from commits before this one (force-push of <code>tau2-loop</code>), or accept that the redaction commit is enough.</td><td>§4 · 49 files at M2</td><td>Your call — the branch is public, and nobody else has it.</td><td class="num">10 min</td></tr>
+</tbody></table></div>
+<form class="q" data-lavish-question="s02-scope" onsubmit="event.preventDefault();const sel=[...event.currentTarget.querySelectorAll('input[name=items]:checked')].map(i=>({id:i.value,label:i.dataset.label}));const n=event.currentTarget.querySelector('textarea').value.trim();if(!sel.length&&!n){return;}window.lavish.queuePrompt('s02 scope from s01: do '+(sel.map(s=>s.id+' ('+s.label+')').join(', ')||'nothing selected')+'.'+(n?' Notes: '+n:'')+' Account for every listed ID in the receipt before reporting completion.',{tag:'tracked-batch',text:'s02: '+sel.map(s=>s.id).join(' ')+(n?' + notes':''),element:event.currentTarget,data:{question:'s02-scope',items:sel,note:n}});event.currentTarget.querySelector('.queued').textContent='queued — press Send to Agent';">
+<h3>Which go into s02?</h3>
+<p class="why">Selections stay local until you press Queue. N-5 and N-6 need nothing from the subscription window; N-1 to N-4 do.</p>
+<label><input type="checkbox" name="items" value="N-1" data-label="ground v0 against the harness context" checked><span><span class="id">N-1</span>Ground every v0 against the CLI's date and account context<span class="rec">recommended</span></span></label>
+<label><input type="checkbox" name="items" value="N-2" data-label="banking cycle with retrieval-aware optimiser" checked><span><span class="id">N-2</span>Run the banking cycle<span class="rec">recommended</span></span></label>
+<label><input type="checkbox" name="items" value="N-3" data-label="re-gate airline v2 by dominance, test split, cycle 3" checked><span><span class="id">N-3</span>Re-gate airline v2 by dominance + test split; then cycle 3<span class="rec">recommended</span></span></label>
+<label><input type="checkbox" name="items" value="N-4" data-label="two trials per task on the gate"><span><span class="id">N-4</span>Two trials per task on the gate</span></label>
+<label><input type="checkbox" name="items" value="N-5" data-label="deploy M5 and merge to main" checked><span><span class="id">N-5</span>Deploy M5 and merge to main<span class="rec">recommended · needs your SSO login</span></span></label>
+<label><input type="checkbox" name="items" value="N-6" data-label="rewrite pushed history to drop the email"><span><span class="id">N-6</span>Rewrite the pushed history to drop the account email</span></label>
+<textarea placeholder="Notes for the agent — order, budget, anything to skip"></textarea>
+<div class="row"><button class="btn" type="submit">Queue this answer</button><span class="queued"></span></div>
+</form>
+</div></section>
+
+<footer><div class="wrap">s01 · tau2-loop build findings · written 16 Sep 2026 from runs/, loop/, agents/ and workspace/ logs on branch tau2-loop · s00 is the plan this reports against</div></footer>
+
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+const dark = matchMedia("(prefers-color-scheme: dark)").matches && document.documentElement.dataset.theme !== "light" || document.documentElement.dataset.theme === "dark";
+mermaid.initialize({ startOnLoad: true, theme: "base", themeVariables: {
+  fontFamily: "IBM Plex Sans, system-ui, sans-serif", fontSize: "13px",
+  primaryColor: dark ? "#191E1B" : "#FFFFFF", primaryTextColor: dark ? "#E8EBE7" : "#1A1D1B", primaryBorderColor: dark ? "#3A443E" : "#C7C5BC",
+  lineColor: dark ? "#AEB6B0" : "#4A514D", secondaryColor: dark ? "#17382C" : "#DFEFE8", tertiaryColor: dark ? "#161A18" : "#EFEEE8" }});
+</script>
+</body>
+</html>

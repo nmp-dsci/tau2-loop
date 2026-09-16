@@ -1,0 +1,103 @@
+{
+  "diagnoses": [
+    {
+      "task_id": "0",
+      "symptom": "Agent never executed the confirmed keyboard/thermostat exchange; instead it transferred to a human agent because the customer asked whether 'Google Assistant compatible' works with Google Home.",
+      "root_cause": "Agent treated an answerable product-spec clarification question as grounds for transfer, and did not execute the exchange the customer had already effectively confirmed once the clarification loop started; policy only allows transfer when the request is outside the agent's scope, which this was not.",
+      "surface": "system.md",
+      "change": "Added an operating rule forbidding transfer for product-spec questions answerable from get_product_details/get_item_details data, and a rule to execute confirmed actions immediately rather than letting a side question stall them.",
+      "verified_in_session": false,
+      "verification": "No simulation run (not permitted); change is a system-prompt rule addition, reviewed by reading the transcript and confirming get_product_details already returned the compatibility field the agent needed."
+    },
+    {
+      "task_id": "105",
+      "symptom": "Gift card had insufficient balance for the price difference; agent transferred to a human agent instead of asking for an alternate payment method.",
+      "root_cause": "Agent conflated 'customer reluctant to give new payment info' with 'must transfer', even though policy and tools support simply asking the customer to pick a different payment method already on file for the difference.",
+      "surface": "system.md",
+      "change": "Added an operating rule: on insufficient gift-card balance, ask the customer to choose a different payment method on file instead of transferring.",
+      "verified_in_session": false,
+      "verification": "No simulation run; reviewed transcript to confirm the tool error was 'Insufficient gift card balance' and no other payment method was ever offered before transferring."
+    },
+    {
+      "task_id": "85",
+      "symptom": "Agent could not authenticate the customer (no zip code) and transferred, even though the customer actually knows their email address per task metadata and could have completed the exchange.",
+      "root_cause": "Agent's first tool call in every failing transcript is find_user_id_by_email with 'account-email@redacted.invalid' — an email the customer never stated (it leaks from the agent's own context, not from the conversation). Because that bogus lookup consumed the 'ask for email' step, the agent moved straight to asking for name+zip instead of asking the customer to state their real email, so when the customer lacked a zip code the conversation stalled and got transferred instead of authenticated.",
+      "surface": "system.md",
+      "change": "Added an operating rule: only call find_user_id_by_email with an email address the customer explicitly typed in the conversation; never reuse/guess an email from context.",
+      "verified_in_session": false,
+      "verification": "Confirmed by inspecting all 6 failing transcripts: every one opens with find_user_id_by_email({\"email\": \"account-email@redacted.invalid\"}) before the customer has said anything about their email, and that email is not the simulated customer's; this is the same root cause across tasks 0, 105, 85, 5, 20, 76."
+    },
+    {
+      "task_id": "5",
+      "symptom": "Customer backed out of the water-bottle exchange ('I think I'd like to skip exchanging that one for now'); gold expects a return_delivered_order_items call for that item, but the agent just dropped it entirely.",
+      "root_cause": "The agent interpreted 'skip the exchange' as 'do nothing with this item' rather than checking whether the customer wanted a return instead; it never offered the return alternative so the ambiguity was never resolved toward the gold path.",
+      "surface": "system.md",
+      "change": "Added an operating rule to explicitly ask, when a customer backs out of an exchange for an item, whether they want to leave it as-is or return it for a refund.",
+      "verified_in_session": false,
+      "verification": "No simulation run; reviewed transcript and policy 'Return delivered order' section to confirm return is a distinct, valid action the agent could have offered."
+    },
+    {
+      "task_id": "20",
+      "symptom": "modify_pending_order_items was called, but item_ids and new_item_ids were misaligned across the four items, producing a resulting order where e.g. the Water Bottle line ended up with Makeup Kit-style options ('skin tone', 'kit size', 'brand') instead of the intended swap; DB mismatched gold.",
+      "root_cause": "Agent built the two parallel id lists without verifying that item_ids[i] and new_item_ids[i] referred to the same product, so ids from different items got cross-assigned.",
+      "surface": "system.md",
+      "change": "Added an operating rule requiring item_ids[i]/new_item_ids[i] to be verified as same-product pairs before calling modify_pending_order_items or exchange_delivered_order_items with multiple items.",
+      "verified_in_session": false,
+      "verification": "No simulation run; confirmed the misalignment by comparing the tool call's item_ids order (water bottle, keyboard, running shoes, makeup kit item) against the returned order's item options, which show mismatched product attributes on several lines."
+    },
+    {
+      "task_id": "76",
+      "symptom": "Customer wanted the fleece jacket removed from a multi-item pending order; agent could only swap items, not remove one, and transferred to a human instead of offering to cancel the whole order, so the expected cancel_pending_order for #W8367380 never happened.",
+      "root_cause": "Policy's 'Modify pending order' section only supports swapping an item's options, not deleting a line item, and 'Cancel pending order' only cancels the whole order — the agent correctly identified it couldn't do a partial removal but didn't consider offering full-order cancellation as the policy-compliant alternative, defaulting to transfer instead.",
+      "surface": "system.md",
+      "change": "Added an operating rule: when a customer wants a single item removed from a pending order, explain that partial removal isn't supported and offer to cancel the entire order (with confirmation) instead of transferring.",
+      "verified_in_session": false,
+      "verification": "No simulation run; cross-checked policy 'Modify pending order' and 'Cancel pending order' sections, which together imply full cancellation is the only supported way to eliminate an item from a pending order."
+    }
+  ],
+  "prompt_diff_summary": "Added an <operating_rules> block to system.md with five rules: never call find_user_id_by_email with an email the customer didn't state; don't transfer for answerable product questions, insufficient-balance payment issues, or single-item removal from a pending order (offer full cancellation instead); execute confirmed write actions on the very next turn; verify item_ids/new_item_ids are same-product pairs before multi-item modify/exchange calls; ask explicitly whether a customer backing out of an exchange wants to keep or return the item.",
+  "helper_diff_summary": "No changes — helper.py left absent; none of the root causes are mechanical argument-normalization issues that on_tool_call/on_reply could reliably fix without conversation context.",
+  "expected_to_fix": ["0", "105", "85", "5", "20", "76"],
+  "risks": [
+    "The anti-transfer rules could make the agent too reluctant to transfer for genuinely out-of-scope requests, but the rules only name three specific situations (answerable spec question, insufficient balance, single-item removal) that policy already supports handling directly, so in-scope transfer behavior for other cases is unchanged.",
+    "The 'execute confirmed actions immediately' rule could cause premature tool calls if confirmation was ambiguous, but it only fires after an explicit 'yes'/'go ahead', matching the existing policy requirement to get explicit confirmation before any write.",
+    "The email-authentication rule changes the agent's first move (no more blind find_user_id_by_email call), which is a behavior change on every task, not just the failing ones — but the old behavior always errored ('User not found') and wasted a turn, so this should be net neutral-to-positive on passing tasks and only helps on tasks where the customer's real email/zip flow needed that turn back."
+  ],
+  "changes": [
+    {
+      "file": "system.md",
+      "anchor": "1. Identity verification: Only call",
+      "what": "Instructs the agent to only call find_user_id_by_email with an email the customer stated, never a guessed/contextual one.",
+      "why": "All 6 failing transcripts open with find_user_id_by_email({\"email\": \"account-email@redacted.invalid\"}) — an email never mentioned by the simulated customer — which always errors and, in task 85, prevents the agent from ever asking the customer for their real (known) email.",
+      "task_ids": ["0", "105", "85", "5", "20", "76"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "2. Do not transfer to a human",
+      "what": "Lists three situations (answerable product question, insufficient payment balance, single-item removal from pending order) where the agent must handle the request itself instead of transferring.",
+      "why": "Task 0 transferred over a compatibility question answerable from get_product_details; task 105 transferred over insufficient gift-card balance instead of asking for another payment method; task 76 transferred instead of offering full-order cancellation for item removal.",
+      "task_ids": ["0", "105", "76"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "3. Execute confirmed actions immediately",
+      "what": "Requires the agent's next turn after a customer's explicit confirmation to be the corresponding tool call.",
+      "why": "Task 0: customer confirmed the keyboard exchange but the agent never called exchange_delivered_order_items before transferring over the thermostat question, losing both confirmed exchanges.",
+      "task_ids": ["0"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "4. When calling modify_pending_order_items",
+      "what": "Requires verifying item_ids[i]/new_item_ids[i] are the same product before multi-item modify/exchange calls.",
+      "why": "Task 20's modify_pending_order_items call produced a resulting order where item lines had mismatched product options (e.g. Water Bottle line showing makeup-kit attributes), indicating the id arrays were misaligned.",
+      "task_ids": ["20"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "5. If a customer backs out",
+      "what": "Requires the agent to ask explicitly whether a customer backing out of an exchange wants to keep the item or return it instead.",
+      "why": "Task 5: customer said 'skip exchanging that one for now' for the water bottle; gold expects a return_delivered_order_items call, but the agent silently dropped the item without asking about a return.",
+      "task_ids": ["5"]
+    }
+  ]
+}

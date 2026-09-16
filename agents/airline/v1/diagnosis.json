@@ -1,0 +1,107 @@
+{
+  "diagnoses": [
+    {
+      "task_id": "24",
+      "symptom": "Agent transferred to a human agent instead of processing the user's request, citing that reservation H9ZU1C flights (2024-05-24/25) had 'already been flown'.",
+      "root_cause": "The agent used a real-world notion of 'today' (it explicitly reasoned 'current date is 2026-09-15') instead of the policy's stated current time (2024-05-15 15:00:00 EST), so it wrongly classified in-window flights as past and refused to act / transferred.",
+      "surface": "both",
+      "change": "Added an explicit instruction to only use the policy's stated current time for past/future judgments, plus a helper.py extra_context hook that restates that exact line at the end of the prompt.",
+      "verified_in_session": true,
+      "verification": "Ran `uv run python -c` importing helper.extra_context(policy) against data/tasks/airline.json and confirmed it extracts 'The current time is 2024-05-15 15:00:00 EST.' and appends the reminder block correctly."
+    },
+    {
+      "task_id": "39",
+      "symptom": "Agent transferred to human agent citing reservation 8C8K4E flights (2024-05-24) as already flown, instead of evaluating refund eligibility and cancelling the 3 reservations that qualified.",
+      "root_cause": "Same real-world-date-override bug as task 24: agent believed 'today' was 2026-09-15 instead of the policy's 2024-05-15, so it misjudged every reservation as unmodifiable/past.",
+      "surface": "both",
+      "change": "Same current-time-grounding instruction and helper reminder as task 24's fix.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run beyond the shared helper.py check; relies on the same fix as task 24."
+    },
+    {
+      "task_id": "44",
+      "symptom": "Agent told the user that flight duration/layover information is unavailable with its tools and offered to transfer to a human agent, instead of using search_direct_flight for each segment to get scheduled times and reasoning about duration.",
+      "root_cause": "Prompt gave no guidance that duration can be derived from search_direct_flight/search_onestop_flight results (which include scheduled departure/arrival times); the agent defaulted to declaring the capability missing and transferring, which policy reserves for truly unsolvable requests.",
+      "surface": "system.md",
+      "change": "Added an explicit instruction to retrieve schedule times via the search tools (or reservation data) and compute durations instead of claiming the information is unavailable, and to reserve transfer_to_human_agents for requests that genuinely cannot be solved with the available tools.",
+      "verified_in_session": false,
+      "verification": "Prompt-only change; not independently executable without running the model, so left for the harness re-evaluation."
+    },
+    {
+      "task_id": "22",
+      "symptom": "Agent told the user a cabin upgrade on FQ8APE was impossible because the flights (2024-05-25) had 'already been flown', causing the user to stop instead of confirming the change.",
+      "root_cause": "Same real-world-date-override bug: agent judged 2024-05-25 as past relative to a wrongly assumed 2026-09-15 'today' instead of the policy's 2024-05-15.",
+      "surface": "both",
+      "change": "Same current-time-grounding instruction and helper reminder as task 24's fix.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run; relies on the same fix as task 24."
+    },
+    {
+      "task_id": "14",
+      "symptom": "Agent transferred to a human agent claiming reservation K1NW8N's flights (2024-05-26/28) were in the past and basic economy could not be modified for that reason, instead of proceeding to cancel-and-rebook in business per policy.",
+      "root_cause": "Same real-world-date-override bug as task 24.",
+      "surface": "both",
+      "change": "Same current-time-grounding instruction and helper reminder as task 24's fix.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run; relies on the same fix as task 24."
+    },
+    {
+      "task_id": "25",
+      "symptom": "Agent searched for flights around September/October 2026 (its own wrongly-assumed 'today') instead of near the reservation's original 2024-05-17 date, found nothing, and never booked.",
+      "root_cause": "Same real-world-date-override bug as task 24, manifesting here as the agent picking search dates relative to a wrong 'today' rather than the policy's 2024-05-15 current time, so it searched a period with no seeded flight data.",
+      "surface": "both",
+      "change": "Same current-time-grounding instruction and helper reminder as task 24's fix.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run; relies on the same fix as task 24."
+    },
+    {
+      "task_id": "11",
+      "symptom": "Agent transferred to a human agent claiming reservation GV1N64's flights (2024-05-19/20) were already flown, instead of downgrading all passengers to basic economy and stating the refund amount.",
+      "root_cause": "Same real-world-date-override bug as task 24.",
+      "surface": "both",
+      "change": "Same current-time-grounding instruction and helper reminder as task 24's fix.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run; relies on the same fix as task 24."
+    },
+    {
+      "task_id": "23",
+      "symptom": "Agent declared reservation K1NW8N's flights (2024-05-26/28) already completed/past and told the user no other recent reservation existed, ending the conversation before reaching the three-certificate multi-booking logic.",
+      "root_cause": "Same real-world-date-override bug as task 24, which pre-empted the agent from ever reaching the cancel/rebook-with-certificates workflow.",
+      "surface": "both",
+      "change": "Same current-time-grounding instruction and helper reminder as task 24's fix.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run; relies on the same fix as task 24."
+    }
+  ],
+  "prompt_diff_summary": "Added two instruction blocks to system.md: (1) a directive to treat the policy's own 'The current time is ...' line as the sole source of truth for 'today' and never substitute a real-world/model-believed date when judging whether a flight is past or upcoming, and (2) a directive to use search_direct_flight/search_onestop_flight (or reservation data) plus calculate to answer flight-duration/layover questions instead of claiming the data is unavailable and transferring.",
+  "helper_diff_summary": "Added helper.py with an extra_context(policy) hook that extracts the policy's 'The current time is ...' sentence via regex and re-appends it as a reminder block at the end of the system prompt (recency-weighted reinforcement); no hard-coded dates or task-specific values.",
+  "expected_to_fix": ["24", "39", "44", "22", "14", "25", "11", "23"],
+  "risks": [
+    "If the test split's policy ever omits the 'The current time is ...' sentence or phrases it differently, the regex in helper.py will match nothing and extra_context returns '', which is a safe no-op (falls back to the system.md instruction alone) rather than breaking anything.",
+    "The duration-reasoning instruction for task 44 nudges the agent to call search_direct_flight/search_onestop_flight more readily; this could very slightly increase tool-call counts on unrelated tasks, but should not change final DB state or communicated facts since it only applies when duration/layover is asked about.",
+    "Strengthening 'do not transfer' language could in rare cases make the agent persist on a genuinely unsolvable request instead of transferring; mitigated by keeping the original transfer_to_human_agents tool-description criterion ('cannot be handled within scope') as the explicit standard."
+  ],
+  "changes": [
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — WHAT \"TODAY\" MEANS:",
+      "what": "Instructs the agent to use only the policy's stated current time for judging past vs. future flights, explicitly overriding any other date belief.",
+      "why": "Multiple transcripts show the agent stating 'current date is 2026-09-15' and then wrongly treating in-policy 2024-05 flights as already flown, causing incorrect refusals/transfers (tasks 24, 39, 22, 14, 25, 11, 23).",
+      "task_ids": ["24", "39", "22", "14", "25", "11", "23"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — DO NOT GIVE UP TOO EARLY:",
+      "what": "Instructs the agent to derive flight duration/layover from search_direct_flight/search_onestop_flight results and calculate rather than declaring it unavailable, and to reserve transfer_to_human_agents for genuinely unsolvable requests.",
+      "why": "Task 44 transcript: agent said 'the tools available to me do not include flight duration or detailed layover time information' and asked to transfer, when the search tools return scheduled times the agent could reason over.",
+      "task_ids": ["44"]
+    },
+    {
+      "file": "helper.py",
+      "anchor": "def extra_context(policy: str) -> str:",
+      "what": "Extracts the policy's 'The current time is ...' sentence via regex and appends it again as a reminder block at the end of the system prompt.",
+      "why": "The current-time line sits near the top of a long policy; repeating it at the end (recency-favoured position) reinforces it against the model's tendency to substitute a real-world date, without hard-coding any date so it generalises to the test split's policy.",
+      "task_ids": ["24", "39", "22", "14", "25", "11", "23"]
+    }
+  ]
+}
