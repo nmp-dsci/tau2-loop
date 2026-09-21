@@ -48,6 +48,16 @@ leaderboard submission in this build (that is M6, a separate decision).
 | Deploy | DABStep-loop's pattern: ECR + App Runner, OIDC role, `workflow_run` after CI, `DEMO_MODE=1` in the Dockerfile | keyless by construction |
 | Frontend | React 18 + Vite + TS, plain CSS on `tokens.css` from DESIGN.md | the Field Guide brief; no Tailwind/DaisyUI |
 
+**Platform migration (2026-09-21).** Tracking moved from this repo's own MLflow (`make mlflow-up`, sqlite
+under `.mlflow/`, `:5601`) to the portfolio's central server in `../nmp-central-ai` (experiment `tau2-loop`,
+`http://localhost:5000`; `MLFLOW_TRACKING_URI` overrides). The
+only coupling is that env var — nothing here imports the platform. Old runs stay in `.mlflow/` as a read-only
+archive (platform decision D2; set `MLFLOW_TRACKING_URI=sqlite:///.mlflow/mlflow.db` to read them, never to
+log). The platform's `registry/projects.yaml` lists this project and `make -C ../nmp-central-ai check
+ARGS="--only P3"` re-logs one committed run as proof; run `make snapshot` only after real runs have been
+re-logged, or it will overwrite `loop/mlflow_snapshot.json` with an empty index. Contract:
+`../nmp-central-ai/PLATFORM.md`; receipt: `../nmp-central-ai/ai_specs/s01_m0_m1_build_receipt.md`.
+
 ## 3 · Layout
 
 ```
