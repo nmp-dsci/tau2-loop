@@ -9,7 +9,7 @@
 - `make smoke` · `make eval DOMAIN=airline` · `make loop DOMAIN=airline CYCLES=1`
 - `make dev` + `cd frontend && npm run dev` (UI on :5174) · `make viewer`
 - `uv run pytest -q` · `make lint` · `make gate`
-- MLflow: `make mlflow-up` → http://127.0.0.1:5601
+- MLflow: central (`make platform-up` → `make -C ../nmp-central-ai up`) → http://localhost:5000; `MLFLOW_TRACKING_URI` overrides
 
 ## Rules
 

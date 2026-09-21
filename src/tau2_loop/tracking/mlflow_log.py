@@ -1,4 +1,4 @@
-"""Log a run folder to the self-hosted MLflow (sqlite, :5600).
+"""Log a run folder to the central MLflow (nmp-central-ai, http://localhost:5000).
 
 MLflow is the index, never the record: every artifact it holds is a copy of a
 file in `runs/<id>/`. If the server is down the eval still completes and the

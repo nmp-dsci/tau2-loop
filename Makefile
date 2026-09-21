@@ -7,7 +7,7 @@ TRIALS ?= 1
 CONCURRENCY ?= 3
 CYCLES ?= 1
 OPTIMISER ?= sonnet
-MLFLOW_PORT ?= 5601
+MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
 
 help: ## list targets
@@ -21,18 +21,19 @@ setup: ## submodule at the pin, python deps (uv) and frontend deps (npm)
 splits: ## cut the 20 / 20 train / test split per domain (seed 300) → data/splits, data/tasks
 	uv run tau2loop splits
 
-mlflow-up: ## start the self-hosted MLflow tracking server on :$(MLFLOW_PORT)
-	mkdir -p .mlflow
-	uv run mlflow server --host 127.0.0.1 --port $(MLFLOW_PORT) \
-	  --backend-store-uri sqlite:///.mlflow/mlflow.db --artifacts-destination .mlflow/artifacts
+platform-up: ## start the central MLflow (nmp-central-ai: postgres + minio + mlflow on :5000)
+	$(MAKE) -C ../nmp-central-ai up
 
-smoke: ## the adapter on the mock domain (10 tasks): agent, user simulator and judge on the subscription
+platform-status: ## preflight: the central MLflow must answer /health (runs before every tracked eval)
+	@curl -fsS $(MLFLOW_TRACKING_URI)/health >/dev/null || (echo "central MLflow down at $(MLFLOW_TRACKING_URI): run make platform-up"; exit 1)
+
+smoke: platform-status ## the adapter on the mock domain (10 tasks): agent, user simulator and judge on the subscription
 	uv run tau2loop smoke --concurrency $(CONCURRENCY)
 
-eval: ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=)
+eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=)
 	uv run tau2loop eval --domain $(DOMAIN) --agent $(AGENT) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY)
 
-baselines: ## v0 on the train split of all four domains, one trial each
+baselines: platform-status ## v0 on the train split of all four domains, one trial each
 	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --agent v0 --split train --concurrency $(CONCURRENCY) || exit 1; done
 
 score: ## summarise RUN=<run id>
@@ -50,13 +51,13 @@ register: ## register RUN=<run id> as challenger
 promote: ## promote RUN=<run id> to champion of its domain
 	uv run tau2loop promote $(RUN)
 
-loop: ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate (OPTIMISER=sonnet)
+loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate (OPTIMISER=sonnet)
 	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY)
 
 ledger: ## print DOMAIN's loop ledger
 	uv run tau2loop ledger --domain $(DOMAIN)
 
-snapshot: ## export MLflow to loop/mlflow_snapshot.json
+snapshot: platform-status ## export MLflow to loop/mlflow_snapshot.json
 	uv run tau2loop snapshot
 
 gate: ## the CI gate: every champion re-scores offline to what its registry says
@@ -82,4 +83,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: help setup splits mlflow-up smoke eval baselines score rescore compare register promote loop ledger snapshot gate dev viewer demo-up test lint fmt
+.PHONY: help setup splits platform-up platform-status smoke eval baselines score rescore compare register promote loop ledger snapshot gate dev viewer demo-up test lint fmt

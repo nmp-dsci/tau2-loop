@@ -21,7 +21,7 @@ airline, retail, telecom, banking_knowledge. This project:
    litellm provider over the Claude Agent SDK (`src/tau2_loop/llm/`);
 2. scores it on our own committed 20 train / 20 test split per domain
    (`data/splits/`, seed 300) and keeps every run as a folder under `runs/`,
-   indexed in a self-hosted MLflow;
+   indexed in the central MLflow (nmp-central-ai);
 3. runs an **error loop per domain**: one optimiser session (Sonnet) reads
    every failed conversation and the ledger of earlier attempts, writes
    `agents/<domain>/v(N+1)/`, and a gate promotes it when a one-sided McNemar
@@ -43,7 +43,7 @@ leaderboard submission in this build (that is M6, a separate decision).
 | Tool calls | a JSON reply contract in the prompt (`tool_mode: json`), parsed back into `tool_calls` | the SDK cannot return a native tool call without executing it; the contract is the same either-message-or-tools rule tau2 enforces |
 | Sampling | the CLI default; tau2's `temperature: 0.0` does not apply | the SDK exposes no temperature; recorded as `sampling: cli-default` on every run |
 | Trials | one per cycle for the gate; `pass^k` over trials when `TRIALS>1` | a cycle is 20 conversations; the board's ≥4 trials is a submission requirement, not a loop one |
-| Tracking | MLflow 3, sqlite, `:5601`, self-hosted; `loop/<domain>/registry.json` is the truth | the run folder is the record, MLflow the index; DABStep-loop uses `:5600` |
+| Tracking | MLflow 3 on the central platform (`nmp-central-ai`, http://localhost:5000; `MLFLOW_TRACKING_URI` overrides); `loop/<domain>/registry.json` is the truth | one server for the portfolio (DABStep-loop logs to the same one, experiment `dabstep-loop`); the run folder is the record, MLflow the index; the old sqlite store under `.mlflow/` is an archive |
 | Billing | `require_live()` refuses a key alongside `BILLING=subscription`, scrubs a key tau2's dotenv search injects from `~/.env`, blanks the key in the SDK child | tau2's `utils.py` calls `load_dotenv()` with a directory search on import |
 | Deploy | DABStep-loop's pattern: ECR + App Runner, OIDC role, `workflow_run` after CI, `DEMO_MODE=1` in the Dockerfile | keyless by construction |
 | Frontend | React 18 + Vite + TS, plain CSS on `tokens.css` from DESIGN.md | the Field Guide brief; no Tailwind/DaisyUI |
@@ -75,7 +75,8 @@ frontend/                 Vite + React; src/tokens.css verbatim from DESIGN.md; 
 ```
 make setup                submodule + uv sync + npm ci
 make splits               cut the splits and task extracts (only when seed/size change)
-make mlflow-up            MLflow on :5601 (sqlite under .mlflow/)
+make platform-up          central MLflow (make -C ../nmp-central-ai up) → http://localhost:5000
+make platform-status      preflight: is the central MLflow up? (smoke/eval/loop run it first)
 make smoke                v0 on the mock domain: proves the adapter on all three roles
 make eval DOMAIN=airline AGENT=v0 SPLIT=train [TRIALS=1] [CONCURRENCY=3]
 make baselines            v0 on train for all four domains

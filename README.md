@@ -75,6 +75,6 @@ Details and next steps: `.lavish/s01_build-findings.html`.
 make setup          # submodule at the pin, uv sync, npm ci
 cp .env.example .env
 claude login        # the subscription; no ANTHROPIC_API_KEY anywhere
-make mlflow-up      # http://127.0.0.1:5601
+make platform-up    # central MLflow (make -C ../nmp-central-ai up) → http://localhost:5000
 make test · make lint
 ```
