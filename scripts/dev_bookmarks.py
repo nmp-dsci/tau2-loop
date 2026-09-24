@@ -28,8 +28,10 @@ import shutil
 import subprocess
 import time
 import uuid
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 CHROME_DEFAULT = Path.home() / "Library/Application Support/Google/Chrome/Default"
 FOLDER = "Dev apps (local)"
@@ -118,7 +120,7 @@ def cwd_of(pid: int) -> str:
 
 def docker_projects() -> dict[int, str]:
     """host port → compose project, for containers publishing a port."""
-    fmt = "{{.Label \"com.docker.compose.project\"}}\t{{.Ports}}"
+    fmt = '{{.Label "com.docker.compose.project"}}\t{{.Ports}}'
     out: dict[int, str] = {}
     for line in _sh(["docker", "ps", "--format", fmt]).splitlines():
         project, _, ports = line.partition("\t")
@@ -176,8 +178,8 @@ def _chrome_now() -> str:
     return str(int(time.time() * 1_000_000) + 11_644_473_600 * 1_000_000)
 
 
-def _next_id(doc: dict) -> "callable[[], str]":  # type: ignore[valid-type]
-    def walk(node: dict):
+def _next_id(doc: dict[str, Any]) -> Callable[[], str]:
+    def walk(node: dict[str, Any]) -> Iterator[dict[str, Any]]:
         yield node
         for child in node.get("children", []):
             yield from walk(child)
@@ -192,8 +194,10 @@ def _next_id(doc: dict) -> "callable[[], str]":  # type: ignore[valid-type]
     return nxt
 
 
-def build_folder(groups: dict[str, list[tuple[str, str]]], nxt) -> dict:
-    def url_node(name: str, href: str) -> dict:
+def build_folder(
+    groups: dict[str, list[tuple[str, str]]], nxt: Callable[[], str]
+) -> dict[str, Any]:
+    def url_node(name: str, href: str) -> dict[str, Any]:
         return {
             "type": "url",
             "name": name,
@@ -203,7 +207,7 @@ def build_folder(groups: dict[str, list[tuple[str, str]]], nxt) -> dict:
             "guid": str(uuid.uuid4()),
         }
 
-    def folder_node(name: str, children: list[dict]) -> dict:
+    def folder_node(name: str, children: list[dict[str, Any]]) -> dict[str, Any]:
         return {
             "type": "folder",
             "name": name,
@@ -216,7 +220,7 @@ def build_folder(groups: dict[str, list[tuple[str, str]]], nxt) -> dict:
 
     order = list(KNOWN.values()) + list(DOCKER_LABELS.values())
     rank = {name: i for i, name in enumerate(order)}
-    subfolders = [
+    subfolders: list[dict[str, Any]] = [
         folder_node(label, [url_node(n, u) for n, u in links])
         for label, links in sorted(groups.items(), key=lambda kv: (rank.get(kv[0], 99), kv[0]))
     ]
