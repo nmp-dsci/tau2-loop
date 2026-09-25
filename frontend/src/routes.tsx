@@ -9,6 +9,7 @@ import { Run } from './pages/Run';
 import { Trace } from './pages/Trace';
 import { Optimise, OptimiseRound } from './pages/Optimise';
 import { Review } from './pages/Review';
+import { Leaderboard } from './pages/Leaderboard';
 import { search } from './lib/url';
 
 /**
@@ -52,6 +53,9 @@ export const routes: RouteObject[] = [
 
       // how a conversation is judged
       { id: 'rubric', path: '/rubric', element: <Rubric /> },
+
+      // who else has tried
+      { id: 'leaderboard', path: '/leaderboard', element: <Leaderboard /> },
 
       // what we ran — the gate is a lens on a run, not a tab
       { id: 'runs', path: '/runs', element: <Runs /> },

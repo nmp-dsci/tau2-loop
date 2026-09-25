@@ -60,6 +60,9 @@ ledger: ## print DOMAIN's loop ledger
 snapshot: platform-status ## export MLflow to loop/mlflow_snapshot.json
 	uv run tau2loop snapshot
 
+leaderboard: ## ingest tau2-bench's published submissions into data/index/leaderboard.json
+	uv run tau2loop leaderboard
+
 db-migrate: ## apply infra/roles.sql to the central Postgres (database `tau2`, idempotent)
 	uv run python -c "from tau2_loop.data import pg; pg.migrate(); print('tau2_loop schema ready')"
 

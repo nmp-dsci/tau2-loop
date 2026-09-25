@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentPath,
   domainPath,
+  leaderboardPath,
   optimisePath,
   parseTaskId,
   parseTrialId,
@@ -135,6 +136,8 @@ describe('every address the viewer builds lands on the page it names', () => {
     ['/agent', 'agents'],
     [agentPath('airline', 'v2', { node: 'judge' }), 'agent'],
     ['/rubric', 'rubric'],
+    ['/leaderboard', 'leaderboard'],
+    [leaderboardPath({ domain: 'telecom' }), 'leaderboard'],
     ['/review', 'review'],
     [`/review/${RUN}/0/t1`, 'review-one'],
     [reviewPath(RUN, '0/t2'), 'review-one'],

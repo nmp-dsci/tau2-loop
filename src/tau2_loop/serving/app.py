@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from tau2_loop import __version__
 from tau2_loop.agent.versions import list_versions, load_version
 from tau2_loop.config import DOMAINS, FRONTEND_DIST, RUNS_DIR, SMOKE_DOMAIN, settings
+from tau2_loop.data import leaderboard as board
 from tau2_loop.data import pg
 from tau2_loop.data.splits import read_split, read_task_extract
 from tau2_loop.eval import review as review_store
@@ -346,6 +347,52 @@ def create_app() -> FastAPI:
         if row is None or not row.trace:
             raise HTTPException(404, "no such conversation")
         return {**trace(run_id, row.trace), "result": row.__dict__, "domain": meta.domain}
+
+    @app.get("/api/leaderboard")
+    def leaderboard() -> dict[str, Any]:
+        """The published board, and our own runs on the same axis.
+
+        Every published entry is self-reported: a team runs the harness and opens a
+        pull request. Ours are not on it — `ours` is what a submission would claim,
+        computed from the same `pass^k` the harness writes into each run's summary.
+        """
+        index = board.read()
+        entries = index.get("entries") or []
+        ours = []
+        for m in list_runs():
+            s = m.summary or {}
+            if m.dry_run or not s.get("n_scored") or m.domain not in DOMAINS:
+                continue
+            ours.append(
+                {
+                    "run_id": m.run_id,
+                    "domain": m.domain,
+                    "agent": m.agent,
+                    "fingerprint": m.fingerprint,
+                    "split": m.split,
+                    "n_tasks": m.n_tasks,
+                    "trials": m.trials,
+                    "model": m.model,
+                    "user_model": m.user_model,
+                    "pass_hat_k": s.get("pass_hat_k") or {},
+                    "passed": s.get("passed"),
+                    "n_scored": s.get("n_scored"),
+                    "cost_usd_est": s.get("cost_usd_est"),
+                    "started_at": m.started_at,
+                }
+            )
+        return {
+            **index,
+            "best": board.best_per_domain(entries),
+            "ours": ours,
+            # what would make our entry unverified if it were submitted (plan s03)
+            "our_caveats": {
+                "user_simulator": "claude-sdk/claude-haiku-4-5",
+                "tool_calling": "a JSON contract in the prompt, not native tool calls",
+                "prompts": "written by our optimiser, so `modified_prompts` would be true",
+                "split": "our own 20/20 train/test cut, not the full base set",
+            },
+        }
 
     # ── reviews: the one write path (s04 M5) ─────────────────────────────
     @app.get("/api/review")

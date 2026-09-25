@@ -63,6 +63,7 @@ export const agentsPath = (lens?: Lens): string => `/agent${search(lens)}`;
 /** A round is named for the version it wrote: `/optimise/airline/v2`. */
 export const optimisePath = (domain?: string, version?: string, lens?: Lens): string =>
   (domain ? `/optimise/${enc(domain)}${version ? `/${enc(version)}` : ''}` : '/optimise') + search(lens);
+export const leaderboardPath = (lens?: Lens): string => `/leaderboard${search(lens)}`;
 export const rubricPath = (lens?: Lens): string => `/rubric${search(lens)}`;
 /** The review list, or one conversation's review: `/review/<run>/<task>/t1`.
  *  Takes the ids, never an already-built path: encoding an encoded segment again is

@@ -3,14 +3,15 @@ import { type Health, useGet } from './lib/api';
 
 /**
  * Eight tabs, in the order the story runs: what the benchmark is → how it is
- * judged → what we ran → how we improve → what the agent is. s04 M3 collapsed
- * nine ad-hoc tabs into DataAgentBench's eight slots; Leaderboard (M6) and
- * Review (M5) fill the two that are still empty.
+ * judged → who else has tried → what we ran → how we improve → what the agent
+ * is → what we know by hand. The same eight slots as DataAgentBench's explorer
+ * (s04 M3–M6).
  */
 const NAV: [string, string][] = [
   ['/', 'Overview'],
   ['/domains', 'Domains & tasks'],
   ['/rubric', 'Rubric'],
+  ['/leaderboard', 'Leaderboard'],
   ['/runs', 'Runs'],
   ['/optimise', 'Optimise'],
   ['/agent', 'Agent'],

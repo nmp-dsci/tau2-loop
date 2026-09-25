@@ -136,6 +136,20 @@ def ledger(domain: str = "airline") -> None:
 
 
 @app.command()
+def leaderboard() -> None:
+    """Ingest τ²-bench's published submissions into data/index/leaderboard.json."""
+    from tau2_loop.data.leaderboard import best_per_domain, ingest
+
+    payload = ingest()
+    console.print(
+        f"[bold]{len(payload['entries'])}[/] of {payload['listed']} listed submissions "
+        f"from tau2-bench@{payload['tau2_sha']}"
+    )
+    for domain, best in best_per_domain(payload["entries"]).items():
+        console.print(f"  {domain:20} best pass^1 {best['pass_1']:.1f}  {best['model']}")
+
+
+@app.command()
 def snapshot() -> None:
     """Export the MLflow experiment to loop/mlflow_snapshot.json for the demo image."""
     from tau2_loop.tracking.snapshot import write_snapshot
