@@ -71,9 +71,16 @@ ONE INSIGHT LINE    — what it means, once, in under 25 words
 
 ### Colour
 - 60/30/10: surfaces (`--bg --panel --band`), ink (four steps), accent.
-- **The accent means "act on this" or "shipped / passed".** Primary buttons,
-  links, the recommended option, a passed gate. Never decoration, never
-  borders that carry no status, never a diagram fill without meaning.
+- **The accent means "act on this".** Primary buttons, links, the recommended
+  option, the brand. Never decoration, never borders that carry no status,
+  never a diagram fill without meaning. `--accent` here is red, not the
+  portfolio's green: this project's one deliberate divergence from the site
+  palette, recorded 2026-09-25 (plan `.lavish/s04_…`, decision Q3-A).
+- **`--ok` means exactly one thing: passed** — a passed gate, a correct
+  conversation, a promoted champion (`.v-ok`, `.chip.ok`, `.status.ok`,
+  `tr.pro`). It is this project's extension to the site palette, not a site
+  token, and exists because `--accent` is red here: a pass must never render
+  as a failure.
 - **`--amber` means exactly one thing: partial** (a warning, a caveat, a
   provisional number). `--line-3` outlines mean **designed, not built**.
 - Status is never colour alone; every glyph is accompanied by the word.
@@ -154,23 +161,27 @@ bigger unverified one.
 | Surface | What it is | How the brief applies |
 |---|---|---|
 | `.lavish/sNN_*.html` | the review artifact written before each change | full system: tokens block copied verbatim, assertion headings, `.dia` figures, `form.q` decision controls |
-| `frontend/` | the React + Vite demo site (served from FastAPI, deployed to App Runner as read-only) | `frontend/src/tokens.css` is the token block below, verbatim; `frontend/scripts/design_lint.mjs` hard-fails on hex outside it; three voices; status words with glyphs; tables per §2; every page led by an assertion headline; no metric strip without a baseline |
+| `frontend/` | the React + Vite demo site (served from FastAPI, deployed to App Runner as read-only) | `frontend/src/tokens.css` is the token block below, including its two recorded divergences (`--accent` red, `--ok` added); `frontend/scripts/design_lint.mjs` hard-fails on hex outside it; three voices; status words with glyphs; tables per §2; every page led by an assertion headline; no metric strip without a baseline |
 | `README.md`, `docs/` | the repo's public face | assertion headings; every number with its denominator; figures as committed SVG with a title and caption |
 | `nmp-dsci.github.io/_projects/tau2-loop.md` | the eventual case study | the site's own contract applies, run `scripts/lint_case_study.py` there |
 
 ## 5. The tokens
 
-The light palette below is copied from `nmp-dsci.github.io/assets/css/tokens.css`
-and must be pasted into every artifact unchanged, with the dark override that
-follows it. Fonts load from Google Fonts in artifacts (the site self-hosts).
+The light palette below is the site's
+(`nmp-dsci.github.io/assets/css/tokens.css`), with this project's two recorded
+divergences: `--accent` is red, not the site's green, and `--ok` carries the
+"passed" meaning the site's green accent carried (§2 Colour). Everything else
+is pasted into every artifact unchanged, with the dark override that follows
+it. Fonts load from Google Fonts in artifacts (the site self-hosts).
 
 ```css
 :root{
   --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
   --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
   --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
-  --accent:#0A6552; --accent-ink:#FFFFFF; --accent-soft:#DFEFE8;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7; /* divergence: red, not the site's #0A6552 */
   --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8; /* project extension: passed (§2 Colour) */
   --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
   --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
   --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -185,8 +196,9 @@ follows it. Fonts load from Google Fonts in artifacts (the site self-hosts).
   --bg:#121614; --panel:#191E1B; --band:#161A18;
   --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
   --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
-  --accent:#43C29A; --accent-ink:#0E1512; --accent-soft:#17382C;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
   --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
   --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
 }}
 :root[data-theme="dark"]{ /* same values as the dark block above */ }
