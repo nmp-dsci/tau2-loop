@@ -45,20 +45,34 @@ KEY_IN_SHELL_AT_START = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
 
 
 class Settings(BaseModel):
-    """Runtime settings, read once from the environment."""
+    """Runtime settings, read once from the environment.
+
+    The two central services are nmp-central-ai's (PLATFORM.md): MLflow on :5000 and
+    Postgres on :5432, database `tau2`. Both are optional at boot — the viewer serves
+    committed files with either one stopped — but neither is ever replaced by a local
+    store (PLATFORM.md rule 1). `make -C ../nmp-central-ai db-urls` prints the URLs.
+    """
 
     billing: str = "subscription"
     demo_mode: bool = False
     mlflow_tracking_uri: str = "http://localhost:5000"
+    database_url: str = "postgresql://tau2_owner:tau2_owner@localhost:5432/tau2"
+    ro_database_url: str = "postgresql://tau2_ro:tau2_ro@localhost:5432/tau2"
+    pg_superuser_url: str = "postgresql://nmp:nmp@localhost:5432/tau2"
     code_sha: str = "unknown"
 
     @classmethod
     def from_env(cls) -> Settings:
+        env = os.environ.get
+        default = cls.model_fields
         return cls(
-            billing=os.environ.get("BILLING", "subscription").strip().lower(),
-            demo_mode=os.environ.get("DEMO_MODE", "").strip() in {"1", "true", "yes"},
-            mlflow_tracking_uri=os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000"),
-            code_sha=os.environ.get("TAU2LOOP_CODE_SHA", "unknown"),
+            billing=env("BILLING", "subscription").strip().lower(),
+            demo_mode=env("DEMO_MODE", "").strip() in {"1", "true", "yes"},
+            mlflow_tracking_uri=env("MLFLOW_TRACKING_URI", "http://localhost:5000"),
+            database_url=env("DATABASE_URL", str(default["database_url"].default)),
+            ro_database_url=env("RO_DATABASE_URL", str(default["ro_database_url"].default)),
+            pg_superuser_url=env("PG_SUPERUSER_URL", str(default["pg_superuser_url"].default)),
+            code_sha=env("TAU2LOOP_CODE_SHA", "unknown"),
         )
 
 
