@@ -25,16 +25,31 @@ def test_an_unreachable_database_is_a_state_not_an_error() -> None:
     assert pg.reachable("postgresql://nobody:nobody@127.0.0.1:1/none") is False
 
 
-def test_the_schema_file_creates_its_tables_as_the_owner() -> None:
-    sql = pg.ROLES_SQL.read_text()
-    # a table owned by the superuser is invisible to tau2_owner: the DDL must act as it
-    assert "SET ROLE tau2_owner;" in sql
-    assert sql.index("SET ROLE tau2_owner;") < sql.index(
-        "CREATE TABLE IF NOT EXISTS tau2_loop.review"
-    )
-    assert "RESET ROLE;" in sql
-    # and the read-only role must never be able to write
-    assert "default_transaction_read_only = on" in sql
+@pytest.mark.skipif(not pg.reachable(), reason="central Postgres not running")
+def test_migrate_leaves_every_table_owned_by_tau2_owner_and_visible_to_it() -> None:
+    # a table owned by the platform superuser is invisible to tau2_owner: migrate()
+    # must reclaim ownership before creating anything, or this regresses silently
+    pg.migrate()
+    with pg.connect() as con:
+        owners = con.execute(
+            "select tablename, tableowner from pg_tables where schemaname = %s",
+            (pg.SCHEMA,),
+        ).fetchall()
+        assert {name for name, _ in owners} == {"review", "submission"}
+        assert all(owner == "tau2_owner" for _, owner in owners)
+
+        visible = {
+            r[0]
+            for r in con.execute(
+                "select table_name from information_schema.tables where table_schema = %s",
+                (pg.SCHEMA,),
+            ).fetchall()
+        }
+        assert visible == {"review", "submission"}
+
+    # idempotent: a second migrate() used to fail with "must be owner of table
+    # review" on CREATE INDEX IF NOT EXISTS once the superuser owned the tables
+    pg.migrate()
 
 
 @pytest.mark.skipif(not pg.reachable(), reason="central Postgres not running")
