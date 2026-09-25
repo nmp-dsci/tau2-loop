@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>s03 · eval-submission — score one whole domain, submit it, keep the loop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Design source (2): the project's own system — DESIGN.md / frontend/src/tokens.css ("Field Guide"),
+   the same tokens s00–s02 use, so this page reads as part of the same series. */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#0A6552; --accent-ink:#FFFFFF; --accent-soft:#DFEFE8;
+  --amber:#8A5006; --amber-soft:#F6E6CF; --red:#8A2B1D; --red-soft:#F5DCD7;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --w:1180px; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121614; --panel:#191E1B; --band:#161A18;
+    --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+    --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+    --accent:#43C29A; --accent-ink:#0E1512; --accent-soft:#17382C;
+    --amber:#D99A4E; --amber-soft:#3A2A14; --red:#E08A7A; --red-soft:#3A1E1A;
+    --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#43C29A; --accent-ink:#0E1512; --accent-soft:#17382C;
+  --amber:#D99A4E; --amber-soft:#3A2A14; --red:#E08A7A; --red-soft:#3A1E1A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+*,*::before,*::after{box-sizing:border-box}
+:where(.grid,.flex,.kpi,.cards,.ms .m,.opts)>*{min-width:0}
+:where(p,h1,h2,h3,h4,li,dd,figcaption,td,th,.chip,.label){overflow-wrap:anywhere}
+:where(img,svg,video,iframe){max-width:100%;height:auto}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink-2);font-family:var(--sans);font-size:var(--t0);line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{color:var(--ink);margin:0;line-height:1.15;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+h1{font-size:var(--t4);font-family:var(--serif);font-weight:400} h1 em{font-style:italic;font-weight:400;color:var(--accent)}
+h2{font-size:var(--t3)} h3{font-size:var(--t1)} h4{font-size:var(--t0)}
+p{margin:0 0 var(--s4);text-wrap:pretty}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.2em}
+strong,b{color:var(--ink);font-weight:600}
+code{font-family:var(--mono);font-size:max(var(--t-2),.86em);background:var(--band);padding:.08em .32em;border-radius:var(--r-sm);color:var(--ink-2)}
+.wrap{max-width:var(--w);margin-inline:auto;padding-inline:var(--s5)}
+.label{font-family:var(--mono);font-size:var(--t-2);font-weight:500;letter-spacing:var(--track-label);text-transform:uppercase;color:var(--faint);margin:0}
+.lead{font-family:var(--serif);font-size:var(--t1);line-height:1.5;color:var(--ink-2);max-width:72ch}
+.small{font-size:var(--t-1);color:var(--muted)}
+.top{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top-in{max-width:var(--w);margin-inline:auto;padding:var(--s3) var(--s5);display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap}
+.top b{font-family:var(--mono);font-size:var(--t-1);color:var(--ink);white-space:nowrap}
+.top nav{display:flex;gap:var(--s4);margin-left:auto;flex-wrap:wrap;font-size:var(--t-1);font-weight:500}
+.top nav a{color:var(--ink-2);text-decoration:none;padding:var(--s1) 0} .top nav a:hover{color:var(--accent)}
+header.hero{padding:var(--s7) 0 var(--s5)}
+.chips{display:flex;gap:var(--s2);flex-wrap:wrap;margin:var(--s4) 0 0}
+.chip{font-family:var(--mono);font-size:var(--t-2);padding:.3em .6em;border:1px solid var(--line-2);border-radius:var(--r-sm);color:var(--ink-2);background:var(--panel)}
+.chip.ok{border-color:var(--accent);color:var(--accent)} .chip.warn{border-color:var(--amber);color:var(--amber)} .chip.bad{border-color:var(--red);color:var(--red)}
+section.blk{padding-top:var(--s8)} section.blk:last-of-type{padding-bottom:var(--s9)}
+section.band-sec{background:var(--band);margin-top:var(--s8);padding:var(--s7) 0}
+section.band-sec + section.blk{padding-top:var(--s7)}
+.hd{margin-bottom:var(--s5);max-width:84ch} .hd .label{margin-bottom:var(--s2)} .hd h2{margin-bottom:var(--s3)}
+.panel{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5)}
+.grid{display:grid;gap:var(--s4)} .g3{grid-template-columns:repeat(3,minmax(0,1fr))} .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:900px){.g3,.g2{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5)}
+.card h3{margin-bottom:var(--s2)} .card p{margin-bottom:var(--s2);font-size:var(--t-1)} .card p:last-child{margin:0}
+.card .label{margin-bottom:var(--s2)}
+.card.pro{box-shadow:var(--shadow),inset 0 0 0 1.5px var(--accent)}
+.card.warn{box-shadow:var(--shadow),inset 0 0 0 1.5px var(--amber)}
+.card.bad{box-shadow:var(--shadow),inset 0 0 0 1.5px var(--red)}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r);box-shadow:var(--shadow);background:var(--panel)}
+.tw table{width:100%;border-collapse:collapse;font-size:var(--t-1);min-width:720px}
+caption{text-align:left;padding:var(--s4) var(--s5) var(--s2);color:var(--muted);font-size:var(--t-1);caption-side:top}
+.tw thead th{font-family:var(--mono);font-size:var(--t-2);letter-spacing:var(--track-label);text-transform:uppercase;color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);font-weight:500;white-space:nowrap}
+.tw td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;line-height:1.45}
+.tw tbody tr:last-child td{border-bottom:0}
+.tw td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;font-size:var(--t-2)}
+.tw td.sub{color:var(--ink);font-weight:600;white-space:nowrap}
+.tw .path{display:block;font-family:var(--mono);font-size:var(--t-2);color:var(--faint);margin-top:2px;word-break:break-all}
+.tw tr.pro td{background:color-mix(in srgb,var(--accent-soft) 55%,transparent)}
+.tw tr.dim td{color:var(--faint)}
+.v-ok{color:var(--accent);font-weight:600} .v-no{color:var(--muted)} .v-warn{color:var(--amber);font-weight:600} .v-bad{color:var(--red);font-weight:600}
+.kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s4)}
+@media(max-width:900px){.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi .k{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4)}
+.kpi .k b{display:block;font-family:var(--mono);font-size:var(--t3);color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi .k span{display:block;font-size:var(--t-2);color:var(--muted);margin-top:var(--s2);line-height:1.4}
+blockquote{margin:0;padding:var(--s3) var(--s4);border-left:2px solid var(--accent);background:var(--band);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:var(--t-1)}
+blockquote.warn{border-left-color:var(--amber)} blockquote.bad{border-left-color:var(--red)}
+figure{margin:0} .fig{margin:var(--s5) 0 0}
+.fig-title{font-family:var(--mono);font-size:var(--t-2);font-weight:500;letter-spacing:var(--track-label);text-transform:uppercase;color:var(--faint);margin:0 0 var(--s3);text-wrap:balance}
+figcaption{font-size:var(--t-1);color:var(--muted);line-height:1.5;margin-top:var(--s3)} figcaption b{color:var(--ink);font-weight:600}
+pre.code{font-family:var(--mono);font-size:var(--t-2);line-height:1.55;background:var(--band);border-radius:var(--r);padding:var(--s4);overflow-x:auto;margin:0;color:var(--ink-2);white-space:pre}
+ul.tight{margin:0;padding-left:1.1em;font-size:var(--t-1)} ul.tight li{margin-bottom:var(--s1)}
+ol.steps{margin:0;padding-left:1.3em} ol.steps li{margin-bottom:var(--s2)}
+.ms{display:grid;gap:var(--s3)}
+.ms .m{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:var(--s3);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4)}
+@media(max-width:600px){.ms .m{grid-template-columns:minmax(0,1fr)}}
+.ms .m .n{font-family:var(--mono);color:var(--accent);font-weight:500} .ms .m .n span{display:block;font-size:var(--t-2);color:var(--faint);font-weight:400;margin-top:2px}
+.ms .m p{margin:0 0 var(--s2);font-size:var(--t-1)} .ms .m p:last-child{margin:0} .ms .m h4{margin-bottom:var(--s1)}
+/* svg figure */
+.flow{width:100%;height:auto;display:block;font-family:var(--sans)}
+.flow .box{fill:var(--panel);stroke:var(--line-2);stroke-width:1}
+.flow .box.ours{fill:var(--accent-soft);stroke:var(--accent)}
+.flow .box.theirs{fill:var(--band);stroke:var(--line-3);stroke-dasharray:4 3}
+.flow .box.human{fill:var(--amber-soft);stroke:var(--amber)}
+.flow text{fill:var(--ink);font-size:13px} .flow text.t{font-weight:600} .flow text.s{fill:var(--muted);font-size:11px;font-family:var(--mono)}
+.flow .edge{stroke:var(--line-3);stroke-width:1.4;fill:none;marker-end:url(#arr)}
+.flow .lane{fill:none;stroke:var(--line);stroke-width:1} .flow text.lane{fill:var(--faint);font-size:11px;font-family:var(--mono);letter-spacing:.08em;text-transform:uppercase}
+/* decision form */
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5)}
+form.q fieldset{border:0;padding:0;margin:0 0 var(--s5)} form.q legend{font-weight:600;color:var(--ink);margin-bottom:var(--s3);padding:0}
+form.q label.o{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:start;padding:var(--s3) var(--s4);border:1px solid var(--line);border-radius:var(--r-sm);margin-bottom:var(--s2);cursor:pointer;font-size:var(--t-1)}
+form.q label.o:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent-soft) 60%,transparent)}
+form.q label.o b{display:block;color:var(--ink)} form.q label.o span{color:var(--muted)}
+form.q input[type=radio],form.q input[type=checkbox]{margin-top:.25em;accent-color:var(--accent)}
+form.q textarea{width:100%;min-height:5em;font:inherit;font-size:var(--t-1);padding:var(--s3);border:1px solid var(--line-2);border-radius:var(--r-sm);background:var(--bg);color:var(--ink);resize:vertical}
+form.q button{font:600 var(--t-1) var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s5);cursor:pointer}
+form.q .queued{font-family:var(--mono);font-size:var(--t-2);color:var(--amber);margin-left:var(--s3)}
+</style>
+</head>
+<body>
+<div class="top"><div class="top-in"><b>tau2-loop · s03 · eval-submission</b>
+<nav><a href="#finding">Finding</a><a href="#flow">Flow</a><a href="#holdout">Held-out</a><a href="#pick">Domain</a><a href="#build">Build</a><a href="#hyper">hyper-τ</a><a href="#risks">Risks</a><a href="#decide">Decide</a></nav></div></div>
+
+<header class="hero"><div class="wrap">
+<p class="label">Branch <code>eval-submission</code> · off <code>main</code> a9f6ad4 · plan before code · 17 Sep 2026</p>
+<h1>Score one whole domain, <em>submit it</em>, and keep the submission as a loop stage</h1>
+<p class="lead" style="margin-top:var(--s4)">Discovery first: how a τ-bench score actually gets onto the leaderboard, what "holdout" means for an agent our loop has already trained on, what it costs on the subscription, and where hyper-τ-bench fits. Then a build that turns one full-domain run into a validated submission and records it so later cycles can be compared against it.</p>
+<div class="chips"><span class="chip ok">tau2-bench v1.0.1 · submodule 2174a60</span><span class="chip">leaderboard: taubench.com</span><span class="chip">submission = PR + trajectories link</span><span class="chip warn">our entry is "custom"</span><span class="chip warn">hyper-τ-bench: different benchmark, parked</span></div>
+</div></header>
+
+<section class="blk" id="finding"><div class="wrap">
+<div class="hd"><p class="label">1 · The finding that shapes everything</p><h2>There is no holdout server. The leaderboard is self-reported, and every task is public.</h2>
+<p>I read the submission guide, the CLI that implements it, one real submission on the public bucket, and the hyper-τ-bench repo. The "submission page" is a pull request; the "holdout" is a choice we make ourselves.</p></div>
+<div class="grid g3">
+ <div class="card"><p class="label">What the board scores</p><h3>All base tasks, ≥4 trials, self-run</h3><p>You run <code>tau2 run</code> on every task in a domain's <code>base</code> split (airline 50 · retail 114 · telecom 114 · banking_knowledge 97), ideally 4 trials, with one agent model and one user-simulator model held constant. The board ranks per domain; a single-domain submission is allowed.</p><p class="small">Source: <code>vendor/tau2-bench/docs/leaderboard-submission.md</code> §Requirements.</p></div>
+ <div class="card"><p class="label">How it gets there</p><h3><code>tau2 submit prepare</code> → validate → PR</h3><p><code>prepare</code> reads the run's <code>results.json</code> files, checks format / all tasks present / trial counts (no model calls), computes pass^1…4 and mean cost, prompts for metadata, and writes <code>submission.json</code> + <code>trajectories/</code>. You commit only <code>submission.json</code> under <code>web/leaderboard/public/submissions/&lt;model&gt;_&lt;org&gt;_&lt;date&gt;/</code>, add the name to <code>manifest.json</code>, and link the trajectories (Drive / HF / release) in the PR. A maintainer uploads them to S3; taubench.com reads S3.</p></div>
+ <div class="card warn"><p class="label">What that makes us</p><h3>A <b>custom</b>, likely <b>unverified</b> entry</h3><p>Our system prompt is written by the optimiser, tool calls go through a JSON contract instead of native tool use, and the user simulator is Haiku on the subscription rather than gpt-5.2. Under the guide that is <code>submission_type: "custom"</code> with <code>modified_prompts: true</code> and full methodology notes. It still lands on the board — flagged, per domain, comparable on task set and evaluator, not on protocol.</p></div>
+</div>
+<div class="fig"><p class="fig-title">Evidence trail</p>
+<div class="tw"><table>
+<thead><tr><th>Claim</th><th>Where I checked</th><th>What it says</th></tr></thead>
+<tbody>
+<tr><td class="sub">No hidden test set</td><td><code>docs/leaderboard-submission.md</code>, <code>scripts/leaderboard/verify_trajectories.py</code></td><td>Verification is <code>check_format</code> · <code>check_tasks</code> · <code>check_num_trials</code>; the "private" mode raises <em>"not available in the public version"</em>. Maintainers may re-score with <code>tau2 evaluate-trajs --fresh-tasks</code>, on the same public tasks.</td></tr>
+<tr><td class="sub">Submission is a PR</td><td>guide §Step 4–6; <code>manifest.json</code> on S3</td><td>29 text entries in <code>submissions[]</code>, dir name <code>{model}_{org}_{date}</code>; after merge a GitHub Action syncs metadata to S3.</td></tr>
+<tr><td class="sub">What a real entry looks like</td><td><code>s3://sierra-tau-bench-public/submissions/claude-opus-5_sierra_2026-08-04/</code></td><td><code>submission.json</code> (1.3 KB) + <code>trajectories/banking_knowledge_results.json</code> (243 MB, 97 tasks × 4 trials). Single-domain entries exist (this one is banking only, airline/retail/telecom <code>null</code>).</td></tr>
+<tr><td class="sub">Metrics are computed by tau2, not typed</td><td><code>scripts/leaderboard/prepare_submission.py::get_metrics</code></td><td><code>compute_metrics(results)</code> → <code>pass_hat_ks[1..4]</code> ×100 and <code>avg_agent_cost</code>; model and user-sim names are read from the trajectory file's <code>info</code>, so ours will read <code>claude-sdk/claude-haiku-4-5</code> unless we set the display name.</td></tr>
+<tr><td class="sub"><code>prepare</code> is interactive</td><td><code>prepare_submission.py</code> l.631–743</td><td>Fourteen <code>Prompt.ask</code> calls (model name, org, email, type, dates, notes, references). No flags — so our wrapper builds the <code>Submission</code> pydantic model directly and calls the same <code>get_metrics</code>/validate functions.</td></tr>
+<tr><td class="sub">Our run files are already the right shape</td><td><code>src/tau2_loop/eval/runner.py</code></td><td><code>run_tasks(config, tasks, save_path=run_dir/"tau2_results.json")</code> keeps tau2's own <code>Results</code> verbatim — that file <em>is</em> the trajectory file <code>prepare</code> wants. Only the split (20 of base) and trials (1) differ from a submission run.</td></tr>
+<tr><td class="sub">Resume exists in tau2</td><td><code>runner/checkpoint.py::try_resume</code>, <code>batch.py</code> l.804</td><td><code>auto_resume=config.auto_resume</code>: a run pointed at an existing <code>save_path</code> skips <code>(trial, task_id, seed)</code> tuples already done. We don't set it today; a submission run that spans two or three subscription windows needs it.</td></tr>
+</tbody></table></div></div>
+</div></section>
+
+<section class="blk" id="flow"><div class="wrap">
+<div class="hd"><p class="label">2 · End-to-end flow</p><h2>From a run folder to a row on taubench.com — and where tau2-loop plugs in</h2>
+<p>Green boxes are ours (existing or to build). Grey dashed boxes are tau2-bench's code, used as-is from the submodule. Amber is a human step: the PR is outward-facing and stays a manual, confirmed action.</p></div>
+<figure class="panel" style="padding:var(--s4)">
+<svg class="flow" viewBox="0 0 1180 330" role="img" aria-labelledby="flow-t"><title id="flow-t">Submission flow: run, prepare, validate, publish, PR, board</title>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--line-3)"/></marker></defs>
+<!-- lanes -->
+<line class="lane" x1="20" y1="118" x2="1160" y2="118"/><text class="lane" x="20" y="20">tau2-loop (ours)</text>
+<text class="lane" x="20" y="140">tau2-bench (submodule, unchanged)</text>
+<line class="lane" x1="20" y1="238" x2="1160" y2="238"/><text class="lane" x="20" y="260">outside the repo</text>
+<!-- row 1: ours -->
+<g id="n-run"><rect class="box ours" x="20" y="34" width="200" height="70" rx="8"/><title>tau2loop eval --split base --trials 4 --resume</title><text class="t" x="32" y="58">eval · base split · 4 trials</text><text class="s" x="32" y="76">runs/&lt;id&gt;/tau2_results.json</text><text class="s" x="32" y="92">resumable across windows</text></g>
+<g id="n-prep"><rect class="box ours" x="260" y="34" width="210" height="70" rx="8"/><title>tau2loop submit prepare</title><text class="t" x="272" y="58">submit prepare (ours)</text><text class="s" x="272" y="76">metrics via tau2 · metadata from</text><text class="s" x="272" y="92">config · custom + notes · held-out</text></g>
+<g id="n-out"><rect class="box ours" x="510" y="34" width="210" height="70" rx="8"/><title>submissions/&lt;name&gt;/</title><text class="t" x="522" y="58">submissions/&lt;name&gt;/</text><text class="s" x="522" y="76">submission.json · trajectories/</text><text class="s" x="522" y="92">heldout.json · PR.md</text></g>
+<g id="n-ledger"><rect class="box ours" x="760" y="34" width="190" height="70" rx="8"/><title>loop/&lt;domain&gt;/submissions.jsonl</title><text class="t" x="772" y="58">submissions ledger</text><text class="s" x="772" y="76">loop/&lt;domain&gt;/submissions.jsonl</text><text class="s" x="772" y="92">+ data/leaderboard.json row</text></g>
+<g id="n-viewer"><rect class="box ours" x="990" y="34" width="170" height="70" rx="8"/><title>Viewer Results tab (s02)</title><text class="t" x="1002" y="58">viewer · Results</text><text class="s" x="1002" y="76">us vs board, per domain</text><text class="s" x="1002" y="92">(s02 V1)</text></g>
+<!-- row 2: tau2 -->
+<g id="n-runtasks"><rect class="box theirs" x="20" y="154" width="200" height="66" rx="8"/><title>tau2.runner.batch.run_tasks</title><text class="t" x="32" y="178">run_tasks + evaluators</text><text class="s" x="32" y="196">DB · actions · NL judge</text><text class="s" x="32" y="212">checkpoint / auto_resume</text></g>
+<g id="n-metrics"><rect class="box theirs" x="260" y="154" width="210" height="66" rx="8"/><title>prepare_submission.get_metrics + verify_trajectories</title><text class="t" x="272" y="178">get_metrics · verify</text><text class="s" x="272" y="196">pass^1..4 · avg cost · format,</text><text class="s" x="272" y="212">all tasks, trial count</text></g>
+<g id="n-validate"><rect class="box theirs" x="510" y="154" width="210" height="66" rx="8"/><title>tau2 submit validate</title><text class="t" x="522" y="178">tau2 submit validate</text><text class="s" x="522" y="196">schema · coverage · metrics</text><text class="s" x="522" y="212">match trajectories</text></g>
+<!-- row 3: outside -->
+<g id="n-host"><rect class="box human" x="510" y="272" width="210" height="50" rx="8"/><title>Host trajectories: GitHub release on nmp-dsci/tau2-loop</title><text class="t" x="522" y="292">host trajectories</text><text class="s" x="522" y="310">gh release · nmp-dsci/tau2-loop</text></g>
+<g id="n-pr"><rect class="box human" x="760" y="272" width="190" height="50" rx="8"/><title>PR to sierra-research/tau2-bench</title><text class="t" x="772" y="292">PR · sierra-research/tau2-bench</text><text class="s" x="772" y="310">dir + manifest · you press go</text></g>
+<g id="n-board"><rect class="box theirs" x="990" y="272" width="170" height="50" rx="8"/><title>taubench.com reads S3</title><text class="t" x="1002" y="292">S3 → taubench.com</text><text class="s" x="1002" y="310">after maintainer merge</text></g>
+<!-- edges -->
+<path class="edge" d="M220 69H258"/><path class="edge" d="M470 69H508"/><path class="edge" d="M720 69H758"/><path class="edge" d="M950 69H988"/>
+<path class="edge" d="M120 104V152"/><path class="edge" d="M365 152V106"/><path class="edge" d="M615 104V152"/>
+<path class="edge" d="M615 220V270"/><path class="edge" d="M720 297H758"/><path class="edge" d="M950 297H988"/>
+<path class="edge" d="M1075 270V106"/>
+</svg>
+<figcaption><b>Reading it.</b> The left column is what already exists (<code>tau2loop eval</code> over <code>run_tasks</code>); it needs a <code>base</code> split, trials, and resume. The middle is the new command: it calls tau2's own metric and validation code rather than re-implementing it, so the numbers in <code>submission.json</code> are the ones the maintainers would compute. The right is bookkeeping that makes the submission a stage of the loop instead of a one-off: a ledger row and a leaderboard row the viewer can draw. The PR is the one step the code prepares but never sends.</figcaption>
+</figure>
+</div></section>
+
+<section class="band-sec" id="holdout"><div class="wrap">
+<div class="hd"><p class="label">3 · What "held-out" means for us</p><h2>The loop has seen 20 of each domain's tasks. The honest holdout is everything else in <code>base</code>.</h2>
+<p>Every promoted prompt was written by an optimiser that read traces from the 20-task train split. The board does not care (it scores all of <code>base</code>), but we should: a submission run gives two numbers, and the second is the one that tells us whether the loop generalised.</p></div>
+<div class="tw"><table>
+<caption>Per domain: what the board wants, what the loop trained on, and the unseen remainder. <code>data/splits/&lt;domain&gt;.json</code>, seed 300.</caption>
+<thead><tr><th>Domain</th><th>base (board scores)</th><th>train (optimiser saw)</th><th>test (gate saw)</th><th>reserve (never run)</th><th>held-out = base − train</th><th>Best version today</th></tr></thead>
+<tbody>
+<tr><td class="sub">airline</td><td class="num">50</td><td class="num">20</td><td class="num">20</td><td class="num">10</td><td class="num">30</td><td>v2 · 16/20 train · p .062 · dominance-eligible (N-3 not done) · v0 12/20</td></tr>
+<tr><td class="sub">retail</td><td class="num">114</td><td class="num">20</td><td class="num">20</td><td class="num">74</td><td class="num">94</td><td>v1 · 16/20 train · held (p .312) · v0 14/20</td></tr>
+<tr class="pro"><td class="sub">telecom</td><td class="num">114</td><td class="num">20</td><td class="num">20</td><td class="num">74</td><td class="num">94</td><td>v1 · <b>promoted</b> 19/20 train (p .031) · 19/20 test</td></tr>
+<tr class="dim"><td class="sub">banking_knowledge</td><td class="num">97</td><td class="num">20</td><td class="num">20</td><td class="num">57</td><td class="num">77</td><td>v0 · 4/20 · no cycle — not a candidate</td></tr>
+</tbody></table></div>
+<div class="grid g2" style="margin-top:var(--s5)">
+ <div class="card"><p class="label">Reported to the board</p><h3>pass^1…4 over all of <code>base</code></h3><p>Computed by tau2's <code>compute_metrics</code> from the trajectory file, exactly as any other entry. Includes the 20 train tasks — noted in <code>methodology.notes</code> as "prompt optimised on 20 of N tasks (ids listed in the repo)".</p></div>
+ <div class="card pro"><p class="label">Reported to ourselves</p><h3><code>heldout.json</code>: pass^k over base − train</h3><p>Same trajectories, filtered by the split file. This is the loop's generalisation number and the one <code>submissions.jsonl</code> keeps for later cycles to beat. Also split further into <code>test</code> (20, gate saw) vs <code>reserve</code> (never run) so a gap between them is visible.</p></div>
+</div>
+</div></section>
+
+<section class="blk" id="pick"><div class="wrap">
+<div class="hd"><p class="label">4 · Which domain, and what it costs</p><h2>Airline v2 × 4 trials is the only full-domain, 4-trial submission that fits in ~2–3 subscription windows</h2>
+<p>Token use per conversation is measured from our own <code>results.jsonl</code> (agent + user simulator, Haiku). A 5-hour window was measured at roughly 15 M Haiku input and 1.6 M Haiku output before it locks; output is the binding constraint for the chatty domains. Estimates are ±50 % — the judge calls and per-window variance are not in the per-conversation numbers.</p></div>
+<div class="tw"><table>
+<caption>Cost of a board-shaped run (all base tasks) for each candidate. Tokens per conversation from the named run; windows = max(input/15 M, output/1.6 M), rounded up.</caption>
+<thead><tr><th>Option</th><th>Domain · version</th><th>Conversations</th><th>Tokens / conv (in · out)</th><th>Total (in · out)</th><th>Windows</th><th>Elapsed (guess)</th><th>What you get</th></tr></thead>
+<tbody>
+<tr class="pro"><td class="sub">A</td><td>airline · v2 (from <code>airline_v2_train</code>)</td><td class="num">50 × 4 = 200</td><td class="num">87 k · 18 k</td><td class="num">17 M · 3.6 M</td><td class="num">2–3</td><td class="num">~1 day</td><td>Full 4-trial entry, pass^1…4; held-out 30 tasks. Cheapest complete submission. v2 is not re-gated yet — running it on the whole domain <em>is</em> the re-gate.</td></tr>
+<tr><td class="sub">B</td><td>telecom · v1 (from <code>telecom_v1_test</code>) · <b>1 trial</b></td><td class="num">114 × 1 = 114</td><td class="num">356 k · 36 k</td><td class="num">41 M · 4.1 M</td><td class="num">3</td><td class="num">~1–2 days</td><td>The promoted agent on its whole domain; pass^1 only (pass^2–4 <code>null</code>, allowed but "strongly prefer 4"). Held-out 94 tasks.</td></tr>
+<tr><td class="sub">B′</td><td>telecom · v1 · 4 trials</td><td class="num">456</td><td class="num">356 k · 36 k</td><td class="num">162 M · 16 M</td><td class="num">≈11</td><td class="num">~3 days of windows</td><td>The proper telecom entry. Too much for this branch; a follow-on once B looks good.</td></tr>
+<tr><td class="sub">C</td><td>retail · v1 (from <code>retail_v1_train</code>)</td><td class="num">114 × 4 = 456</td><td class="num">98 k · 10 k</td><td class="num">45 M · 4.7 M</td><td class="num">3</td><td class="num">~1–2 days</td><td>Full 4-trial entry on a version that did <em>not</em> pass the gate (p .312). Held-out 94 tasks. Fine as a submission, weak as a story.</td></tr>
+</tbody></table></div>
+<div class="grid g3" style="margin-top:var(--s5)">
+ <div class="card pro"><p class="label">Recommendation</p><h3>A — airline v2, 4 trials</h3><p>It is the one option that produces a complete, board-shaped submission inside this branch's budget, and it answers an open question from s01 (N-3: is airline v2 a real improvement?) with 200 conversations instead of 20. Ledger records v2's full-base and held-out pass^k; the same command is then reusable for B/B′ later.</p></div>
+ <div class="card"><p class="label">If the story matters more than the budget</p><h3>B — telecom v1, 1 trial</h3><p>Puts the promoted agent on the board. Costs the same windows as A but gives pass^1 only, and telecom conversations are 4× the tokens, so the run is slower and more exposed to window resets. Pick this if "the loop's winner on the leaderboard" is the point.</p></div>
+ <div class="card"><p class="label">Either way</p><h3>One domain, then stop</h3><p>The guide allows single-domain entries and ranks per domain. The second domain is a later branch with the same command; nothing here is airline-specific except the choice.</p></div>
+</div>
+</div></section>
+
+<section class="blk" id="build"><div class="wrap">
+<div class="hd"><p class="label">5 · Build</p><h2>Six steps: run, prepare, publish, record, show, write up</h2>
+<p>Everything model-facing stays on the subscription through the existing adapter. Nothing under <code>agents/</code> is touched — a submission run is an eval of an existing version, not a cycle. The submodule stays at 2174a60; we import its functions, we never edit it.</p></div>
+<div class="ms">
+ <div class="m"><div class="n">S0<span>eval</span></div><div><h4><code>tau2loop eval --split base --trials 4 --resume &lt;run_id&gt;</code></h4>
+ <p><code>split_ids()</code> gains <code>base</code> (tau2's own split, all ids in tau2 order — no reshuffle). <code>RunMeta.split = "base"</code>. <code>run_eval</code> accepts <code>resume</code>: reuse an existing run folder, pass <code>auto_resume=True</code> in <code>TextRunConfig</code> so tau2's checkpoint skips finished <code>(trial, task, seed)</code> tuples; traces/results are rebuilt from the whole checkpoint at the end. <code>summarise()</code> gains an optional <code>subset</code> so <code>heldout.json</code> can be computed from the same rows.</p>
+ <p>Ops: run under <code>caffeinate -i</code> (the process must outlive two window resets), concurrency 3, <code>scripts/loops.sh</code> gets a <code>submission</code> entry that restarts with <code>--resume</code> if the process dies (memory pressure has killed long jobs on this machine twice).</p>
+ <p class="small">Tests: <code>split_ids(d, "base")</code> equals tau2's base list; resume skips done tuples on a dry-run folder; <code>summarise(rows, subset)</code> matches a hand count.</p></div></div>
+ <div class="m"><div class="n">S1<span>prepare</span></div><div><h4><code>tau2loop submit prepare &lt;run_id&gt;</code> → <code>submissions/&lt;model&gt;_&lt;org&gt;_&lt;date&gt;/</code></h4>
+ <p>Non-interactive twin of <code>tau2 submit prepare</code>: loads <code>tau2_results.json</code> with tau2's <code>check_and_load_submission_data</code>, runs the public <code>verify_trajectories</code> checks, gets <code>DomainResults</code> from <code>get_metrics</code>, and fills the <code>Submission</code> pydantic model from a small <code>submission.toml</code> in the repo (model display name, org, contact, references) plus the run's meta (tau2 version, evaluation date, user sim, seed, notes template). Sets <code>submission_type: custom</code>, <code>modified_prompts: true</code>, <code>omitted_questions: false</code>, <code>trajectories_available: true</code>, <code>trajectory_files</code> naming per the guide. Writes <code>submission.json</code>, copies the trajectory file (redacted — it already is), writes <code>heldout.json</code> and <code>PR.md</code> (the PR body, with the trajectory link placeholder). Then shells out to <code>tau2 submit validate</code> and fails loudly if it does.</p>
+ <p><b>Naming.</b> model_name <code>tau2-loop · Claude Haiku 4.5 (airline v2 prompt)</code>, model_organization <code>nmp-dsci</code> (the "model" is the system; Anthropic built the weights — said in notes), submitting_organization <code>nmp-dsci</code>, dir <code>tau2-loop-haiku-4-5_nmp-dsci_&lt;date&gt;</code>. contact_info.email is the one place the account email is <em>meant</em> to appear; it comes from <code>submission.toml</code>, not from <code>~/.claude.json</code>, and <code>redact_tree</code> skips <code>submissions/</code>.</p>
+ <p class="small">Tests: a dry-run trajectory file with 2 tasks × 4 trials produces the expected pass^k; validate passes on the output; the account email never appears in <code>trajectories/</code>.</p></div></div>
+ <div class="m"><div class="n">S2<span>publish</span></div><div><h4><code>tau2loop submit publish &lt;dir&gt;</code> — trajectories to a GitHub release; PR body ready</h4>
+ <p>Uploads <code>trajectories/*.json</code> as assets of a release <code>submission-&lt;name&gt;</code> on <code>nmp-dsci/tau2-loop</code> (public repo, so the link is public — matches "Google Drive, HuggingFace, institutional storage, etc."). Rewrites the placeholder in <code>PR.md</code> with the asset URL. Prints the exact steps for the fork: <code>gh repo fork sierra-research/tau2-bench</code>, copy dir, edit manifest, <code>gh pr create --body-file PR.md</code>. <b>It never runs the PR itself</b>; that is your call after reading <code>PR.md</code>, and the plan's decision form asks how far you want the code to go.</p></div></div>
+ <div class="m"><div class="n">S3<span>ledger</span></div><div><h4><code>loop/&lt;domain&gt;/submissions.jsonl</code> + <code>data/leaderboard.json</code> local row</h4>
+ <p>One row per prepared submission: run_id, version + fingerprint, base pass^k, held-out pass^k (test / reserve), cost, status <code>prepared → published → pr-open → merged</code>, PR URL. <code>tau2loop submit status</code> lists them. The leaderboard snapshot gets our row with <code>source: "local"</code> so the viewer draws us on the same board (rendered with a "self-reported, custom" chip). This is the hook later cycles use: <em>the champion's last full-base score is the number a challenger's cycle must beat before another submission is worth its windows</em>.</p></div></div>
+ <div class="m"><div class="n">S4<span>viewer</span></div><div><h4>Results tab: our row on the board, held-out beside it</h4>
+ <p>Lands with s02 V1 (board comparison) rather than as separate work: the Results home already needs a leaderboard table; this adds the local row and a "Submissions" panel reading the ledger. If s02 is not built yet by then, a minimal <code>/api/submissions</code> route and a table in the existing Results tab is enough.</p></div></div>
+ <div class="m"><div class="n">S5<span>findings</span></div><div><h4><code>.lavish/s04_submission-findings.html</code></h4>
+ <p>What the full-domain run showed: base vs held-out vs the 20-task numbers, where v2 sits on the board against Haiku 4.5's own row (if any) and the field, the cost, and whether the PR was opened. Feeds N-3 in s01 and the README results table.</p></div></div>
+</div>
+<div class="fig"><p class="fig-title">Repo surface after the build</p>
+<pre class="code">src/tau2_loop/
+  data/splits.py          split_ids(domain, "base")
+  eval/runner.py          run_eval(..., resume=run_id) · auto_resume · RunMeta.split
+  eval/results.py         summarise(rows, subset=None)
+  submit/
+    prepare.py            build Submission from run + submission.toml · heldout.json · PR.md · validate
+    publish.py            gh release upload · PR.md link fill · fork/PR instructions (no PR call)
+    ledger.py             loop/&lt;domain&gt;/submissions.jsonl
+  cli.py                  submit prepare | publish | status
+submission.toml           display name · org · contact · references (committed, no secrets)
+submissions/&lt;name&gt;/       submission.json · trajectories/ (gitignored, ~20–40 MB) · heldout.json · PR.md
+loop/&lt;domain&gt;/submissions.jsonl
+data/leaderboard.json     + our row, source "local"
+Makefile                  submit-run · submit-prepare · submit-publish</pre></div>
+</div></section>
+
+<section class="band-sec" id="hyper"><div class="wrap">
+<div class="hd"><p class="label">6 · hyper-τ-bench</p><h2>A different benchmark: it scores the <em>developer</em> that builds an agent, not the agent</h2>
+<p><a href="https://github.com/sierra-research/hyper-tau-bench">sierra-research/hyper-tau-bench</a> (τ^τ-bench, arXiv 2609.04611) wraps an outer loop around τ³-bench: a coding agent (Codex, Claude Code, OpenCode…) is dropped in a sandbox with evidence — policies, transcripts, call recordings, screenshots, an API with deliberate defects — optionally interviews a simulated client, and must ship a runnable agent. That agent is then scored on the τ³ inner loop. The "held-out" tasks it talks about are the 53 construction tasks in <code>data/tau2/hyper/tasks/</code> — public in the repo, run locally by a sealed runner; there is no scoring server here either.</p></div>
+<div class="grid g3">
+ <div class="card"><p class="label">Shape</p><h3>53 tasks · 4 domains</h3><p><code>airline_plus</code> 6 · <code>retail_plus</code> 6 · <code>telecom</code> 6 · <code>banking_knowledge</code> 35. The <code>_plus</code> policies are rebuilt so memorised τ-bench policies don't transfer. Reward = the built agent's pass rate; also reports build minutes, build cost, and a serve-credit ratio.</p></div>
+ <div class="card"><p class="label">Submission</p><h3>Also a PR, also self-run</h3><p><code>web/leaderboard/public/hyper-submissions/&lt;harness&gt;_&lt;model&gt;/submission.json</code> with per-domain scores; maintainers may rerun a sample. Six entries today, e.g. <code>claude-code_claude-opus-5</code>: overall 23.9, airline 55.9, retail 72.8, telecom 48.2, banking 5.9.</p></div>
+ <div class="card warn"><p class="label">Why not this branch</p><h3>Needs Docker + OpenAI keys; scores the wrong thing for us</h3><p>User simulator, judges and client simulator run on <code>OPENAI_API_KEY</code>/OpenRouter, the construction sandbox is a Docker image, and the thing on the board would be "Claude Code with Opus 5", not tau2-loop. Interesting later: our optimiser <em>is</em> a developer of a kind, and the hyper-τ harness adapters are pluggable — a "tau2-loop as developer harness" experiment is a real follow-on, but a separate plan.</p></div>
+</div>
+</div></section>
+
+<section class="blk" id="risks"><div class="wrap">
+<div class="hd"><p class="label">7 · Risks and open questions</p><h2>What can go wrong, and what I have assumed</h2></div>
+<div class="grid g2">
+ <div class="card bad"><p class="label">R-1 · window arithmetic</p><h3>The 15 M / 1.6 M per-window figure is one measurement</h3><p>If the real cap is half that, A takes 5 windows, not 3. Mitigation: S0 resume + the loop script; the run cannot lose work at a reset, it can only take longer. First window's throughput is logged and the estimate refreshed before window two.</p></div>
+ <div class="card warn"><p class="label">R-2 · resume semantics</p><h3>tau2's checkpoint compares run config</h3><p><code>try_resume</code> diffs the saved config and, with <code>auto_resume</code>, continues anyway but logs the diff. Our config must be byte-identical between attempts (same version fingerprint, seed, ids order). The test in S0 covers it with a dry-run folder.</p></div>
+ <div class="card warn"><p class="label">R-3 · what the board sees</p><h3><code>claude-sdk/claude-haiku-4-5</code> as the model string</h3><p><code>get_metrics</code> reads model and user-sim from the trajectory <code>info</code>. <code>submission.json</code> carries our display name, but the trajectory file will say <code>claude-sdk/…</code>; the PR notes explain the adapter. Acceptable; maintainers see odd model strings regularly.</p></div>
+ <div class="card warn"><p class="label">R-4 · custom + unverified</p><h3>The entry will carry a caution icon</h3><p>Modified prompts ⇒ unverified by the guide's definition, regardless of trajectories. Fine for the goal (a comparable number on the same tasks and evaluator), but not a "Haiku 4.5 scores X" claim — the notes say exactly what the system is.</p></div>
+ <div class="card"><p class="label">R-5 · sampling</p><h3>The SDK exposes no temperature</h3><p>tau2's default is 0.0; ours is the CLI default (<code>RunMeta.sampling</code> already records this). Stated in notes. It also means 4 trials measure real variance, which is the point of pass^k.</p></div>
+ <div class="card"><p class="label">R-6 · airline v2 might not hold</p><h3>16/20 on train can be 55 % on base</h3><p>That is a finding, not a failure: the held-out split shows whether v2 generalised, and the ledger records it. If v2's held-out is below v0's 12/20 rate, the s04 page says so and the submission still goes in as the loop's honest result (or you choose not to open the PR — the form below asks).</p></div>
+</div>
+<div class="fig"><p class="fig-title">Assumptions I made without asking</p>
+<ul class="tight">
+<li>The user simulator stays Haiku on the subscription (the guide allows any user LLM; it is reported on the board). Switching to gpt-5.2 would need an API key and per-token billing — out of scope.</li>
+<li>Trajectories are hosted as a GitHub release asset on this public repo rather than Drive/HF — public, versioned, no new account. Say so if you'd rather use Drive.</li>
+<li>The account email goes into <code>contact_info</code> from <code>submission.toml</code>; nothing else in the submission carries it.</li>
+<li><code>submissions/&lt;name&gt;/trajectories/</code> is gitignored (20–40 MB per domain); <code>submission.json</code>, <code>heldout.json</code> and <code>PR.md</code> are committed.</li>
+<li>No banking, no second domain, no s02 viewer work beyond the minimal submissions panel, in this branch.</li>
+</ul></div>
+</div></section>
+
+<section class="blk" id="decide"><div class="wrap">
+<div class="hd"><p class="label">8 · Decide</p><h2>Three choices, then I build S0 → S5</h2><p>Pick, add notes if you like, queue, then press Send to Agent. Or reply in chat with "recommended".</p></div>
+<form class="q" data-lavish-question="s03-submission" onsubmit="event.preventDefault();const f=new FormData(event.currentTarget);const d=f.get('domain'),h=f.get('howfar'),v=f.get('version');const n=event.currentTarget.querySelector('textarea').value.trim();if(!d||!h||!v){return;}window.lavish.queuePrompt('s03 eval-submission decisions: run = '+d+'; version policy = '+v+'; how far the code goes = '+h+'.'+(n?' Notes: '+n:'')+' Build S0–S5 per s03 with these choices, on branch eval-submission.',{tag:'choice',text:'s03: '+d+' / '+v+' / '+h,element:event.currentTarget,data:{domain:d,version:v,howfar:h,note:n}});event.currentTarget.querySelector('.queued').textContent='queued — press Send to Agent';">
+<fieldset><legend>Q1 · Which run goes to the board first?</legend>
+<label class="o"><input type="radio" name="domain" value="A: airline v2 × 4 trials (all 50 base tasks, ~200 conversations, 2–3 windows)" checked><span><b>A — airline v2 × 4 trials (recommended)</b><span>Complete 4-trial entry, cheapest, re-gates v2 on 50 tasks. Held-out = 30 tasks.</span></span></label>
+<label class="o"><input type="radio" name="domain" value="B: telecom v1 × 1 trial (all 114 base tasks, ~3 windows, pass^1 only)"><span><b>B — telecom v1 × 1 trial</b><span>The promoted agent on its whole domain; pass^1 only. Held-out = 94 tasks.</span></span></label>
+<label class="o"><input type="radio" name="domain" value="C: retail v1 × 4 trials (all 114 base tasks, ~456 conversations, 3 windows)"><span><b>C — retail v1 × 4 trials</b><span>Full entry on a version the gate did not promote. Held-out = 94 tasks.</span></span></label>
+</fieldset>
+<fieldset><legend>Q2 · If the chosen version's held-out score comes in below v0's train rate, what happens to the submission?</legend>
+<label class="o"><input type="radio" name="version" value="submit whatever the run shows; the finding is the point" checked><span><b>Submit it anyway (recommended)</b><span>The board entry is the loop's honest result; s04 explains it.</span></span></label>
+<label class="o"><input type="radio" name="version" value="stop after prepare and ask before publishing if held-out < v0 train rate"><span><b>Prepare, then ask me</b><span>Code stops after S1 and shows the numbers; you decide on S2.</span></span></label>
+</fieldset>
+<fieldset><legend>Q3 · How far should the code go on its own?</legend>
+<label class="o"><input type="radio" name="howfar" value="prepare + publish trajectories to a GitHub release + write PR.md; I open the PR myself" checked><span><b>Up to the PR body (recommended)</b><span>Release asset uploaded, <code>PR.md</code> ready, fork instructions printed. You open the PR.</span></span></label>
+<label class="o"><input type="radio" name="howfar" value="prepare only; no upload, no PR.md link — I will handle hosting and the PR"><span><b>Prepare only</b><span>Nothing leaves the machine; <code>submissions/&lt;name&gt;/</code> is the deliverable.</span></span></label>
+<label class="o"><input type="radio" name="howfar" value="prepare + publish + fork and open the PR on sierra-research/tau2-bench after confirming with me in chat"><span><b>Through to the PR, with a confirmation prompt</b><span>Code forks, branches, and runs <code>gh pr create</code> only after a yes in chat.</span></span></label>
+</fieldset>
+<label for="s03-notes" class="label" style="display:block;margin-bottom:var(--s2)">Notes (optional)</label>
+<textarea id="s03-notes" placeholder="e.g. use Google Drive for trajectories; run at effort low; also record cost in USD-equivalent…"></textarea>
+<div style="margin-top:var(--s4);display:flex;align-items:center;flex-wrap:wrap"><button type="submit">Queue these answers</button><span class="queued"></span></div>
+</form>
+<p class="small" style="margin-top:var(--s5)">Sources read for this page: <code>vendor/tau2-bench/docs/leaderboard-submission.md</code>, <code>src/tau2/scripts/leaderboard/{prepare_submission,verify_trajectories,submission}.py</code>, <code>src/tau2/runner/{checkpoint,batch}.py</code>, the public S3 manifest and <code>claude-opus-5_sierra_2026-08-04</code>, <code>github.com/sierra-research/hyper-tau-bench</code> README + <code>data/tau2/hyper/tasks/MANIFEST.md</code> + <code>hyper-submissions/</code>, and this repo's <code>runs/*/results.jsonl</code> for token counts.</p>
+</div></section>
+</body>
+</html>
