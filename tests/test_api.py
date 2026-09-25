@@ -82,3 +82,62 @@ def test_trace_events_flatten_messages() -> None:
     ev = trace_events(t)
     assert [e["type"] for e in ev] == ["assistant", "user", "tool_call", "tool_result"]
     assert ev[2]["name"] == "get_user"
+
+
+def test_stats_is_the_overview_in_one_object() -> None:
+    s = client().get("/api/stats").json()
+    assert [d["domain"] for d in s["domains"]] == [
+        "airline",
+        "retail",
+        "telecom",
+        "banking_knowledge",
+    ]
+    # the four base splits are the benchmark: 50 + 114 + 114 + 97
+    assert s["base_total"] == 375
+    assert all(d["train"] == 20 and d["test"] == 20 for d in s["domains"])
+    assert s["runs_scored"] <= s["runs"] and s["conversations"] > 0
+
+
+def test_rubric_counts_the_checks_and_what_failed() -> None:
+    r = client().get("/api/rubric").json()
+    airline = next(d for d in r["by_domain"] if d["domain"] == "airline")
+    assert airline["n_tasks"] == 40
+    # every airline task is judged on NL assertions; only some carry expected actions
+    assert airline["uses"]["nl_assertions"] == 40
+    assert 0 < airline["uses"]["actions"] <= 40
+    f = r["failures"]
+    assert f["failed"] > 0
+    assert set(f["by_check"]) == {
+        "db_check",
+        "actions",
+        "communicate_info",
+        "nl_assertions",
+        "error",
+    }
+    # a conversation can miss several checks, so the mix never sums below the worst one
+    assert max(f["by_check"].values()) <= f["failed"]
+
+
+def test_run_detail_carries_a_profile() -> None:
+    c = client()
+    run_id = c.get("/api/runs").json()[0]["run_id"]
+    body = c.get(f"/api/runs/{run_id}").json()
+    p = body["profile"]
+    assert p["n"] == len(body["results"])
+    turns = p["metrics"]["turns"]
+    # the distribution is ordered by construction, and the sum is the total
+    assert turns["p50"] <= turns["p95"] <= turns["max"]
+    assert turns["sum"] == sum(r["n_agent_turns"] for r in body["results"])
+
+
+def test_a_conversation_is_addressed_by_task_and_trial() -> None:
+    c = client()
+    run_id = next(r["run_id"] for r in c.get("/api/runs").json() if r["summary"])
+    row = c.get(f"/api/runs/{run_id}").json()["results"][0]
+    r = c.get(f"/api/runs/{run_id}/{row['task_id']}/t{row['trial']}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["task_id"] == row["task_id"] and body["result"]["trial"] == row["trial"]
+    assert c.get(f"/api/runs/{run_id}/{row['task_id']}/t99").status_code == 404
+    assert c.get(f"/api/runs/{run_id}/{row['task_id']}/nope").status_code == 404
+    assert c.get(f"/api/runs/no-such-run/{row['task_id']}/t1").status_code == 404

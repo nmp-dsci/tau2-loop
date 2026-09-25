@@ -21,6 +21,7 @@ from tau2_loop.agent.versions import list_versions, load_version
 from tau2_loop.config import DOMAINS, FRONTEND_DIST, RUNS_DIR, SMOKE_DOMAIN, settings
 from tau2_loop.data.splits import read_split, read_task_extract
 from tau2_loop.eval.compare import compare
+from tau2_loop.eval.profile import profile
 from tau2_loop.eval.results import slug
 from tau2_loop.eval.runner import list_runs, load_run
 from tau2_loop.loop.ledger import read_ledger
@@ -42,7 +43,78 @@ def create_app() -> FastAPI:
             "code_sha": s.code_sha,
             "version": __version__,
             "domains": list(DOMAINS),
+            "mlflow_url": settings().mlflow_tracking_uri,
+            "mlflow_embeddable": _mlflow_embeddable(),
         }
+
+    @app.get("/api/stats")
+    def stats() -> dict[str, Any]:
+        """One object the overview is built from: how big the benchmark is, how much
+        of it we have run, and what that cost. Every number comes from a committed file."""
+        runs = list_runs()
+        real = [m for m in runs if not m.dry_run and m.domain in DOMAINS]
+        scored = [m for m in real if (m.summary or {}).get("n_scored")]
+        per_domain = []
+        for d in DOMAINS:
+            try:
+                split = read_split(d)
+            except FileNotFoundError:
+                split = {}
+            reg = read_registry(d)
+            champ = reg.get("champion") or {}
+            per_domain.append(
+                {
+                    "domain": d,
+                    "base_n": split.get("base_n"),
+                    "train": len(split.get("train", [])),
+                    "test": len(split.get("test", [])),
+                    "champion": champ.get("agent"),
+                    "champion_run": champ.get("run_id"),
+                    "passed": champ.get("passed"),
+                    "n_scored": champ.get("n_scored"),
+                    "runs": sum(1 for m in real if m.domain == d),
+                    "cycles": len(read_ledger(d)),
+                    "versions": len(list_versions(d)),
+                }
+            )
+        conversations = sum(int((m.summary or {}).get("n") or 0) for m in scored)
+        return {
+            "domains": per_domain,
+            "base_total": sum(x["base_n"] or 0 for x in per_domain),
+            "runs": len(real),
+            "runs_scored": len(scored),
+            "conversations": conversations,
+            "cost_usd_est": round(
+                sum(float((m.summary or {}).get("cost_usd_est") or 0.0) for m in scored), 2
+            ),
+            "cycles": sum(x["cycles"] for x in per_domain),
+            "code_sha": s.code_sha,
+            "mode": "demo" if s.demo_mode else "live",
+        }
+
+    @app.get("/api/rubric")
+    def rubric() -> dict[str, Any]:
+        """How τ² decides a conversation passed, and how often each mechanism is the
+        one that failed. The first half is the task set; the second is our own runs."""
+        kinds = []
+        for d in DOMAINS:
+            ext = read_task_extract(d)
+            tasks = ext.get("tasks", [])
+            counts = {"actions": 0, "communicate_info": 0, "nl_assertions": 0, "env_assertions": 0}
+            for t in tasks:
+                ev = t.get("evaluation_criteria") or {}
+                for k in counts:
+                    if ev.get(k):
+                        counts[k] += 1
+            kinds.append(
+                {
+                    "domain": d,
+                    "n_tasks": len(tasks),
+                    "uses": counts,
+                    "reward_bases": _basis_counts(ext),
+                }
+            )
+        return {"by_domain": kinds, "failures": _failure_mix(list_runs())}
 
     # ── benchmark data ────────────────────────────────────────────────────
     @app.get("/api/domains")
@@ -198,7 +270,10 @@ def create_app() -> FastAPI:
 
     @app.get("/api/runs")
     def runs(domain: str | None = None) -> list[dict[str, Any]]:
-        return [m.__dict__ for m in list_runs(domain)]
+        return [
+            {**m.__dict__, "mlflow_url": _mlflow_run_url(m.mlflow_run_id)}
+            for m in list_runs(domain)
+        ]
 
     @app.get("/api/runs/{run_id}")
     def run(run_id: str) -> dict[str, Any]:
@@ -206,7 +281,11 @@ def create_app() -> FastAPI:
             meta, results = load_run(run_id)
         except FileNotFoundError as e:
             raise HTTPException(404, "no such run") from e
-        return {"meta": meta.__dict__, "results": [r.__dict__ for r in results]}
+        return {
+            "meta": {**meta.__dict__, "mlflow_url": _mlflow_run_url(meta.mlflow_run_id)},
+            "results": [r.__dict__ for r in results],
+            "profile": profile(results),
+        }
 
     @app.get("/api/runs/{run_id}/traces/{name}")
     def trace(run_id: str, name: str) -> dict[str, Any]:
@@ -267,7 +346,13 @@ def create_app() -> FastAPI:
                     "b": db[key].__dict__ if key in db else None,
                 }
             )
-        return {"verdict": v.__dict__, "rows": rows, "a": ma.__dict__, "b": mb.__dict__}
+        return {
+            "verdict": v.__dict__,
+            "rows": rows,
+            "a": {**ma.__dict__, "mlflow_url": _mlflow_run_url(ma.mlflow_run_id)},
+            "b": {**mb.__dict__, "mlflow_url": _mlflow_run_url(mb.mlflow_run_id)},
+            "profiles": {"a": profile(ra), "b": profile(rb)},
+        }
 
     @app.get("/api/ledger")
     def ledger(domain: str | None = None) -> dict[str, list[dict[str, Any]]]:
@@ -283,6 +368,28 @@ def create_app() -> FastAPI:
 
     _mount_frontend(app)
     return app
+
+
+def _mlflow_run_url(run_id: str | None) -> str | None:
+    """A deep link into the central MLflow for one run. The viewer never reads the
+    tracking server itself — the run folder is the record — so this is a link, not a fetch."""
+    if not run_id:
+        return None
+    return f"{settings().mlflow_tracking_uri.rstrip('/')}/#/experiments/search?runId={run_id}"
+
+
+def _mlflow_embeddable() -> bool:
+    """Whether the tracking server answers at all, so a page can decide between an
+    iframe and a plain link. Three seconds, and a failure is a `False`, never an error."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(settings().mlflow_tracking_uri, method="HEAD")  # noqa: S310
+        with urllib.request.urlopen(req, timeout=3) as r:  # noqa: S310 - local platform URL
+            return bool(200 <= r.status < 400)
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
 
 
 def _check_domain(domain: str) -> None:
@@ -314,6 +421,49 @@ def _task_row(t: dict[str, Any], split: dict[str, Any]) -> dict[str, Any]:
         "n_env_assertions": len(ev.get("env_assertions") or []),
         "reward_basis": ev.get("reward_basis"),
     }
+
+
+def _short(fraction: str | None) -> bool:
+    """`action_checks` and friends are written `matched/total`; short of total is a miss."""
+    if not fraction or "/" not in fraction:
+        return False
+    got, _, want = fraction.partition("/")
+    try:
+        return int(got) < int(want)
+    except ValueError:
+        return False
+
+
+def _failure_mix(metas: list[Any]) -> dict[str, Any]:
+    """Across every scored run, what actually failed in the conversations that failed.
+    A conversation can miss on more than one check, so the counts do not sum to `failed`."""
+    failed = 0
+    mix = dict.fromkeys(("db_check", "actions", "communicate_info", "nl_assertions", "error"), 0)
+    capped = 0
+    for m in metas:
+        if m.dry_run or not (m.summary or {}).get("n_scored"):
+            continue
+        try:
+            _, results = load_run(m.run_id)
+        except FileNotFoundError:
+            continue
+        for r in results:
+            if r.correct is not False:
+                continue
+            failed += 1
+            if r.db_check is False:
+                mix["db_check"] += 1
+            if _short(r.action_checks):
+                mix["actions"] += 1
+            if _short(r.communicate_checks):
+                mix["communicate_info"] += 1
+            if _short(r.nl_assertions):
+                mix["nl_assertions"] += 1
+            if r.error:
+                mix["error"] += 1
+            if r.termination_reason == "max_steps":
+                capped += 1
+    return {"failed": failed, "by_check": mix, "hit_turn_cap": capped}
 
 
 def _basis_counts(ext: dict[str, Any]) -> dict[str, int]:
