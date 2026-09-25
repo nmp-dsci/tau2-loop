@@ -13,6 +13,7 @@ import {
   parseTaskId,
   parseTrialId,
   patchLens,
+  reviewPath,
   runPath,
   search,
   taskId,
@@ -113,6 +114,13 @@ describe('every address the viewer builds lands on the page it names', () => {
     expect(got.path).toBe(`/domains/${domain}/${id}`);
   });
 
+  it.each(TASKS)('a %s review address encodes its task id exactly once', async (_domain, id) => {
+    const got = await land(reviewPath(RUN, `${id}/t1`));
+    expect(got.route).toBe('review-one');
+    // decoded once, it is the id again: a double-encoded `[` would read %5B here
+    expect(got.path).toBe(`/review/${RUN}/${id}/t1`);
+  });
+
   it.each(TASKS)('a %s trial address lands on the trace page', async (_domain, id) => {
     const got = await land(trialPath(RUN, trialId({ task_id: id, trial: 2 })));
     expect(got.route).toBe('trial');
@@ -127,6 +135,10 @@ describe('every address the viewer builds lands on the page it names', () => {
     ['/agent', 'agents'],
     [agentPath('airline', 'v2', { node: 'judge' }), 'agent'],
     ['/rubric', 'rubric'],
+    ['/review', 'review'],
+    [`/review/${RUN}/0/t1`, 'review-one'],
+    [reviewPath(RUN, '0/t2'), 'review-one'],
+    [reviewPath(undefined, undefined, { run: RUN }), 'review'],
     [optimisePath('telecom'), 'optimise'],
     [optimisePath('airline', 'v2'), 'optimise-round'],
     [optimisePath('airline', 'v2', { step: 'outcome' }), 'optimise-round'],

@@ -124,7 +124,9 @@ export async function get<T>(url: string): Promise<T> {
   return (await r.json()) as T;
 }
 
-export function useGet<T>(url: string | null): { data: T | null; error: string | null; loading: boolean } {
+/** `nonce` re-fetches the same URL: bump it after a write, so a page that changed
+ *  something server-side reads the new state without changing its address. */
+export function useGet<T>(url: string | null, nonce = 0): { data: T | null; error: string | null; loading: boolean } {
   const [state, set] = useState<{ data: T | null; error: string | null; loading: boolean }>({ data: null, error: null, loading: !!url });
   useEffect(() => {
     if (!url) return;
@@ -136,8 +138,19 @@ export function useGet<T>(url: string | null): { data: T | null; error: string |
     return () => {
       alive = false;
     };
-  }, [url]);
+  }, [url, nonce]);
   return state;
+}
+
+export async function post<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.detail ?? `${r.status} ${url}`);
+  return j as T;
 }
 
 export function fmtPct(x: number | null | undefined, digits = 0): string {

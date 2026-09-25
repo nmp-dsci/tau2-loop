@@ -1,8 +1,11 @@
 """The API behind the frontend, and the frontend itself when a build is present.
 
-Every route serves a committed file: `runs/`, `agents/`, `loop/`, `data/`.
-There is no write route and no model call; the demo image is this process
-with `DEMO_MODE=1` and nothing else.
+Every read route serves a committed file: `runs/`, `agents/`, `loop/`, `data/`.
+No route calls a model. The one write route is `POST /api/review/…`, which
+records a person's verdict on a conversation the judge already scored — the one
+fact here that cannot be a committed file — and it is refused unless the central
+Postgres is reachable and this is not the demo image. The demo image is this
+process with `DEMO_MODE=1` and nothing else.
 """
 
 from __future__ import annotations
@@ -15,11 +18,14 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from tau2_loop import __version__
 from tau2_loop.agent.versions import list_versions, load_version
 from tau2_loop.config import DOMAINS, FRONTEND_DIST, RUNS_DIR, SMOKE_DOMAIN, settings
+from tau2_loop.data import pg
 from tau2_loop.data.splits import read_split, read_task_extract
+from tau2_loop.eval import review as review_store
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.profile import profile
 from tau2_loop.eval.results import slug
@@ -27,6 +33,14 @@ from tau2_loop.eval.runner import list_runs, load_run
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tracking.registry import read_all, read_registry
 from tau2_loop.tracking.snapshot import read_snapshot
+
+
+class ReviewIn(BaseModel):
+    """One recorded verdict. `verdict` is checked again by the table's own CHECK."""
+
+    verdict: str
+    reason: str = ""
+    author: str = ""
 
 
 def create_app() -> FastAPI:
@@ -45,6 +59,9 @@ def create_app() -> FastAPI:
             "domains": list(DOMAINS),
             "mlflow_url": settings().mlflow_tracking_uri,
             "mlflow_embeddable": _mlflow_embeddable(),
+            # whether a person can record a review here: the demo image cannot, and
+            # neither can a checkout with the central Postgres stopped
+            "writable": (not s.demo_mode) and pg.reachable(),
         }
 
     @app.get("/api/stats")
@@ -330,6 +347,59 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "no such conversation")
         return {**trace(run_id, row.trace), "result": row.__dict__, "domain": meta.domain}
 
+    # ── reviews: the one write path (s04 M5) ─────────────────────────────
+    @app.get("/api/review")
+    def reviews(run_id: str | None = None) -> dict[str, Any]:
+        """Every current verdict, and the tally. Empty — never an error — with no database."""
+        if not pg.reachable():
+            return {"writable": False, "reason": _no_db(), "current": {}, "tally": {}}
+        return {
+            "writable": not s.demo_mode,
+            "reason": "the demo image is read only" if s.demo_mode else "",
+            "current": review_store.current(run_id),
+            "tally": review_store.tally(run_id),
+        }
+
+    @app.get("/api/review/{run_id}/{task_id}/{trial}")
+    def review_one(run_id: str, task_id: str, trial: str) -> dict[str, Any]:
+        n = _trial_number(trial)
+        if not pg.reachable():
+            return {"writable": False, "reason": _no_db(), "history": []}
+        return {
+            "writable": not s.demo_mode,
+            "reason": "the demo image is read only" if s.demo_mode else "",
+            "history": review_store.history(run_id, task_id, n),
+        }
+
+    @app.post("/api/review/{run_id}/{task_id}/{trial}")
+    def review_write(run_id: str, task_id: str, trial: str, body: ReviewIn) -> dict[str, Any]:
+        """Record one verdict. Refused in the demo image, and with no database."""
+        if s.demo_mode:
+            raise HTTPException(403, "the demo image is read only")
+        if not pg.reachable():
+            raise HTTPException(503, _no_db())
+        n = _trial_number(trial)
+        try:
+            meta, results = load_run(run_id)
+        except FileNotFoundError as e:
+            raise HTTPException(404, "no such run") from e
+        row = next((r for r in results if r.task_id == task_id and r.trial == n), None)
+        if row is None:
+            raise HTTPException(404, "no such conversation")
+        try:
+            return review_store.add(
+                run_id=run_id,
+                task_id=task_id,
+                trial=n,
+                judge_reward=row.reward,
+                verdict=body.verdict,
+                reason=body.reason[:4000],
+                author=body.author[:120],
+                code_sha=meta.code_sha,
+            )
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+
     @app.get("/api/compare")
     def compare_runs(a: str, b: str) -> dict[str, Any]:
         ma, ra = load_run(a)
@@ -373,6 +443,21 @@ def create_app() -> FastAPI:
 
     _mount_frontend(app)
     return app
+
+
+def _no_db() -> str:
+    """The one-line remedy, wherever the database is asked for and is not there."""
+    return (
+        "the central Postgres is not reachable: "
+        "`make -C ../nmp-central-ai up`, then `make db-migrate` here"
+    )
+
+
+def _trial_number(trial: str) -> int:
+    m = re.fullmatch(r"t?(\d+)", trial)
+    if not m:
+        raise HTTPException(404, "no such trial")
+    return int(m.group(1))
 
 
 def _mlflow_run_url(run_id: str | None) -> str | None:

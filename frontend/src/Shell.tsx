@@ -14,6 +14,7 @@ const NAV: [string, string][] = [
   ['/runs', 'Runs'],
   ['/optimise', 'Optimise'],
   ['/agent', 'Agent'],
+  ['/review', 'Review'],
 ];
 
 export function Shell() {

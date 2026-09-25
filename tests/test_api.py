@@ -141,3 +141,26 @@ def test_a_conversation_is_addressed_by_task_and_trial() -> None:
     assert c.get(f"/api/runs/{run_id}/{row['task_id']}/t99").status_code == 404
     assert c.get(f"/api/runs/{run_id}/{row['task_id']}/nope").status_code == 404
     assert c.get(f"/api/runs/no-such-run/{row['task_id']}/t1").status_code == 404
+
+
+def test_healthz_says_whether_a_review_can_be_recorded(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("DEMO_MODE", "1")
+    # the demo image is never writable, whatever the database says
+    assert client().get("/healthz").json()["writable"] is False
+
+
+def test_the_review_routes_degrade_without_a_database(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody:nobody@127.0.0.1:1/none")
+    monkeypatch.setenv("RO_DATABASE_URL", "postgresql://nobody:nobody@127.0.0.1:1/none")
+    c = client()
+    body = c.get("/api/review").json()
+    # the tab still renders: an empty list and the remedy, never a 500
+    assert body["writable"] is False and body["current"] == {}
+    assert "nmp-central-ai" in body["reason"]
+    assert c.post("/api/review/run/task/t1", json={"verdict": "agree"}).status_code == 503
+
+
+def test_a_review_is_refused_in_the_demo_image(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("DEMO_MODE", "1")
+    r = client().post("/api/review/run/task/t1", json={"verdict": "agree"})
+    assert r.status_code == 403

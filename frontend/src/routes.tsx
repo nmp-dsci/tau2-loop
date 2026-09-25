@@ -8,6 +8,7 @@ import { Runs } from './pages/Runs';
 import { Run } from './pages/Run';
 import { Trace } from './pages/Trace';
 import { Optimise, OptimiseRound } from './pages/Optimise';
+import { Review } from './pages/Review';
 import { search } from './lib/url';
 
 /**
@@ -72,6 +73,10 @@ export const routes: RouteObject[] = [
         element: <Optimise />,
         children: [{ id: 'optimise-round', path: ':version', element: <OptimiseRound /> }],
       },
+
+      // what a person thought of what the judge scored — the one write path
+      { id: 'review', path: '/review', element: <Review /> },
+      { id: 'review-one', path: '/review/:runId/:taskId/:trial', element: <Review /> },
 
       // what the agent is
       { id: 'agents', path: '/agent', element: <Agent /> },

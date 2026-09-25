@@ -64,6 +64,11 @@ export const agentsPath = (lens?: Lens): string => `/agent${search(lens)}`;
 export const optimisePath = (domain?: string, version?: string, lens?: Lens): string =>
   (domain ? `/optimise/${enc(domain)}${version ? `/${enc(version)}` : ''}` : '/optimise') + search(lens);
 export const rubricPath = (lens?: Lens): string => `/rubric${search(lens)}`;
+/** The review list, or one conversation's review: `/review/<run>/<task>/t1`.
+ *  Takes the ids, never an already-built path: encoding an encoded segment again is
+ *  how `%5B` becomes `%255B`. */
+export const reviewPath = (runId?: string, tid?: string, lens?: Lens): string =>
+  (runId && tid ? `/review/${enc(runId)}/${encPath(tid)}` : '/review') + search(lens);
 export const agentPath = (domain: string, version: string, lens?: Lens): string =>
   `/agent/${enc(domain)}/${enc(version)}${search(lens)}`;
 
