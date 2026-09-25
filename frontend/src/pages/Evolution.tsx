@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { DOMAINS, type AgentInfo, type Diagnosis, type LedgerEntry, type Registries, type RunMeta, domainLabel, shortRun, shortTask, useGet } from '../lib/api';
+import { runPath } from '../lib/url';
 
 type Side = { name: string; fingerprint: string; runs: RunMeta[] };
 type DiffFile = { name: string; changed: boolean; added: number; removed: number; diff: string[]; before: string; after: string };
@@ -112,7 +113,7 @@ export function Evolution() {
               {ra?.summary ? `${ra.summary.passed}/${ra.summary.n_scored}` : '—'} · {ta?.summary ? `${ta.summary.passed}/${ta.summary.n_scored}` : '—'}
             </div>
             <div className="b">
-              {ra ? <Link to={`/runs/${ra.run_id}`}>{shortRun(ra.run_id)}</Link> : 'no scored run'} · {data.a.fingerprint}
+              {ra ? <Link to={runPath(ra.run_id)}>{shortRun(ra.run_id)}</Link> : 'no scored run'} · {data.a.fingerprint}
             </div>
           </div>
           <div className="kpi">
@@ -123,7 +124,7 @@ export function Evolution() {
               {rb?.summary ? `${rb.summary.passed}/${rb.summary.n_scored}` : '—'} · {tb?.summary ? `${tb.summary.passed}/${tb.summary.n_scored}` : '—'}
             </div>
             <div className="b">
-              {rb ? <Link to={`/runs/${rb.run_id}`}>{shortRun(rb.run_id)}</Link> : 'no scored run'} · {data.b.fingerprint}
+              {rb ? <Link to={runPath(rb.run_id)}>{shortRun(rb.run_id)}</Link> : 'no scored run'} · {data.b.fingerprint}
             </div>
           </div>
           <div className="kpi">

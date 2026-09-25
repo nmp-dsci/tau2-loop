@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { type DomainSummary, type LedgerEntry, type RunMeta, domainLabel, fmtK, shortRun, useGet } from '../lib/api';
+import { domainPath, runPath } from '../lib/url';
 
 function Arrow() {
   return (
@@ -85,7 +86,7 @@ export function Overview() {
               return (
                 <tr key={d.domain} className={d.champion ? '' : ''}>
                   <td className="sub">
-                    <Link to={`/tasks/${d.domain}`}>{domainLabel(d.domain)}</Link>
+                    <Link to={domainPath(d.domain)}>{domainLabel(d.domain)}</Link>
                   </td>
                   <td className="num">{d.base_n ?? '—'}</td>
                   <td className="mono small">
@@ -236,7 +237,7 @@ export function Overview() {
               .map((r) => (
                 <tr key={r.run_id}>
                   <td className="sub">
-                    <Link to={`/runs/${r.run_id}`}>{shortRun(r.run_id)}</Link>
+                    <Link to={runPath(r.run_id)}>{shortRun(r.run_id)}</Link>
                   </td>
                   <td>{domainLabel(r.domain)}</td>
                   <td className="mono">{r.agent}</td>

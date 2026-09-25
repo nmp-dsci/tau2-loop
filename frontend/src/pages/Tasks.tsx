@@ -1,5 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { DOMAINS, type DomainDetail, domainLabel, shortTask, useGet } from '../lib/api';
+import { domainPath } from '../lib/url';
 
 type TaskFull = {
   id: string;
@@ -33,7 +34,7 @@ export function Tasks() {
       </p>
       <div className="row">
         {DOMAINS.map((d) => (
-          <Link key={d} to={`/tasks/${d}`} className={`chip ${d === domain ? 'ok' : ''}`}>
+          <Link key={d} to={domainPath(d)} className={`chip ${d === domain ? 'ok' : ''}`}>
             {domainLabel(d)}
           </Link>
         ))}

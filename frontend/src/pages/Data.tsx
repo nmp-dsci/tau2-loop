@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { type DomainDetail, type DomainSummary, domainLabel, useGet } from '../lib/api';
+import { domainPath } from '../lib/url';
 
 export function Data() {
   const { data: domains } = useGet<DomainSummary[]>('/api/domains');
@@ -57,7 +58,7 @@ export function Data() {
             {domainLabel(open)} — the policy the agent is given, verbatim ({detail.policy_words.toLocaleString()} words)
           </h2>
           <p className="small muted">
-            Split method: <code>{detail.split.method}</code>. Task list: <Link to={`/tasks/${open}`}>Tasks · {domainLabel(open)}</Link>.
+            Split method: <code>{detail.split.method}</code>. Task list: <Link to={domainPath(open)}>Tasks · {domainLabel(open)}</Link>.
           </p>
           <details>
             <summary>{detail.tools.length} tools the harness exposes to the agent</summary>

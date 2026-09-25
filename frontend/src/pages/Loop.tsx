@@ -1,5 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { DOMAINS, type LedgerEntry, domainLabel, fmtK, fmtS, shortRun, shortTask, useGet } from '../lib/api';
+import { runPath } from '../lib/url';
 
 export function Loop() {
   const [sp, setSp] = useSearchParams();
@@ -57,7 +58,7 @@ export function Loop() {
               </Link>
             )}
             {e.outcome?.test_run && (
-              <Link className="chip" to={`/runs/${e.outcome.test_run}`}>
+              <Link className="chip" to={runPath(e.outcome.test_run)}>
                 test run · {shortRun(e.outcome.test_run)}
               </Link>
             )}

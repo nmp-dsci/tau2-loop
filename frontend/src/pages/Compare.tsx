@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { type Registries, type RunMeta, type TaskResult, domainLabel, shortRun, shortTask, useGet } from '../lib/api';
+import { trialId, trialPath } from '../lib/url';
 
 type Verdict = { promote: boolean; champion_passed: number; challenger_passed: number; n: number; fixed: string[]; broken: string[]; p_value: number; alpha: number; reason: string };
 type ComparePayload = { verdict: Verdict; rows: { task_id: string; trial: number; purpose: string; a: TaskResult | null; b: TaskResult | null }[]; a: RunMeta; b: RunMeta };
@@ -113,7 +114,7 @@ export function Compare() {
                 return (
                   <tr key={`${r.task_id}#${r.trial}`} className={change === 'fixed' ? 'pro' : ''}>
                     <td className="sub mono small" title={r.task_id}>
-                      {r.b ? <Link to={`/runs/${b}/traces/${r.b.trace}`}>{shortTask(r.task_id, 26)}</Link> : shortTask(r.task_id, 26)}
+                      {r.b ? <Link to={trialPath(b, trialId(r.b))}>{shortTask(r.task_id, 26)}</Link> : shortTask(r.task_id, 26)}
                     </td>
                     <td className="wrap small muted">{r.purpose}</td>
                     <td>{ca == null ? '—' : ca ? <span className="status ok">pass</span> : <span className="status err">fail</span>}</td>

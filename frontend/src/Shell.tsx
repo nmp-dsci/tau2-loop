@@ -3,10 +3,10 @@ import { type Health, useGet } from './lib/api';
 
 const NAV: [string, string][] = [
   ['/', 'Result'],
-  ['/data', 'Data'],
-  ['/tasks', 'Tasks'],
+  ['/domains', 'Data'],
+  ['/domains/airline', 'Tasks'],
   ['/architecture', 'Architecture'],
-  ['/agents', 'Agents'],
+  ['/agent', 'Agents'],
   ['/runs', 'Runs'],
   ['/compare', 'Gate'],
   ['/loop', 'Loop'],

@@ -21,6 +21,7 @@ from tau2_loop.agent.versions import list_versions, load_version
 from tau2_loop.config import DOMAINS, FRONTEND_DIST, RUNS_DIR, SMOKE_DOMAIN, settings
 from tau2_loop.data.splits import read_split, read_task_extract
 from tau2_loop.eval.compare import compare
+from tau2_loop.eval.results import slug
 from tau2_loop.eval.runner import list_runs, load_run
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tracking.registry import read_all, read_registry
@@ -224,6 +225,26 @@ def create_app() -> FastAPI:
             "events": trace_events(t),
             "policy_words": len(str(t.get("policy") or "").split()),
         }
+
+    @app.get("/api/runs/{run_id}/{task_id}/{trial}")
+    def trial(run_id: str, task_id: str, trial: str) -> dict[str, Any]:
+        """One conversation, addressed the way the viewer addresses it: task id and
+        `t<n>`. The trace file name (`eval/runner.py` slugs the task id) stays on disk."""
+        m = re.fullmatch(r"t(\d+)", trial)
+        if not m:
+            raise HTTPException(404, "no such trial")
+        n = int(m.group(1))
+        try:
+            meta, results = load_run(run_id)
+        except FileNotFoundError as e:
+            raise HTTPException(404, "no such run") from e
+        row = next((r for r in results if r.task_id == task_id and r.trial == n), None)
+        if row is None:
+            # the pre-grammar address carried a slugged task id; fall back to the slug
+            row = next((r for r in results if slug(r.task_id) == task_id and r.trial == n), None)
+        if row is None or not row.trace:
+            raise HTTPException(404, "no such conversation")
+        return {**trace(run_id, row.trace), "result": row.__dict__, "domain": meta.domain}
 
     @app.get("/api/compare")
     def compare_runs(a: str, b: str) -> dict[str, Any]:

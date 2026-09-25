@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { type RunMeta, type TaskResult, domainLabel, fmtS, shortModel, shortTask, useGet, when } from '../lib/api';
+import { agentPath, trialId, trialPath } from '../lib/url';
 
 function Verdict({ r }: { r: TaskResult }) {
   if (r.correct === true) return <span className="status ok">pass</span>;
@@ -97,7 +98,7 @@ export function Run() {
                   {r.error && r.error !== r.termination_reason && <span className="path v-warn">{r.error.slice(0, 80)}</span>}
                 </td>
                 <td>
-                  <Link to={`/runs/${runId}/traces/${r.trace}`}>open</Link>
+                  <Link to={trialPath(runId, trialId(r))}>open</Link>
                 </td>
               </tr>
             ))}
@@ -108,7 +109,7 @@ export function Run() {
         <summary>the agent files this run used</summary>
         <p className="small muted">
           Copied into <code>runs/{runId}/agent/</code> at run time; see{' '}
-          <Link to={`/agents/${meta.domain}/${meta.agent}`}>
+          <Link to={agentPath(meta.domain, meta.agent)}>
             {domainLabel(meta.domain)}/{meta.agent}
           </Link>{' '}
           for the version.

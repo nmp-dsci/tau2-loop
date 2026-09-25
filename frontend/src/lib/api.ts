@@ -139,8 +139,8 @@ export function useGet<T>(url: string | null): { data: T | null; error: string |
   return state;
 }
 
-export function fmtPct(x: number | null | undefined): string {
-  return x == null ? '—' : `${Math.round(x * 100)}%`;
+export function fmtPct(x: number | null | undefined, digits = 0): string {
+  return x == null ? '—' : `${(x * 100).toFixed(digits)}%`;
 }
 export function fmtS(ms: number | null | undefined): string {
   return ms == null ? '—' : ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(0)}s`;

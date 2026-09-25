@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { type AgentInfo, type Registries, domainLabel, shortRun, useGet } from '../lib/api';
+import { agentPath, runPath } from '../lib/url';
 
 type AgentsPayload = { versions: AgentInfo[]; registry: Registries };
 type AgentFiles = { domain: string; name: string; fingerprint: string; config: Record<string, unknown>; files: Record<string, string> };
@@ -43,7 +44,7 @@ export function Agents() {
               <tr key={v.ref} className={data.registry[v.domain]?.champion?.agent === v.name ? 'pro' : ''}>
                 <td>{domainLabel(v.domain)}</td>
                 <td className="sub">
-                  <Link to={`/agents/${v.domain}/${v.name}`}>{v.name}</Link>
+                  <Link to={agentPath(v.domain, v.name)}>{v.name}</Link>
                 </td>
                 <td>{role(v.domain, v.name)}</td>
                 <td className="mono">{v.fingerprint}</td>
@@ -54,7 +55,7 @@ export function Agents() {
                 <td className="small">
                   {v.runs.map((r) => (
                     <div key={r}>
-                      <Link to={`/runs/${r}`}>{shortRun(r)}</Link>
+                      <Link to={runPath(r)}>{shortRun(r)}</Link>
                     </div>
                   ))}
                 </td>

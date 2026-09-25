@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { type RunMeta, domainLabel, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
+import { runPath } from '../lib/url';
 
 type Snapshot = { experiment: string | null; tracking_uri?: string; runs: { name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
 
@@ -38,7 +39,7 @@ export function Runs() {
             {real.map((r) => (
               <tr key={r.run_id}>
                 <td className="sub">
-                  <Link to={`/runs/${r.run_id}`}>{shortRun(r.run_id)}</Link>
+                  <Link to={runPath(r.run_id)}>{shortRun(r.run_id)}</Link>
                   <span className="path">
                     {when(r.started_at)} · {shortModel(r.model)} · user {shortModel(r.user_model)}
                   </span>
