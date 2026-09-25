@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from tau2_loop.config import DOMAINS, registry_path, settings
+from tau2_loop.tracking.prompts import register_prompt
 
 
 def model_name(domain: str) -> str:
@@ -79,6 +80,8 @@ def promote(run_id: str) -> dict[str, Any]:
     reg.setdefault("history", []).append({"event": "promote", **e})
     _write(meta.domain, reg)
     _mirror_alias(meta.domain, "champion", e)
+    # the prompt that won, in the registry beside the model alias (PLATFORM.md)
+    register_prompt(meta.domain, str(e["agent"]))
     return e
 
 
