@@ -60,6 +60,15 @@ ledger: ## print DOMAIN's loop ledger
 snapshot: platform-status ## export MLflow to loop/mlflow_snapshot.json
 	uv run tau2loop snapshot
 
+leaderboard: ## ingest tau2-bench's published submissions into data/index/leaderboard.json
+	uv run tau2loop leaderboard
+
+db-migrate: ## apply infra/roles.sql to the central Postgres (database `tau2`, idempotent)
+	uv run python -c "from tau2_loop.data import pg; pg.migrate(); print('tau2_loop schema ready')"
+
+db-smoke: ## zero-LLM proof this project can reach its database and read its own tables
+	uv run python -c "from tau2_loop.data import pg; print('tables:', pg.tables()); print('read-only role ok:', bool(pg.connect_ro()))"
+
 gate: ## the CI gate: every champion re-scores offline to what its registry says
 	uv run tau2loop gate
 

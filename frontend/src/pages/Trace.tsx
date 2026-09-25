@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import { type Event, fmtS, shortRun, shortTask, useGet } from '../lib/api';
+import { runPath } from '../lib/url';
 
 type RewardInfo = {
   reward: number;
@@ -31,15 +32,17 @@ export function EventList({ events }: { events: Event[] }) {
 }
 
 export function Trace() {
-  const { runId = '', name = '' } = useParams();
-  const { data, error } = useGet<TracePayload>(`/api/runs/${runId}/traces/${name}`);
+  const { runId = '', taskId = '', trial = 't1' } = useParams();
+  const { data, error } = useGet<TracePayload>(
+    `/api/runs/${encodeURIComponent(runId)}/${encodeURIComponent(taskId)}/${encodeURIComponent(trial)}`,
+  );
   if (error) return <div className="empty">{error}</div>;
   if (!data) return <p className="muted">loading…</p>;
   const ri = data.reward_info;
   return (
     <>
-      <p className="label">
-        <Link to="/runs">runs</Link> / <Link to={`/runs/${runId}`}>{shortRun(runId)}</Link> / {shortTask(data.task_id, 40)}
+      <p className="label crumbs">
+        <Link to="/runs">runs</Link> / <Link to={runPath(runId)}>{shortRun(runId)}</Link> / {shortTask(data.task_id, 40)} / {trial}
       </p>
       <h1>
         {shortTask(data.task_id, 50)}: <em>reward {ri ? ri.reward.toFixed(2) : '—'}</em> after {data.events.filter((e) => e.type === 'assistant' || (e.type === 'tool_call' && e.by !== 'user')).length} agent turns

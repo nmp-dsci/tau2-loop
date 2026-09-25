@@ -17,7 +17,7 @@ loop: the same mechanics as [DABStep-loop](https://github.com/nmp-dsci/DABStep-l
 make smoke                     # v0 on tau2's mock domain: proves the adapter on all three roles
 make eval DOMAIN=airline       # v0 on the 20-task train split → runs/<ts>_airline_v0_train/
 make loop DOMAIN=airline       # champion → failures → one Sonnet optimiser session → challenger → gate → ledger
-make viewer                    # the run viewer on :8081 (data, tasks, agents, runs, gate, loop, evolution)
+make viewer                    # the run viewer on :8081 — eight tabs, see AGENTS.md §4b
 ```
 
 tau2-bench v1.0.1 is a submodule pinned at `2174a60` and never edited. Our
@@ -75,6 +75,7 @@ Details and next steps: `.lavish/s01_build-findings.html`.
 make setup          # submodule at the pin, uv sync, npm ci
 cp .env.example .env
 claude login        # the subscription; no ANTHROPIC_API_KEY anywhere
-make platform-up    # central MLflow (make -C ../nmp-central-ai up) → http://localhost:5000
+make platform-up    # central MLflow + Postgres (make -C ../nmp-central-ai up) → http://localhost:5000
+make db-migrate      # app-state schema on the central Postgres (database `tau2`, idempotent)
 make test · make lint
 ```

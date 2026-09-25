@@ -247,6 +247,11 @@ def _finish(
 
             meta.mlflow_run_id = log_run(run_dir, meta, results)
             _write_meta(run_dir, meta)
+            from tau2_loop.tracking.tracing import flush, log_run_traces
+
+            n = log_run_traces(meta, results, run_dir)
+            flush()
+            console.print(f"[dim]mlflow: {n} conversation traces[/]")
         except Exception as e:  # noqa: BLE001 - tracking down never fails an eval
             console.print(f"[yellow]mlflow: not logged ({type(e).__name__}: {e})[/]")
     return meta, results

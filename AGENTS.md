@@ -64,6 +64,7 @@ re-logged, or it will overwrite `loop/mlflow_snapshot.json` with an empty index.
 vendor/tau2-bench/        τ³-bench at 2174a60 (submodule): harness, domains, data/tau2/, evaluator
 data/splits/<domain>.json 20 train / 20 test ids, seed 300, base_n, reserve_n     committed
 data/tasks/<domain>.json  the forty tasks (tau2's dump), policy, tool list       committed, for the viewer
+data/index/leaderboard.json  τ²-bench's published submissions, ingested from the submodule   committed
 agents/<domain>/vN/       system.md ({policy} slot) · helper.py (hooks) · agent.yaml (frozen) · diagnosis.json
 runs/<ts>_<domain>_<vN>_<split>/  run.json · results.jsonl · traces/<task>.json · tau2_results.json · agent/
 loop/<domain>/            ledger.jsonl · registry.json;  loop/mlflow_snapshot.json for the demo
@@ -71,12 +72,17 @@ src/tau2_loop/
   config.py               paths, Settings (boots keyless), DOMAINS, split seed
   llm/                    __init__ (models, billing) · sdk_provider (litellm CustomLLM → Agent SDK) · prompting (contract)
   agent/                  versions (per domain, fingerprint) · factory (LoopAgent, registered as "tau2_loop")
-  data/splits.py          cut, extract, read
-  eval/                   runner (tau2 run_tasks → run folder) · results · compare (McNemar) · rescore (offline replay)
+  data/                   splits (cut, extract, read) · leaderboard (ingest the published board) · pg (central Postgres)
+  eval/                   runner (tau2 run_tasks → run folder) · results · profile (the cost distribution)
+                          compare (McNemar) · rescore (offline replay) · review (the human verdict)
   loop/                   run (cycle) · optimiser (Sonnet session, hooks) · ledger
-  tracking/               registry · mlflow_log · snapshot · gate (CI)
-  serving/app.py          FastAPI + SPA
-frontend/                 Vite + React; src/tokens.css verbatim from DESIGN.md; scripts/design_lint.mjs
+  tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
+                          conversation) · prompts (the prompt registry) · snapshot · gate (CI)
+  serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
+infra/roles.sql           schema tau2_loop on the central Postgres: review · submission (app state only)
+frontend/                 Vite + React; routes.tsx is the address table, lib/url.ts the grammar,
+                          lib/ui.tsx the shared pieces; src/tokens.css per DESIGN.md §5;
+                          scripts/design_lint.mjs; routes.test.tsx (vitest) drives every address
 .github/workflows/        ci.yml · deploy-aws.yml
 ```
 
@@ -94,11 +100,31 @@ make promote RUN=<run>    make register RUN=<run>
 make loop DOMAIN=airline CYCLES=1     eval → optimiser → challenger → gate → ledger (→ test run on promote)
 make ledger DOMAIN=…      make snapshot
 make gate                 CI gate: champions re-score offline to their registry entries
+make leaderboard          ingest τ²-bench's published submissions → data/index/leaderboard.json
+make db-migrate           apply infra/roles.sql to the central Postgres (database `tau2`, idempotent)
+make db-smoke             zero-LLM proof this project can reach its database
 make dev                  API on :8081; `cd frontend && npm run dev` for the UI on :5174
 make viewer               build the frontend and serve it from the API
 make demo-up              build + run the demo image locally
 make test · make lint
 ```
+
+## 4b · The viewer — eight tabs, DataAgentBench's slots (plan s04)
+
+| tab | address | what it answers |
+|---|---|---|
+| Overview | `/` | where each domain stands |
+| Domains & tasks | `/domains/<domain>/<task>` | what the benchmark is; a task's answer key |
+| Rubric | `/rubric` | how τ² decides a conversation passed, and which check failed |
+| Leaderboard | `/leaderboard` | who else has tried, and why we are not comparable yet |
+| Runs | `/runs/<run>[?vs=<run>]` | what we ran, what it cost, and the gate against another run |
+| Optimise | `/optimise/<domain>/<version>` | a round: diagnose → propose → outcome |
+| Agent | `/agent/<domain>/<version>` | the adapter figure, clickable; the version's own files |
+| Review | `/review/<run>/<task>/t<n>` | what a person thought of what the judge scored (writes) |
+
+The grammar is `frontend/src/lib/url.ts`: one id per thing, the path names the
+subject, the query holds the lens, and a detail opens inside its list. Every
+address published before it redirects — `routes.test.tsx` asserts each one.
 
 ## 5 · The loop, precisely
 

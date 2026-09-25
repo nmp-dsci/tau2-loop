@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>s04 · tau2-loop → DataAgentBench UI parity + central platform backend</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* The Field Guide (tau2-loop/frontend/src/tokens.css, current state: red accent),
+   plus --ok / --ok-soft as proposed in decision Q3-C, so "has it" never reads as an error. */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7;
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1180px; --measure:70ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}}
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--t0)/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
+code,pre,.mono{font-family:var(--mono);font-size:var(--t-1)}
+pre{margin:0;white-space:pre-wrap;word-break:break-word}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font:400 var(--t4)/1.15 var(--serif)}
+h1 em{font-style:italic;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);margin-top:var(--s7)}
+h3{font:600 var(--t1)/1.3 var(--sans);margin-top:var(--s5)}
+h4{font:600 var(--t0)/1.3 var(--sans)}
+p{margin:var(--s3) 0 0;max-width:var(--measure);text-wrap:pretty;color:var(--ink-2)}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure)}
+.label{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.muted{color:var(--muted)} .small{font-size:var(--t-1)}
+main{max-width:var(--w);margin:0 auto;padding-block:var(--s6) var(--s9);padding-inline:var(--s4)}
+header.top{position:sticky;top:0;z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top .in b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top .in .label{margin-left:auto}
+section{scroll-margin-top:72px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.kpi{background:var(--panel);border-radius:var(--r);padding:var(--s4) var(--s5);box-shadow:var(--shadow);min-width:0}
+.kpi .n{font:500 var(--t3)/1.1 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.kpi .n.ok{color:var(--ok)} .kpi .n.warn{color:var(--amber)} .kpi .n.acc{color:var(--accent)}
+.kpi .b{margin-top:var(--s2);color:var(--muted);font-size:var(--t-1);overflow-wrap:anywhere}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.card{background:var(--panel);border-radius:var(--r);padding:var(--s5);box-shadow:var(--shadow);min-width:0}
+.card h3,.card h4{margin-top:0}
+.card.hi{box-shadow:var(--shadow),inset 0 0 0 1.5px var(--accent)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:var(--s5);align-items:start;margin-top:var(--s5)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s4)}
+.chip{font:500 var(--t-2)/1 var(--mono);padding:var(--s2) var(--s3);border-radius:var(--r-sm);background:var(--panel);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.chip.acc{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.chip.no{border-color:var(--line-3);color:var(--muted)}
+.tw{overflow-x:auto;margin-top:var(--s4);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+caption{text-align:left;padding:var(--s4) var(--s4) var(--s2);color:var(--muted);font-size:var(--t-1);caption-side:top;max-width:var(--measure)}
+thead th{font:500 var(--t-2)/1.3 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sub{color:var(--ink);font-weight:500}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+td.wrap{min-width:22ch;max-width:46ch;white-space:normal}
+.v-ok{color:var(--ok);font-weight:500} .v-no{color:var(--muted);font-weight:500} .v-warn{color:var(--amber);font-weight:500}
+.status::before{display:inline-block;width:.7em;margin-right:.35em}
+.status.ok::before{content:'●';color:var(--ok)}
+.status.no::before{content:'○';color:var(--line-3)}
+.status.warn::before{content:'◐';color:var(--amber)}
+.code{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:var(--s4);margin-top:var(--s3);overflow-x:auto}
+.code.band{background:var(--band)}
+.code pre{font-size:var(--t-1);line-height:1.55;white-space:pre}
+figure{margin:var(--s5) 0 0}
+figcaption{margin-top:var(--s2);font-size:var(--t-1);color:var(--muted);max-width:var(--measure)}
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.ok{fill:var(--ok-soft);stroke:var(--ok)}
+.dia .nd.gone{fill:none;stroke:var(--line-3);stroke-dasharray:4 3}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.hi{stroke:var(--accent);marker-end:url(#arrhi)}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 12px var(--sans);fill:var(--muted)}
+.dia .tx.k{font:500 11px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.navmock{margin-top:var(--s4);border:1px solid var(--line);border-radius:var(--r);background:var(--panel);padding:var(--s3) var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap;overflow-x:auto}
+.navmock .brand{font:500 var(--t0)/1 var(--serif);white-space:nowrap}
+.navmock .brand b{color:var(--accent);font-weight:500}
+.navmock .tabs{display:flex;gap:var(--s1);flex-wrap:wrap}
+.navmock .tabs span{font:500 var(--t-1)/1 var(--sans);color:var(--muted);padding:var(--s2) var(--s3);border-radius:var(--r-sm);white-space:nowrap}
+.navmock .tabs span.on{color:var(--accent);background:var(--accent-soft)}
+.navmock .tabs span.new{color:var(--ok);background:var(--ok-soft)}
+.navmock .tabs span.gone{color:var(--faint);text-decoration:line-through}
+.navmock .mode{margin-left:auto;font:500 var(--t-2)/1 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);padding:var(--s2) var(--s3);border-radius:var(--r-sm);border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s4)}
+ol.steps>li{counter-increment:s;position:relative;padding-left:3.2rem;min-width:0}
+ol.steps>li::before{content:'M' counter(s,decimal-leading-zero);position:absolute;left:0;top:.15rem;font:500 var(--t-1)/1.5 var(--mono);color:var(--accent)}
+ol.steps h4{margin-bottom:var(--s1)}
+ol.steps p{margin-top:var(--s1)}
+dl.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);margin:var(--s4) 0 0;font-size:var(--t-1)}
+dl.kv dt{font:500 var(--t-2)/1.6 var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:var(--track-label)}
+dl.kv dd{margin:0;color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
+.note{background:var(--band);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:var(--measure)}
+.note.ok{border-left-color:var(--ok)}
+.note .label{display:block;margin-bottom:var(--s1)}
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+button.btn.ghost{background:none;color:var(--accent);border:1px solid var(--accent)}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+textarea.free{width:100%;margin-top:var(--s3);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3);min-height:76px;resize:vertical}
+.toc{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.toc a{font:500 var(--t-2)/1 var(--mono);text-decoration:none;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+footer{max-width:var(--w);margin:0 auto;padding:var(--s6) var(--s4);color:var(--faint);font-size:var(--t-1);border-top:1px solid var(--line)}
+@media (max-width:640px){ h1{font-size:var(--t3)} .code pre{white-space:pre-wrap} }
+</style>
+</head>
+<body>
+
+<header class="top"><div class="in">
+  <b>tau2<span style="color:var(--accent)">-loop</span></b>
+  <span class="small muted">s04 · UI migration to DataAgentBench + central platform backend</span>
+  <span class="label">draft for review · 2026-09-25</span>
+</div></header>
+
+<main>
+
+<p class="label">Comprehensive review · DataAgentBench explorer vs tau2-loop viewer · branch <code>challenger-20260925</code></p>
+<h1>DataAgentBench's explorer is the <em>same app, three iterations ahead</em>. Bring tau2-loop up to it, and put its backend on the central platform.</h1>
+<p class="lead">
+  Both projects optimise one agent against a public benchmark and show the work. They already share a design system
+  (<code>DESIGN.md</code>, <code>tokens.css</code>) and a stack (React 18 + Vite + TS, FastAPI, MLflow). What differs is
+  the information architecture, the navigation grammar, and how much of the loop the UI can actually drive. This plan
+  migrates tau2-loop's nine tabs to DAB's eight, ports the shared frontend machinery, and moves the backend onto
+  <code>nmp-central-ai</code> for both MLflow <em>and</em> Postgres.
+</p>
+
+<div class="toc">
+  <a href="#evidence">1 · Evidence</a>
+  <a href="#ia">2 · The tab set</a>
+  <a href="#pages">3 · Page by page</a>
+  <a href="#machinery">4 · Shared machinery</a>
+  <a href="#backend">5 · Backend on the platform</a>
+  <a href="#plan">6 · Migration M0–M6</a>
+  <a href="#risks">7 · Risks</a>
+  <a href="#decide">8 · Decisions</a>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="n">2,054<span class="muted" style="font-size:var(--t0)"> / 7,139</span></div><div class="b">lines of frontend source: tau2-loop vs DataAgentBench. Same design system, 3.5× the surface.</div></div>
+  <div class="kpi"><div class="n acc">11 → 27</div><div class="b">API routes. DAB has 25 GET + 2 POST; tau2-loop has 11 GET and no write route at all.</div></div>
+  <div class="kpi"><div class="n ok">✓</div><div class="b">MLflow already central (<code>P3</code> in <code>registry/projects.yaml</code>, experiment <code>tau2-loop</code>, four registered models).</div></div>
+  <div class="kpi"><div class="n warn">0</div><div class="b">Postgres. tau2-loop has no <code>database:</code> block in the registry, no <code>infra/roles.sql</code>, no <code>DATABASE_URL</code>.</div></div>
+</div>
+
+<!-- ─────────────────────────── 1 · EVIDENCE ─────────────────────────── -->
+<section id="evidence">
+<h2>1 · What DAB's explorer has that tau2-loop's viewer does not</h2>
+<p>
+  Every row below was read from the two repos today, not inferred. The column that matters is the last one: what the
+  reader of the tau2-loop viewer currently cannot do.
+</p>
+
+<div class="tw">
+<table>
+  <caption>Capability audit · <code>DataAgentBench/frontend/src</code> vs <code>tau2-loop/frontend/src</code></caption>
+  <thead><tr>
+    <th>Capability</th><th>DataAgentBench</th><th>tau2-loop</th><th class="wrap">Consequence today</th>
+  </tr></thead>
+  <tbody>
+  <tr>
+    <td class="sub">Routes as data + redirect loaders<span class="path">routes.tsx · 107 lines</span></td>
+    <td><span class="status ok">declarative <code>RouteObject[]</code>, old URLs redirect, never 404</span></td>
+    <td><span class="status no">11 <code>&lt;Route&gt;</code> elements inline in <code>main.tsx</code></span></td>
+    <td class="wrap">Any URL change breaks every bookmark and README link.</td>
+  </tr>
+  <tr>
+    <td class="sub">URL grammar<span class="path">lib/url.ts · 88 lines, documented rules</span></td>
+    <td><span class="status ok">id in the path, lens in the query, detail opens inside the list</span></td>
+    <td><span class="status no">ad-hoc paths; no query-string state at all</span></td>
+    <td class="wrap">A filtered table, a selected node or a chosen comparison cannot be linked or shared.</td>
+  </tr>
+  <tr>
+    <td class="sub">Route tests<span class="path">routes.test.tsx · vitest · 128 lines</span></td>
+    <td><span class="status ok">memory router drives every address</span></td>
+    <td><span class="status no">no <code>vitest</code> dependency, no frontend test</span></td>
+    <td class="wrap">Nothing catches the blank-page class of bug (see <code>/gate</code> below).</td>
+  </tr>
+  <tr>
+    <td class="sub">Shared UI primitives<span class="path">lib/ui.tsx · Rate, Kpi, Loading, Clip, Gold, chips bar</span></td>
+    <td><span class="status ok">one <code>&lt;Rate&gt;</code>: bar + <code>72% · 36/50</code>, never a bare %</span></td>
+    <td><span class="status no">each page formats its own numbers</span></td>
+    <td class="wrap">DESIGN.md rule "never a bare percentage" is enforced by hand, inconsistently.</td>
+  </tr>
+  <tr>
+    <td class="sub">Sort / filter / search on tables</td>
+    <td><span class="status ok"><code>thead th.sortable</code>, <code>.filters</code>, <code>.tog</code>, live count</span></td>
+    <td><span class="status no">static tables</span></td>
+    <td class="wrap">114 retail tasks are an unsortable wall.</td>
+  </tr>
+  <tr>
+    <td class="sub">Trace viewer</td>
+    <td><span class="status ok">span waterfall (<code>.wf</code>), per-span tokens, embedded MLflow iframe</span></td>
+    <td><span class="status warn">flat event list, no timing, no MLflow link</span></td>
+    <td class="wrap">Cannot see where a 40-turn conversation spent its time or money.</td>
+  </tr>
+  <tr>
+    <td class="sub">Run comparison</td>
+    <td><span class="status ok"><code>/api/runs/compare</code>: grouped, common-vs-all scope, fixed / broken lists</span></td>
+    <td><span class="status warn"><code>/api/compare</code> exists; the <code>/gate</code> page renders blank</span></td>
+    <td class="wrap">The gate verdict — the whole point of the loop — is invisible in the UI.</td>
+  </tr>
+  <tr>
+    <td class="sub">Cost / token profile</td>
+    <td><span class="status ok"><code>Profile</code>: mean · p50 · p95 · max · sum, cost per pass, cache hit rate</span></td>
+    <td><span class="status no">totals only</span></td>
+    <td class="wrap">No way to see the tail that blows a subscription window.</td>
+  </tr>
+  <tr>
+    <td class="sub">A write surface</td>
+    <td><span class="status ok">Golden tab: author + run + judge SQL, saved to Postgres</span></td>
+    <td><span class="status no">"There is no write route and no model call" (<code>serving/app.py</code>)</span></td>
+    <td class="wrap">Every judgement about a conversation lives in someone's head or a commit message.</td>
+  </tr>
+  <tr>
+    <td class="sub">Leaderboard</td>
+    <td><span class="status ok">the site's own entries, plus ours re-scored against them</span></td>
+    <td><span class="status no">none</span></td>
+    <td class="wrap">s03's submission flow has nowhere to land.</td>
+  </tr>
+  <tr>
+    <td class="sub">Postgres</td>
+    <td><span class="status ok">database <code>dab</code>, roles <code>dab_owner</code>/<code>dab_agent</code>, two schemas</span></td>
+    <td><span class="status no">none</span></td>
+    <td class="wrap">Nothing can be recorded that is not a committed file.</td>
+  </tr>
+  <tr>
+    <td class="sub">MLflow depth</td>
+    <td><span class="status ok"><code>preflight()</code>, four required tags, a trace per trial, prompt registry</span></td>
+    <td><span class="status warn">runs + artifacts only; no traces, no preflight in code, tags incomplete</span></td>
+    <td class="wrap">PLATFORM.md's required tags (<code>project · git_sha · env · billing</code>) are not set.</td>
+  </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <span class="label">What tau2-loop has that DAB does not</span>
+  A genuinely good <b>Architecture</b> page (the tau2 environment, the user simulator, what a turn costs) and an
+  <b>Evolution</b> page that narrates a single optimiser session — diagnosis, diff, closing account. Neither should be
+  lost; §3 folds them into <b>Agent</b> and <b>Optimise</b> rather than deleting them.
+</div>
+</section>
+
+<!-- ─────────────────────────── 2 · IA ─────────────────────────── -->
+<section id="ia">
+<h2>2 · The tab set — nine ad-hoc tabs become DAB's eight</h2>
+<p>DAB's order is a story: <b>what the benchmark is → how it is judged → who else has tried → what we ran → how we improve → what the agent is → what we know by hand.</b> tau2-loop's order is closer to a repo tour. The mock below is the real header, at the real sizes.</p>
+
+<p class="label" style="margin-top:var(--s5)">Today</p>
+<div class="navmock">
+  <span class="brand">tau2<b>-loop</b></span>
+  <span class="tabs">
+    <span class="on">Result</span><span>Data</span><span>Tasks</span><span>Architecture</span><span>Agents</span><span>Runs</span><span class="gone">Gate</span><span>Loop</span><span>Evolution</span>
+  </span>
+  <span class="mode">live · dev</span>
+</div>
+<p class="small muted">Nine tabs; <code>Gate</code> renders blank; <code>Loop</code> and <code>Evolution</code> are two halves of one story; <code>Data</code> and <code>Tasks</code> are two views of one object.</p>
+
+<p class="label" style="margin-top:var(--s5)">Target</p>
+<div class="navmock">
+  <span class="brand">tau2<b>-loop</b></span>
+  <span class="tabs">
+    <span class="on">Overview</span><span>Domains &amp; tasks</span><span>Rubric</span><span class="new">Leaderboard</span><span>Runs</span><span>Optimise</span><span>Agent</span><span class="new">Review</span>
+  </span>
+  <span class="mode">live · dev</span>
+</div>
+<p class="small muted">Eight tabs, the same eight slots as DAB. <span style="color:var(--ok)">Green</span> = new. Every existing page survives as a section of one of these.</p>
+
+<figure>
+<svg class="dia" viewBox="0 0 1000 300" role="img" aria-labelledby="ia-t ia-d">
+  <title id="ia-t">Mapping tau2-loop's nine tabs onto DataAgentBench's eight slots</title>
+  <desc id="ia-d">Nine current pages on the left map onto eight target tabs on the right; Gate folds into Runs, Loop and Evolution merge into Optimise, Architecture folds into Agent, and Leaderboard and Review are new.</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="currentColor" opacity=".45"/></marker>
+    <marker id="arrhi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="currentColor"/></marker>
+  </defs>
+  <text class="tx k" x="20" y="24">tau2-loop today</text>
+  <text class="tx k" x="660" y="24">target · DAB slots</text>
+
+  <g id="cur">
+    <rect class="nd" x="20" y="38" width="150" height="26" rx="6"/><text class="tx" x="32" y="55">Result</text>
+    <rect class="nd" x="20" y="70" width="150" height="26" rx="6"/><text class="tx" x="32" y="87">Data</text>
+    <rect class="nd" x="20" y="102" width="150" height="26" rx="6"/><text class="tx" x="32" y="119">Tasks</text>
+    <rect class="nd" x="20" y="134" width="150" height="26" rx="6"/><text class="tx" x="32" y="151">Architecture</text>
+    <rect class="nd" x="20" y="166" width="150" height="26" rx="6"/><text class="tx" x="32" y="183">Agents</text>
+    <rect class="nd" x="20" y="198" width="150" height="26" rx="6"/><text class="tx" x="32" y="215">Runs</text>
+    <rect class="nd gone" x="20" y="230" width="150" height="26" rx="6"/><text class="tx s" x="32" y="247">Gate (blank)</text>
+    <rect class="nd" x="20" y="262" width="70" height="26" rx="6"/><text class="tx" x="30" y="279">Loop</text>
+    <rect class="nd" x="100" y="262" width="70" height="26" rx="6"/><text class="tx" x="110" y="279">Evolution</text>
+  </g>
+
+  <g id="tgt">
+    <rect class="nd hi" x="660" y="38" width="200" height="26" rx="6"/><text class="tx" x="672" y="55">Overview</text>
+    <rect class="nd hi" x="660" y="76" width="200" height="26" rx="6"/><text class="tx" x="672" y="93">Domains &amp; tasks</text>
+    <rect class="nd hi" x="660" y="114" width="200" height="26" rx="6"/><text class="tx" x="672" y="131">Rubric</text>
+    <rect class="nd ok" x="660" y="152" width="200" height="26" rx="6"/><text class="tx" x="672" y="169">Leaderboard</text>
+    <rect class="nd hi" x="660" y="190" width="200" height="26" rx="6"/><text class="tx" x="672" y="207">Runs · compare · trace</text>
+    <rect class="nd hi" x="660" y="228" width="200" height="26" rx="6"/><text class="tx" x="672" y="245">Optimise</text>
+    <rect class="nd hi" x="660" y="266" width="95" height="26" rx="6"/><text class="tx" x="680" y="283">Agent</text>
+    <rect class="nd ok" x="765" y="266" width="95" height="26" rx="6"/><text class="tx" x="783" y="283">Review</text>
+  </g>
+
+  <g class="ed" stroke-linecap="round">
+    <path d="M170 51 C 420 51, 430 51, 660 51"/>
+    <path d="M170 83 C 420 83, 430 89, 660 89"/>
+    <path d="M170 115 C 420 115, 430 95, 660 92"/>
+    <path d="M170 115 C 420 120, 430 127, 660 127"/>
+    <path d="M170 147 C 420 147, 430 275, 660 279"/>
+    <path d="M170 179 C 420 179, 430 275, 660 279"/>
+    <path d="M170 211 C 420 211, 430 203, 660 203"/>
+    <path d="M170 243 C 420 243, 430 207, 660 207"/>
+    <path d="M170 275 C 420 275, 430 241, 660 241"/>
+  </g>
+  <text class="tx s" x="300" y="152">Architecture + Agents → Agent</text>
+  <text class="tx s" x="300" y="262">Loop + Evolution → Optimise</text>
+  <text class="tx s" x="300" y="228">Gate → a section of Runs</text>
+  <text class="tx s" x="880" y="169">new</text>
+  <text class="tx s" x="880" y="283">new</text>
+</svg>
+<figcaption>Seven of nine current pages keep their content; two pairs merge; two tabs are new. No page is deleted.</figcaption>
+</figure>
+
+<div class="tw">
+<table>
+  <caption>Slot-by-slot mapping, with the DAB page that is the reference implementation</caption>
+  <thead><tr><th>Slot</th><th>DAB reference</th><th>tau2-loop target</th><th class="wrap">Built from</th></tr></thead>
+  <tbody>
+  <tr><td class="sub">1 · Overview</td><td><code>pages/Overview.tsx</code><span class="path">163 lines</span></td><td>Overview</td><td class="wrap">Keep today's <code>Result</code>; add the KPI strip with a baseline, the "hardest domain" assertion headline, and the four-domain rate table with <code>&lt;Rate&gt;</code>.</td></tr>
+  <tr><td class="sub">2 · Datasets &amp; queries</td><td><code>Datasets.tsx</code> → <code>Dataset.tsx</code> → <code>Query.tsx</code></td><td>Domains &amp; tasks</td><td class="wrap">Merge <code>Data</code> + <code>Tasks</code>. Domain chips bar (<code>DatasetChips</code> → <code>DomainChips</code>), then task table, then one task: scenario, policy excerpt, evaluation criteria.</td></tr>
+  <tr><td class="sub">3 · Validators</td><td><code>Validators.tsx</code><span class="path">99 lines</span></td><td>Rubric</td><td class="wrap">New page, same shape: τ²'s four judgement kinds (<code>actions</code>, <code>communicate_info</code>, <code>nl_assertions</code>, <code>env_assertions</code>) and the <code>reward_basis</code> distribution already served by <code>/api/domains</code>.</td></tr>
+  <tr><td class="sub">4 · Leaderboard</td><td><code>Leaderboard.tsx</code><span class="path">205 lines</span></td><td>Leaderboard</td><td class="wrap">New. τ²-bench's published <code>submissions/*/submission.json</code> + <code>manifest.json</code>, plus our runs' <code>pass^k</code> in the same table. This is where s03 lands.</td></tr>
+  <tr><td class="sub">5 · Runs</td><td><code>Runs.tsx</code> · <code>Run.tsx</code> · <code>TracePage.tsx</code></td><td>Runs</td><td class="wrap">Keep the three pages; add filters, sort, the profile block, the compare section (today's blank <code>Gate</code>) and the span waterfall.</td></tr>
+  <tr><td class="sub">6 · Optimise</td><td><code>Optimise.tsx</code><span class="path">1,129 lines — the flagship</span></td><td>Optimise</td><td class="wrap">Merge <code>Loop</code> + <code>Evolution</code>. Rounds list; a round opens in place at <code>/optimise/:version</code> as three steps — diagnose → propose → outcome — over the existing ledger entries.</td></tr>
+  <tr><td class="sub">7 · Agent</td><td><code>Agent.tsx</code><span class="path">382 lines</span></td><td>Agent</td><td class="wrap">Merge <code>Architecture</code> + <code>Agents</code>. The architecture SVG becomes clickable: each node opens a panel (system prompt, tool contract, user simulator, judge, MLflow, the run folder) for the selected version.</td></tr>
+  <tr><td class="sub">8 · Golden</td><td><code>Golden.tsx</code><span class="path">804 lines, Postgres-backed</span></td><td>Review</td><td class="wrap">New. τ² has no SQL to golden, but it has a noisy <code>nl_assertions</code> judge. <b>Review</b> is the human verdict on a conversation — agree / disagree with the judge, with a reason. First write path, first Postgres table.</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<!-- ─────────────────────────── 3 · PAGES ─────────────────────────── -->
+<section id="pages">
+<h2>3 · Page by page — what each tab shows and what it needs</h2>
+
+<div class="cards">
+  <div class="card">
+    <h4>1 · Overview</h4>
+    <p class="small">Assertion headline over the four domains: which is hardest, at what rate, over how many conversations.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>/api/stats</code> <span class="chip ok">new</span>, <code>/api/domains</code>, <code>/api/runs</code></dd>
+      <dt>new API</dt><dd><code>GET /api/stats</code> — one object: tasks per domain, splits, champions, cycles, total conversations, total cost.</dd>
+      <dt>keeps</dt><dd>sections 2–4 of today's <code>Result</code> (one conversation, the learning loop, latest runs).</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h4>2 · Domains &amp; tasks</h4>
+    <p class="small">Chips bar for the four domains; the task table sortable by split, reward basis and action count; a task opens in place.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>/api/domains</code>, <code>/api/domains/{d}</code>, <code>/api/domains/{d}/tasks/{id}</code></dd>
+      <dt>new API</dt><dd>none — the data is already served.</dd>
+      <dt>care</dt><dd>the task detail shows the answer key (<code>evaluation_criteria</code>). Mark it: s03 established it is public, but it is also what contaminates a train-split diagnosis.</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h4>3 · Rubric</h4>
+    <p class="small">How τ² decides a conversation passed, and how often each mechanism is the decider.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>/api/rubric</code> <span class="chip ok">new</span></dd>
+      <dt>new API</dt><dd>counts per judgement kind across the 375 base tasks, plus per-run: how many failures were an <code>action</code> miss vs an <code>nl_assertion</code> miss. Both fields already exist on <code>TaskResult</code>.</dd>
+    </dl>
+  </div>
+  <div class="card hi">
+    <h4>4 · Leaderboard <span class="chip ok">new</span></h4>
+    <p class="small">Every published τ²-bench submission beside ours, on the same axis.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>/api/leaderboard</code> <span class="chip ok">new</span></dd>
+      <dt>source</dt><dd><code>vendor/tau2-bench/web/leaderboard/public/submissions/</code> + <code>manifest.json</code>, ingested to <code>data/index/leaderboard.json</code> the way DAB ingests its site's <code>leaderboards.json</code>.</dd>
+      <dt>ties to</dt><dd><code>.lavish/s03_eval-submission-plan.html</code> — <code>tau2 submit prepare</code> writes a row here before it writes a PR.</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h4>5 · Runs · compare · trace</h4>
+    <p class="small">The run list with filters; a run with its profile and per-task table; a conversation as a span waterfall.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>/api/runs</code>, <code>/api/runs/{id}</code>, <code>/api/runs/compare</code> <span class="chip ok">new shape</span>, <code>/api/runs/{id}/{task}/{trial}</code></dd>
+      <dt>fixes</dt><dd>the blank <code>/gate</code> — it becomes a section of the run page, reached as <code>/runs/{id}?vs={other}</code>.</dd>
+      <dt>new API</dt><dd><code>profile</code> on every run (mean · p50 · p95 · max of turns, tool calls, tokens, wall clock) and <code>mlflow_url</code> / <code>mlflow_trace_url</code> per trial.</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h4>6 · Optimise</h4>
+    <p class="small">Every cycle as a round; a round opens in place with three steps and a before → after tally.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>/api/optimise</code>, <code>/api/optimise/{version}</code> <span class="chip ok">new</span></dd>
+      <dt>source</dt><dd><code>loop/&lt;domain&gt;/ledger.jsonl</code> — <code>diagnoses</code>, <code>prompt_diff_summary</code>, <code>expected_to_fix</code>, <code>outcome</code> are already written by <code>loop/optimiser.py</code>.</dd>
+      <dt>keeps</dt><dd>Evolution's four narrative sections, as the body of an opened round.</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h4>7 · Agent</h4>
+    <p class="small">The architecture figure, but every box is a link into what that box actually contains for the selected version.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>/api/agents</code>, <code>/api/agents/{d}/{name}</code>, <code>/api/agents/diff</code></dd>
+      <dt>lens</dt><dd><code>/agent/{domain}/{version}?node=judge</code> — the node is a lens, per the URL grammar.</dd>
+      <dt>keeps</dt><dd>the version diff and the optimiser's closing account, as a node panel.</dd>
+    </dl>
+  </div>
+  <div class="card hi">
+    <h4>8 · Review <span class="chip ok">new · write</span></h4>
+    <p class="small">A human verdict on a conversation the judge scored. Agree, disagree, or "the task itself is broken" — with a reason.</p>
+    <dl class="kv">
+      <dt>reads</dt><dd><code>GET /api/review</code>, <code>GET /api/review/{run}/{task}/{trial}</code></dd>
+      <dt>writes</dt><dd><code>POST /api/review/{run}/{task}/{trial}</code> → Postgres <code>tau2_loop.review</code></dd>
+      <dt>why</dt><dd>τ²'s <code>nl_assertions</code> judge is an LLM. Without a human label set there is no way to know our pass rate is real — and no way to tell a prompt regression from a judge flake.</dd>
+      <dt>demo</dt><dd>read-only when <code>DEMO_MODE=1</code> or Postgres is unreachable; the tab still renders, the form is disabled.</dd>
+    </dl>
+  </div>
+</div>
+</section>
+
+<!-- ─────────────────────────── 4 · MACHINERY ─────────────────────────── -->
+<section id="machinery">
+<h2>4 · Shared machinery to port before any page is rewritten</h2>
+<p>These five files are what make DAB's pages short. Port them first; every page in §3 then costs a fraction of what it would otherwise.</p>
+
+<div class="tw">
+<table>
+  <caption>Port order. "Adapt" means the file is copied and its ids changed from query/dataset to task/domain.</caption>
+  <thead><tr><th>From DAB</th><th>To tau2-loop</th><th>Work</th><th class="wrap">What it buys</th><th class="num">Est.</th></tr></thead>
+  <tbody>
+  <tr><td class="sub">lib/url.ts</td><td><code>frontend/src/lib/url.ts</code></td><td>adapt</td><td class="wrap">One id per thing: domain <code>airline</code>, task <code>airline/0</code>, trial <code>airline/0/t1</code>, run, version. Path = subject, query = lens.</td><td class="num">S</td></tr>
+  <tr><td class="sub">routes.tsx + routes.test.tsx</td><td><code>frontend/src/routes.tsx</code></td><td>adapt</td><td class="wrap">Routes as data, redirect loaders for today's nine addresses, a memory-router test per address. Adds <code>vitest</code> to <code>package.json</code>.</td><td class="num">S</td></tr>
+  <tr><td class="sub">lib/ui.tsx</td><td><code>frontend/src/lib/ui.tsx</code></td><td>adapt</td><td class="wrap"><code>&lt;Rate&gt;</code>, <code>&lt;Kpi&gt;</code>, <code>&lt;Loading&gt;</code>, <code>&lt;Clip&gt;</code>, <code>&lt;DomainChips&gt;</code>. Enforces DESIGN.md's number rules in one place.</td><td class="num">S</td></tr>
+  <tr><td class="sub">lib/runs.tsx</td><td><code>frontend/src/lib/runs.tsx</code></td><td>adapt</td><td class="wrap">The run table, its filters and its sort — used by Runs, Overview and Optimise alike.</td><td class="num">M</td></tr>
+  <tr><td class="sub">styles.css §waterfall, §filters, §tables</td><td><code>frontend/src/styles.css</code></td><td>append</td><td class="wrap">≈ 120 lines: <code>.wf*</code>, <code>.filters</code>, <code>.tog</code>, <code>th.sortable</code>, <code>.ratecell</code>, <code>.steps3</code>, <code>.crumbs</code>. No new tokens needed.</td><td class="num">S</td></tr>
+  <tr><td class="sub">lib/diff.ts + .code.diff</td><td>already present in <code>Evolution.tsx</code></td><td>extract</td><td class="wrap">Pull the diff renderer out of the page so Optimise and Agent share it.</td><td class="num">S</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note">
+  <span class="label">Not porting</span>
+  DAB's <code>lib/sql.tsx</code> (CodeMirror 6 + SQL highlighting), <code>lib/golddiff.tsx</code> and the four
+  <code>--syn-*</code> tokens. τ²-bench has no SQL surface — the agent's artefact is a conversation, not a statement.
+  That also keeps <code>tokens.css</code> closer to the canonical Field Guide block.
+</div>
+</section>
+
+<!-- ─────────────────────────── 5 · BACKEND ─────────────────────────── -->
+<section id="backend">
+<h2>5 · Backend on <code>nmp-central-ai</code> — MLflow depth, and a database</h2>
+
+<p>
+  <b>MLflow is already central.</b> <code>config.Settings.mlflow_tracking_uri</code> defaults to
+  <code>http://localhost:5000</code>, <code>make eval</code> depends on <code>platform-status</code>, and the registry lists
+  tau2-loop as <code>P3 · migrated</code> with experiment <code>tau2-loop</code> and four registered models. What is missing
+  is depth, and the required tags. <b>Postgres does not exist here at all</b> — that is the real onboarding.
+</p>
+
+<figure>
+<svg class="dia" viewBox="0 0 1000 250" role="img" aria-labelledby="be-t be-d">
+  <title id="be-t">Where each kind of fact lives after the migration</title>
+  <desc id="be-d">Run folders in the repo stay the record. MLflow is the index over them. Postgres holds only app state that is not a committed file: human reviews and submission records.</desc>
+  <text class="tx k" x="20" y="26">the record · in the repo</text>
+  <text class="tx k" x="390" y="26">the index · central MLflow</text>
+  <text class="tx k" x="720" y="26">app state · central Postgres</text>
+
+  <rect class="nd" x="20" y="40" width="300" height="180" rx="8"/>
+  <text class="tx" x="40" y="68">runs/&lt;id&gt;/run.json · results.jsonl</text>
+  <text class="tx" x="40" y="94">runs/&lt;id&gt;/traces/*.json</text>
+  <text class="tx" x="40" y="120">agents/&lt;domain&gt;/&lt;version&gt;/system.md</text>
+  <text class="tx" x="40" y="146">loop/&lt;domain&gt;/ledger.jsonl</text>
+  <text class="tx" x="40" y="172">data/splits/ · data/tasks/</text>
+  <text class="tx s" x="40" y="200">git is the audit trail. Unchanged by this plan.</text>
+
+  <rect class="nd hi" x="390" y="40" width="270" height="180" rx="8"/>
+  <text class="tx" x="410" y="68">experiment tau2-loop</text>
+  <text class="tx s" x="410" y="90">one run per eval · one per cycle</text>
+  <text class="tx" x="410" y="118">+ one trace per conversation</text>
+  <text class="tx s" x="410" y="140">turn and tool spans, tokens, cost</text>
+  <text class="tx" x="410" y="168">+ prompt registry</text>
+  <text class="tx s" x="410" y="190">tau2-loop.&lt;domain&gt;.system, one</text>
+  <text class="tx s" x="410" y="206">version per agent fingerprint</text>
+
+  <rect class="nd ok" x="720" y="40" width="260" height="180" rx="8"/>
+  <text class="tx" x="740" y="68">database tau2</text>
+  <text class="tx s" x="740" y="90">schema tau2_loop</text>
+  <text class="tx" x="740" y="118">review</text>
+  <text class="tx s" x="740" y="138">human verdict per conversation</text>
+  <text class="tx" x="740" y="166">submission</text>
+  <text class="tx s" x="740" y="186">what was prepared, when, its PR</text>
+  <text class="tx s" x="740" y="208">Nothing here is a benchmark fact.</text>
+
+  <g class="ed"><path d="M320 100 L 385 100"/><path d="M660 130 L 715 130"/></g>
+  <text class="tx s" x="325" y="92">log_run</text>
+  <text class="tx s" x="662" y="122">links by run_id</text>
+</svg>
+<figcaption>The rule DAB states and tau2-loop already half-follows: "MLflow is the index, never the record." Postgres extends it — it holds only what <em>cannot</em> be a committed file, because a person typed it after the run.</figcaption>
+</figure>
+
+<h3>5.1 · MLflow gaps against PLATFORM.md</h3>
+<div class="tw">
+<table>
+  <caption>Each row is a concrete edit in <code>src/tau2_loop/tracking/</code>.</caption>
+  <thead><tr><th>Contract</th><th>DAB</th><th>tau2-loop today</th><th class="wrap">Fix</th></tr></thead>
+  <tbody>
+  <tr><td class="sub">Required tags<span class="path">PLATFORM.md · project · git_sha · env · billing</span></td><td><span class="v-ok">_required_tags()</span></td><td><span class="v-warn">domain, agent, model, split, code_sha, kind</span></td><td class="wrap">Add <code>_required_tags()</code> to <code>mlflow_log.py</code>; merge into both <code>log_run</code> and <code>log_cycle</code>.</td></tr>
+  <tr><td class="sub">Fail fast when down</td><td><span class="v-ok">preflight() raises with the remedy</span></td><td><span class="v-warn">only the Makefile checks</span></td><td class="wrap">Port <code>preflight()</code> / <code>TrackingDownError</code> so a Python entry point fails the same way <code>make</code> does.</td></tr>
+  <tr><td class="sub">Experiment naming</td><td><code>dataagentbench/evals</code></td><td><code>tau2-loop</code></td><td class="wrap"><b>Leave it.</b> PLATFORM.md grandfathers the flat names — <code>&lt;project&gt;/&lt;purpose&gt;</code> is for new experiments only.</td></tr>
+  <tr><td class="sub">Traces</td><td><span class="v-ok">tracing.py · a trace per trial, reconstructed</span></td><td><span class="v-no">none</span></td><td class="wrap">New <code>tracking/tracing.py</code>: rebuild a trace per conversation from the tau2 message stream — root <code>conversation</code> span, a <code>turn</code> child per assistant message, a <code>tool</code> child per call. Same trimming (<code>CUT = 2000</code>).</td></tr>
+  <tr><td class="sub">Trace URLs in the API</td><td><span class="v-ok">_mlflow_trace_url · _mlflow_embeddable</span></td><td><span class="v-no">none</span></td><td class="wrap">Port the four helpers into <code>serving/app.py</code> so the trace page can link out and embed.</td></tr>
+  <tr><td class="sub">Prompt registry</td><td><span class="v-ok">one version per fingerprint</span></td><td><span class="v-no">none</span></td><td class="wrap">Register <code>agents/&lt;domain&gt;/&lt;version&gt;/system.md</code> as <code>tau2-loop.&lt;domain&gt;.system</code> on promote. The four <b>registered models</b> are already declared.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>5.2 · Postgres onboarding — database <code>tau2</code></h3>
+<p>Four edits, in this order. Steps 1 and 2 are the platform's, 3 and 4 are ours; the platform's rules forbid a project-local Postgres service, so nothing is added to any compose file.</p>
+
+<ol class="steps">
+  <li>
+    <h4>Declare it in the platform registry</h4>
+    <p>Add a <code>database:</code> block to <code>P3</code> in <code>nmp-central-ai/registry/projects.yaml</code>, beside the existing <code>mlflow:</code> block, then run <code>make db-init</code> and paste the printed block into <code>tau2-loop/.env</code>.</p>
+    <div class="code band"><pre>    database:
+      name: tau2
+      roles: [tau2_owner, tau2_ro]
+      extensions: []                       # no pgvector: nothing here is embedded
+      env:
+        PG_SUPERUSER_URL: superuser        # roles.sql only (D16)
+        DATABASE_URL: tau2_owner
+        RO_DATABASE_URL: tau2_ro           # what the read-only viewer connects as
+      migrate: make db-init
+      smoke: make db-smoke
+      status: pending
+      aws: false                           # D19</pre></div>
+  </li>
+  <li>
+    <h4><code>infra/roles.sql</code> — one schema, two roles</h4>
+    <p>Modelled on DAB's, minus the meta schema: τ²'s answer keys are public and already in the repo, so there is nothing to hide from a role. <code>tau2_ro</code> exists so the served app cannot write outside its own POST routes.</p>
+    <div class="code band"><pre>CREATE SCHEMA IF NOT EXISTS tau2_loop AUTHORIZATION tau2_owner;
+GRANT USAGE ON SCHEMA tau2_loop TO tau2_ro;
+GRANT SELECT ON ALL TABLES IN SCHEMA tau2_loop TO tau2_ro;
+ALTER DEFAULT PRIVILEGES FOR ROLE tau2_owner IN SCHEMA tau2_loop
+  GRANT SELECT ON TABLES TO tau2_ro;
+ALTER ROLE tau2_ro  SET search_path = tau2_loop;
+ALTER ROLE tau2_ro  SET default_transaction_read_only = on;
+ALTER ROLE tau2_ro  SET statement_timeout = '15s';
+ALTER ROLE tau2_owner SET search_path = tau2_loop, public;</pre></div>
+  </li>
+  <li>
+    <h4><code>src/tau2_loop/data/pg.py</code> + three settings</h4>
+    <p><code>Settings</code> gains <code>database_url</code>, <code>ro_database_url</code>, <code>pg_superuser_url</code> with the same local defaults DAB uses, and nothing else reads <code>os.environ</code>. Add <code>psycopg[binary]</code> to <code>pyproject.toml</code>. <code>reachable()</code> decides whether the Review tab is writable — the app must still boot with Postgres down.</p>
+  </li>
+  <li>
+    <h4>Two tables, both append-only</h4>
+    <div class="code band"><pre>CREATE TABLE tau2_loop.review (        -- the human verdict on one conversation
+  id           bigserial primary key,
+  run_id       text    not null,
+  task_id      text    not null,
+  trial        int     not null,
+  judge_reward numeric not null,       -- what tau2 scored it, copied for drift
+  verdict      text    not null,       -- agree | disagree | task_broken
+  reason       text    not null default '',
+  author       text    not null default '',
+  code_sha     text    not null default '',
+  created_at   timestamptz not null default now()
+);
+CREATE INDEX ON tau2_loop.review (run_id, task_id, trial);
+
+CREATE TABLE tau2_loop.submission (   -- one row per `tau2 submit prepare` (s03)
+  id           bigserial primary key,
+  domain       text    not null,
+  run_ids      text[]  not null,
+  agent_model  text    not null,
+  user_model   text    not null,
+  trials       int     not null,
+  pass_hat_k   jsonb   not null,
+  avg_cost_usd numeric,
+  pr_url       text,
+  created_at   timestamptz not null default now()
+);</pre></div>
+    <p class="small muted">Newest row per <code>(run_id, task_id, trial)</code> is the current review — DAB's golden table uses the same append-only shape, and it is what makes a changed verdict auditable.</p>
+  </li>
+</ol>
+
+<div class="note">
+  <span class="label">Rule zero, honoured</span>
+  No <code>postgres</code> service is added to any compose file, no port is hardcoded, no URL is hardcoded, and no
+  <code>DROP DATABASE</code> appears anywhere. <code>make db-backup DB=tau2</code> before the first migration.
+</div>
+</section>
+
+<!-- ─────────────────────────── 6 · PLAN ─────────────────────────── -->
+<section id="plan">
+<h2>6 · Migration plan</h2>
+<p>Each milestone is a branch and a PR that leaves the app working. M0–M2 are pure refactors with no visible change; the tab set only moves at M3.</p>
+
+<div class="tw">
+<table>
+  <caption>M0 through M6 · "verify" is what proves the step landed</caption>
+  <thead><tr><th>Milestone</th><th class="wrap">Deliverable</th><th class="wrap">Verify</th><th class="num">Size</th></tr></thead>
+  <tbody>
+  <tr><td class="sub">M0 · Foundations</td><td class="wrap"><code>lib/url.ts</code>, <code>routes.tsx</code> + redirect loaders for all nine current addresses, <code>vitest</code>, <code>lib/ui.tsx</code>, the CSS append.</td><td class="wrap"><code>npm test</code> drives every old and new address; <code>npm run lint:design</code> clean; every existing page renders unchanged.</td><td class="num">M</td></tr>
+  <tr><td class="sub">M1 · API parity</td><td class="wrap"><code>/api/stats</code>, <code>/api/rubric</code>, <code>profile</code> on runs, <code>/api/runs/compare</code> in DAB's shape, MLflow URL helpers.</td><td class="wrap"><code>tests/test_api.py</code> covers each new route; existing routes byte-identical.</td><td class="num">M</td></tr>
+  <tr><td class="sub">M2 · MLflow depth</td><td class="wrap"><code>_required_tags()</code>, <code>preflight()</code>, <code>tracking/tracing.py</code>, prompt registry on promote.</td><td class="wrap"><code>make platform-status</code>; a smoke eval produces one run <em>and</em> one trace per conversation, tagged with the four required tags.</td><td class="num">M</td></tr>
+  <tr><td class="sub">M3 · The tab set</td><td class="wrap">Eight tabs. Merge Data+Tasks, Architecture+Agents, Loop+Evolution; fix Gate into Runs; Overview reshaped.</td><td class="wrap">Every old URL still lands (M0's tests); screenshots in both themes at 400 px and 1400 px.</td><td class="num">L</td></tr>
+  <tr><td class="sub">M4 · Postgres</td><td class="wrap">Registry block, <code>infra/roles.sql</code>, <code>data/pg.py</code>, the two tables, <code>make db-smoke</code>.</td><td class="wrap"><code>make -C ../nmp-central-ai check ARGS="--only P3"</code> passes; the app still boots with Postgres stopped.</td><td class="num">M</td></tr>
+  <tr><td class="sub">M5 · Review tab</td><td class="wrap">The first write route, the read-only degradation, the tab.</td><td class="wrap">A verdict survives a restart; <code>DEMO_MODE=1</code> renders the tab read-only; a test asserts the POST is refused in demo mode.</td><td class="num">M</td></tr>
+  <tr><td class="sub">M6 · Leaderboard</td><td class="wrap">Ingest τ²-bench's submissions to <code>data/index/leaderboard.json</code>; the tab; the s03 submission row.</td><td class="wrap">Our <code>pass^1</code> for a fully scored domain appears in the same table as the published entries.</td><td class="num">M</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="note ok">
+  <span class="label">Sequencing against s03</span>
+  s03 (score one domain end to end, submit it) and this plan meet at <b>M6</b>. M0–M2 do not touch the eval path and can
+  run while a long scoring job is in flight; <b>M4 + M6 should land after the first submission exists</b>, so the
+  <code>submission</code> table and the Leaderboard tab are built against a real row rather than a guess.
+</div>
+</section>
+
+<!-- ─────────────────────────── 7 · RISKS ─────────────────────────── -->
+<section id="risks">
+<h2>7 · Risks, failure modes and open questions</h2>
+
+<div class="tw">
+<table>
+  <caption>Ranked. R-1 and R-2 are live today, not introduced by this plan.</caption>
+  <thead><tr><th>ID</th><th class="wrap">Risk</th><th class="wrap">Mitigation</th></tr></thead>
+  <tbody>
+  <tr><td class="sub">R-1</td><td class="wrap"><b>The red accent contradicts <code>DESIGN.md</code>.</b> Both projects' DESIGN.md say <code>frontend/src/tokens.css</code> <em>is</em> the token block "verbatim"; tau2-loop's now diverges, and <code>--accent</code> also means "pass" (<code>.v-ok</code>, <code>.chip.ok</code>, <code>.status.ok</code>, <code>tr.pro</code>). Migrating to DAB's UI while the two projects' palettes disagree makes every shared component look wrong in one of them.</td><td class="wrap">Decision <b>Q3</b>. The recommended answer keeps the red brand and adds an <code>--ok</code> token for pass semantics, which is what this artifact uses — and which DESIGN.md's "project extension" precedent (DAB's <code>--red</code>, <code>--syn-*</code>) already allows.</td></tr>
+  <tr><td class="sub">R-2</td><td class="wrap"><b><code>/gate</code> renders blank</b> and the Runs nav link did not change route when last exercised. Root cause not yet diagnosed.</td><td class="wrap">Diagnose at M0, under the new route tests, before any page is rewritten — otherwise the bug is carried into the new IA.</td></tr>
+  <tr><td class="sub">R-3</td><td class="wrap"><b>The public demo has no Postgres.</b> tau2-loop deploys as a read-only image (<code>DEMO_MODE=1</code>, M5 parked on an App Runner quota). A Review tab that assumes a database breaks the demo.</td><td class="wrap">Postgres reachability is a runtime capability, not a requirement: <code>pg.reachable()</code> gates the write route and the form. Tested explicitly at M5.</td></tr>
+  <tr><td class="sub">R-4</td><td class="wrap"><b>Scope.</b> DAB's <code>Optimise.tsx</code> is 1,129 lines and its <code>Golden.tsx</code> is 804. Reproducing them literally is weeks, not days.</td><td class="wrap">M3 ports the <em>structure</em> (rounds list, round-opens-in-place, three steps) over tau2-loop's existing ledger data, not DAB's scorecard machinery. Q1 sets how far this goes.</td></tr>
+  <tr><td class="sub">R-5</td><td class="wrap"><b>Role-name collision.</b> Postgres roles are cluster-global (D15); <code>make db-init</code> refuses a duplicate.</td><td class="wrap"><code>tau2_owner</code> / <code>tau2_ro</code> appear nowhere in the registry today. Confirmed by reading it — but re-check at M4 before running <code>db-init</code>.</td></tr>
+  <tr><td class="sub">R-6</td><td class="wrap"><b>Trace volume.</b> A τ² conversation runs to 40+ turns across four domains × 114 tasks × 4 trials. A trace per conversation is ~1,800 traces per full submission run.</td><td class="wrap">Keep DAB's <code>CUT = 2000</code> trimming and PLATFORM.md rule 4 (never <code>MLFLOW_TRACE_FULL=1</code>). Consider tracing only failed conversations on full-split runs — <b>open question</b>.</td></tr>
+  <tr><td class="sub">R-7</td><td class="wrap"><b>The submodule is never edited.</b> <code>vendor/tau2-bench</code> is pinned at <code>2174a60</code>; the Leaderboard ingest reads from inside it.</td><td class="wrap">Ingest to <code>data/index/leaderboard.json</code> and commit that, exactly as DAB ingests upstream — the app must work from a bare clone.</td></tr>
+  <tr><td class="sub">R-8</td><td class="wrap"><b>Review authorship.</b> The <code>author</code> column has no auth behind it; a local single-user app cannot prove who typed a verdict.</td><td class="wrap">Default to the git user, record it as claimed-not-verified, and keep it out of any published number until it matters. <b>Open question</b> if reviews ever become evidence in a submission.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Assumptions this plan rests on</h3>
+<ul class="small">
+  <li>The four τ² domains stay the unit of navigation (they are <code>DOMAINS</code> in <code>config.py</code> and the key of every registry, split and ledger).</li>
+  <li><code>runs/&lt;id&gt;/</code> stays the record. Nothing in §5 moves a benchmark fact into Postgres.</li>
+  <li>The Field Guide stays the design system — no Tailwind, no component library, per both AGENTS.md files.</li>
+  <li>Python stays 3.12 / uv / ruff / mypy strict; the frontend stays React 18 + Vite + plain CSS.</li>
+</ul>
+</section>
+
+<!-- ─────────────────────────── 8 · DECIDE ─────────────────────────── -->
+<section id="decide">
+<h2>8 · Decisions — four answers and this plan is executable</h2>
+<p>Each form queues one prompt. Answer what you have a view on and send; anything left unanswered takes the recommended option.</p>
+
+<div class="grid2">
+
+<form class="q" data-lavish-question="s04-q1" onsubmit="event.preventDefault(); const v=new FormData(event.currentTarget).get('q1'); if(!v)return; window.lavish.queuePrompt('s04 Q1 — how far the UI migration goes: '+v, {tag:'decision', text:'Q1 scope: '+v, element:event.currentTarget, data:{question:'q1-scope', answer:v}}); event.currentTarget.querySelector('.ack').textContent='queued ✓';">
+  <h3>Q1 · How far does the UI migration go?</h3>
+  <label class="opt"><input type="radio" name="q1" value="A — full parity: all eight tabs including Leaderboard and Review"><span class="t"><b>A · Full parity <span class="chip acc">recommended</span></b><span>All eight tabs, M0–M6. The Review tab is the reason Postgres exists, and Leaderboard is where s03 lands — dropping either leaves half the ask unbuilt.</span></span></label>
+  <label class="opt"><input type="radio" name="q1" value="B — structure only: rename and merge to eight slots, no new tabs"><span class="t"><b>B · Structure only</b><span>M0–M3 only. The tab set and the machinery match DAB; no Leaderboard, no Review, no Postgres. Fast, and reversible.</span></span></label>
+  <label class="opt"><input type="radio" name="q1" value="C — parity minus Leaderboard: defer the leaderboard tab to s03"><span class="t"><b>C · Parity minus Leaderboard</b><span>M0–M5. Review and Postgres land now; the Leaderboard tab waits for s03 to produce a real submission.</span></span></label>
+  <div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack small"></span></div>
+</form>
+
+<form class="q" data-lavish-question="s04-q2" onsubmit="event.preventDefault(); const v=new FormData(event.currentTarget).get('q2'); if(!v)return; window.lavish.queuePrompt('s04 Q2 — what Postgres holds: '+v, {tag:'decision', text:'Q2 Postgres: '+v, element:event.currentTarget, data:{question:'q2-postgres', answer:v}}); event.currentTarget.querySelector('.ack').textContent='queued ✓';">
+  <h3>Q2 · What goes in Postgres?</h3>
+  <label class="opt"><input type="radio" name="q2" value="A — app state only: review + submission; files stay the record"><span class="t"><b>A · App state only <span class="chip acc">recommended</span></b><span><code>review</code> + <code>submission</code>. Run folders stay the record, MLflow stays the index. Matches DAB's own rule and keeps the demo image working offline.</span></span></label>
+  <label class="opt"><input type="radio" name="q2" value="B — also mirror runs and results into Postgres as a query layer"><span class="t"><b>B · Also mirror runs + results</b><span>Adds a <code>run</code> / <code>task_result</code> mirror so the API can filter and aggregate in SQL instead of reading JSONL. Faster pages; a second source of truth to keep honest.</span></span></label>
+  <label class="opt"><input type="radio" name="q2" value="C — register the database now, add tables later"><span class="t"><b>C · Register only</b><span>Registry block + <code>roles.sql</code> + <code>make db-smoke</code>, no tables yet. Satisfies the platform standard with the smallest change.</span></span></label>
+  <div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack small"></span></div>
+</form>
+
+<form class="q" data-lavish-question="s04-q3" onsubmit="event.preventDefault(); const v=new FormData(event.currentTarget).get('q3'); if(!v)return; window.lavish.queuePrompt('s04 Q3 — the accent colour: '+v, {tag:'decision', text:'Q3 accent: '+v, element:event.currentTarget, data:{question:'q3-accent', answer:v}}); event.currentTarget.querySelector('.ack').textContent='queued ✓';">
+  <h3>Q3 · The red accent vs the Field Guide</h3>
+  <p class="small muted" style="margin-top:0">Currently staged on <code>challenger-20260925</code>, uncommitted: <code>--accent</code> red in <code>tokens.css</code> + the favicon.</p>
+  <label class="opt"><input type="radio" name="q3" value="A — keep red as the brand accent, add an --ok green token for pass semantics"><span class="t"><b>A · Red brand + <code>--ok</code> green <span class="chip acc">recommended</span></b><span>What this page uses. Red stays the identity; <code>.v-ok</code>, <code>.chip.ok</code>, <code>.status.ok</code> and <code>tr.pro</code> move to <code>--ok</code>, so a pass never renders as a failure. Recorded in DESIGN.md as a project extension, like DAB's <code>--red</code>.</span></span></label>
+  <label class="opt"><input type="radio" name="q3" value="B — keep red everywhere, including pass semantics"><span class="t"><b>B · Red everywhere</b><span>Ship the staged change as-is. Simplest; passing tasks and promoted champions read red.</span></span></label>
+  <label class="opt"><input type="radio" name="q3" value="C — revert to the portfolio green and keep tokens.css verbatim"><span class="t"><b>C · Revert to green</b><span>Discard the staged change. Both projects stay byte-identical to the Field Guide block, which is what makes ported components safe.</span></span></label>
+  <div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack small"></span></div>
+</form>
+
+<form class="q" data-lavish-question="s04-q4" onsubmit="event.preventDefault(); const f=event.currentTarget; const v=new FormData(f).get('q4'); const n=f.querySelector('textarea').value.trim(); if(!v&&!n)return; window.lavish.queuePrompt('s04 Q4 — sequencing: '+(v||'(no option)')+(n?' · note: '+n:''), {tag:'decision', text:'Q4 sequencing: '+(v||'note only'), element:f, data:{question:'q4-sequencing', answer:v, note:n}}); f.querySelector('.ack').textContent='queued ✓';">
+  <h3>Q4 · Sequencing against s03</h3>
+  <label class="opt"><input type="radio" name="q4" value="A — start M0-M2 now, in parallel with s03 scoring"><span class="t"><b>A · Start now, in parallel <span class="chip acc">recommended</span></b><span>M0–M2 touch no eval code, so they proceed while a full-domain scoring run occupies subscription windows.</span></span></label>
+  <label class="opt"><input type="radio" name="q4" value="B — finish s03 submission first, then start M0"><span class="t"><b>B · s03 first</b><span>One thing at a time. The Leaderboard and submission table get built against a real submission.</span></span></label>
+  <label class="opt"><input type="radio" name="q4" value="C — UI migration first, s03 after"><span class="t"><b>C · UI first</b><span>A better viewer makes the s03 results easier to read — at the cost of delaying the first real score.</span></span></label>
+  <textarea class="free" placeholder="Anything else — a tab you want named differently, a page you want kept as-is, something I have wrong about DataAgentBench…"></textarea>
+  <div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack small"></span></div>
+</form>
+
+</div>
+</section>
+
+</main>
+
+<footer>
+  s04 · drafted 2026-09-25 against <code>DataAgentBench@main</code> and <code>tau2-loop@challenger-20260925</code>.
+  Every claim here was read from those two repos and from <code>nmp-central-ai/PLATFORM.md</code> and
+  <code>registry/projects.yaml</code>; file paths and line counts are as of today.
+  Design system: the projects' own Field Guide (<code>DESIGN.md</code> §5 / <code>frontend/src/tokens.css</code>).
+</footer>
+
+</body>
+</html>
