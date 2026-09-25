@@ -100,12 +100,17 @@ def create_app() -> FastAPI:
         for d in DOMAINS:
             ext = read_task_extract(d)
             tasks = ext.get("tasks", [])
-            counts = {"actions": 0, "communicate_info": 0, "nl_assertions": 0, "env_assertions": 0}
+            counts = dict.fromkeys(
+                ("db_check", "actions", "communicate_info", "nl_assertions", "env_assertions"), 0
+            )
             for t in tasks:
                 ev = t.get("evaluation_criteria") or {}
-                for k in counts:
+                for k in ("actions", "communicate_info", "nl_assertions", "env_assertions"):
                     if ev.get(k):
                         counts[k] += 1
+                # the database is not a criterion the task lists: it is named by the basis
+                if "DB" in (ev.get("reward_basis") or []):
+                    counts["db_check"] += 1
             kinds.append(
                 {
                     "domain": d,

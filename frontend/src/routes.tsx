@@ -1,16 +1,13 @@
-import { type RouteObject, redirect } from 'react-router-dom';
+import { type LoaderFunctionArgs, type RouteObject, redirect } from 'react-router-dom';
 import { Shell } from './Shell';
 import { Overview } from './pages/Overview';
-import { Data } from './pages/Data';
-import { Tasks } from './pages/Tasks';
-import { Architecture } from './pages/Architecture';
-import { Agents } from './pages/Agents';
+import { Domain, Domains } from './pages/Domains';
+import { Rubric } from './pages/Rubric';
+import { Agent } from './pages/Agent';
 import { Runs } from './pages/Runs';
 import { Run } from './pages/Run';
 import { Trace } from './pages/Trace';
-import { Compare } from './pages/Compare';
-import { Loop } from './pages/Loop';
-import { Evolution } from './pages/Evolution';
+import { Optimise, OptimiseRound } from './pages/Optimise';
 import { search } from './lib/url';
 
 /**
@@ -22,12 +19,21 @@ import { search } from './lib/url';
 
 /** `/runs/<id>/traces/<file>` → the trial the file holds. `eval/runner.py` names a
  *  trace `<slug(task_id)>.json`, or `<slug>_t<trial>.json` when a run has trials;
- *  the slug is lossy, so the redirect keeps the stem as the task and trusts the
- *  trial page to resolve it against the run. */
+ *  the slug is lossy, so the redirect keeps the stem as the task and the API
+ *  resolves it against the run. */
 function trialFromTraceFile(name: string): { task: string; trial: number } {
   const stem = name.replace(/\.json$/i, '');
   const m = /^(.+)_t(\d+)$/.exec(stem);
   return m ? { task: m[1], trial: Number(m[2]) } : { task: stem, trial: 1 };
+}
+
+/** The old Gate tab was `?a=<champion>&b=<challenger>`; the gate now lives at the
+ *  challenger's own address, with the champion as its lens. */
+function gateAddress(url: URL): string {
+  const a = url.searchParams.get('a') ?? '';
+  const b = url.searchParams.get('b') ?? '';
+  if (!b) return '/runs';
+  return `/runs/${encodeURIComponent(b)}${search({ vs: a })}`;
 }
 
 export const routes: RouteObject[] = [
@@ -39,24 +45,37 @@ export const routes: RouteObject[] = [
       { id: 'overview', path: '/', element: <Overview /> },
 
       // the benchmark: a domain, then one task inside it
-      { id: 'domains', path: '/domains', element: <Data /> },
-      { id: 'domain', path: '/domains/:domain', element: <Tasks /> },
-      { id: 'task', path: '/domains/:domain/:taskId', element: <Tasks /> },
+      { id: 'domains', path: '/domains', element: <Domains /> },
+      { id: 'domain', path: '/domains/:domain', element: <Domain /> },
+      { id: 'task', path: '/domains/:domain/:taskId', element: <Domain /> },
 
-      // what we ran
+      // how a conversation is judged
+      { id: 'rubric', path: '/rubric', element: <Rubric /> },
+
+      // what we ran — the gate is a lens on a run, not a tab
       { id: 'runs', path: '/runs', element: <Runs /> },
       { id: 'run', path: '/runs/:runId', element: <Run /> },
       { id: 'trial', path: '/runs/:runId/:taskId/:trial', element: <Trace /> },
 
-      // the agent
-      { id: 'agents', path: '/agent', element: <Agents /> },
-      { id: 'agent', path: '/agent/:domain/:name', element: <Agents /> },
-      { id: 'architecture', path: '/architecture', element: <Architecture /> },
+      // how it improves: a round opens inside the rounds list (grammar rule 3)
+      {
+        id: 'optimise-bare',
+        path: '/optimise',
+        loader: ({ request }: LoaderFunctionArgs) => {
+          const d = new URL(request.url).searchParams.get('domain');
+          return redirect(`/optimise/${encodeURIComponent(d ?? 'airline')}`);
+        },
+      },
+      {
+        id: 'optimise',
+        path: '/optimise/:domain',
+        element: <Optimise />,
+        children: [{ id: 'optimise-round', path: ':version', element: <OptimiseRound /> }],
+      },
 
-      // the loop
-      { id: 'compare', path: '/compare', element: <Compare /> },
-      { id: 'loop', path: '/loop', element: <Loop /> },
-      { id: 'evolution', path: '/evolution', element: <Evolution /> },
+      // what the agent is
+      { id: 'agents', path: '/agent', element: <Agent /> },
+      { id: 'agent', path: '/agent/:domain/:name', element: <Agent /> },
 
       // ── addresses from before the grammar ──
       { id: 'old-data', path: '/data', loader: () => redirect('/domains') },
@@ -70,7 +89,9 @@ export const routes: RouteObject[] = [
         id: 'old-task',
         path: '/tasks/:domain/:taskId',
         loader: ({ params }) =>
-          redirect(`/domains/${encodeURIComponent(params.domain!)}/${encodeURIComponent(params.taskId!)}`),
+          redirect(
+            `/domains/${encodeURIComponent(params.domain!)}/${encodeURIComponent(params.taskId!)}`,
+          ),
       },
       { id: 'old-agents', path: '/agents', loader: () => redirect('/agent') },
       {
@@ -78,6 +99,35 @@ export const routes: RouteObject[] = [
         path: '/agents/:domain/:name',
         loader: ({ params }) =>
           redirect(`/agent/${encodeURIComponent(params.domain!)}/${encodeURIComponent(params.name!)}`),
+      },
+      // Architecture became the figure at the top of the Agent tab
+      { id: 'old-architecture', path: '/architecture', loader: () => redirect('/agent') },
+      // Loop and Evolution became one round
+      {
+        id: 'old-loop',
+        path: '/loop',
+        loader: ({ request }: LoaderFunctionArgs) => {
+          const d = new URL(request.url).searchParams.get('domain') ?? 'airline';
+          return redirect(`/optimise/${encodeURIComponent(d)}`);
+        },
+      },
+      {
+        id: 'old-evolution',
+        path: '/evolution',
+        loader: ({ request }: LoaderFunctionArgs) => {
+          const sp = new URL(request.url).searchParams;
+          const d = sp.get('domain') ?? 'airline';
+          const b = sp.get('b');
+          return redirect(
+            `/optimise/${encodeURIComponent(d)}${b ? `/${encodeURIComponent(b)}` : ''}`,
+          );
+        },
+      },
+      // the Gate tab became a lens on the challenger's run
+      {
+        id: 'old-compare',
+        path: '/compare',
+        loader: ({ request }: LoaderFunctionArgs) => redirect(gateAddress(new URL(request.url))),
       },
       {
         id: 'old-trace',

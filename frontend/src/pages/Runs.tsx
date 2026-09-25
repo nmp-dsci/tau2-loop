@@ -1,13 +1,22 @@
 import { Link } from 'react-router-dom';
-import { type RunMeta, domainLabel, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
-import { runPath } from '../lib/url';
+import { DOMAINS, type RunMeta, domainLabel, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
+import { Rate } from '../lib/ui';
+import { runPath, useLens } from '../lib/url';
 
 type Snapshot = { experiment: string | null; tracking_uri?: string; runs: { name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
 
 export function Runs() {
+  const [lens, setLens] = useLens();
   const { data: runs } = useGet<RunMeta[]>('/api/runs');
   const { data: snap } = useGet<Snapshot>('/api/experiments');
-  const real = (runs ?? []).filter((r) => !r.dry_run).slice().reverse();
+  const domain = lens.get('domain') ?? '';
+  const split = lens.get('split') ?? '';
+  const q = (lens.get('q') ?? '').toLowerCase();
+  const all = (runs ?? []).filter((r) => !r.dry_run).slice().reverse();
+  const real = all
+    .filter((r) => (domain ? r.domain === domain : true))
+    .filter((r) => (split ? r.split === split : true))
+    .filter((r) => (q ? `${r.run_id} ${r.agent} ${r.note}`.toLowerCase().includes(q) : true));
   return (
     <>
       <p className="label">Evaluation runs</p>
@@ -19,6 +28,32 @@ export function Runs() {
         <code>traces/</code> with every message, and tau2's own <code>tau2_results.json</code> so the run can be re-scored offline. MLflow indexes
         the same folders; the snapshot below is what the tracker holds, exported for the public demo.
       </p>
+      <div className="filters">
+        <label className="pick">
+          <span className="label">domain</span>
+          <select value={domain} onChange={(e) => setLens({ domain: e.target.value })}>
+            <option value="">all</option>
+            {DOMAINS.map((d) => (
+              <option key={d} value={d}>
+                {domainLabel(d)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="pick">
+          <span className="label">split</span>
+          <select value={split} onChange={(e) => setLens({ split: e.target.value })}>
+            <option value="">all</option>
+            <option value="train">train</option>
+            <option value="test">test</option>
+            <option value="custom">custom</option>
+          </select>
+        </label>
+        <input type="search" placeholder="search run, agent, note" value={lens.get('q') ?? ''} onChange={(e) => setLens({ q: e.target.value })} />
+        <span className="count">
+          {real.length} of {all.length} runs
+        </span>
+      </div>
       <div className="tw">
         <table>
           <thead>
@@ -52,7 +87,9 @@ export function Runs() {
                   {r.split}
                   {r.trials > 1 && <span className="path">{r.trials} trials</span>}
                 </td>
-                <td className="num">{r.summary?.n_scored ? `${r.summary.passed}/${r.summary.n_scored}` : '—'}</td>
+                <td className="num">
+                  <Rate passed={r.summary?.passed} n={r.summary?.n_scored} />
+                </td>
                 <td className="num small">
                   {r.summary
                     ? Object.entries(r.summary.pass_hat_k)
@@ -69,7 +106,9 @@ export function Runs() {
           </tbody>
         </table>
       </div>
-      {real.length === 0 && <div className="empty">No runs committed yet.</div>}
+      {real.length === 0 && (
+        <div className="empty">{all.length ? 'No run matches this filter.' : 'No runs committed yet.'}</div>
+      )}
 
       <h2>
         MLflow snapshot — {snap?.runs.length ?? 0} tracked runs in experiment {snap?.experiment ?? '—'}

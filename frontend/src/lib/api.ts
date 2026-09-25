@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 export const DOMAINS = ['airline', 'retail', 'telecom', 'banking_knowledge'] as const;
 export type Domain = (typeof DOMAINS)[number];
 
-export type Health = { status: string; mode: 'demo' | 'live'; champions: Record<string, string | null>; code_sha: string; domains: string[] };
+export type Health = { status: string; mode: 'demo' | 'live'; champions: Record<string, string | null>; code_sha: string; domains: string[]; mlflow_url?: string; mlflow_embeddable?: boolean };
 export type Summary = {
   n: number;
   n_scored: number;
@@ -45,6 +45,7 @@ export type RunMeta = {
   tool_mode: string;
   sampling: string;
   dry_run: boolean;
+  mlflow_url?: string | null;
 };
 export type TaskResult = {
   task_id: string;

@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentPath,
   domainPath,
+  optimisePath,
   parseTaskId,
   parseTrialId,
   patchLens,
@@ -55,6 +56,16 @@ describe('addresses from before the grammar still land', () => {
     ['/tasks/airline/0', '/domains/airline/0', 'task'],
     ['/agents', '/agent', 'agents'],
     ['/agents/airline/v2', '/agent/airline/v2', 'agent'],
+    // the three tabs that merged at M3
+    ['/architecture', '/agent', 'agents'],
+    ['/loop', '/optimise/airline', 'optimise'],
+    ['/loop?domain=telecom', '/optimise/telecom', 'optimise'],
+    ['/evolution?domain=airline&a=v1&b=v2', '/optimise/airline/v2', 'optimise-round'],
+    ['/evolution', '/optimise/airline', 'optimise'],
+    ['/compare?a=run-a&b=run-b', '/runs/run-b?vs=run-a', 'run'],
+    ['/compare', '/runs', 'runs'],
+    ['/optimise', '/optimise/airline', 'optimise'],
+    ['/optimise?domain=retail', '/optimise/retail', 'optimise'],
     [`/runs/${RUN}/traces/0.json`, `/runs/${RUN}/0/t1`, 'trial'],
     [`/runs/${RUN}/traces/0_t3.json`, `/runs/${RUN}/0/t3`, 'trial'],
     [`/runs/${RUN}/traces/task_001.json`, `/runs/${RUN}/task_001/t1`, 'trial'],
@@ -71,6 +82,26 @@ describe('addresses from before the grammar still land', () => {
 });
 
 describe('every address the viewer builds lands on the page it names', () => {
+  it('a round opens inside the rounds list, which stays mounted', async () => {
+    const router = createMemoryRouter(routes, { initialEntries: [optimisePath('airline', 'v2')] });
+    await new Promise<void>((resolve) => {
+      if (router.state.initialized) return resolve();
+      const off = router.subscribe((s) => {
+        if (s.initialized) {
+          off();
+          resolve();
+        }
+      });
+    });
+    // both the list route and the round route are matched: the round renders into the list's Outlet
+    expect(router.state.matches.map((m) => m.route.id)).toEqual([
+      'shell',
+      'optimise',
+      'optimise-round',
+    ]);
+    router.dispose();
+  });
+
   it('the overview is the root', async () => {
     expect(await land('/')).toEqual({ path: '/', route: 'overview' });
   });
@@ -94,10 +125,11 @@ describe('every address the viewer builds lands on the page it names', () => {
     ['/runs', 'runs'],
     [agentPath('airline', 'v2'), 'agent'],
     ['/agent', 'agents'],
-    ['/architecture', 'architecture'],
-    ['/compare?a=x&b=y', 'compare'],
-    ['/loop?domain=telecom', 'loop'],
-    ['/evolution?domain=airline&a=v1&b=v2', 'evolution'],
+    [agentPath('airline', 'v2', { node: 'judge' }), 'agent'],
+    ['/rubric', 'rubric'],
+    [optimisePath('telecom'), 'optimise'],
+    [optimisePath('airline', 'v2'), 'optimise-round'],
+    [optimisePath('airline', 'v2', { step: 'outcome' }), 'optimise-round'],
   ])('%s → %s', async (url, route) => {
     expect((await land(url)).route).toBe(route);
   });

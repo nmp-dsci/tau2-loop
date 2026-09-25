@@ -60,6 +60,10 @@ export const runPath = (runId: string, lens?: Lens): string => `/runs/${enc(runI
 export const trialPath = (runId: string, tid: string, lens?: Lens): string =>
   `/runs/${enc(runId)}/${encPath(tid)}${search(lens)}`;
 export const agentsPath = (lens?: Lens): string => `/agent${search(lens)}`;
+/** A round is named for the version it wrote: `/optimise/airline/v2`. */
+export const optimisePath = (domain?: string, version?: string, lens?: Lens): string =>
+  (domain ? `/optimise/${enc(domain)}${version ? `/${enc(version)}` : ''}` : '/optimise') + search(lens);
+export const rubricPath = (lens?: Lens): string => `/rubric${search(lens)}`;
 export const agentPath = (domain: string, version: string, lens?: Lens): string =>
   `/agent/${enc(domain)}/${enc(version)}${search(lens)}`;
 
