@@ -4,8 +4,8 @@
  * The fixture is the shape `GET /api/runs/{id}/{task}/{trial}` returns.
  */
 import { describe, expect, it } from 'vitest';
-import type { RewardInfo, TraceMessage } from './api';
-import { LEGACY_NODES, agentSteps, apiBehind, checks, legacyNode, nodeOfMessage, toolCalls, userSteps } from './agentgraph';
+import type { RewardInfo, ToolSpec, TraceMessage, TrialPayload } from './api';
+import { LEGACY_NODES, agentSteps, apiBehind, checks, firstWrite, legacyNode, nodeOfMessage, toolCalls, userSteps, writesBefore } from './agentgraph';
 
 const msg = (i: number, role: TraceMessage['role'], extra: Partial<TraceMessage> = {}): TraceMessage => ({
   i,
@@ -125,5 +125,44 @@ describe('an API older than the page', () => {
     expect(apiBehind({ task_id: '22', events: [], messages: [] })).toBe(false);
     // nothing loaded yet is not a stale API
     expect(apiBehind(undefined)).toBe(false);
+  });
+});
+
+describe("where the playground runs a task's expected call", () => {
+  const tool = (name: string, mutates: boolean): ToolSpec => ({ name, description: null, type: mutates ? 'write' : 'read', mutates });
+  const trial = (messages: TraceMessage[], tools: ToolSpec[], userTools: ToolSpec[] = []) =>
+    ({ messages, tools, user_tools: userTools }) as unknown as TrialPayload;
+  const READS = [tool('get_user_details', false), tool('get_reservation_details', false)];
+
+  it("is before the first write by either side: the database τ²'s grader starts from", () => {
+    // the agent only reads; the customer's airplane-mode toggle at 6 is the first write
+    const t = trial(MSGS, READS, [tool('toggle_airplane_mode', true)]);
+    expect(firstWrite(t)).toBe(6);
+    expect(writesBefore(t, 6)).toHaveLength(0);
+    expect(writesBefore(t, 6, 1)).toHaveLength(1);
+    expect(writesBefore(t, MSGS.length)).toHaveLength(1);
+  });
+
+  it('is the end when nothing was written, which is the same database', () => {
+    expect(firstWrite(trial(MSGS, READS, [tool('toggle_airplane_mode', false)]))).toBe(MSGS.length);
+  });
+
+  it('counts a write inside a message only once the replay passes it', () => {
+    // airline/24's shape: a read and the booking in one message, the booking second
+    const msgs = [
+      msg(0, 'assistant', { usage: null }),
+      msg(1, 'assistant', {
+        tool_calls: [
+          { id: 'r', name: 'get_user_details', arguments: {}, requestor: 'assistant' },
+          { id: 'w', name: 'book_reservation', arguments: {}, requestor: 'assistant' },
+        ],
+      }),
+      msg(2, 'tool', { id: 'r', content: '{}' }),
+      msg(3, 'tool', { id: 'w', content: '{}' }),
+    ];
+    const t = trial(msgs, [tool('get_user_details', false), tool('book_reservation', true)]);
+    expect(firstWrite(t)).toBe(1);
+    expect(writesBefore(t, 1, 1)).toHaveLength(0);
+    expect(writesBefore(t, 1, 2)).toHaveLength(1);
   });
 });

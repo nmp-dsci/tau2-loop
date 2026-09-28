@@ -132,6 +132,23 @@ export function toolCalls(msgs: TraceMessage[]): CallRow[] {
   return out;
 }
 
+/**
+ * The message before the conversation's first write, by either side: the database
+ * there is the task's initial one, which is where τ²'s grader replays the expected
+ * calls. An expected call run later lands on top of the conversation's own writes and
+ * can fail on them: in airline/24 the agent's booking had spent the gift card the
+ * expected booking charges. No write at all: the end, which is the same database.
+ */
+export function firstWrite(t: TrialPayload): number {
+  return writesBefore(t, Number.POSITIVE_INFINITY)[0]?.i ?? t.messages.length;
+}
+
+/** The conversation's writes a replay to (`at`, `after` calls into it) includes. */
+export function writesBefore(t: TrialPayload, at: number, after = 0): CallRow[] {
+  const mutates = new Set([...t.tools, ...t.user_tools].filter((s) => s.mutates).map((s) => s.name));
+  return toolCalls(t.messages).filter((c) => mutates.has(c.call.name) && (c.i < at || (c.i === at && c.k < after)));
+}
+
 export function callNode(by: 'agent' | 'user', name: string): NodeKey {
   return by === 'user' ? `utool:${name}` : `tool:${name}`;
 }
@@ -551,7 +568,7 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
                 <span className="label">
                   {a.action_match ? '✓ made' : '✕ not made'} · {a.action.action_id}
                   {a.tool_type ? ` · ${a.tool_type}` : ''}
-                  <RunIt onClick={() => onRun({ node: callNode(a.action.requestor === 'user' ? 'user' : 'agent', a.action.name), at: t.messages.length, args: a.action.arguments, after_calls: 0 })} label="▶ run it" />
+                  <RunIt onClick={() => onRun({ node: callNode(a.action.requestor === 'user' ? 'user' : 'agent', a.action.name), at: firstWrite(t), args: a.action.arguments, after_calls: 0 })} label="▶ run it" />
                 </span>
                 <p className="msg mono">{a.action.name}</p>
                 <pre>{JSON.stringify(a.action.arguments, null, 1)}</pre>
@@ -869,7 +886,7 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
               <div key={a.action.action_id} className={`blk ${a.action_match ? 'okb' : 'miss'}`}>
                 <span className="label">
                   {a.action_match ? '✓ matched' : '✕ never made'} · expected by the task · {a.action.action_id}
-                  <RunIt onClick={() => onRun({ node, at: t.messages.length, args: a.action.arguments, after_calls: 0 })} label="▶ run it" />
+                  <RunIt onClick={() => onRun({ node, at: firstWrite(t), args: a.action.arguments, after_calls: 0 })} label="▶ run it" />
                 </span>
                 <pre>{JSON.stringify(a.action.arguments, null, 1)}</pre>
               </div>
@@ -1022,7 +1039,7 @@ function Playground({ t, runId, name, by, available, req }: PgProps) {
   const calls = toolCalls(t.messages);
   const initial = (): { at: number; args: string; after: number } => {
     const miss = (t.reward_info?.action_checks ?? []).find((a) => a.action.name === name && !a.action_match);
-    if (miss) return { at: t.messages.length, args: JSON.stringify(miss.action.arguments, null, 1), after: 0 };
+    if (miss) return { at: firstWrite(t), args: JSON.stringify(miss.action.arguments, null, 1), after: 0 };
     const mine = calls.filter((c) => c.by === by && c.call.name === name);
     const last = mine[mine.length - 1];
     if (last) return { at: last.i, args: JSON.stringify(last.call.arguments, null, 1), after: last.k };
@@ -1066,7 +1083,9 @@ function Playground({ t, runId, name, by, available, req }: PgProps) {
   }, [req?.nonce]);
 
   const points = [...new Set(calls.map((c) => c.i))];
-  const label = (i: number) => `message ${i} · before ${t.messages[i].tool_calls.map((c) => c.name).join(', ')}`;
+  const fw = firstWrite(t);
+  const held = writesBefore(t, form.at, form.after).length;
+  const label = (i: number) => `message ${i} · before ${t.messages[i].tool_calls.map((c) => c.name).join(', ')}${i === fw ? ' · the database the grader starts from' : ''}`;
   return (
     <div className="pg" ref={ref} id="playground">
       <h4>
@@ -1094,6 +1113,11 @@ function Playground({ t, runId, name, by, available, req }: PgProps) {
             <option value={t.messages.length}>message {t.messages.length} · after the conversation</option>
           </select>
         </div>
+        {held > 0 && (
+          <p className="small warn-note">
+            This database already holds {plural(held, 'write')} the conversation made, the first at message {fw}. τ²'s grader runs the task's expected calls before any of them, so a call can fail here on state the conversation changed.
+          </p>
+        )}
         <textarea id="pg-args" className="mono" spellCheck={false} aria-label="arguments, as JSON" value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} />
         <div className="row">
           <button type="button" className="btn" onClick={() => void run()}>
