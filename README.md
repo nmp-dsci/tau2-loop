@@ -17,8 +17,9 @@ optimisation loop: the same mechanics as [DABStep-loop](https://github.com/nmp-d
 ```
 make smoke                     # v0 on tau2's mock domain: proves the adapter on all three roles
 make eval DOMAIN=airline       # a version on its domain's train half → runs/<ts>_airline_v0_train/
-make loop DOMAIN=airline       # champion → failures → one Sonnet optimiser session → challenger → gate → test → ledger
+make loop DOMAIN=airline       # champion → failures → one Opus 5.5 optimiser session → challenger → gate → test → ledger
 make fork DOMAIN=airline MODEL=sonnet   # the champion's prompt on another model: a model swap, promoted by hand
+make challenge DOMAIN=airline AGENT=v5  # a fork vs the champion through the loop's own gate, ledger and test report; no optimiser
 make agent-service             # the agent's model call as a container on :8091; AGENT_SERVICE_URL routes a run to it
 make viewer                    # the run viewer on :8081 — eight tabs, see AGENTS.md §4b
 ```
@@ -59,6 +60,7 @@ beside the verdict and never decides it.
 | M3 loop cycles | done — airline ×2, retail, telecom; banking not run (subscription window) |
 | M4 holdout · M4b findings page | done — `.lavish/s01_build-findings.html` |
 | s07 Sonnet agent through a sealed service, split v2, the gate with trials | built; airline done: v3 (Sonnet) champion 18/25 train · 21/25 test, v4 held. Retail, telecom, banking next (`.lavish/s07_next-challenger-plan.html`) |
+| s08 Opus 5.5 as agent and as optimiser; `make challenge` | done on airline: v3 re-baselined on claude-agent-sdk 0.2.160 at 21/25 train · 21/25 test; v5 (Opus 5.5 agent) and v6 (Opus 5.5 optimiser) held. Research against the board: `.lavish/s08_airline-agent-field-notes.html` |
 | M5 keyless demo image on App Runner | parked — bootstrap role, ECR repo and image (`5518ad7`) are in AWS; the service is blocked by the account's 2-per-region App Runner cap (both regions full). Resume: lift the quota or free a slot, then `terraform apply` in `infra/terraform/demo` |
 
 ## Results
@@ -92,6 +94,28 @@ reported only; the gate reads train.
 |---|---|---|---|---|
 | v3 · v0's prompt, Sonnet 5 | **18/25** `20260928T060029Z_airline_v3_train` | **21/25** `20260928T073602Z_airline_v3_test` | champion by fiat (`model swap`) | — |
 | v4 · cycle 3 | 20/25 `20260928T075613Z_airline_v4_train` | 18/25 `20260928T081324Z_airline_v4_test` | hold: fixed 6, broke 4, p = 0.377 | 21 → 18: fixed 1, broke 4 |
+
+### Split v2, airline — Opus 5.5, on claude-agent-sdk 0.2.160
+
+Opus 5.5 needs Claude Code CLI 2.1.280 or newer; SDK 0.2.152 shipped 2.1.259, so
+the project and the agent container moved to 0.2.160 (CLI 2.1.283). v3 was
+re-run on it and re-baselined (`KIND=re-baseline`): the same bytes scored 21/25
+on train against 18/25 before, 5 of 25 tasks flipping. Everything else is as
+above. v5 is v3's prompt on Opus 5.5 at medium effort, scored by `make challenge`
+(cycle 4, no optimiser). v6 is loop cycle 5, with Opus 5.5 as the optimiser and
+Sonnet 5 still the agent. Both are held; v3 stays champion.
+
+| Version | Train | Test | Gate on train | Test, v3 → challenger |
+|---|---|---|---|---|
+| v3 · re-baseline | **21/25** `20260928T093954Z_airline_v3_train` | **21/25** `20260928T095651Z_airline_v3_test` | champion (`re-baseline`) | — |
+| v5 · Opus 5.5 agent (cycle 4) | 18/25 `20260928T094017Z_airline_v5_train` | 22/25 `20260928T095731Z_airline_v5_test` | hold: fixed 1, broke 4, p = 0.969 | 21 → 22: fixed 2, broke 1 |
+| v6 · Opus 5.5 optimiser (cycle 5) | 21/25 `20260928T101605Z_airline_v6_train` | 22/25 `20260928T102823Z_airline_v6_test` | hold: fixed 2, broke 2, p = 0.688 | 21 → 22: fixed 3, broke 2 |
+
+Opus lost 14 and 24 by booking round trips with `destination` equal to the
+origin (JFK → JFK in all three of its first round-trip bookings), and 6 by
+offering upgrades that led round a refusal. One trial cannot separate either
+challenger from noise; `.lavish/s08_airline-agent-field-notes.html` sets out why
+and what the published airline agents do instead.
 
 Every run folder under `runs/` holds `run.json`, `results.jsonl`, one trace per
 conversation and the agent version it ran; `tau2loop gate` replays them through

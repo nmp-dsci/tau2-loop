@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>s08 · tau2-loop — how others build τ²-bench airline agents, against yours</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+
+/* DESIGN.md §5, verbatim (tau2-loop/frontend/src/tokens.css): red accent, --ok for passed. */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7;
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1240px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--t0)/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
+code,pre,.mono{font-family:var(--mono);font-size:var(--t-1)}
+p code,li code,td code,dd code,figcaption code{overflow-wrap:anywhere}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font:400 var(--t4)/1.15 var(--serif);overflow-wrap:anywhere}
+h1 em{font-style:italic;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);margin-top:var(--s8)}
+h3{font:600 var(--t1)/1.3 var(--sans);margin-top:var(--s5)}
+h4{font:600 var(--t0)/1.3 var(--sans)}
+p{margin:var(--s3) 0 0;max-width:var(--measure);text-wrap:pretty;color:var(--ink-2)}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure)}
+.label{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.muted{color:var(--muted)} .small{font-size:var(--t-1)}
+main{max-width:var(--w);margin:0 auto;padding-block:var(--s6) var(--s9);padding-inline:var(--s4)}
+header.top{position:sticky;top:0;z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top .in b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top .in .label{margin-left:auto}
+section{scroll-margin-top:72px}
+.toc{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.toc a{font:500 var(--t-2)/1 var(--mono);text-decoration:none;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.chip{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);background:var(--panel);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap;display:inline-block}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.chip.no{border-color:var(--line-3);color:var(--muted)}
+.chip.acc{border-color:var(--accent);color:var(--accent)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{font:500 var(--t-2)/1.3 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);white-space:nowrap}
+td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sub{color:var(--ink);font-weight:500}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+td.wrap{min-width:22ch;max-width:60ch;white-space:normal}
+td.dim{color:var(--faint)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+.v-ok{color:var(--ok);font-weight:500} .v-warn{color:var(--amber);font-weight:500} .v-no{color:var(--accent);font-weight:500}
+.fig-title{display:block;margin-top:var(--s5)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch}
+p.cap .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+.note{background:var(--band);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:var(--measure)}
+.note .label{display:block;margin-bottom:var(--s1)}
+.note p{margin-top:var(--s2)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.card{background:var(--panel);border-radius:var(--r);padding:var(--s5);box-shadow:var(--shadow);min-width:0}
+.card h3{margin-top:0}
+.card p{max-width:none}
+.card .n{font:400 var(--t3)/1.1 var(--serif);color:var(--ink);display:block;margin-top:var(--s2)}
+ul.bl{list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s3);max-width:84ch}
+ul.bl li{position:relative;padding-left:1.4rem;color:var(--ink-2)}
+ul.bl li::before{content:'◐';position:absolute;left:0;color:var(--amber)}
+ul.bl.done li::before{content:'●';color:var(--ok)}
+ul.bl.x li::before{content:'✕';color:var(--accent)}
+ol.steps{margin:var(--s4) 0 0;padding-left:1.4rem;max-width:84ch;display:grid;gap:var(--s2);color:var(--ink-2)}
+ol.steps li::marker{font-family:var(--mono);color:var(--accent)}
+pre.cmd{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:pre;max-width:84ch;font-size:var(--t-1);color:var(--ink)}
+pre.cmd .c{color:var(--faint)}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);margin-top:var(--s4);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);max-width:84ch}
+.rule .k{font:500 var(--t-2)/1.6 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:var(--track-label);white-space:nowrap}
+.rule .v{color:var(--ink-2);min-width:0}
+footer{max-width:var(--w);margin:0 auto;padding:var(--s6) var(--s4);color:var(--faint);font-size:var(--t-1);border-top:1px solid var(--line)}
+footer code{overflow-wrap:anywhere}
+
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+button.btn.alt{background:var(--panel);color:var(--ink);border:1px solid var(--line-2)}
+textarea.free{width:100%;margin-top:var(--s3);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3);min-height:64px;resize:vertical}
+.copyall{margin-top:var(--s5);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.copyall textarea{width:100%;font:400 var(--t-1)/1.5 var(--mono);margin-top:var(--s2)}
+@media (max-width:640px){ h1{font-size:var(--t3)} .rule{grid-template-columns:minmax(0,1fr)} }
+
+/* s08 additions: the ideas table's controls, source lists */
+select.disp{font:500 var(--t-1)/1.2 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s2);min-height:34px}
+td.id{font:600 var(--t-1)/1.3 var(--mono);color:var(--accent);white-space:nowrap}
+.tag{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap;display:inline-block;margin:0 var(--s1) var(--s1) 0}
+ul.src{margin:var(--s3) 0 0;padding-left:1.2rem;max-width:96ch;display:grid;gap:var(--s1);color:var(--ink-2);font-size:var(--t-1)}
+ul.src li{overflow-wrap:anywhere}
+h3.grp{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s5)}
+tr.pro td{background:var(--ok-soft)}
+tr.grp td{background:var(--band);font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="in">
+  <b>tau2-loop</b><span class="muted small">s08 · how others build τ²-bench airline agents, against yours</span><span class="label">2026-09-28 · research · for review</span>
+</div></header>
+
+<main>
+<p class="label">Research · s08 · leaderboard, 25 agent designs, prompt optimisers and noise · airline</p>
+<h1>Airline's best stock agent scores 84.0% pass^1, and harnesses that check write calls 87–88.5%, on 50 tasks × 4 trials — <em>tau2-loop tunes only the prompt</em>, on one trial</h1>
+<p class="lead">Three research passes read about 60 sources: the τ²-bench leaderboard and lab write-ups, 25 agent designs with measured results, and the prompt-optimiser and evaluation-noise literature. The stock agent tops out at 84.0% pass^1 (Claude Opus 4.5, effort high, GPT-5.2 as user). Custom harnesses that check write calls report 87.0–88.5%. Your Sonnet 5 champion scores 21/25 on train and 21/25 on test, at one trial with a Haiku user: close, but not comparable.</p>
+
+<div class="note"><span class="label">What this page is for</span>
+<p>Most of the gap between your loop and the best airline agents is in two places your optimiser cannot reach: <b>measurement</b> (one trial, 25 tasks) and <b>the harness</b> (nothing checks a write call before it runs). Section 6 ranks 15 changes for this repo; pick a disposition for each and queue them.</p></div>
+
+<nav class="toc">
+  <a href="#s0">0 · the board</a><a href="#s1">1 · your setup</a><a href="#s2">2 · what moves airline</a><a href="#s3">3 · measurement</a><a href="#s4">4 · the optimiser</a><a href="#s5">5 · known-bad tasks</a><a href="#s6">6 · ideas</a><a href="#src">sources</a>
+</nav>
+
+<!-- ─────────────────────────────── 0 ─────────────────────────────── -->
+<section id="s0">
+<h2>0 · The board — stock agents peak at 84.0% pass^1</h2>
+<p>Sierra runs the standard entries itself: tau2 1.0.1, the stock agent and prompt, GPT-5.2 at effort low as the user, 50 tasks × 4 trials = 200 conversations, seed 300. The custom entries are open pull requests, self-reported and unmerged.</p>
+<span class="label fig-title">Fig 1 · τ²-bench airline, pass^1 and pass^4 (%, 50 tasks × 4 trials unless noted)</span>
+<div class="tw"><table>
+<thead><tr><th>#</th><th>agent · model</th><th>effort</th><th class="num">pass^1</th><th class="num">pass^4</th><th>user simulator</th><th>what is different</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="7">standard: stock agent, run by Sierra</td></tr>
+<tr><td class="num">1</td><td class="sub">Claude Opus 4.5</td><td>high</td><td class="num">84.0</td><td class="num">70.0</td><td>GPT-5.2 low</td><td class="dim">nothing</td></tr>
+<tr><td class="num">2</td><td class="sub">GPT-5.2</td><td>high</td><td class="num">83.0</td><td class="num">72.0</td><td>GPT-5.2 low</td><td class="dim">nothing</td></tr>
+<tr><td class="num">3=</td><td class="sub">GLM-5</td><td>thinking</td><td class="num">82.5</td><td class="num">70.0</td><td>GPT-5.2 low</td><td class="dim">nothing</td></tr>
+<tr><td class="num">3=</td><td class="sub">Gemini 3 Flash</td><td>high</td><td class="num">82.5</td><td class="num">68.0</td><td>GPT-5.2 low</td><td class="dim">seed 123</td></tr>
+<tr><td class="num">5</td><td class="sub">Qwen3.5-397B-A17B</td><td>thinking</td><td class="num">81.5</td><td class="num">68.0</td><td>GPT-5.2 low</td><td class="dim">vLLM</td></tr>
+<tr><td class="num">6</td><td class="sub">Gemini 3 Pro</td><td>high</td><td class="num">80.5</td><td class="num">66.0</td><td>GPT-5.2 low</td><td class="dim">3 infra errors scored 0</td></tr>
+<tr><td class="num">—</td><td class="sub">Claude Sonnet 4.5</td><td>—</td><td class="num">72.0</td><td class="num">48.0</td><td>GPT-5.2 low</td><td class="dim">Anthropic's own figure: 70.0 with a prompt addendum</td></tr>
+<tr><td class="num">—</td><td class="sub">GPT-5.2</td><td><b>none</b></td><td class="num">52.5</td><td class="num">22.0</td><td>GPT-5.2 low</td><td class="dim">the same model as #2, no reasoning</td></tr>
+<tr class="grp"><td colspan="7">custom: open PRs, self-reported, unmerged</td></tr>
+<tr><td class="num">—</td><td class="sub">IBM ALTK-Evolve · GPT-5.5<span class="path"><a href="https://github.com/sierra-research/tau2-bench/pull/551" target="_blank" rel="noopener">#551</a></span></td><td>—</td><td class="num">88.5</td><td class="num">82.0</td><td>GPT-5.5</td><td>learned guidelines appended to the policy; <span class="v-warn">learned on the train split, which is part of the scored set</span></td></tr>
+<tr><td class="num">—</td><td class="sub">ByteVerity · gpt-oss-120b<span class="path"><a href="https://github.com/sierra-research/tau2-bench/pull/376" target="_blank" rel="noopener">#376</a></span></td><td>—</td><td class="num">88.5</td><td class="num">70.0</td><td>GPT-4.1</td><td>a deterministic policy gate on every action</td></tr>
+<tr><td class="num">—</td><td class="sub">Cascade Dynamics · Sonnet 4.6<span class="path"><a href="https://github.com/sierra-research/tau2-bench/pull/489" target="_blank" rel="noopener">#489</a></span></td><td>—</td><td class="num">87.0</td><td class="num">82.0</td><td>Sonnet 4.6</td><td>a pre-execution policy gate on write tools; <b>the same model with the stock agent: 82.5 / 76.0</b></td></tr>
+<tr><td class="num">—</td><td class="sub">Publicis Sapient · Opus 5<span class="path"><a href="https://github.com/sierra-research/tau2-bench/pull/550" target="_blank" rel="noopener">#550</a></span></td><td>—</td><td class="num">83.5</td><td class="num">72.0</td><td>GPT-5</td><td>own orchestration, stock prompt</td></tr>
+<tr class="grp"><td colspan="7">yours: 1 trial, Haiku 4.5 medium as user, not comparable (§1)</td></tr>
+<tr class="pro"><td class="num">—</td><td class="sub">tau2-loop v3 · Sonnet 5 (champion)<span class="path">runs/20260928T093954Z_airline_v3_train · …095651Z_airline_v3_test</span></td><td>medium</td><td class="num">84 · 84</td><td class="num">—</td><td>Haiku 4.5 medium</td><td>train 21/25, test 21/25; stock prompt</td></tr>
+<tr><td class="num">—</td><td class="sub">tau2-loop v5 · Opus 5.5<span class="path">runs/20260928T094017Z_airline_v5_train · …095731Z_airline_v5_test</span></td><td>medium</td><td class="num">72 · 88</td><td class="num">—</td><td>Haiku 4.5 medium</td><td>train 18/25, test 22/25; v3's prompt; held (cycle 4)</td></tr>
+<tr><td class="num">—</td><td class="sub">tau2-loop v6 · Sonnet 5<span class="path">runs/20260928T101605Z_airline_v6_train · …102823Z_airline_v6_test</span></td><td>medium</td><td class="num">84 · 88</td><td class="num">—</td><td>Haiku 4.5 medium</td><td>train 21/25, test 22/25; Opus 5.5 optimiser's prompt; held (cycle 5)</td></tr>
+</tbody></table></div>
+<p class="cap">The airline table stopped updating in about March 2026: every newer model in the manifest (Opus 5.x, Sonnet 5, GPT-5.4 and later) has <code>airline: null</code>, and the Sonnet 5, Opus 5 and Opus 5.5 system cards do not mention τ-bench. OpenAI has left airline out since GPT-5.2 "because of lower-quality ground truth grading".
+<span class="path">github.com/sierra-research/tau2-bench/tree/main/web/leaderboard/public/submissions · docs/leaderboard-submission.md · your pass^1 cells read train · test, as % of 25</span></p>
+<p class="insight">Reasoning effort is the largest single lever on the board: the same GPT-5.2 scores 52.5% at effort none and 83.0% at high. Every top-six entry ran at high; you run medium.</p>
+</section>
+
+<!-- ─────────────────────────────── 1 ─────────────────────────────── -->
+<section id="s1">
+<h2>1 · Your setup — same tasks, different user, one trial</h2>
+<p>Your task data matches the board's; almost everything around it differs. Three differences change what your numbers can tell you, and they are marked.</p>
+<span class="label fig-title">Fig 2 · the protocol, the top custom agents, and tau2-loop, row by row</span>
+<div class="tw"><table>
+<thead><tr><th>dimension</th><th>leaderboard protocol</th><th>top custom agents</th><th>tau2-loop now</th><th>matters?</th></tr></thead>
+<tbody>
+<tr><td class="sub">task data</td><td>tau2 ≥ 1.0 (29 airline tasks fixed in 1.0.0, 2026-03-18)</td><td>same</td><td><code>vendor/tau2-bench</code> at v1.0.1-41 (<code>2174a60</code>): the fixes are in</td><td class="v-ok">✓ same</td></tr>
+<tr><td class="sub">tasks × trials</td><td>all 50 × 4, pass^1–4 reported</td><td>50 × 4</td><td>25 train / 25 test × <b>1</b>; pass^2–4 read "—"</td><td class="v-no">✕ yes: noise, §3</td></tr>
+<tr><td class="sub">user simulator</td><td>GPT-5.2 at effort low (recommended); code default GPT-4.1, T = 0</td><td>GPT-4.1, GPT-5, GPT-5.5, Sonnet 4.6</td><td>Claude Haiku 4.5, medium; subscription-only, so no GPT user</td><td class="v-warn">◐ partly: §3</td></tr>
+<tr><td class="sub">agent effort</td><td>high on all top six</td><td>—</td><td>medium (<code>agent.yaml</code>)</td><td class="v-no">✕ yes: untested</td></tr>
+<tr><td class="sub">write-call checks</td><td>none (stock)</td><td>a policy gate on writes (Cascade, ByteVerity)</td><td>none: a tool call goes straight to tau2</td><td class="v-no">✕ yes: §2</td></tr>
+<tr><td class="sub">tool calling</td><td>native function calls</td><td>native</td><td>a JSON reply contract in text; each turn is a fresh SDK session that re-sends the whole transcript</td><td class="v-warn">◐ unknown: 0–2 unparsed per ~300 replies</td></tr>
+<tr><td class="sub">system prompt</td><td>stock (Anthropic's own scores add a published addendum)</td><td>learned guidelines; rewritten policy</td><td>v3 = the stock 366 characters + policy; v6 = 11,175 characters of learned rules</td><td class="v-warn">◐ §4</td></tr>
+<tr><td class="sub">state between turns</td><td>the transcript only</td><td>typed state from read tools (LedgerAgent)</td><td>the transcript, plus a time reminder from <code>helper.py</code></td><td class="dim">idea</td></tr>
+<tr><td class="sub">split</td><td>official train 30 / test 20 (<code>split_tasks.json</code>)</td><td>ALTK-Evolve learned on train, scored on all 50</td><td>seed-300 halves; 11 of your 25 train tasks are in the official test 20</td><td class="dim">comparability only</td></tr>
+<tr><td class="sub">max steps</td><td>200</td><td>—</td><td>200</td><td class="v-ok">✓ same</td></tr>
+</tbody></table></div>
+<p class="cap">Protocol: tau2 <code>config.py</code> defaults and the submission rules. Yours: <code>agents/airline/v3/agent.yaml</code>, <code>src/tau2_loop/llm/prompting.py</code> (<code>TOOL_CONTRACT</code>), <code>src/tau2_loop/eval/runner.py</code> (<code>USER_MODEL = "haiku"</code>), <code>data/splits/airline.json</code>.
+<span class="path">vendor/tau2-bench/data/tau2/domains/airline/split_tasks.json · github.com/sierra-research/tau2-bench/blob/main/src/tau2/config.py</span></p>
+<p class="insight">The two cheapest gaps to close are effort (an <code>agent.yaml</code> fork) and trials (a runner flag). The expensive one is a write-call check, which needs a harness hook.</p>
+</section>
+
+<!-- ─────────────────────────────── 2 ─────────────────────────────── -->
+<section id="s2">
+<h2>2 · What moves airline — checks at write time, not longer prompts</h2>
+<p>Every design here reports a measured airline effect (retail or pooled where noted). "Surface" says where it would live in your repo; your optimiser can only reach <code>system.md</code> and <code>helper.py</code>.</p>
+<span class="label fig-title">Fig 3 · 14 designs with their measured effect, strongest Claude evidence first</span>
+<div class="tw"><table>
+<thead><tr><th>design</th><th>what it does</th><th>airline effect (conditions)</th><th>surface here</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">checks at write time</td></tr>
+<tr><td class="sub">Pre-execution policy gate<span class="path"><a href="https://github.com/sierra-research/tau2-bench/pull/489" target="_blank" rel="noopener">Cascade Dynamics · PR #489</a></span></td><td>checks every write-tool call against the policy before it runs</td><td><b>Sonnet 4.6: pass^1 82.5 → 87.0, pass^4 76.0 → 82.0</b> (50 × 4, Sonnet 4.6 user, self-reported)</td><td><span class="tag">harness</span></td></tr>
+<tr><td class="sub">PolicyGuard<span class="path"><a href="https://arxiv.org/abs/2606.29225" target="_blank" rel="noopener">arXiv 2606.29225</a></span></td><td>a checker model sees the dialogue, policy and a per-tool checklist and reviews write calls only; a blocked call becomes a short fix-it message</td><td><b>Sonnet 4.6 pass^4 72 → 78</b>; GPT-5.4 46 → 58; Gemini 2.5 Pro 48 → 60 (50 × 4)</td><td><span class="tag">harness</span></td></tr>
+<tr><td class="sub">PolicyGuide<span class="path"><a href="https://arxiv.org/abs/2608.19861" target="_blank" rel="noopener">arXiv 2608.19861</a></span></td><td>the policy compiled offline into a workflow graph; each user turn a verifier injects advice for the first unmet step; the write gate blocks once, then lets a retry through</td><td><b>Sonnet 4.6 pass^4 0.72 → 0.78</b>; GPT-5.4 0.46 → 0.62, but <b>0.48</b> with the same workflow pasted into the system prompt (50 × 4, GPT-4.1 user)</td><td><span class="tag">helper.py</span><span class="tag">harness</span></td></tr>
+<tr><td class="sub">LedgerAgent<span class="path"><a href="https://arxiv.org/abs/2606.20529" target="_blank" rel="noopener">arXiv 2606.20529</a></span></td><td>read-tool results kept as typed state and shown every turn; 10 airline rules checked in code before any write (the flight must come from an earlier search, and so on); no extra model calls</td><td>Kimi-K2.5 pass^1 69.0 → 74.0; GLM-5 66.5 → 76.0; MiniMax M2.5 61.5 → 63.0 (4 trials). Remaining failures: missed actions 47.7%, wrong arguments 33.9%</td><td><span class="tag">helper.py</span><span class="tag">harness</span></td></tr>
+<tr><td class="sub">Re-check writes at higher effort<span class="path"><a href="https://arxiv.org/abs/2607.01426" target="_blank" rel="noopener">arXiv 2607.01426</a></span></td><td>a router sends complex sessions down a path where the same model re-checks each write at higher reasoning effort</td><td>majority-pass 68 → 78 (Gemini 3.5), 74 → 84 (ChatGPT 5.5) (4 trials)</td><td><span class="tag">harness</span></td></tr>
+<tr><td class="sub">IBM ToolGuard<span class="path"><a href="https://arxiv.org/abs/2507.16459" target="_blank" rel="noopener">arXiv 2507.16459</a></span></td><td>the policy compiled into one guard function per tool: hard blocks</td><td>22 forbidden-request tasks: pass^1 0.450 → 0.685. <span class="v-no">Full airline, Sonnet 4.6: pass^4 72 → 58</span>, from over-blocking legitimate writes</td><td><span class="tag">harness</span></td></tr>
+<tr><td class="sub">Reviewer before execution<span class="path"><a href="https://arxiv.org/abs/2604.27233" target="_blank" rel="noopener">arXiv 2604.27233</a></span></td><td>a reviewer agent comments on each tool call before it runs</td><td>GPT-4o 42.0 → <span class="v-no">40.7</span> with progressive feedback; best-of-5 selection 48.0. Over-talk errors rose from 10% to 27%</td><td><span class="tag">harness</span></td></tr>
+<tr class="grp"><td colspan="4">per-turn guidance and memory</td></tr>
+<tr><td class="sub">Proactive memory agent<span class="path"><a href="https://arxiv.org/abs/2607.08716" target="_blank" rel="noopener">arXiv 2607.08716</a></span></td><td>a side agent keeps facts and past attempts and injects a reminder only when it judges one useful</td><td>Sonnet 4.5 68 → 78; <b>Opus 4.6 76 → 76</b>; reminders without the memory bank fell to 62 (50 tasks, 1 run)</td><td><span class="tag">helper.py</span></td></tr>
+<tr><td class="sub">IRMA input rewriting<span class="path"><a href="https://arxiv.org/abs/2508.20931" target="_blank" rel="noopener">arXiv 2508.20931</a></span></td><td>before each turn: restate the original request, list the relevant rules, suggest tools</td><td>GPT-4o pass^1 0.424 → 0.452, pass^5 0.20 → 0.30 (50 × 5); +50% tokens</td><td><span class="tag">helper.py</span></td></tr>
+<tr><td class="sub">BREW recipes<span class="path"><a href="https://arxiv.org/abs/2511.20297" target="_blank" rel="noopener">arXiv 2511.20297</a></span></td><td>past trajectories distilled into short concept-level recipes, retrieved after each user turn</td><td>o4-mini, τ² pooled: 56.6 → 62.5; <span class="v-no">near-verbatim traces 52.7</span>, below baseline</td><td><span class="tag">system.md</span><span class="tag">helper.py</span></td></tr>
+<tr class="grp"><td colspan="4">prompt and model settings</td></tr>
+<tr><td class="sub">Reasoning effort<span class="path"><a href="https://github.com/sierra-research/tau2-bench/tree/main/web/leaderboard/public/submissions" target="_blank" rel="noopener">leaderboard submissions</a></span></td><td>the model's thinking budget</td><td>GPT-5.2: pass^1 52.5 at none → 83.0 at high; pass^4 22.0 → 72.0 (50 × 4)</td><td><span class="tag">agent.yaml</span></td></tr>
+<tr><td class="sub">Think tool + checklist prompt<span class="path"><a href="https://www.anthropic.com/engineering/claude-think-tool" target="_blank" rel="noopener">Anthropic engineering</a></span></td><td>a scratchpad plus prompt examples: list the rules that apply, check the information is complete, verify the action before acting</td><td>Claude 3.7 Sonnet on τ-bench 1: 0.370 → 0.570 in the prose (0.332 → 0.584 in its table). Anthropic now prefers extended thinking</td><td><span class="tag">system.md</span></td></tr>
+<tr><td class="sub">Anthropic's airline addendum<span class="path"><a href="https://github.com/anthropics/model-cards/tree/main/claude-opus-4-5-20251101/tau2" target="_blank" rel="noopener">anthropics/model-cards · opus-4-5 · tau2</a></span></td><td>tighter basic-economy wording; "transfer only as a LAST resort"; "No circumvention: do not suggest, facilitate, or execute any sequence of actions designed to achieve an outcome that a direct action would prohibit"</td><td>used for Anthropic's reported scores; no ablation published. Sonnet 4.5: 70.0 with it</td><td><span class="tag">system.md</span></td></tr>
+<tr><td class="sub">Workflow-shaped policy<span class="path"><a href="https://quesma.com/blog/tau2-benchmark-improving-results-smaller-models/" target="_blank" rel="noopener">Quesma</a> · τ² paper</span></td><td>the policy rewritten as decision trees and numbered steps</td><td>telecom only: GPT-5-mini 0.55 → 0.675 (20 × 2). No airline number; PolicyGuide's prompt-only variant +2 pass^4</td><td><span class="tag">system.md</span></td></tr>
+</tbody></table></div>
+<p class="cap">Numbers were checked against each paper's own text; the research pass discarded two figures that only appeared in summaries. The PRs in this table are self-reported.
+<span class="path">Every source is linked in the row and listed under Sources.</span></p>
+<p class="insight">In PolicyGuide's test the same workflow moved GPT-5.4's pass^4 by 2 points in the system prompt and by 16 as per-turn checks. Write-time gates added 6 on Sonnet 4.6.</p>
+</section>
+
+<!-- ─────────────────────────────── 3 ─────────────────────────────── -->
+<section id="s3">
+<h2>3 · Measurement — one trial hides a two-task gain</h2>
+<div class="cards">
+  <div class="card"><span class="label">your data · same bytes, two runs</span><span class="n">5 / 25</span><p>train tasks that flipped between v3's two runs: 4 fixed and 1 broke. The prompt and model were the same; only the CLI changed.</p><p class="small muted"><code>…060029Z_airline_v3_train</code> vs <code>…093954Z_airline_v3_train</code></p></div>
+  <div class="card"><span class="label">leaderboard · 8 submissions</span><span class="n">5.5–10.7 pts</span><p>how far apart two single airline runs of 50 tasks must be before the gap exceeds run-to-run noise. Between identical runs, 10–42% of task verdicts flip.</p><p class="small muted"><a href="https://github.com/sierra-research/tau2-bench/issues/540" target="_blank" rel="noopener">tau2-bench #540</a></p></div>
+  <div class="card"><span class="label">simulation · not published</span><span class="n">16%</span><p>chance your 1-trial gate catches a real gain of about 1.6 of 25 tasks. It promotes a challenger that changes nothing 6% of the time. With 5 trials and a paired test: 5% false promotions, 34% caught, 65% for a 2.4-task gain.</p><p class="small muted">the research agent's model of 25 tasks: 13 always pass, 10 coin flips, 2 always fail</p></div>
+  <div class="card"><span class="label">τ² paper · 100 airline conversations</span><span class="n">13 / 100</span><p>conversations where the GPT-4.1 user simulator made a critical error, one that prevented success. It made errors of some kind in 47 of 100.</p><p class="small muted"><a href="https://arxiv.org/abs/2506.07982" target="_blank" rel="noopener">arXiv 2506.07982</a></p></div>
+</div>
+<span class="label fig-title">Fig 4 · every airline gate so far: what each challenger fixed and broke on train</span>
+<div class="tw"><table>
+<thead><tr><th>cycle</th><th>champion → challenger</th><th>made by</th><th class="num">train passes</th><th class="num">fixed</th><th class="num">broke</th><th>verdict</th><th class="num">test (reported)</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="sub">v0 → v1</td><td>Sonnet optimiser</td><td class="num">12 → 15 / 20</td><td class="num">4</td><td class="num">1</td><td class="v-warn">hold</td><td class="num">—</td></tr>
+<tr><td class="num">2</td><td class="sub">v0 → v2</td><td>Sonnet optimiser</td><td class="num">12 → 16 / 20</td><td class="num">4</td><td class="num">0</td><td class="v-warn">hold <span class="small muted">(before the dominance rule)</span></td><td class="num">—</td></tr>
+<tr><td class="num">3</td><td class="sub">v3 → v4</td><td>Sonnet optimiser</td><td class="num">18 → 20 / 25</td><td class="num">6</td><td class="num">4</td><td class="v-warn">hold</td><td class="num">21 → 18 / 25</td></tr>
+<tr><td class="num">4</td><td class="sub">v3 → v5</td><td>model swap to Opus 5.5</td><td class="num">21 → 18 / 25</td><td class="num">1</td><td class="num">4</td><td class="v-warn">hold</td><td class="num">21 → 22 / 25</td></tr>
+<tr><td class="num">5</td><td class="sub">v3 → v6</td><td>Opus 5.5 optimiser</td><td class="num">21 → 21 / 25</td><td class="num">2</td><td class="num">2</td><td class="v-warn">hold</td><td class="num">21 → 22 / 25</td></tr>
+<tr class="sum"><td></td><td>five cycles</td><td></td><td></td><td class="num">17</td><td class="num">11</td><td>0 promoted</td><td></td></tr>
+</tbody></table></div>
+<p class="cap">Train and test move in opposite directions in cycles 3 and 4. That is what coin-flip tasks do at one trial.
+<span class="path">loop/airline/ledger.jsonl · cycles 1–2 ran on split v1 (20 train tasks), 3–5 on split v2 (25)</span></p>
+<p class="insight">At one trial your gate can't separate a real two-task gain from noise. Until it runs 4 or more paired trials, no idea on this page can be judged.</p>
+<div class="note"><span class="label">On the user simulator</span>
+<p>In a comparison of 31 simulators against 451 real people, Claude Haiku 4.5 scored 63.2 on realism against a best of 76.0 (humans 92.7). Claude Sonnet 4 (62.0) and Opus 4 (59.2) were no better. So a larger Claude as the user is not an obvious fix. Tagging failures that are the simulator's fault is: in cycle 4, the Haiku user leaked the real date and quit task 19. <a href="https://arxiv.org/html/2603.11245" target="_blank" rel="noopener">Sim2Real, arXiv 2603.11245</a></p></div>
+</section>
+
+<!-- ─────────────────────────────── 4 ─────────────────────────────── -->
+<section id="s4">
+<h2>4 · The optimiser — whole-prompt rewrites overfit 25 tasks</h2>
+<p>No paper optimises a Claude agent's prompt on τ²-airline with real user simulation and a proper held-out split. The closest work agrees on three things. Validate on tasks the optimiser didn't read. Edit in small, itemised deltas. Reject regressions during the search, not after it.</p>
+<span class="label fig-title">Fig 5 · your optimiser today against what the evidence favours</span>
+<div class="tw"><table>
+<thead><tr><th>step</th><th>tau2-loop now</th><th>what the evidence favours</th><th>evidence</th></tr></thead>
+<tbody>
+<tr><td class="sub">what it reads</td><td>the champion's failed train transcripts + the ledger</td><td>the grader's expected-vs-actual action diff, and a passing and a failing run of the same task; prefer tasks whose outcome varies across runs</td><td>45–48% of τ² airline/retail failures are "false success", where the agent says it finished but the state is wrong; transcript judges reach at most 0.65 AUROC (<a href="https://arxiv.org/abs/2606.09863" target="_blank" rel="noopener">2606.09863</a>). SIMBA picks the tasks that vary most (<a href="https://dspy.ai/current/api/optimizers/SIMBA/" target="_blank" rel="noopener">DSPy</a>)</td></tr>
+<tr><td class="sub">how it edits</td><td>rewrites <code>system.md</code>: v2 5,259 → v4 7,936 → v6 11,175 characters</td><td>an itemised playbook of bullets with IDs, edited as small deltas, near-duplicates removed, a line budget, no task-specific lessons</td><td>ACE: a full rewrite collapsed 18,282 tokens at 66.7% to 122 tokens at 57.1%, below the 63.7% baseline (<a href="https://arxiv.org/html/2510.04618v1" target="_blank" rel="noopener">2510.04618</a>). GEPA on Terminal-Bench grew a 5-line prompt to 195 lines of per-task lessons and scored 54.5% on new tasks vs a 56.8% baseline (<a href="https://arxiv.org/pdf/2607.14004" target="_blank" rel="noopener">2607.14004</a>, vendor)</td></tr>
+<tr><td class="sub">what decides</td><td>the same 25 train tasks it read failures from</td><td>a separate gate set: tasks it proposes from, tasks that accept, tasks untouched until the report</td><td>PRISM on τ²-retail: 20 repair / 20 gate / 74 held out. Prompt-only GEPA averaged <span class="v-no">−4.7</span> pass^4 (positive in 25% of runs), MIPROv2 +6.1, PRISM with tool-boundary edits +14.9 (<a href="https://arxiv.org/html/2609.05736" target="_blank" rel="noopener">2609.05736</a>). DSPy: reusing the train set as the validation set "makes GEPA overfit"</td></tr>
+<tr><td class="sub">regressions</td><td>found after a whole train run; the cycle holds</td><td>screen each edit on the tasks it targets and on the tasks it could break before the full gate; say which rule caused each fix and break</td><td>only the method that rejected regressions during search kept improving (<a href="https://arxiv.org/pdf/2607.14004" target="_blank" rel="noopener">RELAI</a>)</td></tr>
+<tr><td class="sub">how many rules</td><td>no limit</td><td>fewer, plainer rules; per-step checks moved out of the prompt into the turn</td><td>the best models reach 68% accuracy when given 500 instructions at once, and favour earlier ones (<a href="https://arxiv.org/abs/2507.11538" target="_blank" rel="noopener">IFScale</a>). With 30 or fewer examples, "strong fixed prompts may outperform all reflective optimizers" (<a href="https://arxiv.org/html/2607.11944" target="_blank" rel="noopener">Mage</a>)</td></tr>
+</tbody></table></div>
+<p class="cap">Closest to your loop, but a vendor claim: ACE with a Claude Haiku 4.5 agent on the official τ² airline test 20 × 4 trials, pass^1 41.2% → 52.5% and pass^4 20% → 40% (<a href="https://github.com/kayba-ai/agentic-context-engine" target="_blank" rel="noopener">kayba-ai/agentic-context-engine</a>).
+<span class="path">agents/airline/v{2,4,6}/system.md · src/tau2_loop/loop/optimiser.py</span></p>
+<p class="insight">Your learned prompt grew from 5,259 to 11,175 characters, and no learned version has passed the gate against the stock prompt on Sonnet 5 (cycles 3 and 5). That is the RELAI pattern.</p>
+</section>
+
+<!-- ─────────────────────────────── 5 ─────────────────────────────── -->
+<section id="s5">
+<h2>5 · Known-bad tasks — 11 of your 50 are suspect</h2>
+<p>Sierra fixed 29 airline tasks in τ³ 1.0.0, and your pin includes those fixes. Tasks 14, 19, 23, 33, 39 and 44 were among them, so your failures on them are failures on the corrected versions. Four more are still open on 1.0.1, and 7 carry policy loopholes that graders score inconsistently.</p>
+<span class="label fig-title">Fig 6 · open problems on tau2 1.0.1, and which half of your split each sits in</span>
+<div class="tw"><table>
+<thead><tr><th>task</th><th>problem</th><th>source</th><th>your split</th></tr></thead>
+<tbody>
+<tr><td class="num">35</td><td>the user simulator invents a second passenger; all 7 models tested fail it. The fix PR was closed unmerged</td><td><a href="https://github.com/sierra-research/tau2-bench/issues/172" target="_blank" rel="noopener">#172</a> · <a href="https://github.com/sierra-research/tau2-bench/pull/357" target="_blank" rel="noopener">#357</a></td><td>train</td></tr>
+<tr><td class="num">7</td><td>"other upcoming flights" reads as $708; the gold answer is $1,628</td><td><a href="https://github.com/sierra-research/tau2-bench/issues/495" target="_blank" rel="noopener">#495</a></td><td>test</td></tr>
+<tr><td class="num">6</td><td>the user simulator invents a new goal in 7 of 24 trials. In cycle 4, Opus 5.5 lost it after offering an upgrade that the customer built a new goal on</td><td><a href="https://github.com/sierra-research/tau2-bench/issues/494" target="_blank" rel="noopener">#494</a></td><td>train</td></tr>
+<tr><td class="num">14</td><td>the DB hash depends on the order of <code>payment_methods</code>, so a correct booking can fail. Opus also got the destination wrong here (JFK → JFK)</td><td><a href="https://github.com/sierra-research/tau2-bench/issues/514" target="_blank" rel="noopener">#514</a></td><td>train</td></tr>
+<tr><td class="num">2 5 13 27 29 32 45</td><td>policy loopholes, such as upgrading the cabin and then changing the flights. Loophole tasks pass 37% vs 51% for the rest (3 models × 4 trials); graders are inconsistent about them</td><td><a href="https://arxiv.org/html/2609.14400" target="_blank" rel="noopener">2609.14400</a> · <a href="https://github.com/sierra-research/tau2-bench/pull/94" target="_blank" rel="noopener">#94</a></td><td>13 45 train · 2 5 27 29 32 test</td></tr>
+<tr class="sum"><td></td><td>also: 23 airline tasks pass with no DB change at all, and 44 score COMMUNICATE with no criteria, so a passive agent collects easy passes</td><td><a href="https://github.com/sierra-research/tau2-bench/issues/384" target="_blank" rel="noopener">#384</a></td><td>both</td></tr>
+</tbody></table></div>
+<p class="cap">5 of the 11 are in train, where the optimiser reads them as failures to fix; 6 are in test.
+<span class="path">data/splits/airline.json · vendor/tau2-bench/CHANGELOG.md</span></p>
+<p class="insight">Tag these 11 before the optimiser reads them. A rule written to pass task 35 or 14 is a rule written to the grader's bug.</p>
+</section>
+
+<!-- ─────────────────────────────── 6 ─────────────────────────────── -->
+<section id="s6">
+<h2>6 · Ideas — fifteen changes, measurement first</h2>
+<p>Ranked by expected airline gain for the effort, with measurement first because it decides whether anything else can be seen. Each row names the file it touches and what it costs in conversations. Set a disposition per row, then queue the set once. <b>next</b> means I plan it on a Lavish page before any code. <b>later</b> records it in the README's status section. <b>skip</b> drops it.</p>
+<form data-lavish-question="s08-ideas" onsubmit="event.preventDefault(); const f=event.currentTarget; const items=[...f.querySelectorAll('select.disp')].filter(s=>s.value).map(s=>({id:s.name,label:s.dataset.label,disposition:s.value})); const n=(f.querySelector('textarea')?.value||'').trim(); const ack=f.querySelector('.ack'); if(!items.length&&!n){ack.textContent='Pick a disposition for at least one row.';return;} if(!window.lavish){ack.textContent='Not opened through Lavish: use Copy all answers below.';return;} window.lavish.queuePrompt('s08 ideas: act on every selected ID by its disposition (next = plan it on a Lavish page before building; later = record it in the README status section; skip = drop it) and return an item-by-item receipt. Account for every submitted ID before reporting completion.'+(n?' Note: '+n:''),{tag:'tracked-batch',text:'s08: '+items.length+' ideas dispositioned',element:f,queueKey:'s08-ideas',data:{items,note:n}}); ack.textContent='Queued '+items.length+' — now press Send to Agent.';">
+<div class="tw"><table>
+<thead><tr><th>id</th><th>idea</th><th>surface</th><th>cost</th><th>evidence</th><th>your call</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="6">measure: without these, nothing below can be seen</td></tr>
+<tr><td class="id">M1</td><td class="wrap"><b>Gate on 4 paired trials.</b> Champion and challenger both run in the same cycle, compared per task with a paired test. The 1-trial "fix ≥ 1, break 0" route goes, because noise alone promotes a do-nothing challenger 6% of the time</td><td><span class="tag">loop</span></td><td class="small">4× conversations per gate: ~200, about 1 h 50 min at concurrency 3</td><td class="small">§3; #540; leaderboard rules; Miller, <a href="https://arxiv.org/html/2411.00640" target="_blank" rel="noopener">2411.00640</a></td><td><select class="disp" name="M1" data-label="Gate on 4 paired trials"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">M2</td><td class="wrap"><b>Three-way split.</b> The optimiser reads 15 tasks, the gate decides on 15 it never read, and the old test 20 stays untouched. This is the validation split from your earlier question</td><td><span class="tag">data/splits</span><span class="tag">loop</span></td><td class="small">a split v3; rescore the champion on the gate set</td><td class="small">PRISM 20/20/74; GEPA's separate validation set</td><td><select class="disp" name="M2" data-label="Three-way split: read / gate / test"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">M3</td><td class="wrap"><b>Tag the 11 suspect tasks and the simulator's faults</b> (§5), so they don't count as failures to fix</td><td><span class="tag">optimiser input</span></td><td class="small">none</td><td class="small">§5; τ²'s 13/100 critical simulator errors</td><td><select class="disp" name="M3" data-label="Tag suspect tasks and simulator faults"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">M4</td><td class="wrap"><b>Score "prevent a change" and "make a change" tasks separately.</b> Stricter wording helps one group and hurts the other</td><td><span class="tag">runs tab</span></td><td class="small">none</td><td class="small">PolicyGuide's 24/26 split</td><td><select class="disp" name="M4" data-label="Report prevent-change vs make-change groups"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr class="grp"><td colspan="6">the agent: cheapest first</td></tr>
+<tr><td class="id">E1</td><td class="wrap"><b>Effort high.</b> A fork of v3 on Sonnet 5 at high effort, scored by <code>make challenge</code>. Every top-six board entry ran high</td><td><span class="tag">agent.yaml</span></td><td class="small">one train run (+ test): 50 conversations</td><td class="small">GPT-5.2: none 52.5 → high 83.0</td><td><select class="disp" name="E1" data-label="Effort high fork of v3"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">P1</td><td class="wrap"><b>Anthropic's published addendum:</b> "transfer only as a last resort", "no circumvention", and the tighter basic-economy wording. Hand-added, then scored</td><td><span class="tag">system.md</span></td><td class="small">one challenge: 50 conversations</td><td class="small">anthropics/model-cards · opus-4-5 · tau2</td><td><select class="disp" name="P1" data-label="Anthropic addendum lines"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">H1</td><td class="wrap"><b>A state ledger and argument checks.</b> <code>helper.py</code> parses read-tool results into typed state and shows it each turn. Plain code checks run on write arguments: a round trip's destination is not its origin, the flight came from a search, the payment method is on the profile, the price is multiplied by the passenger count. It hits Opus's JFK → JFK bug and v3's task 23</td><td><span class="tag">helper.py</span><span class="tag">harness hook</span></td><td class="small">a hook that sees tool calls before tau2 runs them; no extra model calls</td><td class="small">LedgerAgent +5–10 pass^1; missed actions + wrong arguments = 81.6% of what remains</td><td><select class="disp" name="H1" data-label="State ledger and write-argument checks"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">H2</td><td class="wrap"><b>An advisory checker on write calls.</b> Before a write runs, a second look (the same model at high effort, or a checker model) reads the call, the dialogue and the policy. It blocks once with a fix-it message, then lets a retry through. No hard blocks</td><td><span class="tag">harness hook</span></td><td class="small">one extra call per write (~2–4 a conversation)</td><td class="small">Cascade +4.5 pass^1 / +6 pass^4 and PolicyGuard +6 pass^4, both on Sonnet 4.6; ToolGuard's hard blocks lost 14</td><td><select class="disp" name="H2" data-label="Advisory checker on write calls"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">H3</td><td class="wrap"><b>A per-turn checklist.</b> <code>helper.py</code> restates the user's open requests and the policy steps still pending for each, every user turn</td><td><span class="tag">helper.py</span></td><td class="small">~+50% input tokens</td><td class="small">IRMA; PolicyGuide 0.48 → 0.62 vs prompt-only</td><td><select class="disp" name="H3" data-label="Per-turn checklist injection"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">T1</td><td class="wrap"><b>Native tool calls.</b> Replace the JSON reply contract with SDK tool stubs whose <code>ToolUseBlock</code> is returned to tau2 without running. Every board agent calls tools natively</td><td><span class="tag">llm/core.py</span></td><td class="small">a change to the sealed core; re-baseline</td><td class="small">none direct; your unparsed rate is 0–2 per ~300 replies</td><td><select class="disp" name="T1" data-label="Native tool calls through SDK stubs"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr class="grp"><td colspan="6">the optimiser</td></tr>
+<tr><td class="id">O1</td><td class="wrap"><b>Delta edits, not rewrites.</b> <code>system.md</code> becomes an itemised playbook with IDs. The optimiser adds, edits or removes bullets within a line budget, and task-specific lessons are refused</td><td><span class="tag">optimiser</span></td><td class="small">prompt + hook changes</td><td class="small">ACE context collapse; RELAI 5 → 195 lines</td><td><select class="disp" name="O1" data-label="Delta edits with a line budget"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">O2</td><td class="wrap"><b>Better optimiser input.</b> The grader's expected-vs-actual diff, and a passing and a failing run of the same task, alongside the transcripts</td><td><span class="tag">optimiser</span></td><td class="small">none: the data is in <code>tau2_results.json</code></td><td class="small">false-success 45–48%; SIMBA</td><td><select class="disp" name="O2" data-label="Grader diffs and pass/fail pairs for the optimiser"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">O3</td><td class="wrap"><b>Say which rule did what.</b> Each diagnosis names the rule behind each fix and break. Rules behind breaks are dropped one at a time before the next cycle</td><td><span class="tag">optimiser</span><span class="tag">ledger</span></td><td class="small">a few ablation runs on broken tasks only</td><td class="small">RELAI</td><td><select class="disp" name="O3" data-label="Rule attribution and ablation"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr class="grp"><td colspan="6">comparability</td></tr>
+<tr><td class="id">R1</td><td class="wrap"><b>A board-style number per champion:</b> all 50 tasks × 4 trials, pass^1–4, reported only. Leave training on your split</td><td><span class="tag">runner</span></td><td class="small">200 conversations per champion</td><td class="small">leaderboard submission rules</td><td><select class="disp" name="R1" data-label="All-50 x 4-trial board number per champion"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">U1</td><td class="wrap"><b>Keep Haiku as the user, and tag its faults (M3).</b> A bigger Claude user was not more realistic, and a GPT user is off-limits under subscription billing</td><td><span class="tag">eval</span></td><td class="small">none</td><td class="small">Sim2Real: Haiku 4.5 63.2, Sonnet 4 62.0, Opus 4 59.2</td><td><select class="disp" name="U1" data-label="Keep Haiku user, tag its faults"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+</tbody></table></div>
+<textarea class="free" placeholder="Anything else: an order, a budget, an idea that isn't here"></textarea>
+<div class="actions" style="margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap"><button class="btn" type="submit">Queue these dispositions</button><span class="ack small" style="color:var(--ok)"></span></div>
+</form>
+<div class="rule">
+  <span class="k">My order</span><span class="v">M1 + M2 first, as one change: a split v3 and a 4-trial paired gate. Then E1 and P1, cheap and each one challenge. Then H1, the code checks that need no model call. Only then H2, the checker model. O1–O3 go with the next optimiser cycle.</span>
+  <span class="k">Why</span><span class="v">At one trial, E1's or H1's real effect could not be told apart from noise (§3). Measuring first makes every later run count.</span>
+</div>
+
+<div class="copyall">
+  <button type="button" class="btn alt" onclick="(async (btn) => {
+    const qs = [...document.querySelectorAll('[data-lavish-question]')];
+    const status = btn.parentElement.querySelector('[data-lavish-copy-all-status]');
+    btn.parentElement.querySelector('[data-lavish-copy-all-manual]')?.remove();
+    const out = [];
+    for (const q of qs) {
+      const key = q.getAttribute('data-lavish-question');
+      const lines = [];
+      for (const el of q.querySelectorAll('select, textarea')) {
+        const v = (el.value || '').trim(); if (!v) continue;
+        lines.push('  ' + (el.name || 'note') + ': ' + v);
+      }
+      if (lines.length) out.push(key + ':\n' + lines.join('\n'));
+    }
+    const text = out.join('\n\n');
+    if (!text) { status.textContent = 'No answers to copy yet.'; return; }
+    try { await navigator.clipboard.writeText(text); status.textContent = 'Answers copied — paste them into the chat.'; return; } catch {}
+    const man = document.createElement('textarea'); man.value = text; man.readOnly = true; man.rows = Math.min(18, text.split('\n').length + 1);
+    man.setAttribute('aria-label', 'Answers to copy manually'); man.dataset.lavishCopyAllManual = '';
+    btn.parentElement.append(man); man.focus(); man.select(); status.textContent = 'Clipboard unavailable: copy the text below.';
+  })(this)">Copy all answers</button>
+  <span data-lavish-copy-all-status role="status" aria-live="polite" class="small muted"></span>
+</div>
+</section>
+
+<!-- ─────────────────────────────── sources ─────────────────────────────── -->
+<section id="src">
+<h2>Sources — about 60 read, every number above traced to one</h2>
+<h3 class="grp">Leaderboard and protocol</h3>
+<ul class="src">
+<li><a href="https://github.com/sierra-research/tau2-bench/tree/main/web/leaderboard/public/submissions" target="_blank" rel="noopener">tau2-bench leaderboard submissions (JSON)</a> · <a href="https://github.com/sierra-research/tau2-bench/blob/main/docs/leaderboard-submission.md" target="_blank" rel="noopener">submission rules</a> · <a href="https://github.com/sierra-research/tau2-bench/blob/main/src/tau2/config.py" target="_blank" rel="noopener">config.py defaults</a> · <a href="https://github.com/sierra-research/tau2-bench/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG (29 airline task fixes)</a> · <a href="https://taubench.com/blog/tau3-task-fixes.html" target="_blank" rel="noopener">τ³ task-fixes post</a></li>
+<li>Issues: <a href="https://github.com/sierra-research/tau2-bench/issues/540" target="_blank" rel="noopener">#540 noise</a> · <a href="https://github.com/sierra-research/tau2-bench/issues/384" target="_blank" rel="noopener">#384 passive passes</a> · <a href="https://github.com/sierra-research/tau2-bench/issues/172" target="_blank" rel="noopener">#172</a> · <a href="https://github.com/sierra-research/tau2-bench/issues/494" target="_blank" rel="noopener">#494</a> · <a href="https://github.com/sierra-research/tau2-bench/issues/495" target="_blank" rel="noopener">#495</a> · <a href="https://github.com/sierra-research/tau2-bench/issues/514" target="_blank" rel="noopener">#514</a> · <a href="https://github.com/sierra-research/tau2-bench/pull/94" target="_blank" rel="noopener">PR #94 (Anthropic's loophole fixes, closed)</a></li>
+<li>Custom-agent PRs: <a href="https://github.com/sierra-research/tau2-bench/pull/551" target="_blank" rel="noopener">#551 IBM ALTK-Evolve</a> · <a href="https://github.com/sierra-research/tau2-bench/pull/376" target="_blank" rel="noopener">#376 ByteVerity</a> · <a href="https://github.com/sierra-research/tau2-bench/pull/489" target="_blank" rel="noopener">#489 Cascade Dynamics</a> · <a href="https://github.com/sierra-research/tau2-bench/pull/550" target="_blank" rel="noopener">#550 Publicis Sapient</a> · <a href="https://github.com/sierra-research/tau2-bench/pull/518" target="_blank" rel="noopener">#518 Politecnico di Milano</a></li>
+</ul>
+<h3 class="grp">Lab write-ups</h3>
+<ul class="src">
+<li>Anthropic: <a href="https://www.anthropic.com/engineering/claude-think-tool" target="_blank" rel="noopener">the "think" tool</a> · <a href="https://www.anthropic.com/news/claude-4" target="_blank" rel="noopener">Claude 4</a> · <a href="https://www.anthropic.com/news/claude-sonnet-4-5" target="_blank" rel="noopener">Sonnet 4.5</a> · <a href="https://assets.anthropic.com/m/64823ba7485345a7/Claude-Opus-4-5-System-Card.pdf" target="_blank" rel="noopener">Opus 4.5 system card</a> · <a href="https://github.com/anthropics/model-cards/tree/main/claude-opus-4-5-20251101/tau2" target="_blank" rel="noopener">model-cards: the τ² addendum</a></li>
+<li>OpenAI: <a href="https://web.archive.org/web/20250810/https://openai.com/index/introducing-gpt-5-for-developers/" target="_blank" rel="noopener">GPT-5 for developers</a> · <a href="https://web.archive.org/web/2026/https://openai.com/index/introducing-gpt-5-2/" target="_blank" rel="noopener">GPT-5.2 (airline excluded)</a> · <a href="https://web.archive.org/web/20250420/https://openai.com/index/gpt-4-1/" target="_blank" rel="noopener">GPT-4.1</a></li>
+<li>Others: <a href="https://storage.googleapis.com/deepmind-media/gemini/gemini_3_pro_model_evaluation.pdf" target="_blank" rel="noopener">Gemini 3 Pro evaluation</a> · <a href="https://huggingface.co/Qwen/Qwen3.5-27B" target="_blank" rel="noopener">Qwen3.5</a> · <a href="https://huggingface.co/zai-org/GLM-5" target="_blank" rel="noopener">GLM-5</a> · <a href="https://arxiv.org/html/2507.20534v2" target="_blank" rel="noopener">Kimi K2</a> · <a href="https://huggingface.co/deepseek-ai/DeepSeek-V3.2" target="_blank" rel="noopener">DeepSeek-V3.2</a> · <a href="https://arxiv.org/abs/2602.10604" target="_blank" rel="noopener">Step 3.5 Flash</a></li>
+</ul>
+<h3 class="grp">Agent designs</h3>
+<ul class="src">
+<li><a href="https://arxiv.org/abs/2606.29225" target="_blank" rel="noopener">PolicyGuard 2606.29225</a> · <a href="https://arxiv.org/abs/2608.19861" target="_blank" rel="noopener">PolicyGuide 2608.19861</a> · <a href="https://arxiv.org/abs/2606.20529" target="_blank" rel="noopener">LedgerAgent 2606.20529</a> · <a href="https://arxiv.org/abs/2607.01426" target="_blank" rel="noopener">router + reconsideration 2607.01426</a> · <a href="https://arxiv.org/abs/2507.16459" target="_blank" rel="noopener">ToolGuard 2507.16459</a> (<a href="https://github.com/IBM/tool_guard" target="_blank" rel="noopener">code</a>) · <a href="https://arxiv.org/abs/2604.15579" target="_blank" rel="noopener">symbolic guardrails 2604.15579</a> · <a href="https://arxiv.org/abs/2603.20449" target="_blank" rel="noopener">SMT checks 2603.20449</a> · <a href="https://arxiv.org/abs/2604.27233" target="_blank" rel="noopener">reviewer agent 2604.27233</a></li>
+<li><a href="https://arxiv.org/abs/2607.08716" target="_blank" rel="noopener">proactive memory 2607.08716</a> · <a href="https://arxiv.org/abs/2508.20931" target="_blank" rel="noopener">IRMA 2508.20931</a> · <a href="https://arxiv.org/abs/2511.20297" target="_blank" rel="noopener">BREW 2511.20297</a> · <a href="https://arxiv.org/abs/2604.25135" target="_blank" rel="noopener">FAMA 2604.25135</a> · <a href="https://quesma.com/blog/tau2-benchmark-improving-results-smaller-models/" target="_blank" rel="noopener">Quesma policy rewrite</a></li>
+<li>Training (closed-model builders can't use these): <a href="https://arxiv.org/abs/2504.03601" target="_blank" rel="noopener">APIGen-MT</a> (<a href="https://huggingface.co/datasets/Salesforce/APIGen-MT-5k" target="_blank" rel="noopener">HF dataset</a>) · <a href="https://arxiv.org/abs/2508.18669" target="_blank" rel="noopener">MUA-RL</a> · <a href="https://arxiv.org/abs/2604.05336" target="_blank" rel="noopener">TRACE</a> · <a href="https://arxiv.org/abs/2604.02869" target="_blank" rel="noopener">reward-calibrated RL</a></li>
+</ul>
+<h3 class="grp">Optimisers, noise and task quality</h3>
+<ul class="src">
+<li><a href="https://arxiv.org/pdf/2507.19457" target="_blank" rel="noopener">GEPA</a> · <a href="https://dspy.ai/current/api/optimizers/GEPA/overview/" target="_blank" rel="noopener">DSPy GEPA docs</a> · <a href="https://arxiv.org/html/2609.05736" target="_blank" rel="noopener">PRISM (Airbnb) 2609.05736</a> · <a href="https://arxiv.org/html/2510.04618v1" target="_blank" rel="noopener">ACE</a> · <a href="https://github.com/kayba-ai/agentic-context-engine" target="_blank" rel="noopener">Kayba ACE on τ² (vendor)</a> · <a href="https://arxiv.org/pdf/2607.14004" target="_blank" rel="noopener">RELAI 2607.14004</a> · <a href="https://arxiv.org/html/2607.11944" target="_blank" rel="noopener">Mage</a> · <a href="https://arxiv.org/abs/2507.11538" target="_blank" rel="noopener">IFScale</a> · <a href="https://dspy.ai/current/api/optimizers/SIMBA/" target="_blank" rel="noopener">SIMBA</a></li>
+<li><a href="https://arxiv.org/abs/2506.07982" target="_blank" rel="noopener">τ²-bench paper</a> · <a href="https://arxiv.org/pdf/2406.12045" target="_blank" rel="noopener">τ-bench paper</a> · <a href="https://arxiv.org/html/2411.00640" target="_blank" rel="noopener">Adding error bars to evals</a> · <a href="https://arxiv.org/html/2603.11245" target="_blank" rel="noopener">Sim2Real user simulators</a> · <a href="https://arxiv.org/html/2601.17087v1" target="_blank" rel="noopener">Lost in Simulation</a> · <a href="https://arxiv.org/abs/2606.09863" target="_blank" rel="noopener">false success 2606.09863</a> · <a href="https://arxiv.org/pdf/2507.02825" target="_blank" rel="noopener">ABC checklist</a></li>
+<li><a href="https://arxiv.org/html/2512.07850" target="_blank" rel="noopener">τ-Bench Verified / SABER</a> (<a href="https://github.com/amazon-agi/tau2-bench-verified" target="_blank" rel="noopener">repo</a>) · <a href="https://arxiv.org/html/2609.14400" target="_blank" rel="noopener">airline loopholes 2609.14400</a> · <a href="https://github.com/AGI-Eval-Official/tau2-bench-revised/blob/main/data/tau2/domains/airline/task_revisions.md" target="_blank" rel="noopener">AGI-Eval task revisions</a></li>
+</ul>
+</section>
+
+</main>
+
+<footer>
+  s08 · written 2026-09-28 against <code>tau2-loop@challenger-20260925</code> (uncommitted: the Opus 5.5 challenge and cycle 5). Your numbers: <code>runs/2026092[8]*_airline_v{3,5,6}_*</code>, <code>loop/airline/ledger.jsonl</code>, <code>data/splits/airline.json</code>, <code>agents/airline/v*/system.md</code>. External numbers: three research passes on 2026-09-28, each claim checked at the linked source; PRs and vendor READMEs are self-reported and marked so. Design system: the project's own Field Guide (<code>DESIGN.md</code> §5).
+</footer>
+
+</body>
+</html>
