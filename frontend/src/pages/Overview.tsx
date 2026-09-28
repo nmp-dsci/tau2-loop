@@ -32,6 +32,10 @@ export function Overview() {
   const real = (runs ?? []).filter((r) => !r.dry_run && r.summary?.n_scored);
   const cycles = Object.values(ledger ?? {}).flat();
   const promoted = cycles.filter((e) => e.outcome?.verdict === 'promote').length;
+  // a cycle whose gate has not run yet is neither held nor rejected
+  const pending = cycles.filter((e) => !e.outcome || e.outcome.verdict === 'pending').length;
+  // `make challenge` cycles: gated like the rest, but no optimiser session wrote the challenger
+  const byHand = cycles.filter((e) => e.kind).length;
   const optTokens = cycles.reduce((n, e) => n + (e.tokens?.optimiser_in ?? 0) + (e.tokens?.optimiser_out ?? 0), 0);
   const scoredDomains = (domains ?? []).filter((d) => d.champion);
   const champPassed = scoredDomains.reduce((n, d) => n + (d.champion?.passed ?? 0), 0);
@@ -71,7 +75,9 @@ export function Overview() {
           <div className="label">loop cycles</div>
           <div className="n">{cycles.length}</div>
           <div className="b">
-            {promoted} promoted · {cycles.length - promoted} held or rejected · {fmtK(optTokens)} optimiser tokens
+            {promoted} promoted · {cycles.length - promoted - pending} held or rejected
+            {pending ? ` · ${pending} pending` : ''} · {fmtK(optTokens)} optimiser tokens
+            {byHand ? ` · ${byHand} of ${cycles.length} a hand-made challenger, no optimiser` : ''}
           </div>
         </div>
         <div className="kpi">

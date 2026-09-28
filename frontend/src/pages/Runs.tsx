@@ -28,6 +28,14 @@ function CheckCell({ c, what }: { c?: Check; what: string }) {
 
 function PassK({ r, k }: { r: RunMeta; k: number }) {
   const v = r.summary?.pass_hat_k[`pass^${k}`];
+  // a run is scored when it finishes: until then it has no summary to show
+  if (k === 1 && !r.summary && !r.finished_at) {
+    return (
+      <td className="num muted" title="scored when the run finishes">
+        running
+      </td>
+    );
+  }
   if (v == null) return <td className="num muted">—</td>;
   if (k === 1) {
     return (
@@ -39,7 +47,7 @@ function PassK({ r, k }: { r: RunMeta; k: number }) {
   return <td className="num mono">{fmtPct(v)}</td>;
 }
 
-type Snapshot = { experiment: string | null; tracking_uri?: string; runs: { name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
+type Snapshot = { experiment: string | null; tracking_uri?: string; runs: { mlflow_run_id?: string; name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
 
 export function Runs() {
   const [lens, setLens] = useLens();
@@ -193,7 +201,7 @@ export function Runs() {
             </thead>
             <tbody>
               {snap.runs.map((r) => (
-                <tr key={r.name}>
+                <tr key={r.mlflow_run_id ?? r.name}>
                   <td className="sub mono">{shortRun(r.name)}</td>
                   <td>{r.tags.kind ?? '—'}</td>
                   <td>{r.tags.domain ? domainLabel(r.tags.domain) : '—'}</td>

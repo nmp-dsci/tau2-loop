@@ -101,14 +101,22 @@ export type LedgerEntry = {
   champion: string;
   champion_run?: string;
   challenger: string | null;
-  optimiser_model?: string;
+  /** `make challenge`: a version no optimiser wrote (e.g. `model swap`), gated like a loop's
+   * challenger. A loop cycle has no `kind`; one of these has no optimiser (both fields null). */
+  kind?: string;
+  forked_from?: string | null;
+  /** the agent.yaml lines that differ from the source, e.g. `model: sonnet → opus` */
+  agent_yaml?: string[];
+  challenger_model?: string;
+  challenger_effort?: string;
+  optimiser_model?: string | null;
   failed: string[];
   diagnoses?: Diagnosis[];
   prompt_diff_summary?: string;
   helper_diff_summary?: string;
   expected_to_fix?: string[];
   risks?: string[];
-  optimiser?: { turns: number; duration_ms: number; cost_usd_est: number | null; error: string | null };
+  optimiser?: { turns: number; duration_ms: number; cost_usd_est: number | null; error: string | null } | null;
   tokens?: Record<string, number>;
   outcome?: Outcome;
   at?: string;

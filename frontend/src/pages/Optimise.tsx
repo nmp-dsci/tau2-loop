@@ -51,6 +51,10 @@ type DiffPayload = {
     expected_to_fix: string[];
     risks: string[];
     changes?: Change[];
+    /** a `fork`: `model swap`, the version it copied, the agent.yaml lines that changed */
+    kind?: string;
+    forked_from?: string;
+    agent_yaml?: string[];
   } | null;
   cycles: LedgerEntry[];
 };
@@ -81,6 +85,14 @@ function commentaryFor(h: Hunk, changes: Change[], file: string): Change[] {
 
 function best(runs: RunMeta[], split: string): RunMeta | undefined {
   return runs.filter((r) => r.split === split && r.summary?.n_scored).slice(-1)[0];
+}
+
+/** A cycle no optimiser wrote (`make challenge`), named for what it changed:
+ * `model swap v3 → v5 (Claude Opus 5.5, medium)`. Null for a loop cycle. */
+function handMade(e: LedgerEntry | undefined): string | null {
+  if (!e?.kind) return null;
+  const model = [e.challenger_model, e.challenger_effort].filter(Boolean).join(', ');
+  return `${e.kind} ${e.forked_from ?? e.champion} → ${e.challenger ?? '—'}${model ? ` (${model})` : ''}`;
 }
 
 /** What the gate did with one task, by the ledger's own three lists. */
@@ -229,9 +241,15 @@ export function Optimise() {
                   </td>
                   <td className="num">{e.outcome?.passes ?? '—'}</td>
                   <td className="num">{e.outcome?.test_passes ?? '—'}</td>
-                  <td className="wrap small">{e.prompt_diff_summary || '—'}</td>
-                  <td className="small nw">
-                    {e.optimiser_model ?? '—'}
+                  <td className="wrap small">
+                    {e.kind && e.agent_yaml?.length
+                      ? `agent.yaml: ${e.agent_yaml.join('; ')}`
+                      : e.prompt_diff_summary || '—'}
+                  </td>
+                  {/* a hand-made row names its fork in the path line, which must wrap, not clip */}
+                  <td className={`small ${handMade(e) ? 'wrap' : 'nw'}`}>
+                    {handMade(e) ? 'none' : (e.optimiser_model ?? '—')}
+                    {handMade(e) && <span className="path">{handMade(e)}</span>}
                     {e.optimiser && (
                       <span className="path">
                         {e.optimiser.turns} turns · {fmtS(e.optimiser.duration_ms)}
@@ -258,7 +276,8 @@ export function OptimiseRound() {
   const { domain = 'airline', version = '' } = useParams();
   const [lens, setLens] = useLens();
   const step = lens.get('step') ?? 'diagnose';
-  const [file, setFile] = useState('system.md');
+  // null until a file tab is picked: the round opens on the first file it changed
+  const [file, setFile] = useState<string | null>(null);
   const nav = useNavigate();
   const { data: agents } = useGet<{ versions: AgentInfo[]; registry: Registries }>(
     `/api/agents?domain=${encodeURIComponent(domain)}`,
@@ -277,7 +296,9 @@ export function OptimiseRound() {
   const rb = best(data.b.runs, 'train');
   const ta = best(data.a.runs, 'test');
   const tb = best(data.b.runs, 'test');
-  const cur = data.files.find((f) => f.name === file) ?? data.files[0];
+  const cur =
+    data.files.find((f) => f.name === (file ?? data.files.find((x) => x.changed)?.name)) ??
+    data.files[0];
   const changes = data.diagnosis?.changes ?? [];
   const added = data.files.reduce((n, f) => n + f.added, 0);
   const removed = data.files.reduce((n, f) => n + f.removed, 0);
@@ -295,7 +316,7 @@ export function OptimiseRound() {
         </button>
       </p>
       <h2 style={{ marginTop: 0 }}>
-        {cycle ? `Cycle ${cycle.cycle}` : 'A version'} — {parent} → {version}:{' '}
+        {cycle ? `Cycle ${cycle.cycle}` : 'A version'} — {handMade(cycle) ?? `${parent} → ${version}`}:{' '}
         {cycle?.outcome?.verdict ?? 'not produced by the loop'}
       </h2>
 
@@ -377,10 +398,33 @@ export function OptimiseRound() {
               <dt>helper</dt>
               <dd>{data.diagnosis.helper_diff_summary}</dd>
             </dl>
-            <DiagnosisTable rows={data.diagnosis.diagnoses} cycle={cycle} />
+            {data.diagnosis.kind && !data.diagnosis.diagnoses.length ? (
+              <div className="empty">
+                {data.b.name} is a {data.diagnosis.kind} of {data.diagnosis.forked_from ?? parent}
+                {data.diagnosis.agent_yaml?.length ? ` (${data.diagnosis.agent_yaml.join('; ')})` : ''}:
+                no optimiser read the failures, so nothing was diagnosed.{' '}
+                {cycle ? (
+                  <>
+                    The gate scored it against {cycle.champion} on the same train tasks, as it
+                    scores a loop challenger.
+                  </>
+                ) : (
+                  <>
+                    No gate has scored it; <code>make challenge</code> scores a fork against the
+                    champion with the loop's own gate.
+                  </>
+                )}
+              </div>
+            ) : (
+              <DiagnosisTable rows={data.diagnosis.diagnoses} cycle={cycle} />
+            )}
             {data.diagnosis.risks?.length ? (
               <details>
-                <summary>risks the optimiser named</summary>
+                <summary>
+                  {data.diagnosis.kind
+                    ? `risks named for the ${data.diagnosis.kind}`
+                    : 'risks the optimiser named'}
+                </summary>
                 <ul>
                   {data.diagnosis.risks.map((r, i) => (
                     <li key={i} className="small">
@@ -521,10 +565,18 @@ export function OptimiseRound() {
               {cycle.outcome?.still_failed?.length ? (
                 <span className="chip no">still failed {cycle.outcome.still_failed.length}</span>
               ) : null}
+              {/* two chips, not one: a chip does not wrap, and one long one overflows a phone */}
               {cycle.tokens && (
                 <span className="chip">
-                  tokens opt {fmtK(cycle.tokens.optimiser_in)}/{fmtK(cycle.tokens.optimiser_out)} ·
-                  eval agent {fmtK(cycle.tokens.eval_agent_in)}/{fmtK(cycle.tokens.eval_agent_out)}
+                  {cycle.tokens.optimiser_in != null
+                    ? `tokens opt ${fmtK(cycle.tokens.optimiser_in)}/${fmtK(cycle.tokens.optimiser_out)}`
+                    : 'no optimiser tokens'}
+                </span>
+              )}
+              {cycle.tokens && (
+                <span className="chip">
+                  tokens eval agent {fmtK(cycle.tokens.eval_agent_in)}/
+                  {fmtK(cycle.tokens.eval_agent_out)}
                 </span>
               )}
               {cycle.outcome?.challenger_run && (
