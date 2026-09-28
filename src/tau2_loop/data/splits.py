@@ -71,20 +71,31 @@ def _write_task_extract(domain: str, ids: list[str]) -> Path:
     tasks = [t for t in load_tasks(domain, None) if t.id in wanted]
     env_kwargs = {"retrieval_variant": "bm25"} if domain == "banking_knowledge" else {}
     env = build_environment(domain, env_kwargs=env_kwargs)
-    tools = [
-        {"name": t.name, "description": (t.openai_schema.get("function") or {}).get("description")}
-        for t in env.get_tools()
-    ]
     doc = {
         "domain": domain,
         "policy": env.get_policy(),
         "policy_words": len(env.get_policy().split()),
-        "tools": tools,
+        "tools": [_tool_row(env.tools, t) for t in env.get_tools()],
+        # the customer's own tools (telecom's phone, banking's app): the user simulator calls these
+        "user_tools": [_tool_row(env.user_tools, t) for t in env.get_user_tools()]
+        if env.user_tools is not None
+        else [],
         "tasks": [t.model_dump(mode="json") for t in tasks],
     }
     p = TASKS_DIR / f"{domain}.json"
     p.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
     return p
+
+
+def _tool_row(kit: Any, tool: Any) -> dict[str, Any]:
+    """A tool as the viewer shows it: `type` is tau2's own read / write / think / generic,
+    `mutates` whether replaying it changes the database (what a state rebuild re-runs)."""
+    return {
+        "name": tool.name,
+        "description": (tool.openai_schema.get("function") or {}).get("description"),
+        "type": kit.tool_type(tool.name).value,
+        "mutates": bool(kit.tool_mutates_state(tool.name)),
+    }
 
 
 def read_split(domain: str) -> dict[str, Any]:

@@ -7,7 +7,9 @@ import json
 from fastapi.testclient import TestClient
 
 from tau2_loop.config import RUNS_DIR
-from tau2_loop.serving.app import create_app, trace_events
+from tau2_loop.serving.app import create_app, trace_events, trace_messages
+
+V2_RUN = "20260915T132148Z_airline_v2_train"
 
 
 def client() -> TestClient:
@@ -185,3 +187,67 @@ def test_a_review_is_refused_in_the_demo_image(monkeypatch) -> None:  # type: ig
     monkeypatch.setenv("DEMO_MODE", "1")
     r = client().post("/api/review/run/task/t1", json={"verdict": "agree"})
     assert r.status_code == 403
+
+
+def test_every_committed_tool_result_pairs_with_exactly_one_call() -> None:
+    """The Agent tab pairs a result with its call by id; every committed trace must allow it."""
+    checked = 0
+    for trace in sorted(RUNS_DIR.glob("*/traces/*.json")):
+        msgs = trace_messages(json.loads(trace.read_text()))
+        calls = [c["id"] for m in msgs for c in m["tool_calls"]]
+        results = [m["id"] for m in msgs if m["role"] == "tool"]
+        assert len(calls) == len(set(calls)), f"{trace}: a call id repeats"
+        assert sorted(results) == sorted(calls), (
+            f"{trace}: a result without its call, or a call without its result"
+        )
+        checked += len(calls)
+    assert checked > 1000
+
+
+def test_a_conversation_carries_messages_the_task_and_typed_tools() -> None:
+    body = client().get(f"/api/runs/{V2_RUN}/22/t1").json()
+    msgs = body["messages"]
+    assert [m["i"] for m in msgs] == list(range(len(msgs)))
+    # τ²'s greeting is a fixed string: no usage; every later agent message has some
+    assert msgs[0]["role"] == "assistant" and msgs[0]["usage"] is None
+    assert all(m["usage"] for m in msgs[1:] if m["role"] == "assistant")
+    assert body["task"]["id"] == "22" and body["task"]["evaluation_criteria"]["actions"]
+    types = {t["name"]: t["type"] for t in body["tools"]}
+    assert types["update_reservation_flights"] == "write" and types["get_user_details"] == "read"
+    assert body["user_tools"] == []  # airline's customer has no tools of their own
+
+
+def test_telecom_lists_the_customers_own_tools() -> None:
+    body = client().get("/api/domains/telecom").json()
+    ext = json.loads((RUNS_DIR.parent / "data" / "tasks" / "telecom.json").read_text())
+    assert body["tools"] == ext["tools"]
+    assert {t["name"] for t in ext["user_tools"]} >= {
+        "toggle_airplane_mode",
+        "check_network_status",
+    }
+
+
+def test_a_run_serves_the_agent_it_ran_with() -> None:
+    c = client()
+    v2 = c.get(f"/api/runs/{V2_RUN}/agent").json()
+    assert v2["agent"] == "v2" and v2["hooks"]["extra_context"] is True
+    p = v2["prompt"]
+    # the policy sits in the slot, and extra_context() is appended after it
+    assert p["slotted"] and p["policy"] in p["text"] and p["extra_context"]
+    assert p["text"].endswith(p["extra_context"])
+    v0 = c.get("/api/runs/20260915T075151Z_airline_v0_train/agent").json()
+    assert v0["hooks"] == {"extra_context": False, "on_tool_call": False, "on_reply": False}
+    assert "helper.py" not in v0["files"] and v0["prompt"]["extra_context"] is None
+    assert c.get("/api/runs/nope/agent").status_code == 404
+
+
+def test_the_prompt_shown_is_the_prompt_the_agent_builds() -> None:
+    """One composition, two callers: the tab's prompt and `LoopAgent.system_prompt()`."""
+    from tau2_loop.agent.factory import LoopAgent
+    from tau2_loop.agent.versions import load_version
+
+    shown = client().get(f"/api/runs/{V2_RUN}/agent").json()
+    version = load_version("airline", "v2")
+    assert version.fingerprint == shown["fingerprint"][:12]
+    agent = LoopAgent(tools=[], domain_policy=shown["prompt"]["policy"], version=version)
+    assert agent.system_prompt() == shown["prompt"]["text"]

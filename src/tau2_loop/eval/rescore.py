@@ -15,6 +15,7 @@ import json
 from typing import Any
 
 from tau2_loop.config import RUNS_DIR, quiet_tau2
+from tau2_loop.eval.replay import env_kwargs_for
 
 
 def rescore_run(run_id: str) -> dict[str, Any]:
@@ -36,14 +37,8 @@ def rescore_run(run_id: str) -> dict[str, Any]:
         task = tasks[sim.task_id]
         # The same environment the live evaluation built (banking: retrieval variant,
         # the task for golden retrieval, the read-log allowlist), else the replay differs.
-        env_kwargs: dict[str, Any] = {}
-        if domain == "banking_knowledge":
-            from tau2.data_model.simulation import TextRunConfig
-            from tau2.runner.build import _build_env_kwargs
-
-            env_kwargs = _build_env_kwargs(
-                TextRunConfig(domain=domain, retrieval_config="bm25"), task
-            )
+        # Shared with the Agent tab's playground, so the two cannot drift apart.
+        env_kwargs = env_kwargs_for(domain, task)
         recorded = float(sim.reward_info.reward) if sim.reward_info else 0.0
         basis = set(task.evaluation_criteria.reward_basis) if task.evaluation_criteria else set()
         components: dict[str, float] = {}

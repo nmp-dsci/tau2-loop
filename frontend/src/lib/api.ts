@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 export const DOMAINS = ['airline', 'retail', 'telecom', 'banking_knowledge'] as const;
 export type Domain = (typeof DOMAINS)[number];
 
-export type Health = { status: string; mode: 'demo' | 'live'; champions: Record<string, string | null>; code_sha: string; domains: string[]; mlflow_url?: string; mlflow_embeddable?: boolean };
+export type Health = { status: string; mode: 'demo' | 'live'; champions: Record<string, string | null>; code_sha: string; domains: string[]; mlflow_url?: string; mlflow_embeddable?: boolean; writable?: boolean; playground?: boolean };
 export type Summary = {
   n: number;
   n_scored: number;
@@ -119,6 +119,90 @@ export type DomainSummary = {
 export type TaskRow = { id: string; split: string; purpose: string | null; relevant_policies: string | null; reason_for_call: string | null; n_actions: number; n_communicate: number; n_nl_assertions: number; n_env_assertions: number; reward_basis: string[] | null };
 export type DomainDetail = { domain: string; split: { seed: number; size: number; base_n: number; method: string; train: string[]; test: string[]; reserve_n: number }; policy: string; policy_words: number; tools: { name: string; description: string | null }[]; tasks: TaskRow[] };
 export type Event = { type: string; [k: string]: unknown };
+
+// ── one conversation, whole (the Agent tab) ──────────────────────────────
+/** A domain tool with tau2's own type; `mutates` is whether a state rebuild re-runs it. */
+export type ToolSpec = { name: string; description: string | null; type: 'read' | 'write' | 'think' | 'generic'; mutates: boolean };
+export type TraceCall = { id: string | null; name: string; arguments: Record<string, unknown>; requestor: string };
+export type TraceMessage = {
+  i: number;
+  role: 'assistant' | 'user' | 'tool' | 'system';
+  content: string | null;
+  tool_calls: TraceCall[];
+  /** a tool result's id is the id of the call it answers */
+  id: string | null;
+  requestor: string | null;
+  turn_idx: number | null;
+  usage: { prompt_tokens: number | null; completion_tokens: number | null } | null;
+  seconds: number | null;
+  error: boolean;
+};
+export type ExpectedAction = { action_id: string; name: string; arguments: Record<string, unknown>; requestor?: string };
+export type RewardInfo = {
+  reward: number;
+  reward_basis?: string[] | null;
+  reward_breakdown?: Record<string, number> | null;
+  db_check?: { db_match: boolean; db_reward: number } | null;
+  action_checks?: { action: ExpectedAction; action_match: boolean; action_reward?: number; tool_type?: string | null }[] | null;
+  communicate_checks?: { info: string; met: boolean; justification?: string }[] | null;
+  nl_assertions?: { nl_assertion: string; met: boolean; justification: string }[] | null;
+  env_assertions?: { env_assertion: { func_name?: string; arguments?: unknown }; met: boolean; reward?: number }[] | null;
+  info?: Record<string, unknown> | null;
+};
+export type Scenario = { reason_for_call?: string | null; known_info?: string | null; unknown_info?: string | null; task_instructions?: string | null };
+export type TaskSpec = {
+  id: string;
+  description?: { purpose?: string | null; relevant_policies?: string | null } | null;
+  user_scenario?: { instructions?: Scenario | string | null } | null;
+  evaluation_criteria?: {
+    actions?: ExpectedAction[] | null;
+    nl_assertions?: string[] | null;
+    communicate_info?: string[] | null;
+    env_assertions?: unknown[] | null;
+    reward_basis?: string[] | null;
+  } | null;
+  user_tools?: string[] | null;
+};
+export type TrialPayload = {
+  task_id: string;
+  trial: number | null;
+  termination_reason: string;
+  duration: number;
+  reward_info: RewardInfo | null;
+  events: Event[];
+  policy_words: number;
+  result: TaskResult;
+  domain: string;
+  messages: TraceMessage[];
+  task: TaskSpec | null;
+  tools: ToolSpec[];
+  user_tools: ToolSpec[];
+};
+/** The agent a run ran with: its snapshot, and the prompt composed exactly as the agent did. */
+export type RunAgent = {
+  run_id: string;
+  domain: string;
+  agent: string;
+  fingerprint: string;
+  config: Record<string, unknown>;
+  files: Record<string, string>;
+  hooks: Record<string, boolean>;
+  prompt: { text: string; system_md_chars: number; policy: string; policy_words: number; extra_context: string | null; slotted: boolean };
+};
+export type DiffRecord = { record: string; fields: { field: string; before: string | null; after: string | null }[] };
+export type PlaygroundResult = {
+  name: string;
+  arguments: Record<string, unknown>;
+  at: number;
+  after_calls: number;
+  requestor: string;
+  content: string;
+  error: boolean;
+  wrote: boolean;
+  diff: DiffRecord[];
+  replayed_writes: number;
+  same_as_recorded: boolean | null;
+};
 
 export async function get<T>(url: string): Promise<T> {
   const r = await fetch(url);

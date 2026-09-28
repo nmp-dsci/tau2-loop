@@ -10,7 +10,8 @@
 # console edit can turn a public URL into a billable one. There is no API key
 # and no CLI login in the environment, and the API has no route that reaches a
 # model. The tau2 submodule is not in the image: every route reads our own
-# committed files.
+# committed files. The one that cannot — the Agent tab's tool playground, which
+# rebuilds tau2's environment — answers 503 here, and the tab says why.
 #
 #   docker build -t tau2loop-demo .
 #   docker run --rm -p 8081:8080 tau2loop-demo    # no env file, no keys

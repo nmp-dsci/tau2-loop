@@ -135,6 +135,7 @@ describe('every address the viewer builds lands on the page it names', () => {
     [agentPath('airline', 'v2'), 'agent'],
     ['/agent', 'agents'],
     [agentPath('airline', 'v2', { node: 'judge' }), 'agent'],
+    [agentPath('airline', 'v2', { run: RUN, trial: '22/t1', node: 'tool:update_reservation_flights', step: '12' }), 'agent'],
     ['/rubric', 'rubric'],
     ['/leaderboard', 'leaderboard'],
     [leaderboardPath({ domain: 'telecom' }), 'leaderboard'],
@@ -147,6 +148,20 @@ describe('every address the viewer builds lands on the page it names', () => {
     [optimisePath('airline', 'v2', { step: 'outcome' }), 'optimise-round'],
   ])('%s → %s', async (url, route) => {
     expect((await land(url)).route).toBe(route);
+  });
+});
+
+describe('the Agent tab lens', () => {
+  it('names a run, a conversation, a node and a step, and reads back unescaped', async () => {
+    const url = agentPath('airline', 'v2', { run: RUN, trial: trialId({ task_id: '22', trial: 1 }), node: 'tool:update_reservation_flights' });
+    expect(url).toBe(`/agent/airline/v2?run=${RUN}&trial=22/t1&node=tool:update_reservation_flights`);
+    expect(await land(url)).toEqual({ path: url, route: 'agent' });
+  });
+
+  it.each(TASKS)('a %s conversation survives the trip through the lens', (_domain, id) => {
+    const url = agentPath('x', 'v0', { trial: trialId({ task_id: id, trial: 3 }) });
+    const got = new URLSearchParams(url.slice(url.indexOf('?'))).get('trial')!;
+    expect(parseTrialId(got)).toEqual({ task: id, trial: 3 });
   });
 });
 

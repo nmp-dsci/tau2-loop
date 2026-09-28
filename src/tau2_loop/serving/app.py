@@ -6,6 +6,10 @@ records a person's verdict on a conversation the judge already scored — the on
 fact here that cannot be a committed file — and it is refused unless the central
 Postgres is reachable and this is not the demo image. The demo image is this
 process with `DEMO_MODE=1` and nothing else.
+
+`POST /api/runs/…/tool` is a POST that writes nothing: the Agent tab's playground
+runs one tool call in a throwaway copy of tau2's environment (`eval/replay.py`).
+It needs tau2, which the demo image does not ship, so there it answers 503.
 """
 
 from __future__ import annotations
@@ -13,19 +17,23 @@ from __future__ import annotations
 import difflib
 import json
 import re
+from functools import lru_cache
 from typing import Any
 
+import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from tau2_loop import __version__
+from tau2_loop.agent.compose import compose, hooks_defined, load_helper_file
 from tau2_loop.agent.versions import list_versions, load_version
 from tau2_loop.config import DOMAINS, FRONTEND_DIST, RUNS_DIR, SMOKE_DOMAIN, settings
 from tau2_loop.data import leaderboard as board
 from tau2_loop.data import pg
 from tau2_loop.data.splits import read_split, read_task_extract
+from tau2_loop.eval import replay
 from tau2_loop.eval import review as review_store
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.profile import profile
@@ -34,6 +42,16 @@ from tau2_loop.eval.runner import list_runs, load_run
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tracking.registry import read_all, read_registry
 from tau2_loop.tracking.snapshot import read_snapshot
+
+
+class ToolIn(BaseModel):
+    """One playground call: a tool, its arguments, and the message whose state it runs in."""
+
+    name: str
+    arguments: dict[str, Any] = {}
+    at: int
+    after_calls: int = 0
+    requestor: str = "assistant"
 
 
 class ReviewIn(BaseModel):
@@ -63,6 +81,8 @@ def create_app() -> FastAPI:
             # whether a person can record a review here: the demo image cannot, and
             # neither can a checkout with the central Postgres stopped
             "writable": (not s.demo_mode) and pg.reachable(),
+            # whether the Agent tab's playground can run: it needs tau2, which the image lacks
+            "playground": replay.available(),
         }
 
     @app.get("/api/stats")
@@ -332,25 +352,95 @@ def create_app() -> FastAPI:
             "policy_words": len(str(t.get("policy") or "").split()),
         }
 
-    @app.get("/api/runs/{run_id}/{task_id}/{trial}")
-    def trial(run_id: str, task_id: str, trial: str) -> dict[str, Any]:
-        """One conversation, addressed the way the viewer addresses it: task id and
-        `t<n>`. The trace file name (`eval/runner.py` slugs the task id) stays on disk."""
-        m = re.fullmatch(r"t(\d+)", trial)
-        if not m:
-            raise HTTPException(404, "no such trial")
-        n = int(m.group(1))
+    @app.get("/api/runs/{run_id}/agent")
+    def run_agent(run_id: str) -> dict[str, Any]:
+        """The agent a run ran with, from the run's own snapshot (`runs/<id>/agent/`), not
+        `agents/`: the run folder is the record. The prompt is composed by the same
+        function the agent uses, with the policy the trace recorded."""
         try:
             meta, results = load_run(run_id)
         except FileNotFoundError as e:
             raise HTTPException(404, "no such run") from e
-        row = next((r for r in results if r.task_id == task_id and r.trial == n), None)
-        if row is None:
-            # the pre-grammar address carried a slugged task id; fall back to the slug
-            row = next((r for r in results if slug(r.task_id) == task_id and r.trial == n), None)
-        if row is None or not row.trace:
-            raise HTTPException(404, "no such conversation")
-        return {**trace(run_id, row.trace), "result": row.__dict__, "domain": meta.domain}
+        snap = RUNS_DIR / run_id / "agent"
+        files = {
+            n: (snap / n).read_text()
+            for n in ("system.md", "helper.py", "agent.yaml")
+            if (snap / n).is_file()
+        }
+        if "system.md" not in files:
+            raise HTTPException(404, "this run has no agent snapshot")
+        policy = _recorded_policy(run_id, [r.trace for r in results]) or str(
+            read_task_extract(meta.domain).get("policy") or ""
+        )
+        helper = load_helper_file(
+            snap / "helper.py" if "helper.py" in files else None, f"tau2_loop_run_helper_{run_id}"
+        )
+        c = compose(files["system.md"], policy, helper)
+        return {
+            "run_id": run_id,
+            "domain": meta.domain,
+            "agent": meta.agent,
+            "fingerprint": meta.fingerprint,
+            "config": yaml.safe_load(files.get("agent.yaml") or "") or {},
+            "files": files,
+            "hooks": hooks_defined(helper),
+            "prompt": {
+                "text": c.text,
+                "system_md_chars": len(c.system_md),
+                "policy": c.policy,
+                "policy_words": len(c.policy.split()),
+                "extra_context": c.extra_context,
+                "slotted": c.slotted,
+            },
+        }
+
+    @app.get("/api/runs/{run_id}/{task_id}/{trial}")
+    def trial(run_id: str, task_id: str, trial: str) -> dict[str, Any]:
+        """One conversation, addressed the way the viewer addresses it: task id and
+        `t<n>`. The trace file name (`eval/runner.py` slugs the task id) stays on disk.
+
+        Beside the flat `events` the Trace page reads, it carries every message whole
+        (ids, so a result pairs with its call; usage; timing), the task spec, and the
+        domain's tools with tau2's own read/write type, for the Agent tab's graph."""
+        meta, row = _conversation(run_id, task_id, trial)
+        t = json.loads((RUNS_DIR / run_id / "traces" / row.trace).read_text())
+        ext = read_task_extract(meta.domain)
+        spec = next((x for x in ext.get("tasks", []) if x.get("id") == row.task_id), None)
+        return {
+            **trace(run_id, row.trace),
+            "result": row.__dict__,
+            "domain": meta.domain,
+            "messages": trace_messages(t),
+            "task": spec,
+            "tools": ext.get("tools") or [],
+            "user_tools": ext.get("user_tools") or [],
+        }
+
+    @app.post("/api/runs/{run_id}/{task_id}/{trial}/tool")
+    def playground(run_id: str, task_id: str, trial: str, body: ToolIn) -> dict[str, Any]:
+        """Run one tool call against the database as it stood at message `at`.
+
+        Writes nothing: the environment is rebuilt in memory for this call and dropped.
+        Calls no model. Answers 503 where tau2 is not installed (the demo image)."""
+        if not replay.available():
+            raise HTTPException(
+                503,
+                "the playground needs tau2, which the demo image does not ship: "
+                "run the viewer from a checkout (`make dev`)",
+            )
+        meta, row = _conversation(run_id, task_id, trial)
+        try:
+            conv = _loaded_conversation(run_id, row.trace, meta.domain, row.task_id)
+            return replay.run_tool(
+                conv,
+                name=body.name,
+                arguments=body.arguments,
+                at=body.at,
+                after_calls=body.after_calls,
+                requestor=body.requestor,
+            )
+        except replay.ReplayError as e:
+            raise HTTPException(422, str(e)) from e
 
     @app.get("/api/leaderboard")
     def leaderboard() -> dict[str, Any]:
@@ -494,6 +584,43 @@ def create_app() -> FastAPI:
 
     _mount_frontend(app)
     return app
+
+
+def _conversation(run_id: str, task_id: str, trial: str) -> tuple[Any, Any]:
+    """The run and the results row for `task_id` / `t<n>`, or a 404 that says which is missing."""
+    m = re.fullmatch(r"t(\d+)", trial)
+    if not m:
+        raise HTTPException(404, "no such trial")
+    n = int(m.group(1))
+    try:
+        meta, results = load_run(run_id)
+    except FileNotFoundError as e:
+        raise HTTPException(404, "no such run") from e
+    row = next((r for r in results if r.task_id == task_id and r.trial == n), None)
+    if row is None:
+        # the pre-grammar address carried a slugged task id; fall back to the slug
+        row = next((r for r in results if slug(r.task_id) == task_id and r.trial == n), None)
+    if row is None or not row.trace:
+        raise HTTPException(404, "no such conversation")
+    return meta, row
+
+
+@lru_cache(maxsize=32)
+def _loaded_conversation(run_id: str, trace_name: str, domain: str, task_id: str) -> Any:
+    """A committed conversation as tau2 objects. Run folders never change once scored,
+    so a parsed trace is safe to keep; the environment built from it never is."""
+    return replay.load_conversation(run_id, trace_name, domain, task_id)
+
+
+def _recorded_policy(run_id: str, traces: list[str]) -> str | None:
+    """The policy the agent was actually given, as the first trace recorded it."""
+    for name in traces:
+        p = RUNS_DIR / run_id / "traces" / name
+        if name and p.is_file():
+            policy = json.loads(p.read_text()).get("policy")
+            if policy:
+                return str(policy)
+    return None
 
 
 def _no_db() -> str:
@@ -656,6 +783,45 @@ def trace_events(t: dict[str, Any]) -> list[dict[str, Any]]:
         elif role in {"user", "assistant"}:
             events.append({"type": role, "text": str(m.get("content") or "")})
     return events
+
+
+def trace_messages(t: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every message whole, in order: what `trace_events` flattens away, kept.
+
+    `id` pairs a tool result with the call that asked for it; `requestor` says whether
+    the agent or the simulated customer made a call; `usage` and `seconds` are the cost
+    of the model call that produced the message (absent on tau2's fixed greeting)."""
+    out: list[dict[str, Any]] = []
+    for i, m in enumerate(t.get("messages") or []):
+        u = m.get("usage") or None
+        out.append(
+            {
+                "i": i,
+                "role": m.get("role"),
+                "content": m.get("content"),
+                "tool_calls": [
+                    {
+                        "id": c.get("id"),
+                        "name": c.get("name"),
+                        "arguments": c.get("arguments") or {},
+                        "requestor": c.get("requestor") or m.get("role"),
+                    }
+                    for c in (m.get("tool_calls") or [])
+                ],
+                "id": m.get("id"),
+                "requestor": m.get("requestor"),
+                "turn_idx": m.get("turn_idx"),
+                "usage": {
+                    "prompt_tokens": u.get("prompt_tokens"),
+                    "completion_tokens": u.get("completion_tokens"),
+                }
+                if u
+                else None,
+                "seconds": m.get("generation_time_seconds"),
+                "error": bool(m.get("error")),
+            }
+        )
+    return out
 
 
 def _mount_frontend(app: FastAPI) -> None:

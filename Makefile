@@ -72,8 +72,8 @@ db-smoke: ## zero-LLM proof this project can reach its database and read its own
 gate: ## the CI gate: every champion re-scores offline to what its registry says
 	uv run tau2loop gate
 
-dev: ## run the API on :$(API_PORT) (frontend: cd frontend && npm run dev)
-	uv run tau2loop serve --port $(API_PORT)
+dev: ## run the API on :$(API_PORT), reloading on code changes (frontend: cd frontend && npm run dev)
+	uv run tau2loop serve --port $(API_PORT) --reload
 
 viewer: ## build the frontend and serve it with the API on :$(API_PORT)
 	cd frontend && npm run build

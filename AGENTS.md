@@ -119,12 +119,23 @@ make test · make lint
 | Leaderboard | `/leaderboard` | who else has tried, and why we are not comparable yet |
 | Runs | `/runs/<run>[?vs=<run>]` | what we ran, what it cost, and the gate against another run |
 | Optimise | `/optimise/<domain>/<version>` | a round: diagnose → propose → outcome |
-| Agent | `/agent/<domain>/<version>` | the adapter figure, clickable; the version's own files |
+| Agent | `/agent/<domain>/<version>?run=&trial=&node=&step=` | one conversation drawn as the agent in its harness; each node's inputs and outputs; a tool playground (plan s05) |
 | Review | `/review/<run>/<task>/t<n>` | what a person thought of what the judge scored (writes) |
 
 The grammar is `frontend/src/lib/url.ts`: one id per thing, the path names the
 subject, the query holds the lens, and a detail opens inside its list. Every
 address published before it redirects — `routes.test.tsx` asserts each one.
+
+The Agent tab (`lib/agentgraph.tsx`) reads three routes. `GET /api/runs/<run>/<task>/t<n>`
+returns every message whole (ids pair a result with its call), the task spec, and the
+domain's tools typed read/write from `data/tasks/<domain>.json` (the extract carries
+tau2's own `tool_type`, and telecom's and banking's customer-side tools). `GET
+/api/runs/<run>/agent` serves the run's own agent snapshot, with the prompt composed by
+`agent/compose.py`, the one function `LoopAgent.system_prompt()` also calls. `POST
+/api/runs/<run>/<task>/t<n>/tool` is the playground: `eval/replay.py` rebuilds tau2's
+environment at a message (`set_state`, as the evaluator does) and runs one call in it.
+It writes nothing and calls no model; it needs tau2, so the demo image answers 503.
+`/agent` alone reopens the last view in the browser tab, else a champion's first failure.
 
 ## 5 · The loop, precisely
 

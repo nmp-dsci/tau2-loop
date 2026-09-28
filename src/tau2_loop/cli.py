@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -173,11 +174,23 @@ def gate(no_rescore: bool = False) -> None:
 
 
 @app.command()
-def serve(port: int = 8080, host: str = "127.0.0.1") -> None:
-    """Run the API (and the built frontend when frontend/dist exists)."""
+def serve(port: int = 8080, host: str = "127.0.0.1", reload: bool = False) -> None:
+    """Run the API (and the built frontend when frontend/dist exists).
+
+    `--reload` restarts it when the package's code changes, as Vite does for the
+    frontend; without it a long-lived `make dev` serves routes older than the page.
+    """
     import uvicorn
 
-    uvicorn.run("tau2_loop.serving.app:create_app", factory=True, host=host, port=port)
+    uvicorn.run(
+        "tau2_loop.serving.app:create_app",
+        factory=True,
+        host=host,
+        port=port,
+        reload=reload,
+        # the package only: a loop writing runs/ must not restart the server mid-request
+        reload_dirs=[str(Path(__file__).parent)] if reload else None,
+    )
 
 
 @app.command()
