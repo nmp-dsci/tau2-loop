@@ -1,0 +1,38 @@
+# The agent image: the task agent's model call, as a service and nothing else.
+#
+# Three files of ours — `core.py` (prompt in, reply out), `prompting.py` (the
+# reply contract) and `service.py` (POST /v1/chat/completions) — on the Agent
+# SDK, FastAPI and uvicorn. No tau2, no litellm, no repo, no data: the harness
+# sends the composed prompt and the tool schemas, and the model can only answer
+# (no tools, no MCP servers, no settings, an allow-listed environment). The two
+# package `__init__.py` files are written empty here, so importing the core
+# does not pull in the harness's config.
+#
+# Two secrets at run time, never baked in: CLAUDE_CODE_OAUTH_TOKEN (from
+# `claude setup-token`, the subscription login) and AGENT_SERVICE_TOKEN (the
+# bearer token every call must carry). BILLING=subscription is set here, so an
+# ANTHROPIC_API_KEY in the environment is refused, as it is in the harness.
+#
+#   uv run tau2loop agent-service --docker            # builds, then runs on 127.0.0.1:8090
+#   docker build -f Dockerfile.agent -t tau2loop-agent src/tau2_loop/llm   # the context is those files' folder
+
+FROM python:3.12-slim
+
+# Pinned to uv.lock. The SDK wheel carries the CLI binary for this platform.
+RUN pip install --no-cache-dir "claude-agent-sdk==0.2.152" "fastapi==0.141.1" "uvicorn==0.53.0"
+
+WORKDIR /app
+RUN mkdir -p tau2_loop/llm && touch tau2_loop/__init__.py tau2_loop/llm/__init__.py
+COPY core.py prompting.py service.py tau2_loop/llm/
+
+# The CLI refuses bypassPermissions as root; the service runs as its own user.
+RUN useradd --create-home --uid 10001 agent
+USER agent
+
+ENV BILLING=subscription \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+EXPOSE 8080
+CMD ["python", "-m", "uvicorn", "tau2_loop.llm.service:create_app", \
+     "--factory", "--host", "0.0.0.0", "--port", "8080"]

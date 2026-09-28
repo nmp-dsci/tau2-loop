@@ -11,9 +11,12 @@ airline prompt and a retail prompt evolve on their own ledgers.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -132,3 +135,88 @@ def helper_signatures(helper_source: str) -> str:
                 doc = src[i + 1].strip().strip('"').strip("'").strip()
             lines.append(f"{sig}  # {doc}" if doc else sig)
     return "\n".join(lines)
+
+
+def forked_from(domain: str, name: str) -> str | None:
+    """The version a hand-made fork copied its surfaces from (its diagnosis.json says), else None."""
+    p = version_dir(domain, name) / "diagnosis.json"
+    try:
+        v = json.loads(p.read_text()).get("forked_from")
+    except (OSError, ValueError):
+        return None
+    return str(v) if v else None
+
+
+def lineage(domain: str, name: str) -> list[str]:
+    """`name`, then the version it was forked from, and so on back: v3 forked from v0 → [v3, v0]."""
+    out = [name]
+    while (parent := forked_from(domain, out[-1])) and parent not in out:
+        out.append(parent)
+    return out
+
+
+AGENT_YAML_HEADER = (
+    "# Frozen across a loop cycle: the optimiser edits system.md and helper.py only.\n"
+)
+
+
+def fork_version(
+    domain: str, source: str, model: str | None = None, effort: str | None = None
+) -> AgentVersion:
+    """A hand-made version: `source`'s two surfaces unchanged, a different `agent.yaml`.
+
+    The optimiser may not touch `agent.yaml`, so a model or effort change is a
+    fork, not a loop cycle. Its `diagnosis.json` says so (`kind: model swap`,
+    `forked_from`), so the ledger, the Optimise tab and the next optimiser
+    session can tell why the version exists and which held challengers it inherits.
+    """
+    src = load_version(domain, source)
+    cfg = src.config
+    new = AgentConfig(
+        model=model or cfg.model,
+        effort=effort or cfg.effort,
+        tool_mode=cfg.tool_mode,
+        max_steps=cfg.max_steps,
+    )
+    if new == cfg:
+        raise ValueError(f"a fork of {domain}/{source} needs a different model or effort")
+    name = next_version_name(domain)
+    dest = version_dir(domain, name)
+    dest.mkdir(parents=True)
+    for surface in SURFACES:
+        if (src.path / surface).exists():
+            shutil.copyfile(src.path / surface, dest / surface)
+    (dest / "agent.yaml").write_text(
+        AGENT_YAML_HEADER + "".join(f"{k}: {v}\n" for k, v in new.__dict__.items())
+    )
+    changed = [
+        f"{k}: {getattr(cfg, k)} → {getattr(new, k)}"
+        for k in ("model", "effort")
+        if getattr(cfg, k) != getattr(new, k)
+    ]
+    diagnosis: dict[str, Any] = {
+        "kind": "model swap",
+        "forked_from": source,
+        "agent_yaml": changed,
+        "prompt_diff_summary": f"none: {source}'s system.md, unchanged",
+        "helper_diff_summary": f"none: {source}'s helper.py, unchanged"
+        if src.helper is not None
+        else "none: no helper",
+        "diagnoses": [],
+        "expected_to_fix": [],
+        "risks": [
+            "a prompt tuned on one model's failures can over-steer another; the version's own "
+            "train run is its baseline"
+        ],
+        "changes": [
+            {
+                "file": "agent.yaml",
+                "anchor": "model",
+                "what": "; ".join(changed),
+                "why": "a hand-made fork: the optimiser may not change agent.yaml",
+                "task_ids": [],
+            }
+        ],
+    }
+    (dest / "diagnosis.json").write_text(json.dumps(diagnosis, indent=2) + "\n")
+    return load_version(domain, name)

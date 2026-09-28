@@ -21,7 +21,7 @@ from rich.console import Console
 
 from tau2_loop.agent.versions import AgentVersion, load_version
 from tau2_loop.config import DOMAINS, ROOT, RUNS_DIR, SMOKE_DOMAIN, SPLIT_SEED, quiet_tau2, settings
-from tau2_loop.data.splits import split_ids
+from tau2_loop.data.splits import split_ids, split_version
 from tau2_loop.eval.results import (
     Summary,
     TaskResult,
@@ -31,12 +31,18 @@ from tau2_loop.eval.results import (
     summarise,
     write_results,
 )
-from tau2_loop.llm import HARNESS, redact_tree, sdk_model
+from tau2_loop.llm import EFFORT, HARNESS, redact_tree, resolve_model, sdk_model
 
 console = Console()
 
 USER_MODEL = "haiku"
+USER_EFFORT = EFFORT
 JUDGE_MODEL = "haiku"
+JUDGE_EFFORT = EFFORT
+
+# A held service call can sleep through a subscription window's reset (up to
+# core.MAX_WAIT_S), so the HTTP client waits longer than that before giving up.
+SERVICE_TIMEOUT_S = 7 * 3600
 
 TAU2_SHA_FALLBACK = "2174a60"
 
@@ -84,6 +90,20 @@ class RunMeta:
     harness: str = (
         "baseline"  # llm.HARNESS at run time; "baseline" = inherited connector tools + title call
     )
+    # Added with split v2; older run.json files read these defaults.
+    agent_effort: str | None = None
+    user_effort: str | None = None
+    split_version: int | None = None  # 1 = the 20 / 20 cut, 2 = half of base each
+    agent_route: str = "in-process"  # or service:<host:port>, the agent's calls over HTTP
+
+
+def agent_route() -> tuple[str, str | None]:
+    """Where the task agent's model calls go: ('in-process', None) or ('service:<host>', base url)."""
+    url = settings().agent_service_url
+    if not url:
+        return "in-process", None
+    host = url.split("://", 1)[-1].split("/", 1)[0]
+    return f"service:{host}", url
 
 
 def new_run_id(domain: str, version: AgentVersion, split: str) -> str:
@@ -96,19 +116,27 @@ def _run_config(
 ) -> Any:
     from tau2.data_model.simulation import TextRunConfig
 
-    from tau2_loop.agent.factory import AGENT_NAME, VERSION_KEY
+    from tau2_loop.agent.factory import AGENT_NAME, SERVICE_PREFIX, VERSION_KEY, with_effort
 
+    # tau2 writes these into tau2_results.json: provenance only, never a secret
+    # (the service's bearer token is added by the factory at run time).
+    llm_agent = sdk_model(version.config.model)
+    llm_args_agent: dict[str, Any] = with_effort({VERSION_KEY: version.ref}, version.config.effort)
+    _, url = agent_route()
+    if url:
+        llm_agent = SERVICE_PREFIX + resolve_model(version.config.model)
+        llm_args_agent |= {"api_base": f"{url}/v1", "timeout": SERVICE_TIMEOUT_S}
     kwargs: dict[str, Any] = {
         "domain": domain,
         "task_set_name": domain,
         "task_split_name": None if domain == SMOKE_DOMAIN else "base",
         "task_ids": ids,
         "agent": AGENT_NAME,
-        "llm_agent": sdk_model(version.config.model),
-        "llm_args_agent": {VERSION_KEY: version.ref},
+        "llm_agent": llm_agent,
+        "llm_args_agent": llm_args_agent,
         "user": "user_simulator",
         "llm_user": sdk_model(USER_MODEL),
-        "llm_args_user": {},
+        "llm_args_user": with_effort({}, USER_EFFORT),
         "num_trials": trials,
         "max_concurrency": concurrency,
         "seed": seed,
@@ -125,8 +153,10 @@ def _point_judge_at_sdk() -> None:
     """tau2's NL judge names its model as a module constant; route it to the subscription too."""
     import tau2.evaluator.evaluator_nl_assertions as nl
 
+    from tau2_loop.agent.factory import with_effort
+
     nl.DEFAULT_LLM_NL_ASSERTIONS = sdk_model(JUDGE_MODEL)
-    nl.DEFAULT_LLM_NL_ASSERTIONS_ARGS = {}
+    nl.DEFAULT_LLM_NL_ASSERTIONS_ARGS = with_effort({}, JUDGE_EFFORT)
 
 
 def run_eval(
@@ -173,6 +203,10 @@ def run_eval(
         tool_mode=version.config.tool_mode,
         dry_run=dry_run,
         harness=HARNESS,
+        agent_effort=version.config.effort,
+        user_effort=USER_EFFORT,
+        split_version=None if task_ids else split_version(domain),
+        agent_route=agent_route()[0],
     )
     _write_meta(run_dir, meta)
     (run_dir / "agent").mkdir(exist_ok=True)
@@ -180,7 +214,8 @@ def run_eval(
         (run_dir / "agent" / name).write_text(text)
 
     console.rule(
-        f"[bold]{run_id}[/] · {len(ids)} tasks × {trials} trial(s) · {meta.model} · concurrency={concurrency}"
+        f"[bold]{run_id}[/] · {len(ids)} tasks × {trials} trial(s) · {meta.model} "
+        f"({meta.agent_effort}, {meta.agent_route}) · concurrency={concurrency}"
     )
     if dry_run:
         results = [

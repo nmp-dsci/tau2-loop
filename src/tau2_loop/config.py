@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT / ".env")
@@ -31,7 +31,11 @@ FRONTEND_DIST = ROOT / "frontend" / "dist"
 DOMAINS: tuple[str, ...] = ("airline", "retail", "telecom", "banking_knowledge")
 SMOKE_DOMAIN = "mock"
 SPLIT_SEED = 300
-SPLIT_SIZE = 20  # per split, per domain: 20 train + 20 test
+# The cut per domain (data/splits.py). Version 1 drew 20 train + 20 test and
+# held the rest in reserve; version 2 keeps those 40 where they were and deals
+# the reserve out evenly, so train and test are each half of the base set.
+SPLIT_VERSION = 2
+V1_SIZE = 20
 
 # tau2 reads its data dir from this variable; the submodule's own `data/` is the
 # pinned copy, so point there before anything imports tau2.
@@ -60,6 +64,10 @@ class Settings(BaseModel):
     ro_database_url: str = "postgresql://tau2_ro:tau2_ro@localhost:5432/tau2"
     pg_superuser_url: str = "postgresql://nmp:nmp@localhost:5432/tau2"
     code_sha: str = "unknown"
+    # The agent service (llm/service.py). With a URL set, the task agent's calls go over
+    # HTTP to it; the user simulator and the judge stay in-process on the same core.
+    agent_service_url: str = ""
+    agent_service_token: SecretStr = SecretStr("")
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -73,6 +81,8 @@ class Settings(BaseModel):
             ro_database_url=env("RO_DATABASE_URL", str(default["ro_database_url"].default)),
             pg_superuser_url=env("PG_SUPERUSER_URL", str(default["pg_superuser_url"].default)),
             code_sha=env("TAU2LOOP_CODE_SHA", "unknown"),
+            agent_service_url=env("AGENT_SERVICE_URL", "").strip().rstrip("/"),
+            agent_service_token=SecretStr(env("AGENT_SERVICE_TOKEN", "").strip()),
         )
 
 

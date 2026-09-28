@@ -1,53 +1,64 @@
-"""The one place a model is named or a billing path chosen.
+"""The harness's view of the models: names, routes and the billing guard.
 
 Every model call in this repo — the agent under test, tau2's user simulator,
 tau2's NL-assertion judge, the optimiser — goes through the Claude Agent SDK on
 the subscription. Nothing builds an Anthropic client or reads an API key. The
 demo image cannot call a model at all: `require_live()` raises under DEMO_MODE
-before any session starts.
+before any session starts. The model names, the effort and the billing check
+live in `core.py`, the sealed part the agent service ships alone; this module
+adds what only the harness needs (the litellm prefix, the dotenv scrub, the
+optimiser's environment, redaction of files).
 """
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
-from typing import Literal
 
 from tau2_loop.config import settings
-
-MODELS: dict[str, str] = {
-    "haiku": "claude-haiku-4-5",
-    "sonnet": "claude-sonnet-5",
-    "opus": "claude-opus-5",
-}
+from tau2_loop.llm.core import (
+    EFFORT,
+    MODELS,
+    REDACTED_EMAIL,
+    BillingError,
+    Effort,
+    account_email,
+    check_billing,
+)
+from tau2_loop.llm.core import resolve_model as _core_resolve
 
 # tau2 routes a model string through litellm; this prefix routes it to the SDK
 # provider instead (`sdk_provider.py`), so `claude-sdk/claude-haiku-4-5` is a
 # Haiku call on the subscription.
 SDK_PREFIX = "claude-sdk/"
 
-# Every Agent SDK session in this app runs at this effort unless a version's
-# `agent.yaml` pins another one for the task agent.
-Effort = Literal["low", "medium", "high", "xhigh", "max"]
-EFFORT: Effort = "medium"
-
-
-class BillingError(RuntimeError):
-    """The environment would bill the wrong way, or cannot bill at all."""
+__all__ = [
+    "EFFORT",
+    "MODELS",
+    "REDACTED_EMAIL",
+    "SDK_PREFIX",
+    "BillingError",
+    "Effort",
+    "account_email",
+]
 
 
 def resolve_model(name: str) -> str:
-    """`haiku` → `claude-haiku-4-5`; a full model id passes through; the SDK prefix is stripped."""
-    name = name.strip()
-    if name.startswith(SDK_PREFIX):
-        name = name[len(SDK_PREFIX) :]
-    return MODELS.get(name.lower(), name)
+    """`haiku` → `claude-haiku-4-5`; a full model id passes through; the route prefix is stripped."""
+    return _core_resolve(name)
 
 
 def sdk_model(name: str) -> str:
     """The litellm-facing model string for a tau2 role: `claude-sdk/<full id>`."""
     return SDK_PREFIX + resolve_model(name)
+
+
+def model_label(model: str) -> str:
+    """`claude-sonnet-5` → `Claude Sonnet 5`, `haiku` → `Claude Haiku 4.5`: the name a prompt says."""
+    parts = resolve_model(model).split("-")
+    if len(parts) < 2 or parts[0] != "claude":
+        return resolve_model(model)
+    return f"Claude {parts[1].capitalize()} {'.'.join(parts[2:])}".strip()
 
 
 def short_model(model: str) -> str:
@@ -77,24 +88,16 @@ def scrub_injected_key() -> bool:
 
 def require_live() -> None:
     """Refuse to start a model call in a state where the bill would be a surprise."""
-    s = settings()
-    if s.demo_mode:
-        raise BillingError(
-            "DEMO_MODE=1: this deployment serves committed runs and never calls a model"
-        )
     scrub_injected_key()
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if s.billing == "subscription" and key:
-        raise BillingError(
-            "ANTHROPIC_API_KEY is set while BILLING=subscription. Unset one: with a key present the "
-            "CLI bills per token even though the subscription would cover the call."
-        )
-    if s.billing == "api" and not key:
-        raise BillingError("BILLING=api but ANTHROPIC_API_KEY is not set")
+    check_billing()
 
 
 def subscription_env() -> dict[str, str]:
-    """Environment for the Agent SDK child process, with per-token billing made impossible.
+    """Environment for the optimiser's SDK session, with per-token billing made impossible.
+
+    The task agent, the user simulator and the judge run on `core.sealed_env()`,
+    an allow-list; the optimiser's session works on the repo with Bash, so it
+    keeps the parent's environment minus what would bill the wrong way.
 
     Ported from DABStep-loop / ConvFinQA-agent: an `ANTHROPIC_API_KEY` in the
     child makes the CLI bill per token silently, and `CLAUDE_CODE_*` variables
@@ -114,24 +117,6 @@ def subscription_env() -> dict[str, str]:
     # would be paid per turn; this switch stops it.
     env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
     return env
-
-
-REDACTED_EMAIL = "account-email@redacted.invalid"
-
-
-def account_email() -> str:
-    """The subscription account's email, from the CLI's own config; '' when unknown.
-
-    The CLI tells every session whose account it runs under. That sentence
-    reaches the task agent as context, and Haiku on retail v0 used the address
-    as the customer's in 20/20 conversations (`find_user_id_by_email`), which
-    both wasted the first turn and put a real address in every trace.
-    """
-    try:
-        cfg = json.loads((Path.home() / ".claude.json").read_text())
-        return str(cfg.get("oauthAccount", {}).get("emailAddress", "")).strip()
-    except (OSError, ValueError):
-        return ""
 
 
 def redact(text: str) -> str:

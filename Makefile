@@ -9,6 +9,8 @@ CYCLES ?= 1
 OPTIMISER ?= sonnet
 MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
+AGENT_PORT ?= 8090
+KIND ?= gate
 
 help: ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -18,8 +20,14 @@ setup: ## submodule at the pin, python deps (uv) and frontend deps (npm)
 	uv sync
 	cd frontend && npm ci
 
-splits: ## cut the 20 / 20 train / test split per domain (seed 300) → data/splits, data/tasks
+splits: ## cut each domain's base set in half, train / test (seed 300) → data/splits, data/tasks
 	uv run tau2loop splits
+
+fork: ## a new DOMAIN version with the champion's prompt on MODEL= (and/or EFFORT=): a model swap, by hand
+	uv run tau2loop fork --domain $(DOMAIN) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT))
+
+agent-service: ## the agent's model call as a container on 127.0.0.1:$(AGENT_PORT); runs reach it with AGENT_SERVICE_URL
+	uv run tau2loop agent-service --docker --port $(AGENT_PORT)
 
 platform-up: ## start the central MLflow (nmp-central-ai: postgres + minio + mlflow on :5000)
 	$(MAKE) -C ../nmp-central-ai up
@@ -27,8 +35,8 @@ platform-up: ## start the central MLflow (nmp-central-ai: postgres + minio + mlf
 platform-status: ## preflight: the central MLflow must answer /health (runs before every tracked eval)
 	@curl -fsS $(MLFLOW_TRACKING_URI)/health >/dev/null || (echo "central MLflow down at $(MLFLOW_TRACKING_URI): run make platform-up"; exit 1)
 
-smoke: platform-status ## the adapter on the mock domain (10 tasks): agent, user simulator and judge on the subscription
-	uv run tau2loop smoke --concurrency $(CONCURRENCY)
+smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
+	uv run tau2loop smoke --agent $(AGENT) --concurrency $(CONCURRENCY)
 
 eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=)
 	uv run tau2loop eval --domain $(DOMAIN) --agent $(AGENT) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY)
@@ -48,11 +56,11 @@ compare: ## gate CHAMPION=<run> CHALLENGER=<run>
 register: ## register RUN=<run id> as challenger
 	uv run tau2loop register $(RUN)
 
-promote: ## promote RUN=<run id> to champion of its domain
-	uv run tau2loop promote $(RUN)
+promote: ## promote RUN=<run id> to champion of its domain (KIND="model swap" for a fork by fiat)
+	uv run tau2loop promote $(RUN) --kind "$(KIND)"
 
-loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate (OPTIMISER=sonnet)
-	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY)
+loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate → test (OPTIMISER=sonnet, TRIALS=1)
+	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY) --trials $(TRIALS)
 
 ledger: ## print DOMAIN's loop ledger
 	uv run tau2loop ledger --domain $(DOMAIN)
@@ -92,4 +100,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: help setup splits platform-up platform-status smoke eval baselines score rescore compare register promote loop ledger snapshot gate dev viewer demo-up test lint fmt
+.PHONY: help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop ledger snapshot gate dev viewer demo-up test lint fmt

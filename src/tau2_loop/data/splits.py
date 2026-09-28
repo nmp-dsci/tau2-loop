@@ -1,10 +1,15 @@
 """Our own train / test split per domain: `data/splits/<domain>.json`, cut once and committed.
 
 tau2's `train` / `test` lists are fixed choices (and banking has none), so the
-loop draws its own: `random.Random(300).sample(base_ids, 40)`, the first 20
-train, the next 20 test, from the public `base` set of each scored domain. The
+loop draws its own from the public `base` set of each scored domain. Version 1
+drew `random.Random(300).sample(base_ids, 40)`: the first 20 train, the next 20
+test, the rest in reserve. Version 2 (`SPLIT_VERSION`) halves the whole base
+set and keeps what was held out, held out: every version-1 train task stays in
+train, every version-1 test task stays in test, and the reserve, shuffled with
+the same seed, is dealt out evenly — an odd one goes to test. The file keeps
+the version-1 lists under `v1`, so a run on the old cut can be told apart. The
 files are committed so every run, every cycle and every table reads the same
-forty ids; `make splits` rewrites them only when the seed or the size changes.
+ids; `make splits` rewrites them only when the seed or the version changes.
 
 Alongside each split the selected tasks themselves are extracted to
 `data/tasks/<domain>.json` (the task spec as tau2 dumps it, plus the policy),
@@ -18,7 +23,15 @@ import random
 from pathlib import Path
 from typing import Any
 
-from tau2_loop.config import DOMAINS, SPLIT_SEED, SPLIT_SIZE, SPLITS_DIR, TASKS_DIR, quiet_tau2
+from tau2_loop.config import (
+    DOMAINS,
+    SPLIT_SEED,
+    SPLIT_VERSION,
+    SPLITS_DIR,
+    TASKS_DIR,
+    V1_SIZE,
+    quiet_tau2,
+)
 
 SPLITS = ("train", "test")
 
@@ -33,29 +46,49 @@ def _base_task_ids(domain: str) -> list[str]:
     return [t.id for t in load_tasks(domain, None)]
 
 
-def cut(domain: str, seed: int = SPLIT_SEED, size: int = SPLIT_SIZE) -> dict[str, Any]:
-    ids = _base_task_ids(domain)
-    if len(ids) < 2 * size:
-        raise ValueError(f"{domain}: {len(ids)} base tasks, need {2 * size}")
-    drawn = random.Random(seed).sample(ids, 2 * size)
+def cut_ids(ids: list[str], seed: int = SPLIT_SEED, v1_size: int = V1_SIZE) -> dict[str, Any]:
+    """The version-2 cut of a base id list: version 1's draw kept, the reserve dealt out evenly."""
+    if len(ids) < 2 * v1_size:
+        raise ValueError(f"{len(ids)} base tasks, need {2 * v1_size}")
+    drawn = random.Random(seed).sample(ids, 2 * v1_size)
+    v1 = {"train": drawn[:v1_size], "test": drawn[v1_size:]}
+    held = set(drawn)
+    reserve = [t for t in ids if t not in held]
+    dealt = random.Random(seed).sample(reserve, len(reserve))
+    half = len(dealt) // 2  # an odd reserve puts its extra task on the reported side
     return {
-        "domain": domain,
-        "seed": seed,
-        "size": size,
-        "base_n": len(ids),
-        "method": f"random.Random({seed}).sample(base_ids, {2 * size}); first {size} train, next {size} test",
-        "train": drawn[:size],
-        "test": drawn[size:],
-        "reserve_n": len(ids) - 2 * size,
+        "train": v1["train"] + dealt[:half],
+        "test": v1["test"] + dealt[half:],
+        "v1": v1,
     }
 
 
-def write_splits(seed: int = SPLIT_SEED, size: int = SPLIT_SIZE) -> list[Path]:
+def cut(domain: str, seed: int = SPLIT_SEED) -> dict[str, Any]:
+    ids = _base_task_ids(domain)
+    c = cut_ids(ids, seed)
+    return {
+        "domain": domain,
+        "version": SPLIT_VERSION,
+        "seed": seed,
+        "base_n": len(ids),
+        "method": (
+            f"v1: random.Random({seed}).sample(base_ids, {2 * V1_SIZE}), first {V1_SIZE} train, "
+            f"next {V1_SIZE} test; v2 keeps both and deals the remaining {len(ids) - 2 * V1_SIZE} "
+            f"out with random.Random({seed}).sample(reserve, n), first half train, the rest test"
+        ),
+        "train": c["train"],
+        "test": c["test"],
+        "reserve_n": len(ids) - len(c["train"]) - len(c["test"]),
+        "v1": c["v1"],
+    }
+
+
+def write_splits(seed: int = SPLIT_SEED) -> list[Path]:
     SPLITS_DIR.mkdir(parents=True, exist_ok=True)
     TASKS_DIR.mkdir(parents=True, exist_ok=True)
     out: list[Path] = []
     for domain in DOMAINS:
-        split = cut(domain, seed, size)
+        split = cut(domain, seed)
         p = SPLITS_DIR / f"{domain}.json"
         p.write_text(json.dumps(split, indent=2) + "\n")
         out.append(p)
@@ -103,6 +136,13 @@ def read_split(domain: str) -> dict[str, Any]:
     if not p.exists():
         raise FileNotFoundError(f"no split for {domain}: run `make splits`")
     return dict(json.loads(p.read_text()))
+
+
+def split_version(domain: str) -> int | None:
+    """The committed cut's version; None for `mock`, which has no split file."""
+    if domain == "mock":
+        return None
+    return int(read_split(domain).get("version", 1))
 
 
 def split_ids(domain: str, split: str) -> list[str]:

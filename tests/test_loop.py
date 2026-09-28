@@ -42,7 +42,7 @@ def _rows(passes: set[str], ids: list[str]) -> list[TaskResult]:
 
 
 def test_one_cycle_promotes_and_records(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A fake optimiser fixes five tasks and breaks none: promote, test run recorded, ledger complete."""
+    """A fake optimiser fixes five tasks and breaks none: promote, test runs compared, ledger complete."""
     import tau2_loop.config as cfg
     import tau2_loop.eval.runner as runner
     from tau2_loop.loop import ledger as led
@@ -115,11 +115,16 @@ def test_one_cycle_promotes_and_records(tmp_path: Path, monkeypatch: pytest.Monk
     assert o["verdict"] == "promote" and o["passes"] == "10 → 15"
     assert o["fixed"] == ids[10:15] and o["broken"] == []
     assert o["test_run"] and o["test_passes"] == "15/20"
-    assert [c[2] for c in calls] == [
-        "train",
-        "train",
-        "test",
-    ]  # champion, challenger, then test once
+    # champion, challenger, the challenger's test run, then the champion's (it had none)
+    assert [(c[1], c[2]) for c in calls] == [
+        ("v0", "train"),
+        ("v1", "train"),
+        ("v1", "test"),
+        ("v0", "test"),
+    ]
+    tc = o["test_compare"]
+    assert tc["passes"] == "10 → 15" and tc["fixed"] == ids[10:15] and tc["broken"] == []
+    assert o["pass_1"] == "0.500 → 0.750"
     ledger = led.read_ledger("airline")
     assert len(ledger) == 1 and ledger[0]["outcome"]["verdict"] == "promote"
     assert ledger[0]["diagnoses"][0]["task_id"] == "10"
@@ -234,7 +239,7 @@ def test_rejected_optimiser_output_does_not_run_the_challenger(
     monkeypatch.setattr(
         loop_run,
         "_champion_run",
-        lambda d, a, c: (
+        lambda d, a, c, t=1: (
             RunMeta("r0", d, a, "fp", "m", "u", "j", "train", 20, 1, 3, 300, "t"),
             _rows(set(ids[:10]), ids),
         ),
@@ -244,3 +249,35 @@ def test_rejected_optimiser_output_does_not_run_the_challenger(
     entry = asyncio.run(loop_run.run_cycle("retail", "v0", "sonnet", 3))
     assert entry["outcome"]["verdict"] == "rejected" and evals == []
     assert led.read_ledger("retail")[0]["outcome"]["verdict"] == "rejected"
+
+
+def test_a_fork_inherits_its_sources_held_challengers_and_names_its_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v3 = v0's files on Sonnet: the optimiser sees v1 and v2 (held against v0) and says Sonnet."""
+    import shutil
+
+    import tau2_loop.agent.versions as versions
+    import tau2_loop.loop.optimiser as opt
+    from tau2_loop.config import AGENTS_DIR, LOOP_DIR
+    from tau2_loop.loop import ledger as led
+
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path)
+    for v in ("v0", "v1", "v2"):
+        shutil.copytree(AGENTS_DIR / "airline" / v, tmp_path / "airline" / v)
+    shutil.copyfile(LOOP_DIR / "airline" / "ledger.jsonl", tmp_path / "ledger.jsonl")
+    monkeypatch.setattr(led, "ledger_path", lambda d: tmp_path / "ledger.jsonl")
+    v3 = versions.fork_version("airline", "v0", model="sonnet")
+    assert v3.name == "v3"
+    held = opt.held_challengers("airline", "v3")
+    assert [h["challenger"] for h in held] == ["v1", "v2"]
+    assert all(h["champion"] == "v0" for h in held)
+    meta, results = load_run("20260915T132148Z_airline_v2_train")
+    failures = [r for r in results if r.correct is False][:1]
+    prompt = build_prompt(v3, "v4", meta.run_id, failures)
+    assert (
+        "The agent is Claude Sonnet 5" in prompt
+        and "Claude Haiku 4.5) plays the customer" in prompt
+    )
+    assert "a fork of `v0`" in prompt and "agents/airline/v2/" in prompt
+    assert "breaks none" in prompt

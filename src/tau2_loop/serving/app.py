@@ -37,8 +37,8 @@ from tau2_loop.eval import replay
 from tau2_loop.eval import review as review_store
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.profile import profile
-from tau2_loop.eval.results import read_results, slug
-from tau2_loop.eval.runner import list_runs, load_run
+from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
+from tau2_loop.eval.runner import RunMeta, list_runs, load_run
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tracking.registry import read_all, read_registry
 from tau2_loop.tracking.snapshot import read_snapshot
@@ -178,6 +178,7 @@ def create_app() -> FastAPI:
                     "test": len(split.get("test", [])),
                     "reserve_n": split.get("reserve_n"),
                     "seed": split.get("seed"),
+                    "split_version": split.get("version", 1),
                     "policy_words": ext.get("policy_words"),
                     "n_tools": len(ext.get("tools", [])),
                     "reward_bases": _basis_counts(ext),
@@ -313,14 +314,21 @@ def create_app() -> FastAPI:
 
     @app.get("/api/runs")
     def runs(domain: str | None = None) -> list[dict[str, Any]]:
-        return [
-            {
-                **m.__dict__,
-                "mlflow_url": _mlflow_run_url(m.mlflow_run_id),
-                "tokens_per_conversation": _tokens_per_conversation(m.run_id),
-            }
-            for m in list_runs(domain)
-        ]
+        out = []
+        for m in list_runs(domain):
+            path = RUNS_DIR / m.run_id / "results.jsonl"
+            results = read_results(path) if path.exists() else []
+            out.append(
+                {
+                    **m.__dict__,
+                    "mlflow_url": _mlflow_run_url(m.mlflow_run_id),
+                    "tokens_per_conversation": _tokens_per_conversation(results),
+                    # a run scored before Summary.checks existed is aggregated here, from its rows
+                    "checks": (m.summary or {}).get("checks") or check_counts(results),
+                    "split_version": m.split_version or _cut_of(m),
+                }
+            )
+        return out
 
     @app.get("/api/runs/{run_id}")
     def run(run_id: str) -> dict[str, Any]:
@@ -545,7 +553,20 @@ def create_app() -> FastAPI:
     def compare_runs(a: str, b: str) -> dict[str, Any]:
         ma, ra = load_run(a)
         mb, rb = load_run(b)
-        v = compare(ra, rb)
+        # The gate refuses runs over different tasks; a page comparing any two runs (an old cut
+        # against a new one) shows the overlap instead, and says that is what it shows.
+        note = None
+        try:
+            v: Any = compare(ra, rb).__dict__
+        except ValueError as e:
+            common = {r.task_id for r in ra} & {r.task_id for r in rb}
+            try:
+                v = compare(
+                    [r for r in ra if r.task_id in common], [r for r in rb if r.task_id in common]
+                ).__dict__
+                note = f"{e}; the verdict is on the {len(common)} tasks both runs scored"
+            except ValueError as e2:
+                v, note = None, str(e2)
         rows = []
         da = {(r.task_id, r.trial): r for r in ra}
         db = {(r.task_id, r.trial): r for r in rb}
@@ -563,7 +584,8 @@ def create_app() -> FastAPI:
                 }
             )
         return {
-            "verdict": v.__dict__,
+            "verdict": v,
+            "note": note,
             "rows": rows,
             "a": {**ma.__dict__, "mlflow_url": _mlflow_run_url(ma.mlflow_run_id)},
             "b": {**mb.__dict__, "mlflow_url": _mlflow_run_url(mb.mlflow_run_id)},
@@ -646,12 +668,26 @@ def _mlflow_run_url(run_id: str | None) -> str | None:
     return f"{settings().mlflow_tracking_uri.rstrip('/')}/#/experiments/search?runId={run_id}"
 
 
-def _tokens_per_conversation(run_id: str) -> dict[str, int] | None:
+def _cut_of(m: RunMeta) -> int | None:
+    """Which cut an older run's tasks are (its run.json predates `split_version`): 1 or 2, or None."""
+    if m.split not in ("train", "test") or m.domain not in DOMAINS:
+        return None
+    try:
+        s = read_split(m.domain)
+    except FileNotFoundError:
+        return None
+    ids = set(m.task_ids)
+    if ids and ids == set((s.get("v1") or {}).get(m.split) or []):
+        return 1
+    if ids and ids == set(s.get(m.split) or []):
+        return int(s.get("version", 1))
+    return None
+
+
+def _tokens_per_conversation(results: list[TaskResult]) -> dict[str, int] | None:
     """The mean tokens one conversation spent: every role, and the agent's share of it.
     Read from `results.jsonl` rather than the summary in `run.json`, which has no token
     field and, the folder being scored, is never rewritten to gain one."""
-    path = RUNS_DIR / run_id / "results.jsonl"
-    results = read_results(path) if path.exists() else []
     if not results:
         return None
     m = profile(results)["metrics"]

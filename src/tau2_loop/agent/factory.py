@@ -8,9 +8,12 @@ three optional hooks — `on_tool_call`, `on_reply`, `extra_context` — the
 deterministic guards an optimiser can put around the model without touching
 the harness.
 
-`agent.yaml` (frozen) picks the model, effort and tool mode. The version to run
-is passed by the runner through `llm_args["tau2_loop_version"]`, so it lands
-in tau2's own results file as provenance.
+`agent.yaml` (frozen) picks the model, effort and tool mode; the effort
+reaches the provider as `reasoning_effort`. The version to run is passed by the
+runner through `llm_args["tau2_loop_version"]`, so it lands in tau2's own
+results file as provenance. When the runner routes the agent to the service
+(`openai/<model>` with an `api_base`), the bearer token is added here, at run
+time, so it never enters the run config tau2 writes to disk.
 """
 
 from __future__ import annotations
@@ -33,10 +36,23 @@ from tau2.environment.tool import Tool
 
 from tau2_loop.agent.compose import call_hook, compose, load_helper_file
 from tau2_loop.agent.versions import AgentVersion, load_version, parse_ref
+from tau2_loop.config import settings
 from tau2_loop.llm import sdk_model
 
 AGENT_NAME = "tau2_loop"
 VERSION_KEY = "tau2_loop_version"
+SERVICE_PREFIX = "openai/"
+
+
+def with_effort(llm_args: dict[str, Any], effort: str) -> dict[str, Any]:
+    """`reasoning_effort` for a call, and the litellm switch without which a custom provider never sees it."""
+    out = dict(llm_args)
+    out.setdefault("reasoning_effort", effort)
+    allowed = list(out.get("allowed_openai_params") or [])
+    if "reasoning_effort" not in allowed:
+        allowed.append("reasoning_effort")
+    out["allowed_openai_params"] = allowed
+    return out
 
 
 @dataclass
@@ -59,7 +75,15 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
         super().__init__(tools=tools, domain_policy=domain_policy)
         self.version = version
         self.llm = llm or sdk_model(version.config.model)
-        self.llm_args = {k: v for k, v in (llm_args or {}).items() if k != VERSION_KEY}
+        args = {k: v for k, v in (llm_args or {}).items() if k != VERSION_KEY}
+        self.llm_args = with_effort(args, version.config.effort)
+        if self.llm.startswith(SERVICE_PREFIX):
+            token = settings().agent_service_token.get_secret_value()
+            if not token:
+                raise RuntimeError(
+                    "the agent is routed to the service but AGENT_SERVICE_TOKEN is not set"
+                )
+            self.llm_args["api_key"] = token
         self.helper = load_helper(version)
 
     def system_prompt(self) -> str:

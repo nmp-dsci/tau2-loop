@@ -33,9 +33,10 @@ def test_domains_and_tasks() -> None:
     c = client()
     ds = c.get("/api/domains").json()
     assert [d["domain"] for d in ds] == ["airline", "retail", "telecom", "banking_knowledge"]
-    assert all(d["train"] == 20 and d["test"] == 20 for d in ds)
+    # split v2: half of each base set on each side
+    assert [(d["train"], d["test"]) for d in ds] == [(25, 25), (57, 57), (57, 57), (48, 49)]
     airline = c.get("/api/domains/airline").json()
-    assert airline["policy_words"] > 1000 and len(airline["tasks"]) == 40
+    assert airline["policy_words"] > 1000 and len(airline["tasks"]) == 50
     first = airline["tasks"][0]
     t = c.get(f"/api/domains/airline/tasks/{first['id']}").json()
     assert t["id"] == first["id"] and t["split"] in {"train", "test"}
@@ -117,17 +118,17 @@ def test_stats_is_the_overview_in_one_object() -> None:
     ]
     # the four base splits are the benchmark: 50 + 114 + 114 + 97
     assert s["base_total"] == 375
-    assert all(d["train"] == 20 and d["test"] == 20 for d in s["domains"])
+    assert all(d["train"] + d["test"] == d["base_n"] for d in s["domains"])
     assert s["runs_scored"] <= s["runs"] and s["conversations"] > 0
 
 
 def test_rubric_counts_the_checks_and_what_failed() -> None:
     r = client().get("/api/rubric").json()
     airline = next(d for d in r["by_domain"] if d["domain"] == "airline")
-    assert airline["n_tasks"] == 40
+    assert airline["n_tasks"] == 50  # the whole base set since split v2
     # every airline task is judged on NL assertions; only some carry expected actions
-    assert airline["uses"]["nl_assertions"] == 40
-    assert 0 < airline["uses"]["actions"] <= 40
+    assert airline["uses"]["nl_assertions"] == 50
+    assert 0 < airline["uses"]["actions"] <= 50
     f = r["failures"]
     assert f["failed"] > 0
     assert set(f["by_check"]) == {
