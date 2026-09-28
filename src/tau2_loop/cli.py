@@ -230,7 +230,7 @@ def smoke(
 
 
 @app.command("agent-service")
-def agent_service(port: int = 8090, docker: bool = False, build: bool = True) -> None:
+def agent_service(port: int = 8091, docker: bool = False, build: bool = True) -> None:
     """The task agent's model call as a service on 127.0.0.1:PORT (POST /v1/chat/completions).
 
     `--docker` builds `Dockerfile.agent` and runs it, handing the container only

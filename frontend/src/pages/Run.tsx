@@ -43,9 +43,14 @@ type Verdict = {
   p_value: number;
   alpha: number;
   reason: string;
+  trials?: number;
+  champion_pass1?: number;
+  challenger_pass1?: number;
 };
 type ComparePayload = {
-  verdict: Verdict;
+  /** null when the two runs share no comparable tasks; `note` then says why */
+  verdict: Verdict | null;
+  note?: string | null;
   rows: { task_id: string; trial: number; purpose: string; a: TaskResult | null; b: TaskResult | null }[];
   a: RunMeta;
   b: RunMeta;
@@ -288,7 +293,8 @@ export function Run() {
         </table>
       </div>
 
-      {vs && cmp && <Gate cmp={cmp} focus={runId} />}
+      {vs && cmp && cmp.verdict && <Gate cmp={cmp} v={cmp.verdict} focus={runId} />}
+      {vs && cmp && !cmp.verdict && <p className="warn-note v-warn">No comparison: {cmp.note}</p>}
 
       <details>
         <summary>the agent files this run used</summary>
@@ -304,10 +310,10 @@ export function Run() {
   );
 }
 
-function Gate({ cmp, focus }: { cmp: ComparePayload; focus: string }) {
-  const v = cmp.verdict;
+function Gate({ cmp, v, focus }: { cmp: ComparePayload; v: Verdict; focus: string }) {
   const sameShape = cmp.a.domain === cmp.b.domain && cmp.a.split === cmp.b.split;
   const discordant = v.fixed.length + v.broken.length;
+  const conversations = v.n * (v.trials ?? 1);
   return (
     <>
       <h2>
@@ -315,12 +321,13 @@ function Gate({ cmp, focus }: { cmp: ComparePayload; focus: string }) {
         <span className={v.promote ? 'v-ok' : 'v-warn'}>{v.promote ? 'promote' : 'hold'}</span>
       </h2>
       <p>
-        Two runs of the same tasks, paired by task; only the discordant pairs count — {v.fixed.length}{' '}
-        fixed, {v.broken.length} broken of {discordant}. Under "no real difference" each is a coin
-        flip, so p = P(breaks ≤ {v.broken.length} | {discordant}, ½) = {v.p_value.toFixed(3)}, and the
-        gate promotes at p &lt; {v.alpha}. With twenty tasks that is blunt by construction: five fixes
-        and no breaks is the smallest result that clears it.
+        Two runs of the same tasks, paired by task{(v.trials ?? 1) > 1 ? `, each scored by its pass fraction over ${v.trials} trials` : ''};
+        only the tasks that changed count — {v.fixed.length} fixed, {v.broken.length} broken of {discordant}. Under "no real
+        difference" each is a coin flip, so p = P(breaks ≤ {v.broken.length} | {discordant}, ½) = {v.p_value.toFixed(3)}. The
+        gate promotes at p &lt; {v.alpha} (five fixes with no break, seven with one), or when the challenger fixes at least one
+        task and breaks none.
       </p>
+      {cmp.note && <p className="warn-note v-warn">Not the gate's comparison: {cmp.note}.</p>}
       {!sameShape && (
         <p className="warn-note v-warn">
           These two runs are not the same domain and split, so the pairing below is not a gate.
@@ -330,7 +337,7 @@ function Gate({ cmp, focus }: { cmp: ComparePayload; focus: string }) {
         <div className="kpi">
           <div className="label">{cmp.a.agent} · champion</div>
           <div className="n">
-            {v.champion_passed}/{v.n}
+            {v.champion_passed}/{conversations}
           </div>
           <div className="b">
             <Link to={runPath(cmp.a.run_id)}>{shortRun(cmp.a.run_id)}</Link>
@@ -339,7 +346,7 @@ function Gate({ cmp, focus }: { cmp: ComparePayload; focus: string }) {
         <div className="kpi">
           <div className="label">{cmp.b.agent} · challenger</div>
           <div className={`n ${v.challenger_passed > v.champion_passed ? 'ok' : ''}`}>
-            {v.challenger_passed}/{v.n}
+            {v.challenger_passed}/{conversations}
           </div>
           <div className="b">
             <Link to={runPath(cmp.b.run_id)}>{shortRun(cmp.b.run_id)}</Link>

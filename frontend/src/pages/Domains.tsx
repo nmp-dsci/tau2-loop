@@ -29,21 +29,21 @@ export function Domains() {
       </h1>
       <p className="lead">
         τ²-bench ships every task with its answer key. The loop therefore cuts its own split per
-        domain — twenty train, twenty test, drawn once with seed 300 from the public{' '}
-        <code>base</code> set and committed under <code>data/splits/</code> — and the agent reads
-        only the policy and the tools; the scenario and the expected actions stay with the simulator
-        and the evaluator.
+        domain — half of the public <code>base</code> set for train, half for test, drawn with seed
+        300 and committed under <code>data/splits/</code> — and the agent reads only the policy and
+        the tools; the scenario and the expected actions stay with the simulator and the evaluator.
+        This is the cut's second version: the first drew 20 train and 20 test per domain, and both
+        lists sit inside this one on the same side, so no task that was ever test has been trained on.
       </p>
       <div className="tw">
         <table>
-          <caption>Pick a domain to read its policy, its tools and its forty split tasks.</caption>
+          <caption>Pick a domain to read its policy, its tools and every one of its tasks.</caption>
           <thead>
             <tr>
               <th>domain</th>
               <th className="num">base tasks</th>
               <th className="num">train</th>
               <th className="num">test</th>
-              <th className="num">reserve</th>
               <th className="num">policy words</th>
               <th className="num">agent tools</th>
               <th>reward basis (tasks)</th>
@@ -58,7 +58,6 @@ export function Domains() {
                 <td className="num">{d.base_n}</td>
                 <td className="num">{d.train}</td>
                 <td className="num">{d.test}</td>
-                <td className="num">{d.reserve_n}</td>
                 <td className="num">{d.policy_words?.toLocaleString()}</td>
                 <td className="num">{d.n_tools}</td>
                 <td className="small wrap">
@@ -73,8 +72,8 @@ export function Domains() {
       </div>
       <p className="small muted">
         Telecom's base set is 114 of its 2,285 generated tasks (tau2's own <code>base</code> split);
-        banking_knowledge has no tau2 split, so its base is all 97. The reserve is never run in this
-        build.
+        banking_knowledge has no tau2 split, so its base is all 97, and its odd count puts the extra
+        task on the test side. Every base task is train or test; none is held in reserve.
       </p>
     </>
   );
@@ -136,13 +135,13 @@ export function Domain() {
       <DomainChips current={domain} />
       <p className="label">Tasks</p>
       <h1>
-        Forty tasks per domain, split <em>once</em>; the agent never sees a scenario or an expected
+        Every base task, split in half <em>once</em>; the agent never sees a scenario or an expected
         action
       </h1>
       <p className="lead">
         Each task is a user scenario the simulator plays, a purpose the annotator wrote, the policy
         clauses it exercises, and the evaluation criteria the score is a product of. Train tasks feed
-        the optimiser; test tasks are run once per promotion and only reported.
+        the optimiser; test tasks are run once per challenger and only reported.
       </p>
 
       {task && (
@@ -232,7 +231,6 @@ export function Domain() {
             <option value="">all</option>
             <option value="train">train</option>
             <option value="test">test</option>
-            <option value="reserve">reserve</option>
           </select>
         </label>
         <input
@@ -294,8 +292,8 @@ export function Domain() {
         {data.policy_words.toLocaleString()} words)
       </h2>
       <p className="small muted">
-        Split method: <code>{data.split.method}</code>, seed {data.split.seed}, {data.split.base_n}{' '}
-        base tasks.
+        Split method (v{data.split.version ?? 1}): <code>{data.split.method}</code>, seed {data.split.seed},{' '}
+        {data.split.base_n} base tasks.
       </p>
       <details>
         <summary>{data.tools.length} tools the harness exposes to the agent</summary>

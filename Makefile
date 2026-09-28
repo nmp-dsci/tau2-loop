@@ -9,7 +9,7 @@ CYCLES ?= 1
 OPTIMISER ?= sonnet
 MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
-AGENT_PORT ?= 8090
+AGENT_PORT ?= 8091
 KIND ?= gate
 
 help: ## list targets

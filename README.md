@@ -2,9 +2,10 @@
 
 A policy-following customer-support agent for [τ²-bench](https://github.com/sierra-research/tau2-bench)
 on four domains (airline, retail, telecom, banking), run **entirely on the Claude
-subscription** — agent, user simulator and judge all Haiku 4.5 through the Claude
-Agent SDK, no API key — with a scored, versioned, self-improving optimisation
-loop: the same mechanics as [DABStep-loop](https://github.com/nmp-dsci/DABStep-loop).
+subscription** through the Claude Agent SDK, no API key — the agent on the model its
+version's `agent.yaml` names (Sonnet 5 on airline since v3, Haiku 4.5 elsewhere), the
+user simulator and judge on Haiku 4.5 — with a scored, versioned, self-improving
+optimisation loop: the same mechanics as [DABStep-loop](https://github.com/nmp-dsci/DABStep-loop).
 
 - **Plan:** `.lavish/s00_tau2-loop-init-plan.html` — the discovery (splits, scoring,
   judge, tools, budget) and the milestones this build follows.
@@ -15,8 +16,10 @@ loop: the same mechanics as [DABStep-loop](https://github.com/nmp-dsci/DABStep-l
 
 ```
 make smoke                     # v0 on tau2's mock domain: proves the adapter on all three roles
-make eval DOMAIN=airline       # v0 on the 20-task train split → runs/<ts>_airline_v0_train/
-make loop DOMAIN=airline       # champion → failures → one Sonnet optimiser session → challenger → gate → ledger
+make eval DOMAIN=airline       # a version on its domain's train half → runs/<ts>_airline_v0_train/
+make loop DOMAIN=airline       # champion → failures → one Sonnet optimiser session → challenger → gate → test → ledger
+make fork DOMAIN=airline MODEL=sonnet   # the champion's prompt on another model: a model swap, promoted by hand
+make agent-service             # the agent's model call as a container on :8091; AGENT_SERVICE_URL routes a run to it
 make viewer                    # the run viewer on :8081 — eight tabs, see AGENTS.md §4b
 ```
 
@@ -28,10 +31,23 @@ simulator's, the retail NL judge's — to the subscription. Tool calls travel as
 JSON contract in the prompt and come back as `tool_calls`, so tau2's orchestrator
 executes them unchanged.
 
-Each domain has its own random 20 train / 20 test split (seed 300, committed
-under `data/splits/`), its own agent versions, its own ledger and registry. The
-gate is a one-sided exact McNemar test on the paired train tasks (promote at
-p < 0.05); a promotion runs the test split once, for the record.
+The agent's model call is a sealed core (`llm/core.py`: a prompt and tool
+schemas in, one reply out, the Agent SDK and nothing else). The SDK child has no
+tools, no MCP servers, no settings and an allow-listed environment. The same
+core runs in-process and behind `POST /v1/chat/completions`
+(`llm/service.py`, `Dockerfile.agent`, a bearer token). With
+`AGENT_SERVICE_URL` set, the harness reaches the agent only over HTTP, through
+litellm's `openai/` provider, so where the agent runs is configuration.
+
+Each domain's split is half its public base set for train and half for test
+(seed 300, committed under `data/splits/`; the earlier 20 / 20 cut sits inside
+it on the same sides). Each domain also has its own agent versions, ledger and
+registry. The gate pairs the two runs by task and promotes when the challenger
+fixes at least one task and breaks none, or when a one-sided exact sign test on
+the tasks that changed gives p < 0.05 (McNemar at one trial; a task's pass
+fraction over trials otherwise). The challenger then runs the test split once
+whatever the verdict. The champion-vs-challenger comparison on test is recorded
+beside the verdict and never decides it.
 
 ## Status
 
@@ -42,14 +58,19 @@ p < 0.05); a promotion runs the test split once, for the record.
 | M2 v0 baselines on train, all four domains | done — gate re-scores 80/80 |
 | M3 loop cycles | done — airline ×2, retail, telecom; banking not run (subscription window) |
 | M4 holdout · M4b findings page | done — `.lavish/s01_build-findings.html` |
+| s07 Sonnet agent through a sealed service, split v2, the gate with trials | built; airline running (`.lavish/s07_next-challenger-plan.html`) |
 | M5 keyless demo image on App Runner | parked — bootstrap role, ECR repo and image (`5518ad7`) are in AWS; the service is blocked by the account's 2-per-region App Runner cap (both regions full). Resume: lift the quota or free a slot, then `terraform apply` in `infra/terraform/demo` |
 
 ## Results
 
+### Split v1 (20 / 20), Haiku 4.5 in every role
+
 Haiku 4.5 for agent, user simulator and judge; one trial; concurrency 3; seed 300;
 lean harness. Train is the 20-task split the optimiser sees; test is the 20 it
 never sees, run once on promotion. p is the one-sided exact McNemar test on the
-paired train tasks; promote at p < 0.05.
+paired train tasks; the verdicts were made at p < 0.05 alone. The dominance rule
+(fixed ≥ 1, broke 0) came later, so airline's v2 (4 fixed / 0 broke) would promote
+under today's gate; its recorded verdict is kept as made.
 
 | Domain | v0 train | Challenger train | Fixed / broke | p | Verdict | Champion test |
 |---|---|---|---|---|---|---|

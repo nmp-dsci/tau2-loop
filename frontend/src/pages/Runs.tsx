@@ -1,7 +1,43 @@
 import { Link } from 'react-router-dom';
-import { DOMAINS, type RunMeta, domainLabel, fmtK, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
+import { type Check, type Checks, DOMAINS, type RunMeta, domainLabel, fmtK, fmtPct, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
 import { Rate } from '../lib/ui';
 import { runPath, useLens } from '../lib/url';
+
+/** The reward checks, in the order τ² multiplies them, with the name a column shows. */
+const CHECKS: [keyof Checks, string, string][] = [
+  ['db', 'DB', 'the final database equals the gold one'],
+  ['actions', 'actions', 'every expected action was called with the expected arguments'],
+  ['communicate', 'said', 'the agent told the user each fact the task requires'],
+  ['nl', 'NL', "an LLM judge finds the task's NL assertions met"],
+  ['env', 'env', "the environment's assertions hold at the end (telecom)"],
+];
+
+/** passes over conversations that carry the check; muted when this domain's score does not use it */
+function CheckCell({ c, what }: { c?: Check; what: string }) {
+  if (!c) return <td className="num muted">—</td>;
+  const counted = c.scored > 0;
+  const title = `${what}: ${c.passed} of ${c.n} conversations met every item (${c.items_met} of ${c.items} items) · ${
+    counted ? `counts toward the score in ${c.scored} of ${c.n}` : 'recorded, not scored in this domain'
+  }`;
+  return (
+    <td className={`num mono${counted ? '' : ' muted'}`} title={title}>
+      {c.passed}/{c.n}
+    </td>
+  );
+}
+
+function PassK({ r, k }: { r: RunMeta; k: number }) {
+  const v = r.summary?.pass_hat_k[`pass^${k}`];
+  if (v == null) return <td className="num muted">—</td>;
+  if (k === 1) {
+    return (
+      <td className="num">
+        <Rate passed={r.summary?.passed} n={r.summary?.n_scored} />
+      </td>
+    );
+  }
+  return <td className="num mono">{fmtPct(v)}</td>;
+}
 
 type Snapshot = { experiment: string | null; tracking_uri?: string; runs: { name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
 
@@ -54,6 +90,13 @@ export function Runs() {
           {real.length} of {all.length} runs
         </span>
       </div>
+      <p className="small muted">
+        pass^1 · 2 · 3 are the leaderboard's statistic: the chance that all k trials of a task pass, averaged over its tasks; a run
+        of one trial per task has only pass^1. A check's cell is conversations that met every item of it over those that carry
+        it; a muted cell is a check τ² records in this domain but does not multiply into the score, and hovering says how many
+        items passed. Under a split, "25 × 1 trial · v2" is tasks × trials and the cut: v1 is 20 train / 20 test, v2 half of each
+        base set, and two runs on different cuts are not the same tasks.
+      </p>
       <div className="tw">
         <table>
           <thead>
@@ -62,8 +105,20 @@ export function Runs() {
               <th>domain</th>
               <th>agent</th>
               <th>split</th>
-              <th className="num">pass</th>
-              <th className="num">pass^k</th>
+              <th className="num" title="the probability that one trial of a task passes, averaged over tasks">
+                pass^1
+              </th>
+              <th className="num" title="the probability that 2 trials of a task all pass; needs a run of 2 or more trials">
+                pass^2
+              </th>
+              <th className="num" title="the probability that 3 trials of a task all pass; needs a run of 3 or more trials">
+                pass^3
+              </th>
+              {CHECKS.map(([key, label, what]) => (
+                <th key={key} className="num" title={what}>
+                  {label}
+                </th>
+              ))}
               <th className="num">errors</th>
               <th className="num">turns/conv</th>
               <th className="num">tokens/conv</th>
@@ -74,30 +129,31 @@ export function Runs() {
           <tbody>
             {real.map((r) => (
               <tr key={r.run_id}>
-                <td className="sub">
+                <td className="sub nw">
                   <Link to={runPath(r.run_id)}>{shortRun(r.run_id)}</Link>
+                  <span className="path">{when(r.started_at)}</span>
                   <span className="path">
-                    {when(r.started_at)} · {shortModel(r.model)} · user {shortModel(r.user_model)}
+                    {shortModel(r.model)}
+                    {r.agent_route?.startsWith('service') ? ' via service' : ''} · user {shortModel(r.user_model)}
                   </span>
                 </td>
                 <td>{domainLabel(r.domain)}</td>
                 <td className="mono">
                   {r.agent} · {r.fingerprint}
                 </td>
-                <td>
+                <td className="sub nw">
                   {r.split}
-                  {r.trials > 1 && <span className="path">{r.trials} trials</span>}
+                  <span className="path">
+                    {r.n_tasks} × {r.trials} trial{r.trials > 1 ? 's' : ''}
+                    {r.split_version ? ` · v${r.split_version}` : ''}
+                  </span>
                 </td>
-                <td className="num">
-                  <Rate passed={r.summary?.passed} n={r.summary?.n_scored} />
-                </td>
-                <td className="num small">
-                  {r.summary
-                    ? Object.entries(r.summary.pass_hat_k)
-                        .map(([k, v]) => `${k} ${Math.round(v * 100)}%`)
-                        .join(' · ')
-                    : '—'}
-                </td>
+                {[1, 2, 3].map((k) => (
+                  <PassK key={k} r={r} k={k} />
+                ))}
+                {CHECKS.map(([key, , what]) => (
+                  <CheckCell key={key} c={r.checks?.[key]} what={what} />
+                ))}
                 <td className="num">{r.summary?.errored_ids.length ?? '—'}</td>
                 <td className="num">{r.summary?.mean_agent_turns ?? '—'}</td>
                 <td

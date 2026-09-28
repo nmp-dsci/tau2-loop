@@ -24,7 +24,7 @@
   `helper.py`). "Improve the agent" means `make loop DOMAIN=…`, not a hand edit
   — a hand edit without a re-run fails the CI gate.
 - **Run folders are immutable** once scored. Fix the code and re-run.
-- **The test split is reported, never optimised on.** It runs once per promotion.
+- **The test split is reported, never optimised on.** It runs once per challenger, promoted or held; the gate never reads it.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

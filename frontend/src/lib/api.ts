@@ -20,7 +20,13 @@ export type Summary = {
   partial_action_mean: number | null;
   duration_ms: number;
   cost_usd_est: number;
+  /** per reward check; absent on a run scored before the field existed (`/api/runs` fills it) */
+  checks?: Checks;
 };
+/** One reward check over a run: conversations carrying it that met every item (`passed / n`),
+ * the items themselves, and how many of those conversations the domain's score multiplies it into. */
+export type Check = { passed: number; n: number; items_met: number; items: number; scored: number };
+export type Checks = Partial<Record<'db' | 'actions' | 'communicate' | 'nl' | 'env', Check>>;
 export type RunMeta = {
   run_id: string;
   domain: string;
@@ -48,6 +54,15 @@ export type RunMeta = {
   mlflow_url?: string | null;
   /** mean tokens per conversation, all roles and the agent's share; `/api/runs` only */
   tokens_per_conversation?: { all: number; agent: number } | null;
+  /** since split v2; absent (or null) on older run.json files */
+  agent_effort?: string | null;
+  user_effort?: string | null;
+  /** 1 = the 20 / 20 cut, 2 = half of each base set; `/api/runs` infers it for older runs */
+  split_version?: number | null;
+  /** `in-process`, or `service:<host>` when the agent's calls went over HTTP */
+  agent_route?: string;
+  /** `/api/runs` only: the summary's checks, or aggregated from the rows for older runs */
+  checks?: Checks;
 };
 export type TaskResult = {
   task_id: string;
@@ -77,7 +92,9 @@ export type TaskResult = {
   trace: string;
 };
 export type Diagnosis = { task_id: string; symptom: string; root_cause: string; surface: string; change: string; verified_in_session: boolean; verification?: string };
-export type Outcome = { verdict: string; reason?: string; p_value?: number; passes?: string; fixed?: string[]; broken?: string[]; still_failed?: string[]; challenger_run?: string; test_run?: string; test_passes?: string };
+/** Champion vs challenger on the test split: reported beside the verdict, never used by it. */
+export type TestCompare = { champion_run: string; challenger_run?: string; passes?: string; pass_1?: string; fixed?: string[]; broken?: string[]; p_value?: number; reason?: string; error?: string };
+export type Outcome = { verdict: string; reason?: string; rule?: string | null; p_value?: number; passes?: string; pass_1?: string; fixed?: string[]; broken?: string[]; still_failed?: string[]; challenger_run?: string; test_run?: string; test_passes?: string; test_compare?: TestCompare };
 export type LedgerEntry = {
   cycle: number;
   domain: string;
@@ -107,6 +124,7 @@ export type DomainSummary = {
   test: number;
   reserve_n: number | null;
   seed: number | null;
+  split_version?: number;
   policy_words: number | null;
   n_tools: number;
   reward_bases: Record<string, number>;
@@ -117,7 +135,7 @@ export type DomainSummary = {
   cycles: number;
 };
 export type TaskRow = { id: string; split: string; purpose: string | null; relevant_policies: string | null; reason_for_call: string | null; n_actions: number; n_communicate: number; n_nl_assertions: number; n_env_assertions: number; reward_basis: string[] | null };
-export type DomainDetail = { domain: string; split: { seed: number; size: number; base_n: number; method: string; train: string[]; test: string[]; reserve_n: number }; policy: string; policy_words: number; tools: { name: string; description: string | null }[]; tasks: TaskRow[] };
+export type DomainDetail = { domain: string; split: { seed: number; version?: number; base_n: number; method: string; train: string[]; test: string[]; reserve_n: number }; policy: string; policy_words: number; tools: { name: string; description: string | null }[]; tasks: TaskRow[] };
 export type Event = { type: string; [k: string]: unknown };
 
 // ── one conversation, whole (the Agent tab) ──────────────────────────────

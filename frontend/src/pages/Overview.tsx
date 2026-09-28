@@ -57,7 +57,7 @@ export function Overview() {
           <div className="label">champions on train</div>
           <div className="n">{champScored ? `${champPassed}/${champScored}` : '—'}</div>
           <div className="b">
-            {scoredDomains.length ? `${scoredDomains.length} of 4 domains have a champion · 20 train conversations each` : 'no champion yet — run `make eval DOMAIN=…` and promote'}
+            {scoredDomains.length ? `${scoredDomains.length} of 4 domains have a champion · each on the train run it was promoted on` : 'no champion yet — run `make eval DOMAIN=…` and promote'}
           </div>
         </div>
         <div className="kpi">
@@ -81,7 +81,7 @@ export function Overview() {
         </div>
       </div>
 
-      <h2>1 · Where each domain stands — train is what the gate sees, test is reported once per promotion</h2>
+      <h2>1 · Where each domain stands — train is what the gate sees, test is reported once per challenger</h2>
       <div className="tw">
         <table>
           <thead>
