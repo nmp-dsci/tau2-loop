@@ -46,6 +46,8 @@ export type RunMeta = {
   sampling: string;
   dry_run: boolean;
   mlflow_url?: string | null;
+  /** mean tokens per conversation, all roles and the agent's share; `/api/runs` only */
+  tokens_per_conversation?: { all: number; agent: number } | null;
 };
 export type TaskResult = {
   task_id: string;

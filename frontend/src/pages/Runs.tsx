@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { DOMAINS, type RunMeta, domainLabel, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
+import { DOMAINS, type RunMeta, domainLabel, fmtK, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
 import { Rate } from '../lib/ui';
 import { runPath, useLens } from '../lib/url';
 
@@ -66,6 +66,7 @@ export function Runs() {
               <th className="num">pass^k</th>
               <th className="num">errors</th>
               <th className="num">turns/conv</th>
+              <th className="num">tokens/conv</th>
               <th className="num">time</th>
               <th>note</th>
             </tr>
@@ -99,6 +100,12 @@ export function Runs() {
                 </td>
                 <td className="num">{r.summary?.errored_ids.length ?? '—'}</td>
                 <td className="num">{r.summary?.mean_agent_turns ?? '—'}</td>
+                <td
+                  className="num"
+                  title={r.tokens_per_conversation ? `agent ${fmtK(r.tokens_per_conversation.agent)} · user ${fmtK(r.tokens_per_conversation.all - r.tokens_per_conversation.agent)}` : undefined}
+                >
+                  {fmtK(r.tokens_per_conversation?.all)}
+                </td>
                 <td className="num">{fmtS(r.summary?.duration_ms)}</td>
                 <td className="wrap small muted">{r.note}</td>
               </tr>

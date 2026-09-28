@@ -29,7 +29,7 @@ from tau2_loop.data.splits import read_split, read_task_extract
 from tau2_loop.eval import review as review_store
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.profile import profile
-from tau2_loop.eval.results import slug
+from tau2_loop.eval.results import read_results, slug
 from tau2_loop.eval.runner import list_runs, load_run
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tracking.registry import read_all, read_registry
@@ -294,7 +294,11 @@ def create_app() -> FastAPI:
     @app.get("/api/runs")
     def runs(domain: str | None = None) -> list[dict[str, Any]]:
         return [
-            {**m.__dict__, "mlflow_url": _mlflow_run_url(m.mlflow_run_id)}
+            {
+                **m.__dict__,
+                "mlflow_url": _mlflow_run_url(m.mlflow_run_id),
+                "tokens_per_conversation": _tokens_per_conversation(m.run_id),
+            }
             for m in list_runs(domain)
         ]
 
@@ -513,6 +517,21 @@ def _mlflow_run_url(run_id: str | None) -> str | None:
     if not run_id:
         return None
     return f"{settings().mlflow_tracking_uri.rstrip('/')}/#/experiments/search?runId={run_id}"
+
+
+def _tokens_per_conversation(run_id: str) -> dict[str, int] | None:
+    """The mean tokens one conversation spent: every role, and the agent's share of it.
+    Read from `results.jsonl` rather than the summary in `run.json`, which has no token
+    field and, the folder being scored, is never rewritten to gain one."""
+    path = RUNS_DIR / run_id / "results.jsonl"
+    results = read_results(path) if path.exists() else []
+    if not results:
+        return None
+    m = profile(results)["metrics"]
+    return {
+        "all": round(m["tokens"]["mean"]),
+        "agent": round(m["agent_in"]["mean"] + m["agent_out"]["mean"]),
+    }
 
 
 def _mlflow_embeddable() -> bool:

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
+from tau2_loop.config import RUNS_DIR
 from tau2_loop.serving.app import create_app, trace_events
 
 
@@ -55,6 +58,24 @@ def test_runs_ledger_experiments_shapes() -> None:
     assert set(c.get("/api/ledger").json()) == {"airline", "retail", "telecom", "banking_knowledge"}
     assert "runs" in c.get("/api/experiments").json()
     assert c.get("/api/runs/nope").status_code == 404
+
+
+def test_runs_carry_mean_tokens_per_conversation() -> None:
+    c = client()
+    row = next(
+        r for r in c.get("/api/runs").json() if r["run_id"] == "20260915T014228Z_mock_v0_all"
+    )
+    tokens = row["tokens_per_conversation"]
+    rows = [json.loads(line) for line in (RUNS_DIR / row["run_id"] / "results.jsonl").open()]
+    total = sum(
+        r["agent_input_tokens"]
+        + r["agent_output_tokens"]
+        + r["user_input_tokens"]
+        + r["user_output_tokens"]
+        for r in rows
+    )
+    assert tokens["all"] == round(total / len(rows))
+    assert 0 < tokens["agent"] <= tokens["all"]
 
 
 def test_trace_endpoint_404s_on_directory_name_instead_of_crashing() -> None:
