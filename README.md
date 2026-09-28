@@ -58,7 +58,7 @@ beside the verdict and never decides it.
 | M2 v0 baselines on train, all four domains | done — gate re-scores 80/80 |
 | M3 loop cycles | done — airline ×2, retail, telecom; banking not run (subscription window) |
 | M4 holdout · M4b findings page | done — `.lavish/s01_build-findings.html` |
-| s07 Sonnet agent through a sealed service, split v2, the gate with trials | built; airline running (`.lavish/s07_next-challenger-plan.html`) |
+| s07 Sonnet agent through a sealed service, split v2, the gate with trials | built; airline done: v3 (Sonnet) champion 18/25 train · 21/25 test, v4 held. Retail, telecom, banking next (`.lavish/s07_next-challenger-plan.html`) |
 | M5 keyless demo image on App Runner | parked — bootstrap role, ECR repo and image (`5518ad7`) are in AWS; the service is blocked by the account's 2-per-region App Runner cap (both regions full). Resume: lift the quota or free a slot, then `terraform apply` in `infra/terraform/demo` |
 
 ## Results
@@ -78,6 +78,20 @@ under today's gate; its recorded verdict is kept as made.
 | retail | 14/20 `20260915T080153Z_retail_v0_train` | v1 16/20 `20260915T172708Z_retail_v1_train` | 3/1 | 0.312 | hold, v0 champion | — |
 | telecom | 14/20 `20260915T081700Z_telecom_v0_train` | v1 19/20 `20260915T174430Z_telecom_v1_train` | 5/0 | 0.031 | **promote**, v1 champion | **19/20** `20260915T181840Z_telecom_v1_test` |
 | banking_knowledge | 4/20 `20260915T121036Z_banking_knowledge_v0_train` | — | — | — | no cycle yet | — |
+
+### Split v2 (25 / 25), airline — Sonnet 5 agent through the service
+
+Agent `claude-sonnet-5` at medium effort, reached over HTTP (`agent_route:
+service:127.0.0.1:8091`); user simulator `claude-haiku-4-5` at medium; one trial;
+concurrency 3; code `228e3d6`. v3 is v0's prompt on Sonnet, promoted by hand as
+a model swap. v4 is loop cycle 3: the optimiser read v3's 7 train failures and
+the ledger, including v1's and v2's held surfaces. The test columns are
+reported only; the gate reads train.
+
+| Version | Train | Test | Gate on train | Test, v3 → v4 |
+|---|---|---|---|---|
+| v3 · v0's prompt, Sonnet 5 | **18/25** `20260928T060029Z_airline_v3_train` | **21/25** `20260928T073602Z_airline_v3_test` | champion by fiat (`model swap`) | — |
+| v4 · cycle 3 | 20/25 `20260928T075613Z_airline_v4_train` | 18/25 `20260928T081324Z_airline_v4_test` | hold: fixed 6, broke 4, p = 0.377 | 21 → 18: fixed 1, broke 4 |
 
 Every run folder under `runs/` holds `run.json`, `results.jsonl`, one trace per
 conversation and the agent version it ran; `tau2loop gate` replays them through
