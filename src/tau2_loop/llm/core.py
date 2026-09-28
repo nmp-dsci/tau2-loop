@@ -34,7 +34,7 @@ from tau2_loop.llm.prompting import build_prompt, parse_reply
 MODELS: dict[str, str] = {
     "haiku": "claude-haiku-4-5",
     "sonnet": "claude-sonnet-5",
-    "opus": "claude-opus-5",
+    "opus": "claude-opus-5-5",
 }
 
 # Every Agent SDK session in this app runs at this effort unless a version's

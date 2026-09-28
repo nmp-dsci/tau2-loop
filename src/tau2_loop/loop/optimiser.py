@@ -296,7 +296,8 @@ def _broken_trace_paths(outcome: dict[str, Any]) -> list[str]:
 
 def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:
     """Earlier challengers of this champion — or of the version it was forked from — that the
-    gate held: real progress the next version may reuse."""
+    gate held: real progress the next version may reuse. A held model swap is not: its
+    surfaces are its source's, so there is nothing in them to copy."""
     names = set(lineage(domain, champion_name))
     out: list[dict[str, Any]] = []
     for e in read_ledger(domain):
@@ -304,6 +305,7 @@ def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:
         if (
             e.get("champion") in names
             and o.get("verdict") == "hold"
+            and e.get("kind") != "model swap"
             and e.get("challenger")
             and version_dir(domain, str(e["challenger"])).exists()
         ):
@@ -367,7 +369,7 @@ async def run_optimiser(
     champion: AgentVersion,
     run_id: str,
     failures: list[TaskResult],
-    model: str = "sonnet",
+    model: str = "opus",
     effort: Effort = EFFORT,
 ) -> OptimiserOutput:
     require_live()

@@ -128,7 +128,7 @@ def loop(
     domain: str = "airline",
     cycles: int = 1,
     agent: str | None = None,
-    optimiser: str = "sonnet",
+    optimiser: str = "opus",
     concurrency: int = 3,
     trials: int = 1,
 ) -> None:
@@ -136,6 +136,41 @@ def loop(
     from tau2_loop.loop.run import run_loop
 
     asyncio.run(run_loop(domain, cycles, agent, optimiser, concurrency, trials))
+
+
+@app.command()
+def challenge(
+    agent: Annotated[str, typer.Option("--agent", help="the version to score, e.g. a fork")],
+    domain: str = "airline",
+    concurrency: int = 3,
+    trials: int = 1,
+    run_test: Annotated[bool, typer.Option("--test/--no-test")] = True,
+) -> None:
+    """Score a version no optimiser wrote (a `fork`) against the champion: the loop's own gate on
+    train, ledger entry, promotion and test report, with no optimiser session. Runs of the
+    version's exact bytes that already exist are reused."""
+    from tau2_loop.loop.run import run_challenge
+
+    try:
+        entry = run_challenge(
+            domain, agent, concurrency=concurrency, trials=trials, run_test=run_test
+        )
+    except (ValueError, RuntimeError) as e:
+        console.print(f"[red]challenge refused:[/] {e}")
+        raise typer.Exit(1) from e
+    o = entry.get("outcome") or {}
+    tc = o.get("test_compare") or {}
+    console.print(
+        f"cycle {entry['cycle']} · {entry.get('kind')} {entry['champion']} → {entry['challenger']}"
+        f" ({entry.get('challenger_model')}, {entry.get('challenger_effort')}): "
+        f"[bold]{o.get('verdict')}[/] · train {o.get('passes')} · fixed {len(o.get('fixed') or [])}"
+        f" · broke {len(o.get('broken') or [])} · {o.get('reason')}"
+        + (
+            f" · test {tc['passes']} (reported, not gated)"
+            if tc.get("passes")
+            else f" · test {tc.get('error') or 'not run'}"
+        )
+    )
 
 
 @app.command()

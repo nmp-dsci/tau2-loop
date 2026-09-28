@@ -43,10 +43,10 @@ leaderboard submission in this build (that is M6, a separate decision).
 |---|---|---|
 | Split | our own, per domain, from tau2's public `base` set, seed 300, committed. v2 (now): half train, half test, no reserve (airline 25/25, retail 57/57, telecom 57/57, banking 48/49), with v1's 20/20 kept inside it on the same sides | nothing is held out upstream; tau2's train/test are fixed lists and banking has none; keeping v1's sides means no task that was ever test has been trained on |
 | Models | agent: `agent.yaml`'s model and effort (airline v3+: `claude-sonnet-5`, medium; elsewhere `claude-haiku-4-5`, medium); user simulator and NL judge: `claude-haiku-4-5`, medium; every effort is recorded in `run.json` | the only billing path is the subscription; a Claude judge makes retail's score `custom` relative to the board |
-| Model swap | `tau2loop fork` copies a version's two surfaces with a new `agent.yaml`; it is evaluated once and promoted by hand (`KIND="model swap"`); its `diagnosis.json` names `forked_from`, and the optimiser follows that lineage to the held challengers | the optimiser may not change `agent.yaml`, so a model change is not a loop cycle |
+| Model swap | `tau2loop fork` copies a version's two surfaces with a new `agent.yaml`; it is evaluated once and promoted by hand (`KIND="model swap"`), or gated against the champion by `make challenge` (a ledger cycle with `kind: model swap` and no optimiser); its `diagnosis.json` names `forked_from`, and the optimiser follows that lineage to the held challengers | the optimiser may not change `agent.yaml`, so a model change is not a loop cycle |
 | Ringfence | `llm/core.py` imports the SDK, `prompting.py` and the standard library only; the SDK child runs with no tools, no MCP, no settings, a temp working directory and an allow-listed environment (the SDK merges `options.env` over the parent's, so every other name is passed blank); `llm/service.py` serves it as `POST /v1/chat/completions` with a bearer token; `Dockerfile.agent` ships those three files; `AGENT_SERVICE_URL` routes a run's agent to it | the agent must depend on nothing but its prompt, its tool schemas and the SDK, and run here or in the cloud unchanged |
 | Gate | pair by task; a task's score is its pass fraction over trials; promote on fixed ≥ 1 and broke 0 (dominance), or on a one-sided exact sign test p < 0.05 (McNemar at one trial); runs over different tasks or trials are refused | the rule the loop's owner set; pairing trial k with trial k would treat independent samples as pairs |
-| Optimiser | `claude-sonnet-5`, effort medium, one session per cycle, may write two files | must read ~20 transcripts and the policy in one context |
+| Optimiser | `claude-opus-5-5`, effort medium (`OPTIMISER=`; `claude-sonnet-5` to airline cycle 3), one session per cycle, may write two files | must read ~20 transcripts and the policy in one context |
 | Tool calls | a JSON reply contract in the prompt (`tool_mode: json`), parsed back into `tool_calls` | the SDK cannot return a native tool call without executing it; the contract is the same either-message-or-tools rule tau2 enforces |
 | Sampling | the CLI default; tau2's `temperature: 0.0` does not apply | the SDK exposes no temperature; recorded as `sampling: cli-default` on every run |
 | Trials | one per cycle for the gate (`TRIALS=` on `make loop` for more); `pass^k` over trials when `TRIALS>1` | one trial keeps a cycle inside a subscription window; the board's ≥4 trials is a submission requirement, not a loop one |
@@ -84,7 +84,7 @@ src/tau2_loop/
   data/                   splits (cut, extract, read) · leaderboard (ingest the published board) · pg (central Postgres)
   eval/                   runner (tau2 run_tasks → run folder) · results · profile (the cost distribution)
                           compare (the gate: pass fractions, sign test) · rescore (offline replay) · review
-  loop/                   run (cycle) · optimiser (Sonnet session, hooks) · ledger
+  loop/                   run (cycle, challenge) · optimiser (Opus session, hooks) · ledger
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
@@ -102,6 +102,9 @@ Dockerfile.agent          the agent service image: core.py, prompting.py, servic
 make setup                submodule + uv sync + npm ci
 make splits               cut the splits and task extracts (only when the seed or the cut's version changes)
 make fork DOMAIN=… MODEL=sonnet [EFFORT=…]   a model-swap version from the champion's surfaces
+make challenge DOMAIN=… AGENT=vN [TRIALS=1] [NO_TEST=1]   that version vs the champion on train through
+                          the loop's own gate, ledger entry and test report, with no optimiser; runs of
+                          its exact bytes are reused (`run_challenge` and `run_cycle` share `_score_challenger`)
 make agent-service        the agent service container on 127.0.0.1:8091 (AGENT_PORT=); then
                           AGENT_SERVICE_URL=http://127.0.0.1:8091 make eval … routes the agent to it
 make platform-up          central MLflow (make -C ../nmp-central-ai up) → http://localhost:5000
