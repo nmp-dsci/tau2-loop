@@ -423,9 +423,9 @@ function Gate({ cmp, v, focus }: { cmp: ComparePayload; v: Verdict; focus: strin
         </table>
       </div>
       <p className="small muted">
-        pass rate {fmtPct((v.champion_passed || 0) / (v.n || 1))} →{' '}
-        {fmtPct((v.challenger_passed || 0) / (v.n || 1))} ·{' '}
-        <Rate passed={v.challenger_passed} n={v.n} />
+        pass rate {fmtPct((v.champion_passed || 0) / (conversations || 1))} →{' '}
+        {fmtPct((v.challenger_passed || 0) / (conversations || 1))} ·{' '}
+        <Rate passed={v.challenger_passed} n={conversations} />
       </p>
     </>
   );
