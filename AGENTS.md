@@ -85,6 +85,7 @@ src/tau2_loop/
   eval/                   runner (tau2 run_tasks → run folder) · results · profile (the cost distribution)
                           compare (the gate: pass fractions, sign test) · rescore (offline replay) · review
   loop/                   run (cycle, challenge) · optimiser (Opus session, hooks) · ledger
+                          history (every version per domain: how made, the gate's runs, the reigns)
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
@@ -133,14 +134,24 @@ make test · make lint
 | Domains & tasks | `/domains/<domain>/<task>` | what the benchmark is; a task's answer key |
 | Rubric | `/rubric` | how τ² decides a conversation passed, and which check failed |
 | Leaderboard | `/leaderboard` | who else has tried, and why we are not comparable yet |
-| Runs | `/runs/<run>[?vs=<run>]` | what we ran, what it cost, and the gate against another run |
-| Optimise | `/optimise/<domain>/<version>` | a round: diagnose → propose → outcome |
+| Runs | `/runs/<run>[?vs=<run>]` | who holds each domain and how the title moved; what we ran, what it cost, and the gate against another run |
+| Optimise | `/optimise/<domain>/<version>` | every version of a domain, train and test; a round: diagnose → propose → outcome; every cycle across the domains |
 | Agent | `/agent/<domain>/<version>?run=&trial=&node=&step=` | one conversation drawn as the agent in its harness; each node's inputs and outputs; a tool playground (plan s05) |
 | Review | `/review/<run>/<task>/t<n>` | what a person thought of what the judge scored (writes) |
 
 The grammar is `frontend/src/lib/url.ts`: one id per thing, the path names the
 subject, the query holds the lens, and a detail opens inside its list. Every
 address published before it redirects — `routes.test.tsx` asserts each one.
+
+The Runs and Optimise figures (`lib/versions.tsx`, after DataAgentBench's) read one
+route, `GET /api/versions`, built by `loop/history.py` from the version folders, the
+ledger, the registry and the run folders. A version's train number is the run the gate
+read (the ledger's challenger run, else its latest promotion); its test number is the
+ledger's test run, else its newest test run on the same cut. Runs draws each domain's
+champion and newest challenger, then the champions over the versions (a re-baseline is a
+second point in one column); Optimise draws the chosen domain's versions, train and test
+with the champion each faced, and every cycle in every domain as champion against
+challenger. No line joins numbers from two different cuts.
 
 The Agent tab (`lib/agentgraph.tsx`) reads three routes. `GET /api/runs/<run>/<task>/t<n>`
 returns every message whole (ids pair a result with its call), the task spec, and the

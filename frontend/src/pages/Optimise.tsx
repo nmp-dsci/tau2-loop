@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router-dom';
 import {
   DOMAINS,
@@ -7,6 +7,7 @@ import {
   type LedgerEntry,
   type Registries,
   type RunMeta,
+  type VersionHistory,
   domainLabel,
   fmtK,
   fmtS,
@@ -15,7 +16,8 @@ import {
   useGet,
 } from '../lib/api';
 import { Loading } from '../lib/ui';
-import { optimisePath, runPath, useLens } from '../lib/url';
+import { agentPath, optimisePath, runPath, useLens } from '../lib/url';
+import { CycleDumbbell, VersionsFig, frac, standing } from '../lib/versions';
 
 /**
  * The loop, as rounds. s04 M3 merged the old Loop tab (the ledger) and the old
@@ -105,6 +107,41 @@ function taskOutcome(e: LedgerEntry | undefined, taskId: string): string {
   return o.verdict === 'pending' ? 'pending' : 'unchanged';
 }
 
+/** Fig 1 · one domain's versions in build order, train and test, and the champion each faced. */
+function VersionsSection({ h, open }: { h: VersionHistory; open: string | null }) {
+  const nav = useNavigate();
+  const { champ } = standing(h);
+  const cyc = h.versions.filter((v) => v.made.cycle != null);
+  const held = cyc.filter((v) => v.verdict === 'hold').length;
+  const aboveHeld = cyc.filter((v) => v.verdict === 'hold' && v.train && v.vs?.train && v.train.passed > v.vs.train.passed).length;
+  return (
+    <>
+      <h2>
+        The versions — {champ ? `${champ.version} holds ${domainLabel(h.domain)} at ${frac(champ.train)} train, ${frac(champ.test)} test` : 'no champion yet'}
+        {cyc.length ? `; ${held} of ${cyc.length} challengers held` : ''}
+      </h2>
+      <figure>
+        <div className="label fig-title">
+          fig 1 · every {domainLabel(h.domain)} version in build order: train (filled), test (open), and the champion each challenger faced (green tick)
+        </div>
+        <VersionsFig
+          h={h}
+          mode="rounds"
+          open={open}
+          onPick={(v) => nav(v.made.kind === 'base' ? agentPath(h.domain, v.version) : optimisePath(h.domain, v.version))}
+        />
+        <figcaption>
+          {aboveHeld
+            ? `${aboveHeld} of ${cyc.length} challengers beat the champion's train count and were still held: the gate reads the tasks fixed and broken, not the count. `
+            : ''}
+          The solid line is train pass^1, what the gate reads; the dashed one is test, run once per challenger and reported only. Neither line crosses from one split to the next. The green tick is the champion's train score each challenger was gated against; + is tasks fixed and − tasks broken against it. A column opens its round.
+          <span className="path">agents/{h.domain}/v*/ · loop/{h.domain}/ledger.jsonl · loop/{h.domain}/registry.json · runs/*/run.json → /api/versions</span>
+        </figcaption>
+      </figure>
+    </>
+  );
+}
+
 function DiagnosisTable({ rows, cycle }: { rows: Diagnosis[]; cycle?: LedgerEntry }) {
   return (
     <div className="tw">
@@ -163,9 +200,15 @@ export function Optimise() {
   const { domain = 'airline', version } = useParams();
   const nav = useNavigate();
   const { data: ledger, error } = useGet<Record<string, LedgerEntry[]>>('/api/ledger');
+  const { data: hist } = useGet<Record<string, VersionHistory>>('/api/versions');
   if (!ledger) return <Loading error={error} />;
   const entries = ledger[domain] ?? [];
   const counts = Object.fromEntries(DOMAINS.map((d) => [d, (ledger[d] ?? []).length]));
+  const hs = DOMAINS.flatMap((d) => (hist?.[d] ? [hist[d]] : []));
+  const gated = hs.flatMap((h) => h.versions.filter((v) => v.made.cycle != null));
+  const promoted = gated.filter((v) => v.verdict === 'promote').length;
+  const heldN = gated.filter((v) => v.verdict === 'hold').length;
+  const mixed = gated.filter((v) => v.verdict === 'hold' && (v.fixed ?? 0) > 0 && (v.broke ?? 0) > 0).length;
   return (
     <>
       <nav className="chips domainbar" aria-label="domains">
@@ -192,6 +235,8 @@ export function Optimise() {
         optimiser is shown this page's contents before it proposes anything, which is what stops the
         loop repeating a fix that already failed.
       </p>
+
+      {hist?.[domain] && hist[domain].versions.length > 1 && <VersionsSection h={hist[domain]} open={version ?? null} />}
 
       {entries.length === 0 && (
         <div className="empty">
@@ -262,6 +307,25 @@ export function Optimise() {
           </table>
         </div>
       )}
+
+      {gated.length > 0 && (
+        <>
+          <h2>
+            Every cycle, every domain — {promoted} of {gated.length} challengers took the title
+          </h2>
+          <figure>
+            <div className="label fig-title">
+              fig 2 · every loop cycle by domain: the champion's pass^1 (open) against the challenger's (filled), train above test
+            </div>
+            <CycleDumbbell hs={hs} open={version ? { domain, version } : null} onPick={(d, v) => nav(optimisePath(d, v.version))} />
+            <figcaption>
+              {promoted} of {gated.length} cycles promoted
+              {mixed ? `; ${mixed} of the ${heldN} held challengers fixed some of the champion's failures and broke others of its passes` : ''}. Each row is one cycle: the open dot is the champion it faced, the filled dot the challenger, green where it was promoted and amber where it was held. The thin dashed pair under it is the same two versions on test, drawn only when both ran it. A row opens its round.
+              <span className="path">loop/&lt;domain&gt;/ledger.jsonl · runs/*/run.json → /api/versions</span>
+            </figcaption>
+          </figure>
+        </>
+      )}
     </>
   );
 }
@@ -290,6 +354,13 @@ export function OptimiseRound() {
   const { data, error } = useGet<DiffPayload>(
     version ? `/api/agents/diff?domain=${encodeURIComponent(domain)}&a=${parent}&b=${version}` : null,
   );
+  // a round opened from below (the cycle figure, a row far down the table) comes into view
+  const ref = useRef<HTMLElement>(null);
+  const ready = !!data;
+  useEffect(() => {
+    const top = ref.current?.getBoundingClientRect().top;
+    if (top != null && (top < 0 || top > window.innerHeight * 0.75)) ref.current?.scrollIntoView({ block: 'start' });
+  }, [domain, version, ready]);
   if (!data) return <Loading error={error} />;
 
   const ra = best(data.a.runs, 'train');
@@ -304,7 +375,7 @@ export function OptimiseRound() {
   const removed = data.files.reduce((n, f) => n + f.removed, 0);
 
   return (
-    <section className="round-open">
+    <section className="round-open" ref={ref}>
       <p className="crumbs">
         <Link to={optimisePath(domain)}>{domainLabel(domain)} rounds</Link> /{' '}
         <span className="mono">

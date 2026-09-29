@@ -124,6 +124,31 @@ export type LedgerEntry = {
 export type RegistryEntry = { agent: string; fingerprint: string; run_id: string; model: string; split: string; trials: number; passed: number | null; n_scored: number | null; at: string };
 export type Registry = { domain: string; champion: RegistryEntry | null; challenger: RegistryEntry | null; history: (RegistryEntry & { event: string })[] };
 export type Registries = Record<string, Registry>;
+/** One run as the version history cites it (`/api/versions`): passes over scored conversations,
+ * its cut (1 = split v1, 2 = split v2) and the model and effort it recorded. */
+export type HRun = { run_id: string | null; passed: number; n: number; cut: number | null; model: string | null; effort: string | null };
+/** How a version was made: `optimise` (a loop cycle), a hand-made fork's kind (`model swap`), or `base`. */
+export type Made = { kind: string; cycle: number | null; source: string | null; detail: string };
+export type VersionNode = {
+  version: string;
+  model: string | null;
+  effort: string | null;
+  made: Made;
+  /** the run the gate read; `test` is reported beside it */
+  train: HRun | null;
+  test: HRun | null;
+  /** `promote` · `hold` · `pending` (a cycle), `first` · `by hand` (promoted with no cycle), `registered` · `not gated`, or null (never scored) */
+  verdict: string | null;
+  fixed: number | null;
+  broke: number | null;
+  p: number | null;
+  /** the champion a cycle's challenger was gated against, on train, and on test when both ran it */
+  vs: { version: string; train: HRun | null; test: HRun | null } | null;
+  held_title: boolean;
+};
+/** One `promote` in the registry, in order: `first`, `gate`, `model swap`, `re-baseline`. */
+export type Reign = { version: string; run_id: string | null; passed: number | null; n: number | null; cut: number | null; kind: string; at: string | null };
+export type VersionHistory = { domain: string; champion: string | null; versions: VersionNode[]; reigns: Reign[] };
 export type AgentInfo = { domain: string; name: string; ref: string; fingerprint: string; config: Record<string, unknown>; has_helper: boolean; helper_functions: string[]; diagnosis: Record<string, unknown> | null; runs: string[] };
 export type DomainSummary = {
   domain: string;

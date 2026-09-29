@@ -18,6 +18,7 @@ import difflib
 import json
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -39,6 +40,7 @@ from tau2_loop.eval.compare import compare
 from tau2_loop.eval.profile import profile
 from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
+from tau2_loop.loop.history import version_history
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tracking.registry import read_all, read_registry
 from tau2_loop.tracking.snapshot import read_snapshot
@@ -600,6 +602,38 @@ def create_app() -> FastAPI:
     def registry() -> dict[str, Any]:
         return read_all()
 
+    @app.get("/api/versions")
+    def versions(domain: str | None = None) -> dict[str, Any]:
+        """Per domain, every version in build order with the run the gate read, its test run,
+        how it was made and who held the title: the figures on the Runs and Optimise tabs."""
+        out = {}
+        for d in DOMAINS if domain is None else (domain,):
+            runs = [
+                {
+                    "run_id": m.run_id,
+                    "agent": m.agent,
+                    "split": m.split,
+                    "cut": m.split_version or _cut_of(m),
+                    "passed": m.summary["passed"],
+                    "n": m.summary["n_scored"],
+                    "model": m.model,
+                    "effort": m.agent_effort,
+                }
+                for m in list_runs(d)
+                if not m.dry_run and m.finished_at and m.summary and m.summary.get("n_scored")
+            ]
+            vs = [
+                {
+                    "name": v.name,
+                    "model": v.config.model,
+                    "effort": v.config.effort,
+                    "diagnosis": _json_or_none(v.path / "diagnosis.json"),
+                }
+                for v in list_versions(d)
+            ]
+            out[d] = version_history(d, vs, runs, read_ledger(d), read_registry(d))
+        return out
+
     @app.get("/api/experiments")
     def experiments() -> dict[str, Any]:
         return read_snapshot()
@@ -666,6 +700,14 @@ def _mlflow_run_url(run_id: str | None) -> str | None:
     if not run_id:
         return None
     return f"{settings().mlflow_tracking_uri.rstrip('/')}/#/experiments/search?runId={run_id}"
+
+
+def _json_or_none(path: Path) -> Any:
+    """A committed JSON file's content, or None when it is absent or unreadable."""
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
 
 
 def _cut_of(m: RunMeta) -> int | None:

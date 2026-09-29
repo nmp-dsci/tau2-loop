@@ -1,7 +1,8 @@
-import { Link } from 'react-router-dom';
-import { type Check, type Checks, DOMAINS, type RunMeta, domainLabel, fmtK, fmtPct, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
-import { Rate } from '../lib/ui';
+import { Link, useNavigate } from 'react-router-dom';
+import { type Check, type Checks, DOMAINS, type RunMeta, type VersionHistory, type VersionNode, domainLabel, fmtK, fmtPct, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
+import { Loading, Rate } from '../lib/ui';
 import { runPath, useLens } from '../lib/url';
+import { DomainBars, VersionsFig, standing, versionsWidth } from '../lib/versions';
 
 /** The reward checks, in the order τ² multiplies them, with the name a column shows. */
 const CHECKS: [keyof Checks, string, string][] = [
@@ -47,12 +48,74 @@ function PassK({ r, k }: { r: RunMeta; k: number }) {
   return <td className="num mono">{fmtPct(v)}</td>;
 }
 
+const names = (hs: VersionHistory[]) => hs.map((h) => domainLabel(h.domain)).join(', ');
+const sentence = (s: string) => (s ? `${s[0].toUpperCase()}${s.slice(1)}.` : '');
+
+/** 01 and 02: the champion and its challenger by domain, then each domain's champion over its versions. */
+function ChampionFigs({ hs }: { hs: VersionHistory[] }) {
+  const nav = useNavigate();
+  const open = (v: VersionNode) => v.train?.run_id && nav(runPath(v.train.run_id));
+  const gated = hs.flatMap((h) => h.versions.filter((v) => v.made.cycle != null));
+  const promoted = gated.filter((v) => v.verdict === 'promote').length;
+  const by = (verdict: string) => hs.filter((h) => standing(h).champ?.verdict === verdict);
+  const [gate, hand, first] = [by('promote'), by('by hand'), by('first')];
+  const moving = hs.filter((h) => h.versions.length > 1);
+  const still = hs.filter((h) => h.versions.length <= 1);
+  const titles = (h: VersionHistory) => h.reigns.map((r) => r.version).filter((v, i, xs) => v !== xs[i - 1]);
+  const changed = hs.filter((h) => titles(h).length > 1);
+  const viaGate = hs.filter((h) => h.reigns.some((r) => r.kind === 'gate')).length;
+  return (
+    <>
+      <h2>
+        01 · By domain — {promoted} of {gated.length} gated challenger{gated.length === 1 ? '' : 's'} took the title
+      </h2>
+      <figure>
+        <div className="label fig-title">fig 1 · pass^1 by domain: the champion, and the newest challenger after it, on train and test</div>
+        <DomainBars hs={hs} onPick={(_, v) => open(v)} />
+        <figcaption>
+          {sentence(
+            [
+              gate.length ? `${names(gate)} took ${gate.length === 1 ? 'its' : 'their'} champion through the gate` : null,
+              hand.length ? `${names(hand)} by hand` : null,
+              first.length ? `${names(first)} still ${first.length === 1 ? 'runs its' : 'run their'} first version` : null,
+            ]
+              .filter(Boolean)
+              .join('; '),
+          )}{' '}
+          A bar is train pass^1, the split the gate reads; the open ring on its track is test, reported and never gated on. The champion's bar is green, a challenger's grey with its verdict after its numbers; the dashed tick is the domain's first champion, on its own cut. A row opens its run.
+          <span className="path">runs/*/run.json · loop/&lt;domain&gt;/registry.json · loop/&lt;domain&gt;/ledger.jsonl → /api/versions</span>
+        </figcaption>
+      </figure>
+
+      <h2>
+        02 · The champion over time — {changed.length} of {hs.length} domain{hs.length === 1 ? '' : 's'} changed champion, {viaGate} through the gate
+      </h2>
+      <div className="figrow">
+        {moving.map((h, i) => (
+          <figure key={h.domain} style={{ flex: `1 1 ${versionsWidth(h)}px` }}>
+            <div className="label fig-title">
+              fig {i + 2} · {domainLabel(h.domain)}: {titles(h).join(' → ')} — train pass^1 of every version, the line joining the champions
+            </div>
+            <VersionsFig h={h} mode="champion" onPick={open} />
+          </figure>
+        ))}
+      </div>
+      <p className="small muted" style={{ maxWidth: 'var(--measure)' }}>
+        One column per version in build order. A green point held the title, and the green line joins the champions in the order they took it; a dashed stretch crosses from one split to another, so its ends are different tasks. A second green point in one column is a re-run that re-baselined the champion. Under each version: the model its train run used, how it was made (a solid rule is a loop cycle's optimiser, a dashed one a hand-made fork) and the gate's verdict, with the tasks it fixed (+) and broke (−) against the champion, paired by task.
+        {still.length ? ` ${names(still)}: one version, no cycle yet.` : ''} A column opens its train run.
+      </p>
+    </>
+  );
+}
+
 type Snapshot = { experiment: string | null; tracking_uri?: string; runs: { mlflow_run_id?: string; name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
 
 export function Runs() {
   const [lens, setLens] = useLens();
   const { data: runs } = useGet<RunMeta[]>('/api/runs');
   const { data: snap } = useGet<Snapshot>('/api/experiments');
+  const { data: hist, error: histError } = useGet<Record<string, VersionHistory>>('/api/versions');
+  const hs = DOMAINS.flatMap((d) => (hist?.[d] ? [hist[d]] : []));
   const domain = lens.get('domain') ?? '';
   const split = lens.get('split') ?? '';
   const q = (lens.get('q') ?? '').toLowerCase();
@@ -72,6 +135,11 @@ export function Runs() {
         <code>traces/</code> with every message, and tau2's own <code>tau2_results.json</code> so the run can be re-scored offline. MLflow indexes
         the same folders; the snapshot below is what the tracker holds, exported for the public demo.
       </p>
+      {hist ? <ChampionFigs hs={hs} /> : <Loading error={histError} />}
+
+      <h2>
+        03 · Every run — {all.length} folders under <code>runs/</code>, each re-scorable offline
+      </h2>
       <div className="filters">
         <label className="pick">
           <span className="label">domain</span>
@@ -182,7 +250,7 @@ export function Runs() {
       )}
 
       <h2>
-        MLflow snapshot — {snap?.runs.length ?? 0} tracked runs in experiment {snap?.experiment ?? '—'}
+        04 · MLflow snapshot — {snap?.runs.length ?? 0} tracked runs in experiment {snap?.experiment ?? '—'}
       </h2>
       {snap && snap.runs.length > 0 ? (
         <div className="tw">
