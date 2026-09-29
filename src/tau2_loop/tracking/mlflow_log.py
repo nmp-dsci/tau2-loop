@@ -18,7 +18,48 @@ if TYPE_CHECKING:
     from tau2_loop.eval.results import TaskResult
     from tau2_loop.eval.runner import RunMeta
 
+# PLATFORM.md grandfathers the flat experiment names in use before M1; a new
+# experiment here would be `tau2-loop/<purpose>`.
 EXPERIMENT = "tau2-loop"
+PROJECT = "tau2-loop"
+
+
+class TrackingDownError(RuntimeError):
+    """The central MLflow is not reachable; the remedy is `make platform-up`."""
+
+
+def preflight() -> str:
+    """Curl-equivalent of `<uri>/health`; raises with the one-line remedy.
+
+    `make eval` already refuses to start without this, but a Python entry point
+    that skipped the Makefile would otherwise discover it mid-run, after the
+    subscription had been spent. Never falls back to a local store (PLATFORM.md
+    rule 1).
+    """
+    import urllib.error
+    import urllib.request
+
+    uri = settings().mlflow_tracking_uri.rstrip("/")
+    try:
+        with urllib.request.urlopen(f"{uri}/health", timeout=3) as r:  # noqa: S310 - local platform URL
+            if r.status != 200:
+                raise TrackingDownError(f"{uri}/health returned {r.status}")
+    except (urllib.error.URLError, OSError) as e:
+        raise TrackingDownError(
+            f"MLflow at {uri} is not reachable ({e}). Start the platform: `make platform-up`"
+        ) from e
+    return uri
+
+
+def required_tags(billing: str | None = None) -> dict[str, str]:
+    """The four tags PLATFORM.md requires on every run and trace."""
+    s = settings()
+    return {
+        "project": PROJECT,
+        "git_sha": s.code_sha,
+        "env": "local",
+        "billing": billing or s.billing,
+    }
 
 
 def _client_setup() -> None:
@@ -33,6 +74,7 @@ def log_run(run_dir: Path, meta: RunMeta, results: list[TaskResult]) -> str:
     with mlflow.start_run(run_name=meta.run_id) as run:
         mlflow.set_tags(
             {
+                **required_tags(),
                 "domain": meta.domain,
                 "agent": meta.agent,
                 "fingerprint": meta.fingerprint,
@@ -102,6 +144,7 @@ def log_cycle(entry: dict[str, object]) -> str | None:
         with mlflow.start_run(run_name=f"{entry.get('domain')}-cycle-{entry.get('cycle')}") as run:
             mlflow.set_tags(
                 {
+                    **required_tags(),
                     "kind": "cycle",
                     "domain": str(entry.get("domain")),
                     "champion": str(entry.get("champion")),

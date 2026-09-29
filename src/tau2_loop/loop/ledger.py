@@ -66,6 +66,14 @@ def next_cycle_number(domain: str) -> int:
     return (max(cycles) + 1) if cycles else 1
 
 
+def _swap_note(e: dict[str, Any]) -> str:
+    """A cycle no optimiser wrote (`make challenge`): what changed instead, e.g.
+    `model swap (model: sonnet → opus)`; "" for a loop cycle."""
+    if not e.get("kind"):
+        return ""
+    return f"{e['kind']} ({'; '.join(e.get('agent_yaml') or []) or 'agent.yaml unchanged'})"
+
+
 def prior_attempts(domain: str, task_id: str) -> list[dict[str, Any]]:
     """Every earlier diagnosis of one task, with the cycle's verdict and whether the task got fixed."""
     out: list[dict[str, Any]] = []
@@ -79,8 +87,9 @@ def prior_attempts(domain: str, task_id: str) -> list[dict[str, Any]]:
                     "cycle": e.get("cycle"),
                     "challenger": e.get("challenger"),
                     "root_cause": "not diagnosed: this task passed on the champion and BROKE on the challenger",
-                    "surface": "both",
-                    "change": f"the cycle's edits ({e.get('prompt_diff_summary', '')[:160]} / {e.get('helper_diff_summary', '')[:160]})",
+                    "surface": "agent.yaml" if e.get("kind") else "both",
+                    "change": _swap_note(e)
+                    or f"the cycle's edits ({e.get('prompt_diff_summary', '')[:160]} / {e.get('helper_diff_summary', '')[:160]})",
                     "verdict": outcome.get("verdict", "pending"),
                     "task_outcome": "broken",
                 }
@@ -121,8 +130,11 @@ def render_history(domain: str, task_ids: list[str]) -> str:
     ]
     for e in entries:
         o = e.get("outcome") or {}
+        swap = _swap_note(e)
         lines.append(
-            f"- cycle {e.get('cycle')}: {e.get('champion')} → {e.get('challenger')} · verdict {o.get('verdict', 'pending')}"
+            f"- cycle {e.get('cycle')}: {e.get('champion')} → {e.get('challenger')}"
+            + (f", a {swap}, no optimiser" if swap else "")
+            + f" · verdict {o.get('verdict', 'pending')}"
             f" · passes {o.get('passes', '?')} · fixed {o.get('fixed', [])} · broken {o.get('broken', [])}"
             + (f" · reason: {o.get('reason', '')[:300]}" if o.get("reason") else "")
         )

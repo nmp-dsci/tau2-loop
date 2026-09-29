@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from tau2_loop.config import DOMAINS, registry_path, settings
+from tau2_loop.tracking.prompts import register_prompt
 
 
 def model_name(domain: str) -> str:
@@ -67,18 +68,27 @@ def register(run_id: str, alias: str = "challenger") -> dict[str, Any]:
     return e
 
 
-def promote(run_id: str) -> dict[str, Any]:
+PROMOTION_KINDS = ("gate", "model swap", "re-baseline")
+
+
+def promote(run_id: str, kind: str = "gate") -> dict[str, Any]:
+    """Make a run's version the champion. `kind` says why, so a history never reads a
+    model swap (by fiat) or a re-baseline (same bytes, new cut) as a gate verdict."""
     from tau2_loop.eval.runner import load_run
 
+    if kind not in PROMOTION_KINDS:
+        raise ValueError(f"kind must be one of {PROMOTION_KINDS}, got {kind!r}")
     meta, _ = load_run(run_id)
     reg = read_registry(meta.domain)
     e = _entry(run_id)
     reg["champion"] = e
     if reg.get("challenger") and reg["challenger"].get("agent") == e["agent"]:
         reg["challenger"] = None
-    reg.setdefault("history", []).append({"event": "promote", **e})
+    reg.setdefault("history", []).append({"event": "promote", "kind": kind, **e})
     _write(meta.domain, reg)
     _mirror_alias(meta.domain, "champion", e)
+    # the prompt that won, in the registry beside the model alias (PLATFORM.md)
+    register_prompt(meta.domain, str(e["agent"]))
     return e
 
 

@@ -63,6 +63,60 @@ class Summary:
     partial_action_mean: float | None
     duration_ms: int
     cost_usd_est: float
+    # per check: conversations that carry it and passed it, of those that carry it; `scored`
+    # counts the conversations whose reward basis multiplies it in (0 = recorded, not scored)
+    checks: dict[str, dict[str, int]] = field(default_factory=dict)
+
+
+# Our name for each reward component → tau2's reward_basis value and the row field holding it.
+CHECKS: dict[str, tuple[str, str]] = {
+    "db": ("DB", "db_check"),
+    "actions": ("ACTION", "action_checks"),
+    "communicate": ("COMMUNICATE", "communicate_checks"),
+    "nl": ("NL_ASSERTION", "nl_assertions"),
+    "env": ("ENV_ASSERTION", "env_assertions"),
+}
+
+
+def _ratio_parts(v: str) -> tuple[int, int]:
+    met, total = v.split("/", 1)
+    return int(met), int(total)
+
+
+def check_counts(results: list[TaskResult]) -> dict[str, dict[str, int]]:
+    """Each check's verdicts over a run: `passed / n` conversations (all items met), and items.
+
+    A check a conversation does not carry (no expected actions, no NL assertions)
+    is not counted against it; `db` is one item per conversation."""
+    out: dict[str, dict[str, int]] = {}
+    for name, (basis, attr) in CHECKS.items():
+        n = passed = items = items_met = scored = 0
+        for r in results:
+            if r.correct is None:
+                continue
+            v = getattr(r, attr)
+            if v is None:
+                continue
+            n += 1
+            scored += int(basis in r.reward_basis)
+            if isinstance(v, bool):
+                passed += int(v)
+                items += 1
+                items_met += int(v)
+            else:
+                met, total = _ratio_parts(str(v))
+                passed += int(met == total)
+                items += total
+                items_met += met
+        if n:
+            out[name] = {
+                "passed": passed,
+                "n": n,
+                "items_met": items_met,
+                "items": items,
+                "scored": scored,
+            }
+    return out
 
 
 def summarise(results: list[TaskResult]) -> Summary:
@@ -108,6 +162,7 @@ def summarise(results: list[TaskResult]) -> Summary:
         partial_action_mean=round(sum(partials) / len(partials), 3) if partials else None,
         duration_ms=sum(r.duration_ms for r in results),
         cost_usd_est=round(sum(r.cost_usd_est or 0.0 for r in results), 4),
+        checks=check_counts(results),
     )
 
 

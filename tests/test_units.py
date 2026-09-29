@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from tau2_loop.agent.versions import list_versions, load_version, next_version_name
-from tau2_loop.config import DOMAINS, SPLIT_SEED, SPLIT_SIZE
+from tau2_loop.config import DOMAINS, SPLIT_SEED, SPLIT_VERSION, V1_SIZE
 from tau2_loop.data.splits import read_split, read_task_extract, split_ids
 from tau2_loop.eval.compare import compare, mcnemar_one_sided
 from tau2_loop.eval.results import TaskResult, read_results, slug, summarise, write_results
@@ -28,14 +28,34 @@ def _r(tid: str, ok: bool, trial: int = 1) -> TaskResult:
 
 
 # ── splits ───────────────────────────────────────────────────────────────
+HALVES = {
+    "airline": (25, 25),
+    "retail": (57, 57),
+    "telecom": (57, 57),
+    "banking_knowledge": (48, 49),
+}
+
+
 @pytest.mark.parametrize("domain", DOMAINS)
-def test_committed_split_is_20_20_disjoint_and_seeded(domain: str) -> None:
+def test_committed_split_halves_the_base_set_disjoint_and_seeded(domain: str) -> None:
     s = read_split(domain)
-    assert s["seed"] == SPLIT_SEED and s["size"] == SPLIT_SIZE
-    assert len(s["train"]) == 20 and len(s["test"]) == 20
+    assert s["seed"] == SPLIT_SEED and s["version"] == SPLIT_VERSION
+    assert (len(s["train"]), len(s["test"])) == HALVES[domain]
     assert not set(s["train"]) & set(s["test"])
-    assert s["base_n"] >= 40 and s["reserve_n"] == s["base_n"] - 40
+    assert s["reserve_n"] == 0 and len(s["train"]) + len(s["test"]) == s["base_n"]
     assert split_ids(domain, "all") == s["train"] + s["test"]
+
+
+@pytest.mark.parametrize("domain", DOMAINS)
+def test_split_v2_keeps_what_was_held_out_held_out(domain: str) -> None:
+    """Every task a committed run scored on train is still train, and every test task still test."""
+    from tau2_loop.eval.runner import list_runs
+
+    s = read_split(domain)
+    assert s["train"][:V1_SIZE] == s["v1"]["train"] and s["test"][:V1_SIZE] == s["v1"]["test"]
+    for m in list_runs(domain):
+        if m.split in ("train", "test") and not m.dry_run:
+            assert set(m.task_ids) <= set(s[m.split]), m.run_id
 
 
 @pytest.mark.parametrize("domain", DOMAINS)
@@ -50,13 +70,23 @@ def test_task_extract_covers_the_split(domain: str) -> None:
 def test_split_is_reproducible_from_seed() -> None:
     import random
 
-    from tau2_loop.data.splits import _base_task_ids
+    from tau2_loop.data.splits import _base_task_ids, cut_ids
 
     s = read_split("airline")
     base = _base_task_ids("airline")
     assert len(base) == s["base_n"]
-    drawn = random.Random(SPLIT_SEED).sample(base, 40)
-    assert drawn[:20] == s["train"] and drawn[20:] == s["test"]
+    drawn = random.Random(SPLIT_SEED).sample(base, 2 * V1_SIZE)
+    assert drawn[:V1_SIZE] == s["v1"]["train"] and drawn[V1_SIZE:] == s["v1"]["test"]
+    c = cut_ids(base)
+    assert c["train"] == s["train"] and c["test"] == s["test"]
+
+
+def test_an_odd_reserve_puts_its_extra_task_on_the_reported_side() -> None:
+    from tau2_loop.data.splits import cut_ids
+
+    c = cut_ids([f"t{i}" for i in range(45)], v1_size=10)
+    assert (len(c["train"]), len(c["test"])) == (22, 23)
+    assert c["train"][:10] == c["v1"]["train"] and c["test"][:10] == c["v1"]["test"]
 
 
 # ── versions ──────────────────────────────────────────────────────────────
@@ -282,3 +312,64 @@ def test_ledger_entries_are_redacted_on_write(
     entries = led.read_ledger("airline")
     assert "someone@example.com" not in json.dumps(entries)
     assert entries[0]["prompt_diff_summary"] == f"cc {llm.REDACTED_EMAIL}"
+
+
+# ── the gate with trials, and the refusals ─────────────────────────────────
+def test_compare_scores_a_task_by_its_pass_fraction_over_trials() -> None:
+    def rows(fracs: dict[str, int], trials: int = 3) -> list[TaskResult]:
+        return [_r(t, i < k, trial=i + 1) for t, k in fracs.items() for i in range(trials)]
+
+    champ = rows({"a": 1, "b": 3, "c": 0, "d": 2})
+    chall = rows({"a": 2, "b": 3, "c": 0, "d": 1})
+    v = compare(champ, chall)
+    assert v.trials == 3 and v.n == 4
+    assert v.fixed == ["a"] and v.broken == ["d"]  # ⅓ → ⅔ and ⅔ → ⅓; trial order is irrelevant
+    assert v.champion_passed == 6 and v.challenger_passed == 6
+    assert v.champion_pass1 == v.challenger_pass1 == 0.5
+    assert not v.promote and "3 trials" in v.reason
+
+
+def test_compare_refuses_runs_over_different_tasks_or_trials() -> None:
+    champ = [_r(str(i), i < 10) for i in range(20)]
+    with pytest.raises(ValueError, match="different tasks"):
+        compare(champ, [_r(str(i), i < 10) for i in range(25)])
+    with pytest.raises(ValueError, match="different trials"):
+        compare(champ, [_r(str(i), True, trial=t) for i in range(20) for t in (1, 2)])
+
+
+def test_check_counts_on_a_committed_run() -> None:
+    from tau2_loop.eval.results import check_counts
+    from tau2_loop.eval.runner import load_run
+
+    _, results = load_run("20260915T132148Z_airline_v2_train")
+    c = check_counts(results)
+    assert (c["db"]["passed"], c["db"]["n"], c["db"]["scored"]) == (16, 20, 20)
+    assert (c["actions"]["passed"], c["actions"]["n"]) == (12, 17)
+    assert (c["actions"]["items_met"], c["actions"]["items"], c["actions"]["scored"]) == (45, 55, 0)
+    assert (c["communicate"]["passed"], c["communicate"]["n"]) == (2, 3)
+    assert "env" not in c and "nl" not in c
+
+
+# ── the fork ────────────────────────────────────────────────────────────
+def test_fork_copies_the_surfaces_and_records_the_swap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    import tau2_loop.agent.versions as versions
+
+    real = versions.AGENTS_DIR
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path)
+    shutil.copytree(real / "airline" / "v0", tmp_path / "airline" / "v0")
+    src = versions.load_version("airline", "v0")
+    v = versions.fork_version("airline", "v0", model="sonnet")
+    assert v.name == "v1" and v.config.model == "sonnet" and v.config.effort == "medium"
+    assert v.system_prompt == src.system_prompt and v.helper == src.helper
+    assert (
+        v.fingerprint != src.fingerprint
+    )  # agent.yaml differs, so the bytes a run is logged on do
+    d = json.loads((v.path / "diagnosis.json").read_text())
+    assert d["kind"] == "model swap" and d["forked_from"] == "v0"
+    assert versions.lineage("airline", "v1") == ["v1", "v0"]
+    with pytest.raises(ValueError):
+        versions.fork_version("airline", "v1", model="sonnet")  # nothing would change

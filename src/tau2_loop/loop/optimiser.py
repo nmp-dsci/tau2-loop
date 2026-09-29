@@ -31,6 +31,7 @@ from claude_agent_sdk import (
 from tau2_loop.agent.versions import (
     SURFACES,
     AgentVersion,
+    lineage,
     load_version,
     next_version_name,
     version_dir,
@@ -41,6 +42,7 @@ from tau2_loop.eval.results import TaskResult, read_results
 from tau2_loop.llm import (
     EFFORT,
     Effort,
+    model_label,
     redact,
     redact_tree,
     require_live,
@@ -177,10 +179,20 @@ def build_prompt(
             f"ERROR: {r.error or 'none'} · {r.n_agent_turns} agent turns · {r.n_tool_calls} tool calls · ended by {r.termination_reason}\n"
             f"TRANSCRIPT:\n{condense_trace(tp)}\n"
         )
+    from tau2_loop.eval.runner import USER_MODEL
+
     held = held_challengers(domain, champion.name)
+    ancestors = lineage(domain, champion.name)[1:]
+    fork_note = (
+        f" `{champion.name}` is a fork of `{ancestors[0]}` (same system.md and helper.py, a different "
+        f"agent.yaml), so the held challengers of {', '.join(f'`{a}`' for a in ancestors)} are listed "
+        "below as its own; they were scored on the earlier model and the earlier cut."
+        if ancestors
+        else ""
+    )
     held_block = (
         "\n".join(
-            f"- `agents/{domain}/{h['challenger']}/` (cycle {h['cycle']}, held: {h['reason']}; passes {h['passes']}; fixed {h['fixed']}; "
+            f"- `agents/{domain}/{h['challenger']}/` (cycle {h['cycle']}, challenger of {h['champion']}, held: {h['reason']}; passes {h['passes']}; fixed {h['fixed']}; "
             f"broke {h['broken']}). Its system.md and helper.py are on disk: read them and copy what held — a held "
             "challenger is a starting point, not a rejected one. Do not repeat what broke: read the traces of the broken "
             f"tasks ({', '.join(h.get('broken_traces') or []) or 'none'}) before you decide what to keep."
@@ -191,13 +203,13 @@ def build_prompt(
     ext = read_task_extract(domain)
     tool_names = ", ".join(t["name"] for t in ext.get("tools", []))
     return f"""You are the optimiser in a benchmark improvement loop for a customer-support agent on τ²-bench,
-domain `{domain}`. The agent is Claude Haiku 4.5 on the Claude subscription; it follows a policy document and calls the
-domain's tools ({tool_names}) through a JSON contract; a simulated user (also Haiku) plays the customer. A
+domain `{domain}`. The agent is {model_label(champion.config.model)} on the Claude subscription; it follows a policy document and calls the
+domain's tools ({tool_names}) through a JSON contract; a simulated user ({model_label(USER_MODEL)}) plays the customer. A
 conversation scores 1 only if every component in the task's reward basis passes: the final database equals the
 gold one produced by the expected actions, the expected actions were called with the expected arguments, the
 required information was said to the user, and (retail) an LLM judge finds the NL assertions met.
 
-The champion is `agents/{domain}/{champion.name}/`. It failed the conversations below on the train split.
+The champion is `agents/{domain}/{champion.name}/`. It failed the conversations below on the train split.{fork_note}
 A copy of the champion is already at `agents/{domain}/{new_name}/`. Your job is to turn that copy into a better
 version by editing **only two files**: `agents/{domain}/{new_name}/system.md` (the agent's system prompt; the
 literal `{{policy}}` is replaced by the domain policy at run time — keep it) and
@@ -261,9 +273,10 @@ before deciding a root cause.
   ]
 }}
 `changes` is the change log: one entry per distinct edit, so a reader looking at the diff can find the reason next
-to the hunk. Then stop. The harness evaluates `{new_name}` on the same train tasks, applies the gate (a one-sided
-McNemar test on the paired tasks: fixes must outweigh breaks with p < 0.05 — one break costs three extra fixes),
-and records the outcome next to your diagnosis in the ledger.
+to the hunk. Then stop. The harness evaluates `{new_name}` on the same train tasks and applies the gate: it
+promotes when `{new_name}` fixes at least one task and breaks none, or when a one-sided exact (McNemar) test on the
+tasks that changed gives p < 0.05 (five fixes with no break; seven with one break; nine with two). It records the
+outcome next to your diagnosis in the ledger, then runs `{new_name}` on the held-out test split for the record.
 """
 
 
@@ -282,13 +295,17 @@ def _broken_trace_paths(outcome: dict[str, Any]) -> list[str]:
 
 
 def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:
-    """Earlier challengers of this champion that the gate held: real progress the next version may reuse."""
+    """Earlier challengers of this champion — or of the version it was forked from — that the
+    gate held: real progress the next version may reuse. A held model swap is not: its
+    surfaces are its source's, so there is nothing in them to copy."""
+    names = set(lineage(domain, champion_name))
     out: list[dict[str, Any]] = []
     for e in read_ledger(domain):
         o = e.get("outcome") or {}
         if (
-            e.get("champion") == champion_name
+            e.get("champion") in names
             and o.get("verdict") == "hold"
+            and e.get("kind") != "model swap"
             and e.get("challenger")
             and version_dir(domain, str(e["challenger"])).exists()
         ):
@@ -296,6 +313,7 @@ def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:
                 {
                     "cycle": e.get("cycle"),
                     "challenger": e["challenger"],
+                    "champion": e.get("champion"),
                     "reason": o.get("reason"),
                     "passes": o.get("passes"),
                     "fixed": o.get("fixed"),
@@ -351,7 +369,7 @@ async def run_optimiser(
     champion: AgentVersion,
     run_id: str,
     failures: list[TaskResult],
-    model: str = "sonnet",
+    model: str = "opus",
     effort: Effort = EFFORT,
 ) -> OptimiserOutput:
     require_live()

@@ -1,5 +1,18 @@
 import { Link } from 'react-router-dom';
 import { type DomainSummary, type LedgerEntry, type RunMeta, domainLabel, fmtK, shortRun, useGet } from '../lib/api';
+import { Rate } from '../lib/ui';
+import { domainPath, optimisePath, rubricPath, runPath, runsPath } from '../lib/url';
+
+/** One object the whole strip is read from (`/api/stats`). */
+type Stats = {
+  domains: { domain: string; base_n: number | null; champion: string | null; passed: number | null; n_scored: number | null; cycles: number }[];
+  base_total: number;
+  runs: number;
+  runs_scored: number;
+  conversations: number;
+  cost_usd_est: number;
+  cycles: number;
+};
 
 function Arrow() {
   return (
@@ -12,12 +25,17 @@ function Arrow() {
 }
 
 export function Overview() {
+  const { data: stats } = useGet<Stats>('/api/stats');
   const { data: domains } = useGet<DomainSummary[]>('/api/domains');
   const { data: runs } = useGet<RunMeta[]>('/api/runs');
   const { data: ledger } = useGet<Record<string, LedgerEntry[]>>('/api/ledger');
   const real = (runs ?? []).filter((r) => !r.dry_run && r.summary?.n_scored);
   const cycles = Object.values(ledger ?? {}).flat();
   const promoted = cycles.filter((e) => e.outcome?.verdict === 'promote').length;
+  // a cycle whose gate has not run yet is neither held nor rejected
+  const pending = cycles.filter((e) => !e.outcome || e.outcome.verdict === 'pending').length;
+  // `make challenge` cycles: gated like the rest, but no optimiser session wrote the challenger
+  const byHand = cycles.filter((e) => e.kind).length;
   const optTokens = cycles.reduce((n, e) => n + (e.tokens?.optimiser_in ?? 0) + (e.tokens?.optimiser_out ?? 0), 0);
   const scoredDomains = (domains ?? []).filter((d) => d.champion);
   const champPassed = scoredDomains.reduce((n, d) => n + (d.champion?.passed ?? 0), 0);
@@ -42,18 +60,24 @@ export function Overview() {
         <div className="kpi">
           <div className="label">champions on train</div>
           <div className="n">{champScored ? `${champPassed}/${champScored}` : '—'}</div>
-          <div className="b">{scoredDomains.length ? `${scoredDomains.length} of 4 domains have a champion · 20 train conversations each` : 'no champion yet — run `make eval DOMAIN=…` and promote'}</div>
+          <div className="b">
+            {scoredDomains.length ? `${scoredDomains.length} of 4 domains have a champion · each on the train run it was promoted on` : 'no champion yet — run `make eval DOMAIN=…` and promote'}
+          </div>
         </div>
         <div className="kpi">
           <div className="label">conversations scored</div>
           <div className="n">{conversations || '—'}</div>
-          <div className="b">{real.length} runs · {testRuns.length} on the held-out test split</div>
+          <div className="b">
+            {real.length} runs · {testRuns.length} on the held-out test split · of {stats?.base_total ?? '—'} base tasks in the benchmark
+          </div>
         </div>
         <div className="kpi">
           <div className="label">loop cycles</div>
           <div className="n">{cycles.length}</div>
           <div className="b">
-            {promoted} promoted · {cycles.length - promoted} held or rejected · {fmtK(optTokens)} optimiser tokens
+            {promoted} promoted · {cycles.length - promoted - pending} held or rejected
+            {pending ? ` · ${pending} pending` : ''} · {fmtK(optTokens)} optimiser tokens
+            {byHand ? ` · ${byHand} of ${cycles.length} a hand-made challenger, no optimiser` : ''}
           </div>
         </div>
         <div className="kpi">
@@ -63,7 +87,7 @@ export function Overview() {
         </div>
       </div>
 
-      <h2>1 · Where each domain stands — train is what the gate sees, test is reported once per promotion</h2>
+      <h2>1 · Where each domain stands — train is what the gate sees, test is reported once per challenger</h2>
       <div className="tw">
         <table>
           <thead>
@@ -85,7 +109,7 @@ export function Overview() {
               return (
                 <tr key={d.domain} className={d.champion ? '' : ''}>
                   <td className="sub">
-                    <Link to={`/tasks/${d.domain}`}>{domainLabel(d.domain)}</Link>
+                    <Link to={domainPath(d.domain)}>{domainLabel(d.domain)}</Link>
                   </td>
                   <td className="num">{d.base_n ?? '—'}</td>
                   <td className="mono small">
@@ -93,8 +117,12 @@ export function Overview() {
                   </td>
                   <td className="small wrap">{Object.entries(d.reward_bases).map(([k, v]) => `${k} ${v}`).join(' · ') || '—'}</td>
                   <td className="mono">{d.champion ? `${d.champion.agent} · ${d.champion.fingerprint}` : <span className="muted">none</span>}</td>
-                  <td className="num">{d.champion ? `${d.champion.passed}/${d.champion.n_scored}` : '—'}</td>
-                  <td className="num">{test?.summary ? `${test.summary.passed}/${test.summary.n_scored}` : '—'}</td>
+                  <td className="num">
+                    <Rate passed={d.champion?.passed} n={d.champion?.n_scored} />
+                  </td>
+                  <td className="num">
+                    <Rate passed={test?.summary?.passed} n={test?.summary?.n_scored} />
+                  </td>
                   <td className="num">{d.versions.length}</td>
                   <td className="num">{d.cycles}</td>
                 </tr>
@@ -104,7 +132,7 @@ export function Overview() {
         </table>
       </div>
       <p className="small muted">
-        A champion's train number is the run its registry entry points at; the test number is the last test-split run of that version. Both are folders under <code>runs/</code>.
+        A champion's train number is the run its registry entry points at; the test number is the last test-split run of that version. Both are folders under <code>runs/</code>. The benchmark is {stats?.base_total ?? '—'} base tasks in total; {stats?.cycles ?? 0} loop cycles have run, at an estimated ${stats?.cost_usd_est?.toFixed(2) ?? '0.00'} of tokens had they been billed.
       </p>
 
       <h2>2 · One conversation — tau2 runs the environment, our agent is one factory in its registry</h2>
@@ -215,6 +243,10 @@ export function Overview() {
       </figure>
 
       <h2>4 · Latest runs</h2>
+      <p className="small muted">
+        <Link to={runsPath()}>every run, filterable</Link> · <Link to={optimisePath('airline')}>the rounds that produced them</Link> ·{' '}
+        <Link to={rubricPath()}>how a conversation is judged</Link>
+      </p>
       <div className="tw">
         <table>
           <thead>
@@ -236,13 +268,13 @@ export function Overview() {
               .map((r) => (
                 <tr key={r.run_id}>
                   <td className="sub">
-                    <Link to={`/runs/${r.run_id}`}>{shortRun(r.run_id)}</Link>
+                    <Link to={runPath(r.run_id)}>{shortRun(r.run_id)}</Link>
                   </td>
                   <td>{domainLabel(r.domain)}</td>
                   <td className="mono">{r.agent}</td>
                   <td>{r.split}</td>
                   <td className="num">
-                    {r.summary?.passed}/{r.summary?.n_scored}
+                    <Rate passed={r.summary?.passed} n={r.summary?.n_scored} />
                   </td>
                   <td className="num">{r.summary?.errored_ids.length ?? 0}</td>
                   <td className="wrap small muted">{r.note}</td>

@@ -1,0 +1,134 @@
+{
+  "diagnoses": [
+    {
+      "task_id": "24",
+      "symptom": "Agent told the user reservation H9ZU1C 'has already occurred/been flown' (flights dated 2024-05-24/25) and transferred to a human instead of cancelling and then booking the new JFK-SEA trip.",
+      "root_cause": "v3 forked from v0 before the v1/v2 current-time grounding fix was merged, so it regressed to substituting a real-world notion of 'today' for the policy's stated 2024-05-15 current time, wrongly judging future flights as past.",
+      "surface": "both",
+      "change": "Restored the v1/v2 'WHAT TODAY MEANS' instruction block plus the helper.py extra_context reminder that restates the policy's own current-time line.",
+      "verified_in_session": true,
+      "verification": "Ran helper.extra_context on the real policy text from data/tasks/airline.json and confirmed it returns a reminder containing 'The current time is 2024-05-15 15:00:00 EST.'"
+    },
+    {
+      "task_id": "44",
+      "symptom": "Agent claimed it had no tool access to flight durations/layover times and transferred to a human instead of searching flights and computing durations to sort reservations into cancel/upgrade buckets.",
+      "root_cause": "Same v3-vs-v0 regression: v3 lacks the v1/v2 'DO NOT GIVE UP TOO EARLY' instruction telling the agent to use search_direct_flight/search_onestop_flight plus calculate to derive durations instead of giving up.",
+      "surface": "system.md",
+      "change": "Restored the v1/v2 'DO NOT GIVE UP TOO EARLY' instruction block verbatim.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run this cycle (already held for 2 cycles with fixed=true, broke=none); restoring it is expected to reproduce the same fix now that v4 starts from the un-fixed v3 baseline."
+    },
+    {
+      "task_id": "25",
+      "symptom": "Agent never called book_reservation; conversation ended after the agent asked one confirming question too many while the balances/date reasoning drifted.",
+      "root_cause": "Same v3-vs-v0 regression: v3 lacks v2's balances-must-be-stated-by-agent and follow-payment-instructions-exactly rules that fixed this task under v2.",
+      "surface": "system.md",
+      "change": "Restored v2's 'PAYMENT METHOD BALANCES ARE ALREADY AVAILABLE' and 'FOLLOW THE USER'S PAYMENT INSTRUCTIONS EXACTLY' instruction blocks verbatim.",
+      "verified_in_session": false,
+      "verification": "Not independently re-run this cycle (held under v2 with fixed=true, broke=none); restoring it into v4 reproduces v2's fix on top of the v3 baseline."
+    },
+    {
+      "task_id": "39",
+      "symptom": "Agent correctly checked every one of the user's 7 reservations but did not cancel MSJ4OA (insurance: yes, economy, reason given as 'change of plan'), even though gold expects it cancelled alongside the two business-class reservations.",
+      "root_cause": "The agent (and the v1/v2 'check every reservation' rule, which does not by itself fix this) read the policy's insurance eligibility clause too narrowly, requiring the user's stated reason to literally be 'health' or 'weather' before treating an insured reservation as cancel-eligible; the policy's health/weather wording actually describes the refund guarantee, and the gold answer treats any insured reservation as eligible once the user gives a concrete cancellation reason.",
+      "surface": "system.md",
+      "change": "Added a clause to the 'CHECK EVERY RESERVATION' block clarifying that insurance on a reservation satisfies the cancel-eligibility clause for any stated reason, not only literal health/weather wording.",
+      "verified_in_session": false,
+      "verification": "Read the full trace runs/20260928T060029Z_airline_v3_train/traces/39.json: MSJ4OA has insurance: yes, cabin economy, created 2024-05-05 (>24h before the 2024-05-15 current time), not business — so only the insurance clause could make it eligible, and gold cancels it despite the user's reason being 'change of plan'."
+    },
+    {
+      "task_id": "23",
+      "symptom": "User proposed splitting one reservation into three separate reservations (one per passenger) so each could use its own certificate; agent refused, calling it a restructuring it 'can't accommodate', and booked one reservation with $1,786 on the Mastercard and never stated the $327/$1,000/$1,286 figures.",
+      "root_cause": "The agent invented a policy restriction against splitting a single trip into multiple reservations; no such restriction exists in the policy (only 'at most one certificate per reservation' is stated, which the split satisfies), and refusing the split also made it structurally impossible to reach the $1,286 Mastercard total the user needed communicated.",
+      "surface": "system.md",
+      "change": "Added a clause to the payment-instructions block stating there is no limit on the number of reservations a party can be split into, and the agent must honor a user's proposal to split a booking across reservations as long as each one independently satisfies policy limits, rather than inventing a restriction against it.",
+      "verified_in_session": false,
+      "verification": "Read the transcript: the agent's own refusal message cites no specific policy clause, and cross-checked the 'Book flight' policy section which only limits certificates/credit cards/gift cards per reservation, not the number of reservations a customer may make."
+    },
+    {
+      "task_id": "35",
+      "symptom": "book_reservation was called with passenger dob '1989-06-10' (what the user said verbally) instead of the gold '1981-05-26' (the account holder's actual DOB from get_user_details), so the DB/action match failed even though the flights and payment were correct.",
+      "root_cause": "The agent asked the self-passenger for their date of birth and accepted whatever the user said, even though it had already retrieved the true DOB via get_user_details earlier in the same conversation; it never cross-checked the user's stated value against the profile record.",
+      "surface": "system.md",
+      "change": "Added a new instruction block stating that profile data (account holder DOB, saved_passengers DOB) already retrieved via get_user_details is the source of truth and must be used for booking, even if the user later states a conflicting value in chat.",
+      "verified_in_session": false,
+      "verification": "Read the transcript: get_user_details for aarav_ahmed_6699 returned dob '1981-05-26' early in the conversation; later the user said 'Date of birth: June 10, 1989' for themself and the agent used that value verbatim in book_reservation, producing the argument mismatch against gold."
+    },
+    {
+      "task_id": "19",
+      "symptom": "Agent listed cancellation details (using insurance) and asked 'Shall I proceed? (yes/no)'; the user replied 'Yes... ###STOP###' in the same turn and the conversation ended before the agent got another turn to call cancel_reservation.",
+      "root_cause": "The agent spent a turn on an unrelated, non-eligibility-affecting tool call (get_flight_status) before presenting the required confirmation, adding a turn of delay; combined with the user simulator ending the call immediately after giving consent, this meant the actual cancel_reservation call never happened before the episode terminated. This is baseline v0/v3 behavior (task 19 already fails without any of our other edits) and is distinct from the v1 regression on this same task (which was caused by v1's now-removed extra confirmation-restating instruction, not present in this edit).",
+      "surface": "system.md",
+      "change": "Added a 'MINIMIZE TURNS BEFORE A REQUIRED CONFIRMATION' instruction telling the agent to skip tool calls that do not affect eligibility or required details and reach the confirmation message as directly as possible.",
+      "verified_in_session": false,
+      "verification": "Read the trace: the agent called get_flight_status (irrelevant to insurance-based cancellation eligibility) as an extra turn between the user's cancellation request and the confirmation message; removing that extra turn should let the confirmation exchange complete one turn earlier and reduce the chance the user simulator ends the call before the tool call fires. This is a new, more targeted fix than the v1 change previously tried and rejected for this task."
+    }
+  ],
+  "prompt_diff_summary": "Restored v2's full instruction set (current-time grounding, don't-give-up-on-durations, balances-must-be-stated, check-every-reservation, follow-payment-instructions-exactly) on top of v3's bare baseline, fixed the stray '</output>' typo from v2, and added three new blocks: insurance-eligibility applies regardless of exact reason wording, no invented restriction against splitting a booking into multiple reservations, profile DOB is the source of truth over conflicting user chat statements, and minimize tool calls before a required confirmation.",
+  "helper_diff_summary": "Restored the v1/v2 extra_context hook that re-appends the policy's own 'The current time is ...' line as a reminder at the end of the system prompt.",
+  "expected_to_fix": ["24", "44", "25", "39", "23", "35", "19"],
+  "risks": [
+    "The insurance-eligibility loosening (task 39) could over-cancel reservations in the test split if a task specifically expects the agent to deny cancellation on an insured reservation for an uncovered reason; mitigated by keeping the other three eligibility conditions (24h, business, airline-cancelled) unchanged and only broadening the insurance clause, which matches the one observed gold example.",
+    "The split-into-multiple-reservations instruction (task 23) could cause over-eager splitting on tasks where the user never proposes it; mitigated by phrasing it as 'if the user proposes this', not a default behavior.",
+    "The DOB source-of-truth instruction (task 35) could cause the agent to ignore a legitimately new/updated DOB the user is trying to correct in their own profile; mitigated by only asserting this for passengers already present in profile/saved_passengers data within the same conversation, not for genuinely new passengers.",
+    "Restoring the full v1/v2 instruction set carries the same risk v1 showed on task 19 (extra confirmation turns costing a turn); mitigated by not restoring v1's specific 'restate today's date' framing verbatim and instead adding the more targeted 'minimize turns before confirmation' rule, and by keeping v2's already-held fold-finding-into-one-message rule which v1 lacked when it broke task 19."
+  ],
+  "changes": [
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — WHAT \"TODAY\" MEANS",
+      "what": "Restored the v1/v2 current-time-grounding instruction block, including v2's addition to fold a matched-record finding and its policy consequence into one message.",
+      "why": "v3 is a bare v0 fork missing this fix; task 24's transcript shows the agent calling upcoming flights 'already flown/occurred' using a wrong notion of today.",
+      "task_ids": ["24"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — DO NOT GIVE UP TOO EARLY",
+      "what": "Restored the v1/v2 instruction to use search tools plus calculate to derive flight durations instead of claiming the data is unavailable.",
+      "why": "Task 44's transcript shows the agent stating 'I don't have access to actual flight durations' and transferring instead of searching flights and computing durations.",
+      "task_ids": ["44"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — PAYMENT METHOD BALANCES ARE ALREADY AVAILABLE TO YOU",
+      "what": "Restored v2's instruction that balances (including summed totals across multiple gift cards/certificates) must be read from get_user_details and stated by the agent itself.",
+      "why": "Held under v2 with fixed=['11','14','25','44'], broke=none; v3 lacks it entirely.",
+      "task_ids": ["25"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — CHECK EVERY RESERVATION BEFORE YOU CONCLUDE",
+      "what": "Restored v2's instruction to call get_reservation_details on every reservation id before concluding anything spans multiple reservations, and added a new clause that an insured reservation satisfies the cancel-eligibility insurance clause regardless of whether the user's stated reason literally says 'health' or 'weather'.",
+      "why": "Task 39's gold expects MSJ4OA (insurance: yes, reason: 'change of plan') to be cancelled alongside the two business-class reservations, which a literal health/weather reading of the insurance clause would incorrectly exclude.",
+      "task_ids": ["39"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — FOLLOW THE USER'S PAYMENT INSTRUCTIONS EXACTLY",
+      "what": "Restored v2's instructions to follow explicit payment-split instructions exactly and act on the very next turn after confirmation, and added a new clause that splitting one trip into multiple reservations (one per passenger) to use more certificates is allowed and must not be refused if each reservation independently satisfies policy limits.",
+      "why": "Task 23's transcript shows the agent refusing the user's three-reservation idea by inventing a restriction not present in policy, which also prevented it from ever stating the required $327/$1,000/$1,286 figures because the split booking (and its $1,286 Mastercard total) never happened.",
+      "task_ids": ["23"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — DO NOT OVERRIDE KNOWN PROFILE DATA WITH WHAT THE USER SAYS IN CHAT",
+      "what": "New instruction: use the date of birth already on file (from get_user_details / saved_passengers) for a known passenger, even if the user later states a different value in chat; only ask for DOB when the passenger is genuinely new.",
+      "why": "Task 35's transcript shows the agent booking with dob '1989-06-10' (what the user said) instead of the profile's actual '1981-05-26' retrieved earlier via get_user_details, causing an argument mismatch against gold.",
+      "task_ids": ["35"]
+    },
+    {
+      "file": "system.md",
+      "anchor": "CRITICAL — MINIMIZE TURNS BEFORE A REQUIRED CONFIRMATION",
+      "what": "New instruction: skip tool calls that do not affect eligibility or required details before presenting the mandatory pre-action confirmation, to reach that confirmation (and the subsequent action) in as few turns as possible.",
+      "why": "Task 19's transcript shows an extra get_flight_status call (irrelevant to insurance-based cancellation eligibility) delaying the confirmation message by one turn; the user then confirmed and ended the call in the same message before the agent's next turn could fire cancel_reservation.",
+      "task_ids": ["19"]
+    },
+    {
+      "file": "helper.py",
+      "anchor": "def extra_context(policy: str) -> str",
+      "what": "Restored the v1/v2 extra_context hook that extracts and re-appends the policy's own 'The current time is ...' line as a reminder.",
+      "why": "Reinforces the current-time-grounding instruction at a recency-favoured position; held across two prior cycles with no observed harm.",
+      "task_ids": ["24", "44", "25", "39", "23"]
+    }
+  ]
+}
