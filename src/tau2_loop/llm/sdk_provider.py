@@ -41,6 +41,7 @@ from tau2_loop.llm.core import (  # re-exported: tests and callers import them f
     Answer,
     SdkResult,
     answer,
+    cache_usage,
     run_query,
     seconds_until_reset,
 )
@@ -96,6 +97,7 @@ def to_model_response(a: Answer, model: str) -> ModelResponse:
             prompt_tokens=res.input_tokens,
             completion_tokens=res.output_tokens,
             total_tokens=res.input_tokens + res.output_tokens,
+            **cache_usage(res),
         ),
     )
     response._hidden_params = {  # noqa: SLF001 - litellm's own extension point

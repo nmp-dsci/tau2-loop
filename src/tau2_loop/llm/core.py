@@ -13,6 +13,12 @@ settings files, a working directory outside any checkout, and an environment
 reduced to an allow-list. The SDK merges `options.env` over the parent's
 environment, so leaving a variable out is not enough; every name outside the
 list is passed blank.
+
+The user prompt goes in as blocks, one per turn (`prompting.build_blocks`),
+with a cache breakpoint on the last, so the prompt cache reads back what the
+last call sent and writes only the new turns; as one text block it wrote the
+whole transcript afresh every call (s10).
+A result's cache reads and writes are kept apart so a run can show the split.
 """
 
 from __future__ import annotations
@@ -24,12 +30,13 @@ import re
 import tempfile
 import time
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
-from tau2_loop.llm.prompting import build_prompt, parse_reply
+from tau2_loop.llm.prompting import build_blocks, parse_reply
 
 MODELS: dict[str, str] = {
     "haiku": "claude-haiku-4-5",
@@ -181,9 +188,57 @@ class SdkResult:
     duration_ms: int
     session_id: str | None
     error: str | None = None
+    # the part of input_tokens read from the prompt cache, and the part written to it
+    cache_read: int = 0
+    cache_write: int = 0
 
 
-async def _query(system_prompt: str, user_prompt: str, model: str, effort: str) -> SdkResult:
+def cache_usage(res: SdkResult) -> dict[str, Any]:
+    """How much of `prompt_tokens` came from the prompt cache and how much went into it,
+    in the fields litellm keeps (OpenAI's `cached_tokens` and Anthropic's pair)."""
+    return {
+        "prompt_tokens_details": {
+            "cached_tokens": res.cache_read,
+            "cache_creation_tokens": res.cache_write,
+        },
+        "cache_read_input_tokens": res.cache_read,
+        "cache_creation_input_tokens": res.cache_write,
+    }
+
+
+# The CLI writes its cache at the prompt's end with a 1-hour lifetime; a mark before it
+# must live at least as long, or the API refuses the request.
+CACHE_MARK = {"type": "ephemeral", "ttl": "1h"}
+
+
+def content_blocks(blocks: list[str]) -> list[dict[str, Any]]:
+    """The blocks as text content, the last one marked for the cache.
+
+    The CLI marks the prompt's end on a block of its own after ours, and a later
+    prompt never repeats that block, so its entry is never read. Our mark leaves
+    an entry exactly at this call's last turn; the next call, from its own mark,
+    finds it a few blocks back and reads everything this call sent. The API allows
+    four marks and the CLI uses three, so there is room for this one only.
+    """
+    content: list[dict[str, Any]] = [{"type": "text", "text": b} for b in blocks]
+    if len(content) > 1:
+        content[-1]["cache_control"] = dict(CACHE_MARK)
+    return content
+
+
+async def _blocks(blocks: list[str]) -> AsyncIterator[dict[str, Any]]:
+    """One user message whose content is the blocks, for the SDK's streaming input."""
+    yield {
+        "type": "user",
+        "message": {"role": "user", "content": content_blocks(blocks)},
+        "parent_tool_use_id": None,
+        "session_id": "default",
+    }
+
+
+async def _query(
+    system_prompt: str, user_prompt: str | list[str], model: str, effort: str
+) -> SdkResult:
     from claude_agent_sdk import (
         AssistantMessage,
         ClaudeAgentOptions,
@@ -208,7 +263,10 @@ async def _query(system_prompt: str, user_prompt: str, model: str, effort: str) 
     texts: list[str] = []
     res = SdkResult("", 0, 0, None, 0, None)
     started = time.time()
-    async for msg in query(prompt=user_prompt, options=options):
+    prompt: str | AsyncIterator[dict[str, Any]] = (
+        _blocks(user_prompt) if isinstance(user_prompt, list) else user_prompt
+    )
+    async for msg in query(prompt=prompt, options=options):
         if isinstance(msg, AssistantMessage):
             for b in msg.content:
                 if isinstance(b, TextBlock):
@@ -221,6 +279,8 @@ async def _query(system_prompt: str, user_prompt: str, model: str, effort: str) 
                 + int(u.get("cache_creation_input_tokens", 0))
             )
             res.output_tokens = int(u.get("output_tokens", 0))
+            res.cache_read = int(u.get("cache_read_input_tokens", 0))
+            res.cache_write = int(u.get("cache_creation_input_tokens", 0))
             res.cost_usd = msg.total_cost_usd
             res.session_id = msg.session_id
             if msg.is_error:
@@ -256,7 +316,9 @@ def seconds_until_reset(error: str, now: datetime | None = None) -> int | None:
     return min(int((target - now).total_seconds()) + 60, MAX_WAIT_S)
 
 
-def run_query(system_prompt: str, user_prompt: str, model: str, effort: str = EFFORT) -> SdkResult:
+def run_query(
+    system_prompt: str, user_prompt: str | list[str], model: str, effort: str = EFFORT
+) -> SdkResult:
     """One SDK query on a private event loop, so it works from worker threads.
 
     A subscription window that has run out is waited for, not failed: the
@@ -313,8 +375,8 @@ def answer(
 ) -> Answer:
     """The chat request as the SDK sees it, and its reply parsed back; raises CoreError on no reply."""
     effort = effort if effort in EFFORTS else EFFORT
-    system_prompt, user_prompt = build_prompt(messages, tools)
-    res = run_query(system_prompt, user_prompt, resolve_model(model), effort)
+    system_prompt, blocks = build_blocks(messages, tools)
+    res = run_query(system_prompt, blocks, resolve_model(model), effort)
     if res.error and not res.text:
         raise CoreError(f"claude-sdk: {res.error}")
     reply = parse_reply(res.text, tools_present=bool(tools))

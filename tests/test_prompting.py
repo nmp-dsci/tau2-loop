@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from tau2_loop.llm.prompting import build_prompt, parse_reply, render_transcript
+from tau2_loop.llm.prompting import (
+    build_blocks,
+    build_prompt,
+    parse_reply,
+    render_transcript,
+)
 
 TOOLS = [
     {
@@ -31,6 +36,28 @@ def test_build_prompt_without_tools_asks_for_plain_text() -> None:
     )
     assert "Tools" not in system
     assert "plain text" in user
+
+
+def test_each_call_s_blocks_start_the_next_call_s() -> None:
+    """The prompt cache matches a prefix at block boundaries: a call's blocks must be the
+    first blocks of the next call's, so the next call reads them back instead of writing them."""
+    history = [
+        {"role": "system", "content": "POLICY"},
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "Hello. Your id?"},
+        {"role": "user", "content": "u1"},
+    ]
+    system_k, blocks_k = build_blocks(history, TOOLS)
+    grown = [
+        *history,
+        {"role": "assistant", "content": "Thanks."},
+        {"role": "user", "content": "ok"},
+    ]
+    system_k2, blocks_k2 = build_blocks(grown, TOOLS)
+    assert system_k == system_k2
+    assert blocks_k2[: len(blocks_k)] == blocks_k and len(blocks_k2) == len(blocks_k) + 2
+    assert blocks_k[-1] == "[user]\nu1"  # nothing closes the transcript after the last turn
+    assert build_prompt(history, TOOLS)[1] == "\n\n".join(blocks_k)
 
 
 def test_transcript_renders_tool_calls_and_results() -> None:
