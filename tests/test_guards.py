@@ -33,6 +33,16 @@ def test_the_fence_closes_runs_data_loop_and_vendor_but_not_what_the_prompt_name
     assert bash_fence_reason("ls agents/banking_knowledge/v2", [partner]) is not None
 
 
+def test_the_fence_refuses_the_root_and_any_ancestor_of_a_closed_folder() -> None:
+    partner = ROOT / "agents" / "banking_knowledge" / "v2"
+    for path in (".", str(ROOT), "agents/..", str(ROOT.parent)):
+        reason = fence_reason(path, set(), [])
+        assert reason and "inside your version" in reason
+    assert fence_reason("agents/banking_knowledge", set(), [partner]) is not None
+    assert fence_reason("agents/banking_knowledge/v1", set(), [partner]) is None
+    assert fence_reason("agents/banking_knowledge/v1/system.md", set(), []) is None
+
+
 def test_a_code_surface_imports_only_the_allow_list() -> None:
     ok = "import re\nfrom datetime import date\n\ndef check_write(n, a, s):\n    return None\n"
     assert import_violations(ok) == []

@@ -69,6 +69,12 @@ def fence_reason(path: str, allowed: set[Path], hidden: list[Path]) -> str | Non
             return "that folder is another challenger of this cycle; it is scored against yours"
     if p in allowed:
         return None
+    closed = [(ROOT / f).resolve() for f in FENCED] + [h.resolve() for h in hidden]
+    if any(_inside(c, p) for c in closed):
+        return (
+            "that path holds folders closed to the optimiser: name a folder inside your "
+            "version or the traces your prompt names"
+        )
     for f in FENCED:
         if _inside(p, (ROOT / f).resolve()):
             return (
