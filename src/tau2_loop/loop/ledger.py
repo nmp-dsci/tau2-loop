@@ -74,12 +74,21 @@ def _swap_note(e: dict[str, Any]) -> str:
     return f"{e['kind']} ({'; '.join(e.get('agent_yaml') or []) or 'agent.yaml unchanged'})"
 
 
+def seen_changes(outcome: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """(fixed, broken) as an optimiser may see them: the read half's where train is halved
+    (s09), since the gate half's ids must never reach a prompt; else the gate's own lists."""
+    if "read_fixed" in outcome:
+        return list(outcome.get("read_fixed") or []), list(outcome.get("read_broken") or [])
+    return list(outcome.get("fixed") or []), list(outcome.get("broken") or [])
+
+
 def prior_attempts(domain: str, task_id: str) -> list[dict[str, Any]]:
     """Every earlier diagnosis of one task, with the cycle's verdict and whether the task got fixed."""
     out: list[dict[str, Any]] = []
     for e in read_ledger(domain):
         outcome = e.get("outcome") or {}
-        if task_id in (outcome.get("broken") or []) and not any(
+        fixed_ids, broken_ids = seen_changes(outcome)
+        if task_id in broken_ids and not any(
             str(d.get("task_id")) == str(task_id) for d in e.get("diagnoses", [])
         ):
             out.append(
@@ -97,8 +106,8 @@ def prior_attempts(domain: str, task_id: str) -> list[dict[str, Any]]:
         for d in e.get("diagnoses", []):
             if str(d.get("task_id")) != str(task_id):
                 continue
-            fixed = task_id in (outcome.get("fixed") or [])
-            broken = task_id in (outcome.get("broken") or [])
+            fixed = task_id in fixed_ids
+            broken = task_id in broken_ids
             still_failed = task_id in (outcome.get("still_failed") or [])
             out.append(
                 {
@@ -131,13 +140,25 @@ def render_history(domain: str, task_ids: list[str]) -> str:
     for e in entries:
         o = e.get("outcome") or {}
         swap = _swap_note(e)
+        fixed_ids, broken_ids = seen_changes(o)
+        halved = "read_fixed" in o
+        reason = (
+            "" if halved else str(o.get("reason") or "")
+        )  # a halved gate's reason names gate ids
         lines.append(
             f"- cycle {e.get('cycle')}: {e.get('champion')} → {e.get('challenger')}"
             + (f", a {swap}, no optimiser" if swap else "")
+            + (f", the {e['optimiser_mode']} optimiser" if e.get("optimiser_mode") else "")
             + f" · verdict {o.get('verdict', 'pending')}"
-            f" · passes {o.get('passes', '?')} · fixed {o.get('fixed', [])} · broken {o.get('broken', [])}"
-            + (f" · reason: {o.get('reason', '')[:300]}" if o.get("reason") else "")
+            + (
+                f" · gate-half passes {o.get('passes', '?')} · on the read half fixed {fixed_ids} · broken {broken_ids}"
+                if halved
+                else f" · passes {o.get('passes', '?')} · fixed {fixed_ids} · broken {broken_ids}"
+            )
+            + (f" · reason: {reason[:300]}" if reason else "")
         )
+        if e.get("surfaces_changed"):
+            lines.append(f"    surfaces changed: {', '.join(e['surfaces_changed'])}")
         lines.append(f"    prompt: {e.get('prompt_diff_summary', '')}")
         lines.append(f"    helper: {e.get('helper_diff_summary', '')}")
     for tid in task_ids:

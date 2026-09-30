@@ -39,6 +39,7 @@ class Conversation:
     domain: str
     task: Any  # tau2.data_model.tasks.Task
     messages: list[Any]  # tau2.data_model.message.Message
+    retrieval: str | None = None  # banking: the run's retrieval variant
 
 
 def available() -> bool:
@@ -46,15 +47,21 @@ def available() -> bool:
     return importlib.util.find_spec("tau2") is not None
 
 
-def env_kwargs_for(domain: str, task: Any) -> dict[str, Any]:
+# The variant every banking run used before `RunMeta.retrieval` recorded one.
+LEGACY_RETRIEVAL = "bm25"
+
+
+def env_kwargs_for(domain: str, task: Any, retrieval: str | None = None) -> dict[str, Any]:
     """The environment the live evaluation built. Banking's retrieval must be the run's own
-    `bm25` (`eval/runner.py`), never a default: the dense variants call an embedding API."""
+    variant (`RunMeta.retrieval`; `bm25` before the field existed), never tau2's default:
+    the dense variants call an embedding API."""
     if domain != "banking_knowledge":
         return {}
     from tau2.data_model.simulation import TextRunConfig
     from tau2.runner.build import _build_env_kwargs
 
-    return dict(_build_env_kwargs(TextRunConfig(domain=domain, retrieval_config="bm25"), task))
+    cfg = TextRunConfig(domain=domain, retrieval_config=retrieval or LEGACY_RETRIEVAL)
+    return dict(_build_env_kwargs(cfg, task))
 
 
 def load_conversation(run_id: str, trace_name: str, domain: str, task_id: str) -> Conversation:
@@ -77,7 +84,19 @@ def load_conversation(run_id: str, trace_name: str, domain: str, task_id: str) -
         task = next((t for t in load_tasks(domain, None) if t.id == task_id), None)
         if task is None:
             raise ReplayError(f"task {task_id} is not in {domain}")
-    return Conversation(domain=domain, task=task, messages=list(sim.messages))
+    return Conversation(
+        domain=domain, task=task, messages=list(sim.messages), retrieval=_run_retrieval(run_id)
+    )
+
+
+def _run_retrieval(run_id: str) -> str | None:
+    """The retrieval variant a run recorded in its `run.json`; None for a run before the field."""
+    try:
+        meta = json.loads((RUNS_DIR / run_id / "run.json").read_text())
+    except (OSError, ValueError):
+        return None
+    v = meta.get("retrieval")
+    return str(v) if v else None
 
 
 def build_env(conv: Conversation, at: int, strict: bool = False) -> Any:
@@ -91,7 +110,7 @@ def build_env(conv: Conversation, at: int, strict: bool = False) -> Any:
         raise ReplayError(f"message {at} is outside this conversation (0–{len(conv.messages)})")
     init = conv.task.initial_state
     env = registry.get_env_constructor(conv.domain)(
-        solo_mode=False, **env_kwargs_for(conv.domain, conv.task)
+        solo_mode=False, **env_kwargs_for(conv.domain, conv.task, conv.retrieval)
     )
     try:
         env.set_state(

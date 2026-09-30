@@ -53,6 +53,7 @@ def to_openai(a: core.Answer, model: str) -> dict[str, Any]:
             "prompt_tokens": res.input_tokens,
             "completion_tokens": res.output_tokens,
             "total_tokens": res.input_tokens + res.output_tokens,
+            **core.cache_usage(res),
         },
     }
 

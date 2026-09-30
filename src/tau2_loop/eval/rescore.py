@@ -38,7 +38,7 @@ def rescore_run(run_id: str) -> dict[str, Any]:
         # The same environment the live evaluation built (banking: retrieval variant,
         # the task for golden retrieval, the read-log allowlist), else the replay differs.
         # Shared with the Agent tab's playground, so the two cannot drift apart.
-        env_kwargs = env_kwargs_for(domain, task)
+        env_kwargs = env_kwargs_for(domain, task, results.info.retrieval_config)
         recorded = float(sim.reward_info.reward) if sim.reward_info else 0.0
         basis = set(task.evaluation_criteria.reward_basis) if task.evaluation_criteria else set()
         components: dict[str, float] = {}

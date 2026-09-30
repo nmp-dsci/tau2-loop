@@ -20,7 +20,16 @@ from typing import Any
 from rich.console import Console
 
 from tau2_loop.agent.versions import AgentVersion, load_version
-from tau2_loop.config import DOMAINS, ROOT, RUNS_DIR, SMOKE_DOMAIN, SPLIT_SEED, quiet_tau2, settings
+from tau2_loop.config import (
+    BANKING_RETRIEVAL,
+    DOMAINS,
+    ROOT,
+    RUNS_DIR,
+    SMOKE_DOMAIN,
+    SPLIT_SEED,
+    quiet_tau2,
+    settings,
+)
 from tau2_loop.data.splits import split_ids, split_version
 from tau2_loop.eval.results import (
     Summary,
@@ -95,6 +104,9 @@ class RunMeta:
     user_effort: str | None = None
     split_version: int | None = None  # 1 = the 20 / 20 cut, 2 = half of base each
     agent_route: str = "in-process"  # or service:<host:port>, the agent's calls over HTTP
+    # banking only: tau2's retrieval variant (s09); None on other domains and on older runs,
+    # which all ran `bm25`
+    retrieval: str | None = None
 
 
 def agent_route() -> tuple[str, str | None]:
@@ -145,7 +157,7 @@ def _run_config(
         "max_retries": 1,
     }
     if domain == "banking_knowledge":
-        kwargs["retrieval_config"] = "bm25"
+        kwargs["retrieval_config"] = BANKING_RETRIEVAL
     return TextRunConfig(**kwargs)
 
 
@@ -207,6 +219,7 @@ def run_eval(
         user_effort=USER_EFFORT,
         split_version=None if task_ids else split_version(domain),
         agent_route=agent_route()[0],
+        retrieval=BANKING_RETRIEVAL if domain == "banking_knowledge" else None,
     )
     _write_meta(run_dir, meta)
     (run_dir / "agent").mkdir(exist_ok=True)

@@ -28,8 +28,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from tau2_loop import __version__
-from tau2_loop.agent.compose import compose, hooks_defined, load_helper_file
-from tau2_loop.agent.versions import list_versions, load_version
+from tau2_loop.agent.compose import compose, hooks_defined, load_code_surfaces, load_helper_file
+from tau2_loop.agent.versions import CODE_SURFACES, FROZEN, SURFACES, list_versions, load_version
 from tau2_loop.config import DOMAINS, FRONTEND_DIST, RUNS_DIR, SMOKE_DOMAIN, settings
 from tau2_loop.data import leaderboard as board
 from tau2_loop.data import pg
@@ -108,6 +108,7 @@ def create_app() -> FastAPI:
                     "base_n": split.get("base_n"),
                     "train": len(split.get("train", [])),
                     "test": len(split.get("test", [])),
+                    "reserve_n": split.get("reserve_n") or 0,
                     "champion": champ.get("agent"),
                     "champion_run": champ.get("run_id"),
                     "passed": champ.get("passed"),
@@ -247,7 +248,10 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "no such agent") from e
         fa, fb = va.files(), vb.files()
         files = []
-        for name in ("system.md", "helper.py", "agent.yaml"):
+        # a code surface (s09) is listed only where one of the two versions has it
+        for name in (*SURFACES, *FROZEN):
+            if name in CODE_SURFACES and name not in fa and name not in fb:
+                continue
             ta, tb = fa.get(name, ""), fb.get(name, "")
             lines = list(
                 difflib.unified_diff(
@@ -372,11 +376,7 @@ def create_app() -> FastAPI:
         except FileNotFoundError as e:
             raise HTTPException(404, "no such run") from e
         snap = RUNS_DIR / run_id / "agent"
-        files = {
-            n: (snap / n).read_text()
-            for n in ("system.md", "helper.py", "agent.yaml")
-            if (snap / n).is_file()
-        }
+        files = {n: (snap / n).read_text() for n in (*SURFACES, *FROZEN) if (snap / n).is_file()}
         if "system.md" not in files:
             raise HTTPException(404, "this run has no agent snapshot")
         policy = _recorded_policy(run_id, [r.trace for r in results]) or str(
@@ -393,7 +393,9 @@ def create_app() -> FastAPI:
             "fingerprint": meta.fingerprint,
             "config": yaml.safe_load(files.get("agent.yaml") or "") or {},
             "files": files,
-            "hooks": hooks_defined(helper),
+            "hooks": hooks_defined(
+                helper, load_code_surfaces(snap, f"tau2_loop_run_code_{run_id}")
+            ),
             "prompt": {
                 "text": c.text,
                 "system_md_chars": len(c.system_md),
@@ -897,6 +899,11 @@ def trace_messages(t: dict[str, Any]) -> list[dict[str, Any]]:
                 else None,
                 "seconds": m.get("generation_time_seconds"),
                 "error": bool(m.get("error")),
+                # s09: what the version's code surfaces did on this reply — the reminder it rode
+                # with, and a write a check blocked before this retry
+                "harness": (m.get("raw_data") or {}).get("tau2_loop")
+                if isinstance(m.get("raw_data"), dict)
+                else None,
             }
         )
     return out

@@ -89,7 +89,7 @@ def test_one_cycle_promotes_and_records(tmp_path: Path, monkeypatch: pytest.Monk
         return meta, rows
 
     async def fake_optimiser(
-        champion: Any, run_id: str, failures: list[TaskResult], model: str = "sonnet"
+        champion: Any, run_id: str, failures: list[TaskResult], model: str = "sonnet", **_: Any
     ) -> OptimiserOutput:
         assert len(failures) == 10
         return OptimiserOutput(
@@ -490,3 +490,206 @@ def test_a_challenge_refuses_the_champion_and_its_bytes(
     with pytest.raises(ValueError, match="bytes"):
         loop_run.run_challenge("airline", "v6")
     assert world["calls"] == [] and led.read_ledger("airline") == []
+
+
+def test_an_ab_pair_reads_the_same_half_gates_on_the_other_and_crowns_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two optimisers from one champion (s09 §6): each reads only the read half's failures and is
+    gated on the gate half; both pass, the one with more gate passes takes the title."""
+    import asyncio
+
+    import tau2_loop.config as cfg
+    import tau2_loop.eval.runner as runner
+    from tau2_loop.loop import ledger as led
+    from tau2_loop.tracking import registry as reg
+
+    monkeypatch.setattr(cfg, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runner, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(led, "ledger_path", lambda d: tmp_path / d / "ledger.jsonl")
+    monkeypatch.setattr(reg, "registry_path", lambda d: tmp_path / d / "registry.json")
+    ids = [str(i) for i in range(20)]
+    read, gate = ids[0::2], ids[1::2]
+    passes = {"v0": set(ids[:10]), "v1": set(ids[:12]), "v2": set(ids[:14])}
+    calls: list[tuple[str, str]] = []
+
+    def fake_eval(
+        domain: str, agent: str, split: str = "train", **kw: Any
+    ) -> tuple[RunMeta, list[TaskResult]]:
+        calls.append((agent, split))
+        rows = _rows(passes[agent], ids)
+        run_id = f"20260101T000000Z_{domain}_{agent}_{split}_{len(calls)}"
+        d = tmp_path / "runs" / run_id
+        d.mkdir(parents=True)
+        from tau2_loop.eval.results import summarise, write_results
+
+        write_results(d / "results.jsonl", rows)
+        meta = RunMeta(
+            run_id, domain, agent, "fp" + agent, "m", "u", "j", split, 20, 1, 3, 300, "t", "t"
+        )
+        meta.summary = summarise(rows).__dict__
+        (d / "run.json").write_text(json.dumps(meta.__dict__))
+        return meta, rows
+
+    seen: list[dict[str, Any]] = []
+
+    async def fake_optimiser(
+        champion: Any, run_id: str, failures: list[TaskResult], **k: Any
+    ) -> OptimiserOutput:
+        seen.append({"failed": [f.task_id for f in failures], **k})
+        name = "v1" if k["mode"] == "classic" else "v2"
+        return OptimiserOutput(
+            name, {"diagnoses": []}, mode=k["mode"], surfaces_changed=["system.md"]
+        )
+
+    monkeypatch.setattr(loop_run, "halves", lambda d: (read, gate))
+    monkeypatch.setattr(loop_run, "build_context", lambda *a: "ctx")
+    monkeypatch.setattr(loop_run, "read_registry", lambda d: {"champion": {"agent": "v0"}})
+    monkeypatch.setattr(loop_run, "run_eval", fake_eval)
+    monkeypatch.setattr(loop_run, "run_optimiser", fake_optimiser)
+    monkeypatch.setattr(
+        loop_run,
+        "load_version",
+        lambda d, n: type("V", (), {"domain": d, "name": n, "fingerprint": "fp" + n})(),
+    )
+    monkeypatch.setattr(loop_run, "version_dir", lambda d, n: tmp_path / "agents" / d / n)
+    monkeypatch.setattr(
+        loop_run,
+        "load_run",
+        lambda rid: (
+            RunMeta(
+                rid, "banking_knowledge", "v0", "fpv0", "m", "u", "j", "train", 20, 1, 3, 300, "t"
+            ),
+            _rows(passes["v0"], ids),
+        ),
+    )
+
+    entries = asyncio.run(loop_run.run_ab("banking_knowledge"))
+    # both read the same five read-half failures, from one context; the second cannot see the first
+    assert seen[0]["failed"] == seen[1]["failed"] == ["10", "12", "14", "16", "18"]
+    assert [s["mode"] for s in seen] == ["classic", "routing"]
+    assert seen[0]["hidden"] == [] and seen[1]["hidden"] == [
+        tmp_path / "agents" / "banking_knowledge" / "v1"
+    ]
+    assert seen[0]["ctx"] == seen[1]["ctx"] == "ctx"
+    a, b = (e["outcome"] for e in entries)
+    # the gate reads only the gate half: the champion passes 5 of its 10
+    assert a["gate_passes"] == {"champion": 5, "challenger": 6, "n": 10} and a["fixed"] == ["11"]
+    assert b["gate_passes"]["challenger"] == 7 and b["verdict"] == "promote"
+    assert a["verdict"] == "hold" and "A/B partner v2 took the title" in a["reason"]
+    assert a["train_passes"] == "10/20 → 12/20"
+    assert reg.read_registry("banking_knowledge")["champion"]["agent"] == "v2"
+    ledger = led.read_ledger("banking_knowledge")
+    assert [e["optimiser_mode"] for e in ledger] == ["classic", "routing"]
+    assert ledger[0]["experiment"]["pair"] == [1, 2] and ledger[0]["outcome"]["verdict"] == "hold"
+    assert ledger[1]["gate_on"] == "gate half (10 of 20 train tasks)"
+    # what the next optimiser reads: the read half's fixes, never a gate-half id
+    assert b["read_fixed"] == ["10", "12"] and b["read_broken"] == []
+    history = led.render_history("banking_knowledge", ["14"])
+    assert "on the read half fixed ['10', '12']" in history
+    assert "'11'" not in history and "'13'" not in history and "A/B partner" not in history
+
+
+def test_a_routing_optimiser_writes_only_what_its_diagnosis_routed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Diagnose, route, write, package (s09 §5): the writer gets only the routed files, the
+    diagnosis is frozen between the two sessions, and a code surface that imports `os` is refused."""
+    import asyncio
+
+    import tau2_loop.agent.versions as versions
+    import tau2_loop.loop.optimiser as opt
+
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path)
+    monkeypatch.setattr(opt, "AGENTS_DIR", tmp_path)
+    champ_dir = tmp_path / "airline" / "v0"
+    champ_dir.mkdir(parents=True)
+    (champ_dir / "system.md").write_text("You are an agent.\n{policy}")
+    (champ_dir / "agent.yaml").write_text("model: haiku\n")
+    champion = versions.load_version("airline", "v0")
+    new_dir = tmp_path / "airline" / "v1"
+    sessions: list[Any] = []
+
+    class FakeClient:
+        def __init__(self, options: Any) -> None:
+            sessions.append(options)
+
+        async def __aenter__(self) -> FakeClient:
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def query(self, prompt: str) -> None:
+            if "**diagnosis** step" in prompt:
+                assert (new_dir / ".context" / "policy.md").exists()
+                (new_dir / "diagnosis.json").write_text(
+                    json.dumps(
+                        {
+                            "diagnoses": [
+                                {
+                                    "task_id": "3",
+                                    "class": "write-arguments",
+                                    "surfaces": ["checks.py", "memory.py"],
+                                }
+                            ],
+                            "surfaces": {
+                                "checks.py": "origin is not destination",
+                                "memory.py": "keep the user",
+                            },
+                        }
+                    )
+                )
+            else:
+                assert "`checks.py`, `memory.py`" in prompt
+                (new_dir / "checks.py").write_text(
+                    "def check_write(name, arguments, state):\n"
+                    "    if arguments.get('origin') == arguments.get('destination'):\n"
+                    "        return 'the destination cannot be the origin.'\n"
+                    "    return None\n"
+                )
+                (new_dir / "memory.py").write_text(
+                    "import os\n\ndef remember(state, name, arguments, result):\n    state['cwd'] = os.getcwd()\n"
+                )
+                (new_dir / "changes.json").write_text(
+                    json.dumps({"changes": [{"file": "checks.py"}]})
+                )
+
+        async def receive_response(self) -> Any:
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+    monkeypatch.setattr(opt, "ClaudeSDKClient", FakeClient)
+    monkeypatch.setattr(opt, "require_live", lambda: None)
+    monkeypatch.setattr(opt, "subscription_env", lambda: {})
+
+    out = asyncio.run(opt.run_optimiser(champion, "run0", [], mode="routing"))
+
+    assert out.mode == "routing" and out.routed == ["checks.py", "memory.py"]
+    assert out.surfaces_changed == ["checks.py", "memory.py"]
+    assert out.rejected and "guard: memory.py imports os" in (out.error or "")
+    d = json.loads((new_dir / "diagnosis.json").read_text())
+    assert d["routed"] == ["checks.py", "memory.py"] and d["changes"] == [{"file": "checks.py"}]
+    assert not (new_dir / ".context").exists() and not (new_dir / "changes.json").exists()
+    # the diagnosis session may write diagnosis.json only; the writer only the routed files
+    guard_diag, guard_write = (s.hooks["PreToolUse"][0].hooks[0] for s in sessions)
+    deny = lambda g, p: asyncio.run(g({"tool_input": {"file_path": str(p)}}, None, None))  # noqa: E731
+    assert (
+        deny(guard_diag, new_dir / "system.md")["hookSpecificOutput"]["permissionDecision"]
+        == "deny"
+    )
+    assert deny(guard_diag, new_dir / "diagnosis.json") == {}
+    assert deny(guard_write, new_dir / "checks.py") == {}
+    assert (
+        deny(guard_write, new_dir / "system.md")["hookSpecificOutput"]["permissionDecision"]
+        == "deny"
+    )
+    assert (
+        deny(guard_write, new_dir / "diagnosis.json")["hookSpecificOutput"]["permissionDecision"]
+        == "deny"
+    )
+    guard_reads = sessions[0].hooks["PreToolUse"][1].hooks[0]
+    fenced = asyncio.run(
+        guard_reads({"tool_input": {"file_path": "data/tasks/airline.json"}}, None, None)
+    )
+    assert fenced["hookSpecificOutput"]["permissionDecision"] == "deny"

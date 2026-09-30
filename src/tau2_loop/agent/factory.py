@@ -14,6 +14,17 @@ runner through `llm_args["tau2_loop_version"]`, so it lands in tau2's own
 results file as provenance. When the runner routes the agent to the service
 (`openai/<model>` with an `api_base`), the bearer token is added here, at run
 time, so it never enters the run config tau2 writes to disk.
+
+Since s09 a version may also carry three code surfaces, each one hook:
+`memory.py` `remember(state, name, arguments, result)` keeps facts from every tool
+result and user message within one conversation; `guidance.py`
+`guidance(state, trigger)` returns a short reminder that rides on that one model
+call as a system message (the provider folds it into the call's system prompt,
+so the transcript never holds it); `checks.py` `check_write(name, arguments,
+state)` sees each write call before tau2 runs it, and a string back blocks the
+reply once: the model gets the message as the calls' tool results and replies
+again, and that reply goes through unchecked. What a hook did is recorded on the
+reply tau2 keeps, under `raw_data["tau2_loop"]`, for the Agent tab.
 """
 
 from __future__ import annotations
@@ -34,9 +45,16 @@ from tau2.data_model.message import (
 )
 from tau2.environment.tool import Tool
 
-from tau2_loop.agent.compose import call_hook, compose, load_helper_file
+from tau2_loop.agent.compose import (
+    GUIDANCE_CHARS,
+    call_hook,
+    compose,
+    load_code_surfaces,
+    load_helper_file,
+)
 from tau2_loop.agent.versions import AgentVersion, load_version, parse_ref
 from tau2_loop.config import settings
+from tau2_loop.data.splits import tool_kinds
 from tau2_loop.llm import sdk_model
 
 AGENT_NAME = "tau2_loop"
@@ -61,6 +79,16 @@ class LoopAgentState:
     messages: list[APICompatibleMessage] = field(default_factory=list)
     n_model_calls: int = 0
     parse_failures: int = 0
+    # memory.py's state: this conversation's only, never carried into another
+    memory: dict[str, Any] = field(default_factory=dict)
+    n_blocked: int = 0
+
+
+# The tool result a blocked call gets; the model sees it and replies again.
+BLOCKED = "NOT EXECUTED. A check on this call failed: {msg} Fix the call and send it again, or ask the user."
+HELD_BACK = (
+    "NOT EXECUTED: another call in this reply failed a check. Send it again if it is still needed."
+)
 
 
 class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
@@ -85,6 +113,10 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
                 )
             self.llm_args["api_key"] = token
         self.helper = load_helper(version)
+        self.code = load_code_surfaces(
+            version.path, f"tau2_loop_code_{version.domain}_{version.name}"
+        )
+        self.kinds = tool_kinds(version.domain)
 
     def system_prompt(self) -> str:
         # the one composition, shared with the viewer's `GET /api/runs/{id}/agent`
@@ -101,23 +133,100 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
     ) -> tuple[AssistantMessage, LoopAgentState]:
         from tau2.utils.llm_utils import generate
 
-        if isinstance(message, MultiToolMessage):
-            state.messages.extend(message.tool_messages)
-        else:
-            state.messages.append(message)
-        response = generate(
-            model=self.llm,
-            tools=self.tools,
-            messages=state.system_messages + state.messages,
-            call_name="tau2_loop_agent",
-            **self.llm_args,
+        incoming = (
+            list(message.tool_messages) if isinstance(message, MultiToolMessage) else [message]
         )
-        state.n_model_calls += 1
-        if looks_unparsed(response.content):
-            state.parse_failures += 1
-        response = self._apply_helper(response)
+        self._remember(state, incoming)
+        state.messages.extend(incoming)
+        trigger = "tool" if all(isinstance(m, ToolMessage) for m in incoming) else "user"
+        note: dict[str, Any] = {}
+        reminder = self._guidance(state, trigger)
+        call = state.system_messages + state.messages
+        if reminder:
+            note["guidance"] = reminder
+            call = call + [SystemMessage(role="system", content=reminder)]
+
+        def ask(messages: list[Any]) -> AssistantMessage:
+            out = generate(
+                model=self.llm,
+                tools=self.tools,
+                messages=messages,
+                call_name="tau2_loop_agent",
+                **self.llm_args,
+            )
+            state.n_model_calls += 1
+            if looks_unparsed(out.content):
+                state.parse_failures += 1
+            return self._apply_helper(out)
+
+        response = ask(call)
+        blocked = self._check(response, state)
+        if blocked:
+            # once per turn: the model sees why, replies again, and that reply goes through
+            state.n_blocked += 1
+            calls = list(response.tool_calls or [])
+            results = [
+                ToolMessage(
+                    id=tc.id,
+                    role="tool",
+                    requestor="assistant",
+                    error=True,
+                    content=BLOCKED.format(msg=blocked[i]) if i in blocked else HELD_BACK,
+                )
+                for i, tc in enumerate(calls)
+            ]
+            note["blocked"] = [
+                {"name": tc.name, "arguments": dict(tc.arguments or {}), "check": blocked[i]}
+                for i, tc in enumerate(calls)
+                if i in blocked
+            ]
+            response = ask(call + [response, *results])
+            note["retried"] = True
+        if note:
+            response.raw_data = {**(response.raw_data or {}), "tau2_loop": note}
         state.messages.append(response)
         return response, state
+
+    def _remember(self, state: LoopAgentState, incoming: list[Any]) -> None:
+        """memory.py's hook on each tool result (with the call that asked for it) and user message."""
+        mod = self.code.get("memory.py")
+        if mod is None:
+            return
+        calls = {
+            tc.id: tc
+            for m in state.messages
+            if isinstance(m, AssistantMessage)
+            for tc in (m.tool_calls or [])
+        }
+        for m in incoming:
+            if isinstance(m, ToolMessage):
+                tc = calls.get(m.id)
+                name = tc.name if tc else "unknown"
+                args = dict(tc.arguments or {}) if tc else {}
+                call_hook(mod, "remember", state.memory, name, args, m.content or "")
+            elif getattr(m, "content", None):
+                call_hook(mod, "remember", state.memory, "user", {}, m.content)
+
+    def _guidance(self, state: LoopAgentState, trigger: str) -> str | None:
+        """guidance.py's reminder for this call, cut to the budget; None when it has nothing to say."""
+        out = call_hook(self.code.get("guidance.py"), "guidance", state.memory, trigger)
+        if not isinstance(out, str) or not out.strip():
+            return None
+        return out.strip()[:GUIDANCE_CHARS]
+
+    def _check(self, response: AssistantMessage, state: LoopAgentState) -> dict[int, str]:
+        """checks.py's verdict on each write call in a reply: the calls it blocks, by position."""
+        mod = self.code.get("checks.py")
+        if mod is None or not response.tool_calls:
+            return {}
+        out: dict[int, str] = {}
+        for i, tc in enumerate(response.tool_calls):
+            if self.kinds.get(tc.name) != "write":
+                continue
+            msg = call_hook(mod, "check_write", tc.name, dict(tc.arguments or {}), state.memory)
+            if isinstance(msg, str) and msg.strip():
+                out[i] = msg.strip()
+        return out
 
     def _apply_helper(self, response: AssistantMessage) -> AssistantMessage:
         if self.helper is None:

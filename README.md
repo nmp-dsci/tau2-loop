@@ -61,6 +61,8 @@ beside the verdict and never decides it.
 | M4 holdout · M4b findings page | done — `.lavish/s01_build-findings.html` |
 | s07 Sonnet agent through a sealed service, split v2, the gate with trials | built; airline done: v3 (Sonnet) champion 18/25 train · 21/25 test, v4 held. Retail, telecom, banking next (`.lavish/s07_next-challenger-plan.html`) |
 | s08 Opus 5.5 as agent and as optimiser; `make challenge` | done on airline: v3 re-baselined on claude-agent-sdk 0.2.160 at 21/25 train · 21/25 test; v5 (Opus 5.5 agent) and v6 (Opus 5.5 optimiser) held. Research against the board: `.lavish/s08_airline-agent-field-notes.html` |
+| s09 banking through the loop; routing mode and code surfaces | built; banking's test capped at 25 (24 in reserve); not yet run through a cycle — `.lavish/s09_banking-loop-and-surfaces-plan.html` |
+| s10 banking token audit: one cached block per turn | built; four banking runs committed as evidence, two unfinished on purpose — `.lavish/s10_banking-token-audit.html` |
 | M5 keyless demo image on App Runner | parked — bootstrap role, ECR repo and image (`5518ad7`) are in AWS; the service is blocked by the account's 2-per-region App Runner cap (both regions full). Resume: lift the quota or free a slot, then `terraform apply` in `infra/terraform/demo` |
 
 ## Results

@@ -20,6 +20,15 @@ from __future__ import annotations
 
 from typing import Any
 
+# a surface's name under a version's column in the figures
+SHORT = {
+    "system.md": "prompt",
+    "helper.py": "helper",
+    "checks.py": "checks",
+    "memory.py": "memory",
+    "guidance.py": "guidance",
+}
+
 
 def _run(r: dict[str, Any] | None) -> dict[str, Any] | None:
     if r is None:
@@ -125,11 +134,15 @@ def version_history(
             }
         elif e:
             opt = e.get("optimiser_model")
+            detail = f"{opt} optimiser" if opt else "optimiser"
+            if e.get("optimiser_mode") == "routing":  # s09: the surfaces its diagnosis chose
+                short = [SHORT.get(n, n) for n in e.get("surfaces_changed") or []]
+                detail = f"routing: {'+'.join(short) or 'none'}"
             made = {
                 "kind": "optimise",
                 "cycle": e["cycle"],
                 "source": e.get("champion"),
-                "detail": f"{opt} optimiser" if opt else "optimiser",
+                "detail": detail,
             }
         elif diag.get("kind"):
             made = {

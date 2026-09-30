@@ -242,6 +242,10 @@ type GraphProps = { t: TrialPayload; agent: RunAgent | null; meta: RunMeta; node
 
 type Row = { name: string; spec: ToolSpec | null; count: number; errs: number; expected: number; matched: number };
 
+
+/** The s09 code surfaces a version may carry beside helper.py, in the order a turn meets them. */
+const CODE_FILES = ['memory.py', 'guidance.py', 'checks.py'];
+
 function tally(t: TrialPayload, by: 'agent' | 'user', names: string[]): Row[] {
   const calls = toolCalls(t.messages).filter((c) => c.by === by);
   const acts = (t.reward_info?.action_checks ?? []).filter((a) => ((a.action.requestor ?? 'assistant') === 'user' ? 'user' : 'agent') === by);
@@ -329,6 +333,7 @@ export function AgentGraph({ t, agent, meta, node, onPick }: GraphProps) {
   const gradeY = envY + envH + 30;
   const H = gradeY + 150;
   const helper = agent?.files['helper.py'];
+  const code = CODE_FILES.filter((f) => agent?.files[f]);
   const hooksOn = Object.values(agent?.hooks ?? {}).filter(Boolean).length;
   const bd = t.reward_info?.reward_breakdown ?? {};
   const ckW = 96;
@@ -356,7 +361,7 @@ export function AgentGraph({ t, agent, meta, node, onPick }: GraphProps) {
       </text>
       {box('agent', 24, grpY + 30, 492, 52, 'agent turns', `${plural(aSteps.length, 'model call')} · ${fmtK(t.result.agent_input_tokens)} in · ${fmtK(t.result.agent_output_tokens)} out`, '', 'The agent: one model call per turn, each carrying the system prompt and the whole history')}
       {box('prompt', 24, grpY + 96, 152, 58, 'system prompt', agent ? `${fmtK(agent.prompt.text.length)} chars` : '…', '', 'The composed system prompt: system.md, the policy in its slot, and extra_context()')}
-      {box('helper', 194, grpY + 96, 152, 58, 'helper.py', helper ? `${hooksOn} of 3 hooks` : 'none', helper ? '' : 'ext', 'helper.py: the deterministic hooks around the model')}
+      {box('helper', 194, grpY + 96, 152, 58, code.length ? 'code surfaces' : 'helper.py', helper || code.length ? `${hooksOn} of ${Object.keys(agent?.hooks ?? {}).length || 3} hooks` : 'none', helper || code.length ? '' : 'ext', 'The deterministic hooks around the model: helper.py, and checks.py, memory.py and guidance.py where the version has them')}
       {box('model', 364, grpY + 96, 152, 58, 'model', shortModel(meta.model), '', 'The model, and the one path every call takes to the subscription')}
       <path className="ed two" d={`M440 ${orchY + 52} V${grpY + 28}`} />
       <path className="ed dash" d={`M100 ${grpY + 96} V${grpY + 82}`} />
@@ -405,6 +410,27 @@ export function AgentGraph({ t, agent, meta, node, onPick }: GraphProps) {
 }
 
 // ── the node panel ────────────────────────────────────────────────────────
+/** What the version's code surfaces did on one reply (s09): the reminder it rode with, and a
+ *  write a check blocked before this reply, which is the retry. */
+function Harness({ m }: { m: TraceMessage }) {
+  const h = m.harness;
+  if (!h) return null;
+  return (
+    <>
+      {h.blocked?.map((b, k) => (
+        <p key={k} className="small">
+          <span className="status warn">blocked</span> <code>checks.py</code> stopped <code>{b.name}</code>: {b.check} This reply is the retry.
+        </p>
+      ))}
+      {h.guidance && (
+        <p className="small muted">
+          <code>guidance.py</code> added to this call: {h.guidance}
+        </p>
+      )}
+    </>
+  );
+}
+
 function Msg({ t, m, label, cls = '' }: { t: TrialPayload; m: TraceMessage; label: string; cls?: string }) {
   if (m.role === 'tool') {
     const c = toolCalls(t.messages).find((x) => x.call.id === m.id);
@@ -431,6 +457,7 @@ function Msg({ t, m, label, cls = '' }: { t: TrialPayload; m: TraceMessage; labe
       ) : (
         <p className="msg">{m.content}</p>
       )}
+      <Harness m={m} />
     </div>
   );
 }
@@ -754,7 +781,8 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
   if (node === 'helper') {
     const h = agent?.files['helper.py'];
     if (!agent) return <p className="small muted">Loading the run's agent…</p>;
-    if (!h) {
+    const codeFiles = CODE_FILES.filter((f) => agent.files[f]);
+    if (!h && !codeFiles.length) {
       return (
         <>
           <Crumbs where={`runs/${meta.run_id}/agent/`} onClose={onClose} />
@@ -762,7 +790,7 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
             No helper.py: {meta.domain}/{meta.agent} is <code>system.md</code> alone
           </h3>
           <p className="small">
-            A version may define three hooks: <code>extra_context(policy)</code>, <code>on_tool_call(name, args)</code> and <code>on_reply(text)</code>. This one defines none, so every model output reaches the orchestrator unchanged.
+            A version may define three hooks in <code>helper.py</code>: <code>extra_context(policy)</code>, <code>on_tool_call(name, args)</code> and <code>on_reply(text)</code>; and, since s09, one each in <code>checks.py</code>, <code>memory.py</code> and <code>guidance.py</code>. This one defines none, so every model output reaches the orchestrator unchanged.
           </p>
         </>
       );
@@ -775,10 +803,16 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
       </tr>
     );
     const nCalls = toolCalls(t.messages).filter((c) => c.by === 'agent').length;
+    const notes = t.messages.map((m) => m.harness).filter((x) => x != null);
+    const nBlocked = notes.reduce((a, x) => a + (x?.blocked?.length ?? 0), 0);
+    const nGuided = notes.filter((x) => x?.guidance).length;
+    const files = [...(h ? ['helper.py'] : []), ...codeFiles];
     return (
       <>
-        <Crumbs where={`runs/${meta.run_id}/agent/helper.py`} onClose={onClose} />
-        <h3>helper.py: {Object.values(agent.hooks).filter(Boolean).length} of 3 hooks, all deterministic</h3>
+        <Crumbs where={`runs/${meta.run_id}/agent/`} onClose={onClose} />
+        <h3>
+          {files.join(', ')}: {Object.values(agent.hooks).filter(Boolean).length} of {Object.keys(agent.hooks).length} hooks, all deterministic
+        </h3>
         <div className="tw flat">
           <table>
             <thead>
@@ -792,17 +826,22 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
               {hookRow('extra_context', agent.hooks.extra_context ? `Ran once, when the prompt was built: ${fmtInt(agent.prompt.extra_context?.length ?? 0)} chars appended.` : 'Nothing appended.')}
               {hookRow('on_tool_call', agent.hooks.on_tool_call ? `Saw ${plural(nCalls, 'call')}; could rewrite any.` : 'Tool calls pass through unchanged.')}
               {hookRow('on_reply', agent.hooks.on_reply ? 'Saw every text reply.' : 'Text replies pass through unchanged.')}
+              {hookRow('remember', agent.hooks.remember ? 'memory.py saw every tool result and user message, and kept its facts for this conversation only.' : 'Nothing is kept between turns but the transcript.')}
+              {hookRow('guidance', agent.hooks.guidance ? `guidance.py added a reminder to ${plural(nGuided, 'model call')}.` : 'No reminder rides on any call.')}
+              {hookRow('check_write', agent.hooks.check_write ? `checks.py blocked ${plural(nBlocked, 'write')}; each block got one retry, which went through.` : 'Write calls reach tau2 unchecked.')}
             </tbody>
           </table>
         </div>
-        <details className="part">
-          <summary>
-            helper.py <span className="muted">· {fmtInt(h.length)} chars</span>
-          </summary>
-          <div className="blk">
-            <pre className="tall">{h}</pre>
-          </div>
-        </details>
+        {files.map((f) => (
+          <details className="part" key={f}>
+            <summary>
+              {f} <span className="muted">· {fmtInt(agent.files[f]?.length ?? 0)} chars</span>
+            </summary>
+            <div className="blk">
+              <pre className="tall">{agent.files[f]}</pre>
+            </div>
+          </details>
+        ))}
       </>
     );
   }

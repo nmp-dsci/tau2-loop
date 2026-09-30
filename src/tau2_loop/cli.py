@@ -131,11 +131,42 @@ def loop(
     optimiser: str = "opus",
     concurrency: int = 3,
     trials: int = 1,
+    mode: Annotated[
+        str,
+        typer.Option(help="classic: system.md + helper.py; routing: diagnose, then any of five"),
+    ] = "classic",
 ) -> None:
     """The error loop on one domain: eval → diagnose → new version → gate → test → ledger."""
     from tau2_loop.loop.run import run_loop
 
-    asyncio.run(run_loop(domain, cycles, agent, optimiser, concurrency, trials))
+    asyncio.run(run_loop(domain, cycles, agent, optimiser, concurrency, trials, mode))
+
+
+@app.command()
+def ab(
+    domain: str = "banking_knowledge",
+    optimiser: str = "opus",
+    concurrency: int = 3,
+    trials: int = 1,
+    run_test: Annotated[bool, typer.Option("--test/--no-test")] = True,
+) -> None:
+    """Two challengers from the champion on the same failures, one per optimiser mode (classic,
+    routing); both gated and tested, at most one crowned (s09 §6)."""
+    from tau2_loop.loop.run import run_ab
+
+    try:
+        entries = asyncio.run(run_ab(domain, optimiser, concurrency, trials, run_test))
+    except ValueError as e:
+        console.print(f"[red]A/B refused:[/] {e}")
+        raise typer.Exit(1) from e
+    for entry in entries:
+        o = entry.get("outcome") or {}
+        tc = o.get("test_compare") or {}
+        console.print(
+            f"cycle {entry['cycle']} · {entry.get('optimiser_mode')} {entry['champion']} → {entry['challenger']}"
+            f" · surfaces {', '.join(entry.get('surfaces_changed') or []) or '—'}: [bold]{o.get('verdict')}[/]"
+            f" · gate {o.get('passes')} · train {o.get('train_passes')} · test {tc.get('passes') or o.get('test_passes')}"
+        )
 
 
 @app.command()

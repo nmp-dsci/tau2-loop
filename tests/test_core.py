@@ -139,13 +139,13 @@ class Stub:
     """core.run_query stand-in: records what the SDK would have been asked, returns a fixed reply."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, str, str]] = []
+        self.calls: list[tuple[str, str | list[str], str, str]] = []
 
     def __call__(
-        self, system: str, user: str, model: str, effort: str = "medium"
+        self, system: str, user: str | list[str], model: str, effort: str = "medium"
     ) -> core.SdkResult:
         self.calls.append((system, user, model, effort))
-        return core.SdkResult(REPLY, 1234, 56, None, 7, "sess-1")
+        return core.SdkResult(REPLY, 1234, 56, None, 7, "sess-1", cache_read=1100, cache_write=120)
 
 
 @pytest.fixture
@@ -184,6 +184,15 @@ def service_url() -> Any:
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     t.join(timeout=5)
+
+
+def test_only_the_last_block_carries_a_cache_mark() -> None:
+    """One mark, on this call's last turn: the next call reads back from it. The CLI uses
+    three of the API's four marks, so a second one of ours is refused."""
+    content = core.content_blocks(["ask", "[user]\nhi", "[assistant]\nId?", "[user]\nu1"])
+    marked = [i for i, c in enumerate(content) if "cache_control" in c]
+    assert marked == [3] and content[3]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert "cache_control" not in core.content_blocks(["ask"])[0]
 
 
 def test_effort_reaches_the_in_process_provider(stub: Stub) -> None:
@@ -231,9 +240,14 @@ def test_one_request_answers_the_same_in_process_and_over_http(
             r.choices[0].finish_reason,
             r.usage.prompt_tokens,
             r.usage.completion_tokens,
+            r.usage.prompt_tokens_details.cached_tokens,
+            r.usage.prompt_tokens_details.cache_creation_tokens,
         )
 
     assert shape(local) == shape(remote)
+    # the transcript went to the SDK as blocks, and the cache split came back on both routes
+    assert isinstance(stub.calls[0][1], list) and len(stub.calls[0][1]) == len(MESSAGES)
+    assert shape(remote)[-2:] == (1100, 120)
     assert shape(remote)[1] == [("get_user_details", '{"user_id": "mia_li_3668"}')]
 
 

@@ -91,10 +91,43 @@ export type TaskResult = {
   purpose: string;
   trace: string;
 };
-export type Diagnosis = { task_id: string; symptom: string; root_cause: string; surface: string; change: string; verified_in_session: boolean; verification?: string };
+export type Diagnosis = {
+  task_id: string;
+  symptom: string;
+  root_cause: string;
+  /** the classic optimiser's one surface; a routing diagnosis names `surfaces` and a `class` instead */
+  surface?: string;
+  surfaces?: string[];
+  class?: string;
+  why_this_surface?: string;
+  change: string;
+  verified_in_session?: boolean;
+  verification?: string;
+};
 /** Champion vs challenger on the test split: reported beside the verdict, never used by it. */
 export type TestCompare = { champion_run: string; challenger_run?: string; passes?: string; pass_1?: string; fixed?: string[]; broken?: string[]; p_value?: number; reason?: string; error?: string };
-export type Outcome = { verdict: string; reason?: string; rule?: string | null; p_value?: number; passes?: string; pass_1?: string; fixed?: string[]; broken?: string[]; still_failed?: string[]; challenger_run?: string; test_run?: string; test_passes?: string; test_compare?: TestCompare };
+export type Outcome = {
+  verdict: string;
+  reason?: string;
+  rule?: string | null;
+  p_value?: number;
+  /** the gate's passes, champion → challenger, on `gate_on` */
+  passes?: string;
+  pass_1?: string;
+  fixed?: string[];
+  broken?: string[];
+  still_failed?: string[];
+  challenger_run?: string;
+  test_run?: string;
+  test_passes?: string;
+  test_compare?: TestCompare;
+  /** s09: `train`, or the gate half where train is halved; the whole train split beside it */
+  gate_on?: string;
+  gate_passes?: { champion: number; challenger: number; n: number };
+  train_passes?: string;
+  read_fixed?: string[];
+  read_broken?: string[];
+};
 export type LedgerEntry = {
   cycle: number;
   domain: string;
@@ -110,6 +143,12 @@ export type LedgerEntry = {
   challenger_model?: string;
   challenger_effort?: string;
   optimiser_model?: string | null;
+  /** s09: `classic` (system.md, helper.py) or `routing` (a diagnosis picks among five surfaces) */
+  optimiser_mode?: string;
+  routed?: string[];
+  surfaces_changed?: string[];
+  gate_on?: string;
+  experiment?: { name: string; pair: number[] };
   failed: string[];
   diagnoses?: Diagnosis[];
   prompt_diff_summary?: string;
@@ -187,6 +226,9 @@ export type TraceMessage = {
   usage: { prompt_tokens: number | null; completion_tokens: number | null } | null;
   seconds: number | null;
   error: boolean;
+  /** s09: what the version's code surfaces did on this reply — `guidance.py`'s reminder, and a
+   *  write `checks.py` blocked before this retry. Absent on versions without them. */
+  harness?: { guidance?: string; blocked?: { name: string; arguments: Record<string, unknown>; check: string }[]; retried?: boolean } | null;
 };
 export type ExpectedAction = { action_id: string; name: string; arguments: Record<string, unknown>; requestor?: string };
 export type RewardInfo = {

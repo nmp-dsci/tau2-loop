@@ -1,12 +1,21 @@
-"""The optimiser: one Agent SDK session that reads every failure and writes the next version.
+"""The optimiser: Agent SDK sessions that read every failure and write the next version.
 
-It sees the champion's two surfaces, every failed conversation's scenario,
-policy clauses, expected actions, the reward components that failed and a
-condensed transcript, plus the ledger's history of what was tried before. It
-may write only `agents/<domain>/v(n+1)/system.md` and `helper.py` (a
-PreToolUse hook refuses any other path; a checksum of the guarded tree is
-compared after the session as well), it may not run a simulation, and it must
-finish by writing `diagnosis.json` — the structured record the ledger stores.
+Two modes (s09). `classic` is one session, as every cycle before: it sees the
+champion's surfaces, every failed conversation's scenario, policy clauses,
+expected actions, the reward components that failed and a condensed transcript,
+plus the ledger's history, and may write only `system.md`, `helper.py` and
+`diagnosis.json`. `routing` splits that in two: a read-only diagnosis session
+names each failure's root cause and the surfaces that fit it (among `system.md`,
+`helper.py`, `checks.py`, `memory.py`, `guidance.py`), then a writing session may
+change only those. Either way a PreToolUse hook refuses any other write, a
+checksum of the guarded tree is compared after the session, and the session is
+fenced: it reads the policy and tools from a copy in the version folder and
+never `runs/`, `data/`, `loop/` or `vendor/`, which hold the test split's and the
+gate half's tasks and results (`loop/guards.py`). The package is then checked:
+code surfaces import only the standard-library allow-list, no file carries a
+customer's id, name or email, and a routing `system.md` stays within its budget.
+It may not run a simulation, and it must finish with `diagnosis.json` — the
+structured record the ledger stores.
 """
 
 from __future__ import annotations
@@ -29,6 +38,9 @@ from claude_agent_sdk import (
 )
 
 from tau2_loop.agent.versions import (
+    CODE_SURFACES,
+    FROZEN,
+    PROMPT_SURFACES,
     SURFACES,
     AgentVersion,
     lineage,
@@ -37,7 +49,7 @@ from tau2_loop.agent.versions import (
     version_dir,
 )
 from tau2_loop.config import AGENTS_DIR, ROOT, RUNS_DIR
-from tau2_loop.data.splits import read_task_extract
+from tau2_loop.data.splits import halves, read_task_extract, tool_kinds
 from tau2_loop.eval.results import TaskResult, read_results
 from tau2_loop.llm import (
     EFFORT,
@@ -49,9 +61,20 @@ from tau2_loop.llm import (
     resolve_model,
     subscription_env,
 )
-from tau2_loop.loop.ledger import read_ledger, render_history
+from tau2_loop.loop.guards import (
+    ALLOWED_IMPORTS,
+    PROMPT_GROWTH,
+    bash_fence_reason,
+    fence_reason,
+    import_violations,
+    leak_values,
+    leaks,
+)
+from tau2_loop.loop.ledger import read_ledger, render_history, seen_changes
 
 MAX_TURNS = 120
+MODES = ("classic", "routing")
+CONTEXT_DIR = ".context"  # the policy and tools the session reads, removed when it ends
 TRACE_CHARS = 9000
 TOOL_RESULT_CHARS = 700
 
@@ -67,6 +90,12 @@ class OptimiserOutput:
     output_tokens: int = 0
     transcript: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
+    # s09: which optimiser, the surfaces it was allowed and the ones it changed; a guard or a
+    # write outside the version rejects the cycle before the challenger runs
+    mode: str = "classic"
+    routed: list[str] = field(default_factory=list)
+    surfaces_changed: list[str] = field(default_factory=list)
+    rejected: bool = False
 
 
 def condense_trace(trace_path: Path, limit: int = TRACE_CHARS) -> str:
@@ -164,14 +193,28 @@ def task_block(domain: str, task_id: str) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def build_prompt(
-    champion: AgentVersion, new_name: str, run_id: str, failures: list[TaskResult]
-) -> str:
+@dataclass
+class Context:
+    """What both optimiser modes read, built once per cycle so an A/B pair sees the same input."""
+
+    domain: str
+    blocks: list[str]
+    history: str
+    held_block: str
+    fork_note: str
+    tool_names: str
+    read_traces: list[Path]
+    halves: tuple[list[str], list[str]] | None
+
+
+def build_context(champion: AgentVersion, run_id: str, failures: list[TaskResult]) -> Context:
     domain = champion.domain
     run_dir = RUNS_DIR / run_id
     blocks: list[str] = []
+    traces: list[Path] = []
     for r in failures:
         tp = run_dir / "traces" / r.trace
+        traces.append(tp.resolve())
         blocks.append(
             f"## Task {r.task_id} (trial {r.trial})\n"
             f"{task_block(domain, r.task_id)}\n"
@@ -179,9 +222,9 @@ def build_prompt(
             f"ERROR: {r.error or 'none'} · {r.n_agent_turns} agent turns · {r.n_tool_calls} tool calls · ended by {r.termination_reason}\n"
             f"TRANSCRIPT:\n{condense_trace(tp)}\n"
         )
-    from tau2_loop.eval.runner import USER_MODEL
-
     held = held_challengers(domain, champion.name)
+    for h in held:
+        traces += [(ROOT / t).resolve() for t in h.get("broken_traces") or []]
     ancestors = lineage(domain, champion.name)[1:]
     fork_note = (
         f" `{champion.name}` is a fork of `{ancestors[0]}` (same system.md and helper.py, a different "
@@ -201,15 +244,74 @@ def build_prompt(
         or "none"
     )
     ext = read_task_extract(domain)
-    tool_names = ", ".join(t["name"] for t in ext.get("tools", []))
+    return Context(
+        domain=domain,
+        blocks=blocks,
+        history=render_history(domain, [r.task_id for r in failures]),
+        held_block=held_block,
+        fork_note=fork_note,
+        tool_names=", ".join(t["name"] for t in ext.get("tools", [])),
+        read_traces=traces,
+        halves=halves(domain),
+    )
+
+
+def _intro(champion: AgentVersion, ctx: Context) -> str:
+    from tau2_loop.eval.runner import USER_MODEL
+
     return f"""You are the optimiser in a benchmark improvement loop for a customer-support agent on τ²-bench,
-domain `{domain}`. The agent is {model_label(champion.config.model)} on the Claude subscription; it follows a policy document and calls the
-domain's tools ({tool_names}) through a JSON contract; a simulated user ({model_label(USER_MODEL)}) plays the customer. A
+domain `{ctx.domain}`. The agent is {model_label(champion.config.model)} on the Claude subscription; it follows a policy document and calls the
+domain's tools ({ctx.tool_names}) through a JSON contract; a simulated user ({model_label(USER_MODEL)}) plays the customer. A
 conversation scores 1 only if every component in the task's reward basis passes: the final database equals the
 gold one produced by the expected actions, the expected actions were called with the expected arguments, the
-required information was said to the user, and (retail) an LLM judge finds the NL assertions met.
+required information was said to the user, and (retail) an LLM judge finds the NL assertions met."""
 
-The champion is `agents/{domain}/{champion.name}/`. It failed the conversations below on the train split.{fork_note}
+
+def _where_failed(ctx: Context) -> str:
+    if ctx.halves:
+        return (
+            f"It failed the conversations below on the read half of the train split ({len(ctx.halves[0])} tasks, "
+            "the ones you may learn from)."
+        )
+    return "It failed the conversations below on the train split."
+
+
+def _reading(ctx: Context, new_name: str) -> str:
+    return (
+        f"The policy is at `agents/{ctx.domain}/{new_name}/.context/policy.md` and the tool list with descriptions at "
+        f"`.context/tools.json` in the same folder. `runs/`, `data/`, `loop/` and `vendor/` are closed to you: the "
+        "failures below are all the task data you get, and the traces they came from are the only runs you may read."
+    )
+
+
+def _gate(ctx: Context, new_name: str) -> str:
+    where = (
+        f"on the {len(ctx.halves[1])} train tasks of the gate half, which are not among the failures above and are "
+        "never shown to an optimiser"
+        if ctx.halves
+        else "on the same train tasks"
+    )
+    return (
+        f"The harness evaluates `{new_name}` on the train split and applies the gate {where}: it promotes when "
+        f"`{new_name}` fixes at least one task and breaks none, or when a one-sided exact (McNemar) test on the tasks "
+        "that changed gives p < 0.05 (five fixes with no break; seven with one break; nine with two). It records the "
+        f"outcome next to your diagnosis in the ledger, then runs `{new_name}` on the held-out test split for the record."
+    )
+
+
+def build_prompt(
+    champion: AgentVersion,
+    new_name: str,
+    run_id: str,
+    failures: list[TaskResult],
+    ctx: Context | None = None,
+) -> str:
+    """The classic optimiser: one session that diagnoses and edits `system.md` and `helper.py`."""
+    ctx = ctx or build_context(champion, run_id, failures)
+    domain = ctx.domain
+    return f"""{_intro(champion, ctx)}
+
+The champion is `agents/{domain}/{champion.name}/`. {_where_failed(ctx)}{ctx.fork_note}
 A copy of the champion is already at `agents/{domain}/{new_name}/`. Your job is to turn that copy into a better
 version by editing **only two files**: `agents/{domain}/{new_name}/system.md` (the agent's system prompt; the
 literal `{{policy}}` is replaced by the domain policy at run time — keep it) and
@@ -220,15 +322,13 @@ to the system prompt). `agent.yaml` is frozen; do not touch it, and do not edit 
 `agents/{domain}/{new_name}/` — the harness refuses the cycle if you do. You may not run a simulation or call a
 model; verify helper code with `uv run python -c "..."` on the example arguments from the traces.
 
-The policy is at `data/tasks/{domain}.json` (key `policy`) and the tool list with descriptions at key `tools`;
-the tasks with their scenarios and expected actions at key `tasks`. Read the policy sections a failure cites
-before deciding a root cause.
+{_reading(ctx, new_name)} Read the policy sections a failure cites before deciding a root cause.
 
 # What was tried before
-{render_history(domain, [r.task_id for r in failures])}
+{ctx.history}
 
 # Held challengers of this champion (their folders still exist)
-{held_block}
+{ctx.held_block}
 
 # The champion's surfaces
 ## agents/{domain}/{champion.name}/system.md
@@ -240,7 +340,7 @@ before deciding a root cause.
 ```
 
 # The failures ({len(failures)} of the train split)
-{chr(10).join(blocks) or "none"}
+{chr(10).join(ctx.blocks) or "none"}
 
 # Method
 1. For each failed conversation, find the root cause from the transcript and the failed components: a policy
@@ -273,16 +373,174 @@ before deciding a root cause.
   ]
 }}
 `changes` is the change log: one entry per distinct edit, so a reader looking at the diff can find the reason next
-to the hunk. Then stop. The harness evaluates `{new_name}` on the same train tasks and applies the gate: it
-promotes when `{new_name}` fixes at least one task and breaks none, or when a one-sided exact (McNemar) test on the
-tasks that changed gives p < 0.05 (five fixes with no break; seven with one break; nine with two). It records the
-outcome next to your diagnosis in the ledger, then runs `{new_name}` on the held-out test split for the record.
+to the hunk. Then stop. {_gate(ctx, new_name)}
+"""
+
+
+SURFACE_GUIDE = """- `system.md` — the system prompt, once per conversation. For a rule the agent did not know or misread.
+- `helper.py` — `on_tool_call(name, arguments) -> (name, arguments)`, `on_reply(text) -> text`,
+  `extra_context(policy) -> str`. For mechanical slips: date formats, id casing, enum values.
+- `checks.py` — `def check_write(name: str, arguments: dict, state: dict) -> str | None`, called for every call
+  to a write tool ({writes}) before tau2 runs it. Return None to let it through, or one short sentence saying
+  what is wrong: the call is then not run, the agent reads your sentence as the call's result and replies once
+  more, and that reply goes through unchecked. For the right rule applied with the wrong arguments, or a write
+  out of order. Check arguments against facts in `state`, never against one task's answer.
+- `memory.py` — `def remember(state: dict, name: str, arguments: dict, result: str) -> None`, called after every
+  tool result (the call's name and arguments, the tool's text output, usually JSON) and every user message
+  (`name == "user"`, `arguments == {{}}`). Update `state` in place. It starts empty in each conversation and is
+  what `checks.py` and `guidance.py` read. For facts lost over a long conversation.
+- `guidance.py` — `def guidance(state: dict, trigger: str) -> str | None`, called before every model call;
+  `trigger` is `"user"` after a user message and `"tool"` after tool results. Return a short reminder (cut to
+  600 characters) or None; it is added to that one call only, never to the transcript. For steps skipped in a
+  multi-step procedure.
+The three code surfaces run inside every conversation: standard-library imports only ({imports}), no files,
+no network, no model calls; the harness swallows an exception, so a hook that raises does nothing."""
+
+ROUTING_RULES = """| root cause | surface | not this |
+|---|---|---|
+| the agent didn't know a rule, or misread it | system.md | a rule restated that the agent already follows |
+| a format slip in an argument | helper.py | a prompt line about formats |
+| the right rule, the wrong arguments or order at a write | checks.py (+ memory.py for the facts it checks) | a check that blocks every attempt |
+| lost a fact or a step in the middle of a procedure | memory.py + guidance.py | a longer procedure in the prompt |
+| the task or the simulated user is at fault | none: say so, change nothing | any edit |"""
+
+
+def _surfaces_text(domain: str) -> str:
+    writes = ", ".join(n for n, k in tool_kinds(domain).items() if k == "write") or "none known"
+    return SURFACE_GUIDE.format(
+        writes=writes, imports=", ".join(sorted(ALLOWED_IMPORTS - {"__future__"}))
+    )
+
+
+def _champion_files(champion: AgentVersion) -> str:
+    out = []
+    for name in SURFACES:
+        text = champion.files().get(name)
+        if name == "system.md":
+            out.append(f"## agents/{champion.domain}/{champion.name}/system.md\n{text}")
+        else:
+            out.append(
+                f"## agents/{champion.domain}/{champion.name}/{name}\n```python\n{text or '(none yet)'}\n```"
+            )
+    return "\n\n".join(out)
+
+
+def build_diagnose_prompt(
+    champion: AgentVersion, new_name: str, failures: list[TaskResult], ctx: Context
+) -> str:
+    """The routing optimiser's first session: read-only, one root cause and its surfaces per failure."""
+    domain = ctx.domain
+    return f"""{_intro(champion, ctx)}
+
+The champion is `agents/{domain}/{champion.name}/`. {_where_failed(ctx)}{ctx.fork_note}
+This session is the **diagnosis** step. For each failed conversation, find the root cause and decide where the
+fix belongs. You write one file, `agents/{domain}/{new_name}/diagnosis.json`; a second session then makes the
+edits, and the harness lets it write only the surfaces you name. You may not run a simulation or call a model.
+
+{_reading(ctx, new_name)} Read the policy sections a failure cites before deciding a root cause.
+
+# The five surfaces a version may have
+{_surfaces_text(domain)}
+
+# Where a fix belongs
+{ROUTING_RULES}
+Prefer the fewest surfaces that fix the failures you can explain. A fix that lives in code is checked every
+turn; a rule in the prompt competes with every other rule. Name `none` for a failure that is the task's or the
+simulated user's fault, and change nothing for it.
+
+# What was tried before
+{ctx.history}
+
+# Held challengers of this champion (their folders still exist)
+{ctx.held_block}
+
+# The champion's surfaces
+{_champion_files(champion)}
+
+# The failures ({len(failures)})
+{chr(10).join(ctx.blocks) or "none"}
+
+# Finish
+Write `agents/{domain}/{new_name}/diagnosis.json` with exactly this shape, then stop:
+{{
+  "diagnoses": [
+    {{"task_id": "…", "symptom": "…", "root_cause": "…",
+      "class": "knowledge|format|write-arguments|lost-state|task-fault",
+      "surfaces": ["checks.py", "memory.py"], "why_this_surface": "…",
+      "evidence": "a transcript line or a policy clause", "change": "one sentence"}}
+  ],
+  "surfaces": {{"checks.py": "what to add or change there, and for which tasks"}},
+  "expected_to_fix": ["task ids"],
+  "risks": ["what might regress and why you think it will not"]
+}}
+`surfaces` has one key per file to change (from {", ".join(SURFACES)}); those keys are the only files the next
+session may write. Do not hard-code any task's answer, customer name or id anywhere: the test split has other
+customers. {_gate(ctx, new_name)}
+"""
+
+
+def build_write_prompt(
+    champion: AgentVersion,
+    new_name: str,
+    failures: list[TaskResult],
+    ctx: Context,
+    diagnosis: dict[str, Any],
+    routed: list[str],
+) -> str:
+    """The routing optimiser's second session: the edits, to the routed surfaces only."""
+    domain = ctx.domain
+    base = len(champion.system_prompt)
+    return f"""{_intro(champion, ctx)}
+
+This session is the **writing** step. A diagnosis session has read the failures below and routed the fixes to
+these files: {", ".join(f"`{r}`" for r in routed)}. A copy of the champion `{champion.name}` is at
+`agents/{domain}/{new_name}/`. Make the diagnosed changes there. You may write only those files and
+`agents/{domain}/{new_name}/changes.json`; `agent.yaml` and `diagnosis.json` are frozen, and the harness
+refuses the cycle if anything else changes. You may not run a simulation or call a model; verify every code
+surface with `uv run python -c "..."`, importing it from the version folder and calling its hook on arguments
+and results taken from the transcripts below.
+
+{_reading(ctx, new_name)}
+
+# The surfaces and their contracts
+{_surfaces_text(domain)}
+
+# Budgets and guards the harness applies to what you write
+- `system.md` may grow by at most {PROMPT_GROWTH} characters over the champion's ({base} now, so at most
+  {base + PROMPT_GROWTH}). Keep the literal `{{policy}}`.
+- A code surface may import only the modules above and may not call open, exec or eval.
+- No file may contain a customer id, name or email from any task.
+
+# The diagnosis
+```json
+{json.dumps(diagnosis, indent=1, ensure_ascii=False)}
+```
+
+# The champion's surfaces
+{_champion_files(champion)}
+
+# The failures ({len(failures)})
+{chr(10).join(ctx.blocks) or "none"}
+
+# Finish
+Write `agents/{domain}/{new_name}/changes.json` with exactly this shape, then stop:
+{{
+  "changes": [
+    {{"file": "one of the routed files", "anchor": "the function name, or the first five words of the edited block",
+      "what": "what the edit does, one sentence", "why": "the evidence — a transcript line, a policy clause",
+      "task_ids": ["tasks this edit is for"], "verified_in_session": true, "verification": "what you ran and saw"}}
+  ],
+  "prompt_diff_summary": "what changed in system.md, one line (or none)",
+  "helper_diff_summary": "what changed in the code surfaces, one line (or none)"
+}}
+{_gate(ctx, new_name)}
 """
 
 
 def _broken_trace_paths(outcome: dict[str, Any]) -> list[str]:
-    """Map each broken task id to its own trace file in the challenger's run."""
-    broken = outcome.get("broken") or []
+    """Map each broken task id to its own trace file in the challenger's run — the read half's
+    breaks only, where train is halved."""
+    broken = seen_changes(outcome)[1]
     challenger_run = outcome.get("challenger_run")
     if not challenger_run or not broken:
         return []
@@ -314,10 +572,11 @@ def held_challengers(domain: str, champion_name: str) -> list[dict[str, Any]]:
                     "cycle": e.get("cycle"),
                     "challenger": e["challenger"],
                     "champion": e.get("champion"),
-                    "reason": o.get("reason"),
+                    # a halved gate's reason names gate-half ids: it is left out
+                    "reason": None if "read_fixed" in o else o.get("reason"),
                     "passes": o.get("passes"),
-                    "fixed": o.get("fixed"),
-                    "broken": o.get("broken"),
+                    "fixed": seen_changes(o)[0],
+                    "broken": seen_changes(o)[1],
                     "broken_traces": _broken_trace_paths(o),
                 }
             )
@@ -329,11 +588,22 @@ def _copy_champion(champion: AgentVersion, new_name: str) -> Path:
     if new_dir.exists():
         shutil.rmtree(new_dir)
     new_dir.mkdir(parents=True)
-    for name in ("system.md", "agent.yaml", "helper.py"):
+    for name in SURFACES + FROZEN:
         src = champion.path / name
         if src.exists():
             shutil.copyfile(src, new_dir / name)
     return new_dir
+
+
+def _write_context(domain: str, new_dir: Path) -> Path:
+    """The policy and tools the session may read, copied beside the version: `data/` is fenced."""
+    ctx_dir = new_dir / CONTEXT_DIR
+    ctx_dir.mkdir(exist_ok=True)
+    ext = read_task_extract(domain)
+    (ctx_dir / "policy.md").write_text(str(ext.get("policy") or ""))
+    tools = {"tools": ext.get("tools") or [], "user_tools": ext.get("user_tools") or []}
+    (ctx_dir / "tools.json").write_text(json.dumps(tools, indent=1, ensure_ascii=False))
+    return ctx_dir
 
 
 GUARDED = (
@@ -365,54 +635,67 @@ def tree_checksum(exclude: Path) -> dict[str, int]:
     return out
 
 
-async def run_optimiser(
-    champion: AgentVersion,
-    run_id: str,
-    failures: list[TaskResult],
-    model: str = "opus",
-    effort: Effort = EFFORT,
-) -> OptimiserOutput:
-    require_live()
-    domain = champion.domain
-    new_name = next_version_name(domain)
-    new_dir = _copy_champion(champion, new_name)
-    allowed_dir = new_dir.resolve()
-    before = tree_checksum(new_dir)
+@dataclass
+class Session:
+    turns: int = 0
+    cost_usd: float | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    error: str | None = None
 
-    async def guard_writes(
-        input_data: Any, tool_use_id: str | None, context: Any
-    ) -> dict[str, Any]:
-        """Refuse a Write/Edit outside agents/<domain>/v(n+1)/ and any touch of agent.yaml."""
-        path = str(input_data.get("tool_input", {}).get("file_path", ""))
-        resolved = Path(path).resolve() if path else None
-        ok = (
-            resolved is not None
-            and resolved.is_relative_to(allowed_dir)
-            and resolved.name != "agent.yaml"
-        )
-        if ok:
-            return {}
+
+async def _run_session(
+    prompt: str,
+    *,
+    label: str,
+    domain: str,
+    new_name: str,
+    writable: set[Path],
+    readable: set[Path],
+    hidden: list[Path],
+    model: str,
+    effort: Effort,
+    transcript: list[dict[str, Any]],
+) -> Session:
+    """One Agent SDK session inside the fence: it writes only `writable` and reads nothing fenced."""
+    names = ", ".join(sorted(p.name for p in writable))
+
+    def deny(reason: str) -> dict[str, Any]:
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": f"Only agents/{domain}/{new_name}/system.md, helper.py and diagnosis.json may be written.",
+                "permissionDecisionReason": reason,
             }
         }
 
+    async def guard_writes(
+        input_data: Any, tool_use_id: str | None, context: Any
+    ) -> dict[str, Any]:
+        """Refuse a Write/Edit to anything but this session's files."""
+        path = str(input_data.get("tool_input", {}).get("file_path", ""))
+        resolved = Path(path).resolve() if path else None
+        if resolved is not None and resolved in writable:
+            return {}
+        return deny(f"This step may write only agents/{domain}/{new_name}/: {names}.")
+
+    async def guard_reads(input_data: Any, tool_use_id: str | None, context: Any) -> dict[str, Any]:
+        """Refuse a Read/Glob/Grep of a fenced folder or of this cycle's other challenger."""
+        ti = input_data.get("tool_input", {}) or {}
+        path = str(ti.get("file_path") or ti.get("path") or "")
+        reason = fence_reason(path, readable, hidden)
+        return deny(reason) if reason else {}
+
     async def guard_bash(input_data: Any, tool_use_id: str | None, context: Any) -> dict[str, Any]:
-        """No simulations and no model calls from inside the optimiser session."""
+        """No simulations, no model calls and no fenced folders from inside the optimiser session."""
         cmd = str(input_data.get("tool_input", {}).get("command", ""))
         banned = ("tau2loop eval", "make eval", "make loop", "tau2 run", "claude ", "make smoke")
         if any(b in cmd for b in banned):
-            return {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": "The harness runs the evaluation after you finish; do not run simulations or models here.",
-                }
-            }
-        return {}
+            return deny(
+                "The harness runs the evaluation after you finish; do not run simulations or models here."
+            )
+        reason = bash_fence_reason(cmd, hidden)
+        return deny(reason) if reason else {}
 
     options = ClaudeAgentOptions(
         model=resolve_model(model),
@@ -427,28 +710,28 @@ async def run_optimiser(
         hooks={
             "PreToolUse": [
                 HookMatcher(matcher="Write|Edit|MultiEdit", hooks=[guard_writes]),
+                HookMatcher(matcher="Read|Glob|Grep", hooks=[guard_reads]),
                 HookMatcher(matcher="Bash", hooks=[guard_bash]),
             ]
         },
     )
-    prompt = build_prompt(champion, new_name, run_id, failures)
-    out = OptimiserOutput(new_version=new_name, diagnosis={})
-    out.transcript.append({"role": "user", "content": prompt})
-    started = time.time()
+    out = Session()
+    transcript.append({"role": "session", "content": label})
+    transcript.append({"role": "user", "content": prompt})
     try:
         async with ClaudeSDKClient(options=options) as client:
             await client.query(prompt)
             async for msg in client.receive_response():
                 if isinstance(msg, AssistantMessage):
-                    for b in msg.content:
-                        if isinstance(b, TextBlock) and b.text.strip():
-                            out.transcript.append({"role": "assistant", "content": b.text})
-                        elif isinstance(b, ToolUseBlock):
-                            out.transcript.append(
-                                {"role": "tool_use", "name": b.name, "input": b.input}
+                    for blk in msg.content:
+                        if isinstance(blk, TextBlock) and blk.text.strip():
+                            transcript.append({"role": "assistant", "content": blk.text})
+                        elif isinstance(blk, ToolUseBlock):
+                            transcript.append(
+                                {"role": "tool_use", "name": blk.name, "input": blk.input}
                             )
                 elif isinstance(msg, ResultMessage):
-                    out.n_turns = msg.num_turns
+                    out.turns = msg.num_turns
                     out.cost_usd = msg.total_cost_usd
                     u = msg.usage or {}
                     out.input_tokens = (
@@ -461,27 +744,146 @@ async def run_optimiser(
                         out.error = f"{msg.subtype}: {(msg.errors or [''])[0]}"[:500]
     except Exception as e:  # noqa: BLE001
         out.error = f"{type(e).__name__}: {e}"[:500]
-    out.duration_ms = int((time.time() - started) * 1000)
+    return out
 
+
+def _add(out: OptimiserOutput, sess: Session) -> None:
+    out.n_turns += sess.turns
+    out.input_tokens += sess.input_tokens
+    out.output_tokens += sess.output_tokens
+    if sess.cost_usd is not None:
+        out.cost_usd = (out.cost_usd or 0.0) + sess.cost_usd
+    if sess.error:
+        out.error = f"{out.error}; {sess.error}" if out.error else sess.error
+
+
+def _fail(out: OptimiserOutput, msg: str, reject: bool = True) -> None:
+    out.error = f"{out.error}; {msg}" if out.error else msg
+    out.rejected = out.rejected or reject
+
+
+def _read_json(path: Path, out: OptimiserOutput, what: str) -> dict[str, Any] | None:
+    if not path.exists():
+        _fail(out, f"no {what} written")
+        return None
+    try:
+        d = json.loads(redact(path.read_text()))
+    except json.JSONDecodeError as e:
+        _fail(out, f"{what} unreadable: {e}")
+        return None
+    return d if isinstance(d, dict) else None
+
+
+async def run_optimiser(
+    champion: AgentVersion,
+    run_id: str,
+    failures: list[TaskResult],
+    model: str = "opus",
+    effort: Effort = EFFORT,
+    mode: str = "classic",
+    hidden: list[Path] | None = None,
+    ctx: Context | None = None,
+) -> OptimiserOutput:
+    """`classic`: one session edits `system.md` and `helper.py`, as every cycle before s09.
+    `routing`: a read-only diagnosis session names each failure's surfaces, then a writing
+    session may change only those, among all five. Both run inside the fence; `hidden` closes
+    an A/B partner's folder, and `ctx` lets a pair share the exact same input."""
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
+    require_live()
+    domain = champion.domain
+    ctx = ctx or build_context(champion, run_id, failures)
+    new_name = next_version_name(domain)
+    new_dir = _copy_champion(champion, new_name)
+    before = tree_checksum(new_dir)
+    ctx_dir = _write_context(domain, new_dir)
+    readable = set(ctx.read_traces) | {p.resolve() for p in ctx_dir.iterdir()}
+    diag_path = (new_dir / "diagnosis.json").resolve()
+    out = OptimiserOutput(new_version=new_name, diagnosis={}, mode=mode)
+    hidden = [h.resolve() for h in hidden or []]
+    started = time.time()
+    common: dict[str, Any] = {
+        "domain": domain,
+        "new_name": new_name,
+        "readable": readable,
+        "hidden": hidden,
+        "model": model,
+        "effort": effort,
+        "transcript": out.transcript,
+    }
+
+    if mode == "classic":
+        writable = {(new_dir / n).resolve() for n in PROMPT_SURFACES} | {diag_path}
+        prompt = build_prompt(champion, new_name, run_id, failures, ctx)
+        _add(out, await _run_session(prompt, label="classic", writable=writable, **common))
+        out.diagnosis = _read_json(diag_path, out, "diagnosis.json") or {}
+        out.routed = list(PROMPT_SURFACES)
+    else:
+        prompt = build_diagnose_prompt(champion, new_name, failures, ctx)
+        _add(out, await _run_session(prompt, label="diagnose", writable={diag_path}, **common))
+        diagnosis = _read_json(diag_path, out, "diagnosis.json") or {}
+        routed = [n for n in SURFACES if n in (diagnosis.get("surfaces") or {})]
+        out.routed = routed
+        if not routed:
+            _fail(out, "the diagnosis routed no surface")
+        else:
+            frozen = diag_path.read_bytes()
+            changes_path = (new_dir / "changes.json").resolve()
+            writable = {(new_dir / n).resolve() for n in routed} | {changes_path}
+            prompt = build_write_prompt(champion, new_name, failures, ctx, diagnosis, routed)
+            _add(out, await _run_session(prompt, label="write", writable=writable, **common))
+            if diag_path.read_bytes() != frozen:
+                _fail(out, "diagnosis.json changed in the writing step")
+            changes = _read_json(changes_path, out, "changes.json") or {}
+            diagnosis.update(
+                {
+                    k: changes.get(k)
+                    for k in ("changes", "prompt_diff_summary", "helper_diff_summary")
+                }
+            )
+            diagnosis["routed"] = routed
+            changes_path.unlink(missing_ok=True)
+            diag_path.write_text(json.dumps(diagnosis, indent=2, ensure_ascii=False) + "\n")
+        out.diagnosis = diagnosis
+    out.duration_ms = int((time.time() - started) * 1000)
+    shutil.rmtree(ctx_dir, ignore_errors=True)
+
+    # the package: what changed, and the guards on it
     after = tree_checksum(new_dir)
     touched = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
     if touched:
-        out.error = (
-            out.error + "; " if out.error else ""
-        ) + f"optimiser changed files outside agents/{domain}/{new_name}: {touched[:10]}"
+        _fail(out, f"optimiser changed files outside agents/{domain}/{new_name}: {touched[:10]}")
     if (new_dir / "agent.yaml").read_bytes() != (champion.path / "agent.yaml").read_bytes():
-        out.error = (out.error + "; " if out.error else "") + "agent.yaml was modified (frozen)"
-    diag_path = new_dir / "diagnosis.json"
-    if diag_path.exists():
-        try:
-            out.diagnosis = json.loads(redact(diag_path.read_text()))
-        except json.JSONDecodeError as e:
-            out.error = (out.error + "; " if out.error else "") + f"diagnosis.json unreadable: {e}"
-    else:
-        out.error = (out.error + "; " if out.error else "") + "no diagnosis.json written"
+        _fail(out, "agent.yaml was modified (frozen)")
+    expected = set(SURFACES + FROZEN) | {"diagnosis.json"}
+    strays = sorted(p.name for p in new_dir.iterdir() if p.name not in expected)
+    for name in strays:  # the write guard should make this impossible; a stray file never ships
+        p = new_dir / name
+        shutil.rmtree(p) if p.is_dir() else p.unlink()
+    if strays:
+        _fail(out, f"stray files removed: {strays}")
     new_version = load_version(domain, new_name)
-    if all(new_version.files().get(s) == champion.files().get(s) for s in SURFACES):
-        out.error = (out.error + "; " if out.error else "") + "no change to either surface"
+    mine, theirs = new_version.files(), champion.files()
+    out.surfaces_changed = [n for n in SURFACES if mine.get(n) != theirs.get(n)]
+    if not out.surfaces_changed:
+        _fail(out, "no change to any surface")
+    for name in CODE_SURFACES:
+        if name in out.surfaces_changed and name in mine:
+            bad = import_violations(mine[name])
+            if bad:
+                _fail(out, f"guard: {name} {'; '.join(bad)}")
+    found = leaks({n: mine[n] for n in out.surfaces_changed if n in mine}, leak_values(domain))
+    if found:
+        _fail(out, f"guard: customer data in the version: {found[:5]}")
+    if (
+        mode == "routing"
+        and len(new_version.system_prompt) > len(champion.system_prompt) + PROMPT_GROWTH
+    ):
+        _fail(
+            out,
+            f"guard: system.md grew {len(new_version.system_prompt) - len(champion.system_prompt)} "
+            f"characters, over the {PROMPT_GROWTH} budget",
+        )
     (new_dir / "optimiser_transcript.json").write_text(
         redact(json.dumps(out.transcript, ensure_ascii=False, indent=1))
     )
@@ -489,4 +891,13 @@ async def run_optimiser(
     return out
 
 
-__all__ = ["run_optimiser", "build_prompt", "condense_trace", "OptimiserOutput", "AGENTS_DIR"]
+__all__ = [
+    "run_optimiser",
+    "build_prompt",
+    "build_context",
+    "build_diagnose_prompt",
+    "build_write_prompt",
+    "condense_trace",
+    "OptimiserOutput",
+    "AGENTS_DIR",
+]

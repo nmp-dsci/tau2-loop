@@ -15,8 +15,9 @@ final database, the actions taken, what was said, and (retail) an LLM judge's
 reading of natural-language assertions. Four domains are scored here:
 airline, retail, telecom, banking_knowledge. This project:
 
-1. runs our agent (`agents/<domain>/vN/{system.md, helper.py}` on the model its
-   `agent.yaml` names: Sonnet 5 on airline since v3, Haiku 4.5 elsewhere)
+1. runs our agent (`agents/<domain>/vN/{system.md, helper.py}`, and since s09
+   optionally `checks.py`, `memory.py`, `guidance.py`, on the model its
+   `agent.yaml` names: Sonnet 5 on airline since v3 and banking since v1, Haiku 4.5 elsewhere)
    through tau2's own harness — orchestrator, tools, user simulator, evaluator
    all unmodified — with **every model call on the Claude subscription** via a
    sealed core over the Claude Agent SDK (`src/tau2_loop/llm/`), in-process or
@@ -41,13 +42,18 @@ leaderboard submission in this build (that is M6, a separate decision).
 
 | Decision | Choice | Why |
 |---|---|---|
-| Split | our own, per domain, from tau2's public `base` set, seed 300, committed. v2 (now): half train, half test, no reserve (airline 25/25, retail 57/57, telecom 57/57, banking 48/49), with v1's 20/20 kept inside it on the same sides | nothing is held out upstream; tau2's train/test are fixed lists and banking has none; keeping v1's sides means no task that was ever test has been trained on |
+| Split | our own, per domain, from tau2's public `base` set, seed 300, committed. v2 (now): half train, half test, no reserve (airline 25/25, retail 57/57, telecom 57/57, banking 48/49 before its test cap: 48/25, 24 in reserve), with v1's 20/20 kept inside it on the same sides | nothing is held out upstream; tau2's train/test are fixed lists and banking has none; keeping v1's sides means no task that was ever test has been trained on |
+| Test cap (s09) | banking's test is the first 25 of its split v2 test list (v1's 20, then 5 dealt), the other 24 held back in reserve (`TEST_CAP`, `test_cap` in the split file) | 49 test conversations cost ~50 minutes a version; nothing held back moves to train |
+| Halves (s09) | banking's train is dealt into a read half (24) and a gate half (24), seed 300, under `halves` in its split file (`HALVED_DOMAINS`); the optimiser reads only read-half failures, the gate decides on the gate half, test stays reported; train and test keep their members, so runs still read split v2 | a gate on the tasks the optimiser read grades its own homework; this makes it honest without spending the test or adding a conversation |
+| Retrieval (s09) | banking runs tau2's `bm25_grep` variant (BM25 `KB_search` plus `grep` over the 698 documents), recorded as `retrieval` in `run.json`; runs before it recorded nothing and ran `bm25`, which replay and rescore still use for them | both are local; the board's AllTools adds OpenAI embeddings, which the subscription cannot call |
 | Models | agent: `agent.yaml`'s model and effort (airline v3+: `claude-sonnet-5`, medium; elsewhere `claude-haiku-4-5`, medium); user simulator and NL judge: `claude-haiku-4-5`, medium; every effort is recorded in `run.json` | the only billing path is the subscription; a Claude judge makes retail's score `custom` relative to the board |
 | Model swap | `tau2loop fork` copies a version's two surfaces with a new `agent.yaml`; it is evaluated once and promoted by hand (`KIND="model swap"`), or gated against the champion by `make challenge` (a ledger cycle with `kind: model swap` and no optimiser); its `diagnosis.json` names `forked_from`, and the optimiser follows that lineage to the held challengers | the optimiser may not change `agent.yaml`, so a model change is not a loop cycle |
 | Ringfence | `llm/core.py` imports the SDK, `prompting.py` and the standard library only; the SDK child runs with no tools, no MCP, no settings, a temp working directory and an allow-listed environment (the SDK merges `options.env` over the parent's, so every other name is passed blank); `llm/service.py` serves it as `POST /v1/chat/completions` with a bearer token; `Dockerfile.agent` ships those three files; `AGENT_SERVICE_URL` routes a run's agent to it | the agent must depend on nothing but its prompt, its tool schemas and the SDK, and run here or in the cloud unchanged |
 | Gate | pair by task; a task's score is its pass fraction over trials; promote on fixed ≥ 1 and broke 0 (dominance), or on a one-sided exact sign test p < 0.05 (McNemar at one trial); runs over different tasks or trials are refused | the rule the loop's owner set; pairing trial k with trial k would treat independent samples as pairs |
-| Optimiser | `claude-opus-5-5`, effort medium (`OPTIMISER=`; `claude-sonnet-5` to airline cycle 3), one session per cycle, may write two files | must read ~20 transcripts and the policy in one context |
+| Optimiser | `claude-opus-5-5`, effort medium (`OPTIMISER=`; `claude-sonnet-5` to airline cycle 3). `MODE=classic`: one session per cycle, may write `system.md` and `helper.py`. `MODE=routing` (s09): a read-only diagnosis session names each failure's root cause and surfaces, then a writing session may change only those, among five. Both are fenced (`loop/guards.py`): they read the policy and tools from a copy in the version folder and never `runs/`, `data/`, `loop/` or `vendor/` | must read ~20 transcripts and the policy in one context; `data/tasks` holds the test split's expected actions, which the optimiser was pointed at before s09 |
+| Code surfaces (s09) | `checks.py` (a write is blocked once with a fix-it message, then its retry goes through), `memory.py` (facts from each tool result, one conversation only), `guidance.py` (a reminder on that call's system prompt, never in the transcript); standard-library imports only; no customer id, name or email from any task; a routing `system.md` grows at most 1,500 characters | write-time checks and per-turn guidance moved published airline agents more than prompt text (`.lavish/s08`); code is checked every turn, a prompt rule competes with every other |
 | Tool calls | a JSON reply contract in the prompt (`tool_mode: json`), parsed back into `tool_calls` | the SDK cannot return a native tool call without executing it; the contract is the same either-message-or-tools rule tau2 enforces |
+| Prompt cache (s10) | the history goes to the SDK as one text block per turn (`build_blocks`), with one `cache_control` mark (ttl 1h) on the last block only; nothing closes the transcript, so each call's blocks are the start of the next call's; cache read and write counts reach tau2's usage in-process and through the service | the Claude CLI already spends 3 of the API's 4 marks, and a second mark returned a 400; one text block changed every call and was written afresh (`.lavish/s10_banking-token-audit.html`) |
 | Sampling | the CLI default; tau2's `temperature: 0.0` does not apply | the SDK exposes no temperature; recorded as `sampling: cli-default` on every run |
 | Trials | one per cycle for the gate (`TRIALS=` on `make loop` for more); `pass^k` over trials when `TRIALS>1` | one trial keeps a cycle inside a subscription window; the board's ≥4 trials is a submission requirement, not a loop one |
 | Tracking | MLflow 3 on the central platform (`nmp-central-ai`, http://localhost:5000; `MLFLOW_TRACKING_URI` overrides); `loop/<domain>/registry.json` is the truth | one server for the portfolio (DABStep-loop logs to the same one, experiment `dabstep-loop`); the run folder is the record, MLflow the index; the old sqlite store under `.mlflow/` is an archive |
@@ -72,7 +78,8 @@ vendor/tau2-bench/        τ³-bench at 2174a60 (submodule): harness, domains, d
 data/splits/<domain>.json train / test ids (v2: half each), seed 300, base_n, v1's 20 / 20   committed
 data/tasks/<domain>.json  every base task (tau2's dump), policy, tool list       committed, for the viewer
 data/index/leaderboard.json  τ²-bench's published submissions, ingested from the submodule   committed
-agents/<domain>/vN/       system.md ({policy} slot) · helper.py (hooks) · agent.yaml (frozen) · diagnosis.json
+agents/<domain>/vN/       system.md ({policy} slot) · helper.py (hooks) · checks.py · memory.py · guidance.py
+                          (s09 code surfaces, each optional) · agent.yaml (frozen) · diagnosis.json
 runs/<ts>_<domain>_<vN>_<split>/  run.json · results.jsonl · traces/<task>.json · tau2_results.json · agent/
 loop/<domain>/            ledger.jsonl · registry.json;  loop/mlflow_snapshot.json for the demo
 src/tau2_loop/
@@ -114,7 +121,9 @@ make smoke [AGENT=v0]     a mock-domain version: proves the adapter on all three
 make eval DOMAIN=airline AGENT=v0 SPLIT=train [TRIALS=1] [CONCURRENCY=3]
 make baselines            v0 on train for all four domains
 make promote RUN=<run> [KIND="model swap"]    make register RUN=<run>
-make loop DOMAIN=airline CYCLES=1 [TRIALS=1]   eval → optimiser → challenger → gate → test → ledger
+make loop DOMAIN=airline CYCLES=1 [TRIALS=1] [MODE=classic|routing]   eval → optimiser → challenger → gate → test → ledger
+make ab DOMAIN=banking_knowledge   two challengers from the champion on the same failures, the classic and the
+                          routing optimiser; both gated and tested; at most one crowned (s09 §6)
 make ledger DOMAIN=…      make snapshot
 make gate                 CI gate: champions re-score offline to their registry entries
 make leaderboard          ingest τ²-bench's published submissions → data/index/leaderboard.json
@@ -171,16 +180,21 @@ It writes nothing and calls no model; it needs tau2, so the demo image answers 5
    ids at the cycle's trials, else evaluates it (and promotes that run: as the
    first champion when the registry was empty, as a `re-baseline` when the
    same bytes had a run on an older cut).
-2. Failures = `correct is False or error`. None → ledger `nothing to fix`.
-3. `run_optimiser` copies the champion to `agents/<domain>/v(N+1)/`, builds
-   one prompt (both surfaces; per failure the scenario, relevant policy
-   clauses, expected actions, which reward components failed and a condensed
-   transcript; `render_history()` of the ledger incl. per-task prior
-   attempts) and runs one `ClaudeSDKClient` session with
-   Read/Write/Edit/Bash/Glob/Grep. A `PreToolUse` hook denies writes outside
-   the new folder and any Bash that runs a simulation or a model; a checksum
-   of the guarded paths is compared before and after; `agent.yaml` must be
-   byte-identical; `diagnosis.json` must exist.
+2. Failures = `correct is False or error`, on the read half where train is
+   halved. None → ledger `nothing to fix`.
+3. `run_optimiser` copies the champion to `agents/<domain>/v(N+1)/`, writes
+   the policy and tools to its `.context/`, builds the prompt (the surfaces; per
+   failure the scenario, relevant policy clauses, expected actions, which
+   reward components failed and a condensed transcript; `render_history()` of
+   the ledger incl. per-task prior attempts, with only read-half ids where
+   train is halved) and runs `ClaudeSDKClient` sessions with
+   Read/Write/Edit/Bash/Glob/Grep: one (`classic`), or a diagnosis then a
+   writer (`routing`). `PreToolUse` hooks deny a write to any file the
+   session was not given, a read of a fenced folder or an A/B partner's, and
+   any Bash that runs a simulation or a model; a checksum of the guarded paths
+   is compared before and after; `agent.yaml` must be byte-identical;
+   `diagnosis.json` must exist; the package guards (imports, customer data,
+   the routing budget) reject the cycle before the challenger runs.
 4. The ledger entry is appended **before** the challenger runs (verdict
    `pending`), then `update_entry` fills `outcome` after `compare()`.
 5. Promote → registry champion; hold → registry challenger. Either way the
@@ -189,7 +203,7 @@ It writes nothing and calls no model; it needs tau2, so the demo image answers 5
    in the outcome — passes, fixed, broke, p — reported, never used by the
    gate. The version folder and its runs stay in the repo.
 
-## 6 · The helper contract
+## 6 · The helper contract, and the code surfaces
 
 `helper.py` is optional and may define any of: `on_tool_call(name, arguments)
 -> (name, arguments)` (normalise arguments before the harness executes a
@@ -197,6 +211,22 @@ tool), `on_reply(text) -> text` (post-process a message to the user),
 `extra_context(policy) -> str` (appended to the system prompt). A helper that
 fails to import or raises is ignored for that turn; it can never break a
 conversation, only shape it.
+
+Since s09 three more files, each optional, each one hook (`agent/factory.py`):
+
+- `memory.py` `remember(state, name, arguments, result)` after every tool
+  result (with the call's name and arguments) and user message (`name ==
+  "user"`); `state` is a dict that starts empty in each conversation.
+- `guidance.py` `guidance(state, trigger) -> str | None` before every model
+  call (`trigger` is `user` or `tool`); the reminder, cut to 600 characters,
+  rides on that call as a system message, which the provider folds into the
+  call's system prompt, so the transcript never holds it.
+- `checks.py` `check_write(name, arguments, state) -> str | None` on each call
+  to a tool tau2 types `write`; a string blocks the reply once: the model reads
+  it as those calls' results and replies again, and that reply goes through.
+
+What they did is kept on the reply as `raw_data["tau2_loop"]` and shown on the
+Agent tab. A version without them has the fingerprint it always had.
 
 ## 7 · Conventions
 

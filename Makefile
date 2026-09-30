@@ -7,6 +7,7 @@ TRIALS ?= 1
 CONCURRENCY ?= 3
 CYCLES ?= 1
 OPTIMISER ?= opus
+MODE ?= classic
 MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
 AGENT_PORT ?= 8091
@@ -59,8 +60,10 @@ register: ## register RUN=<run id> as challenger
 promote: ## promote RUN=<run id> to champion of its domain (KIND="model swap" for a fork by fiat)
 	uv run tau2loop promote $(RUN) --kind "$(KIND)"
 
-loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate → test (OPTIMISER=opus, TRIALS=1)
-	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY) --trials $(TRIALS)
+loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate → test (OPTIMISER=opus, TRIALS=1, MODE=classic|routing)
+	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY) --trials $(TRIALS) --mode $(MODE)
+ab: platform-status ## two challengers from DOMAIN's champion on the same failures, the classic and the routing optimiser; both gated and tested, at most one crowned
+	uv run tau2loop ab --domain $(DOMAIN) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY) --trials $(TRIALS)
 
 challenge: platform-status ## score AGENT= (a fork) against DOMAIN's champion through the loop's gate, ledger and test report; no optimiser (TRIALS=1, NO_TEST=1)
 	@if [ "$(origin AGENT)" = "file" ]; then echo "make challenge needs AGENT=vN: the version to score against the champion"; exit 1; fi
@@ -104,4 +107,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt
+.PHONY: help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

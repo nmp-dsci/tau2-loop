@@ -2,7 +2,7 @@
 
 The Agent SDK takes a system prompt and one user prompt per query; a chat
 request arrives as a role-tagged history plus, sometimes, a tool list. This
-module serialises the history into a transcript block and, when tools are
+module serialises the history into transcript blocks, one per turn, and, when tools are
 present, adds the JSON reply contract the model must follow: exactly one
 object with either `content` (a message to the other party) or `tool_calls`
 (a list of `{name, arguments}`), never both — the same rule tau2's
@@ -75,33 +75,34 @@ def render_tools(tools: list[dict[str, Any]] | None) -> str:
     return "\n".join(lines)
 
 
+def render_turn(m: dict[str, Any]) -> str:
+    """One turn as transcript text; an assistant turn's tool calls inline."""
+    role = str(m.get("role"))
+    content = m.get("content")
+    if role == "assistant":
+        out: list[str] = []
+        calls = m.get("tool_calls") or []
+        if calls:
+            rendered = [
+                {
+                    "id": c.get("id"),
+                    "name": (c.get("function") or {}).get("name") or c.get("name"),
+                    "arguments": _args((c.get("function") or {}).get("arguments")),
+                }
+                for c in calls
+            ]
+            out.append("[assistant → tool calls]\n" + json.dumps(rendered, ensure_ascii=False))
+        if content:
+            out.append(f"[assistant]\n{content}")
+        return "\n\n".join(out)
+    if role == "tool":
+        return f"[tool result · call {m.get('tool_call_id')}]\n{content}"
+    return f"[{role}]\n{content}"
+
+
 def render_transcript(turns: list[dict[str, Any]]) -> str:
     """The conversation so far, one block per turn; tool calls and results inline."""
-    out: list[str] = []
-    for m in turns:
-        role = str(m.get("role"))
-        content = m.get("content")
-        if role == "assistant":
-            calls = m.get("tool_calls") or []
-            if calls:
-                rendered = [
-                    {
-                        "id": c.get("id"),
-                        "name": (c.get("function") or {}).get("name") or c.get("name"),
-                        "arguments": _args((c.get("function") or {}).get("arguments")),
-                    }
-                    for c in calls
-                ]
-                out.append("[assistant → tool calls]\n" + json.dumps(rendered, ensure_ascii=False))
-            if content:
-                out.append(f"[assistant]\n{content}")
-        elif role == "tool":
-            out.append(f"[tool result · call {m.get('tool_call_id')}]\n{content}")
-        elif role == "user":
-            out.append(f"[user]\n{content}")
-        else:
-            out.append(f"[{role}]\n{content}")
-    return "\n\n".join(out)
+    return "\n\n".join(t for t in (render_turn(m) for m in turns) if t)
 
 
 def _args(raw: Any) -> Any:
@@ -113,27 +114,40 @@ def _args(raw: Any) -> Any:
     return raw
 
 
-def build_prompt(
+def build_blocks(
     messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
-) -> tuple[str, str]:
-    """(system_prompt, user_prompt) for one SDK query."""
+) -> tuple[str, list[str]]:
+    """(system_prompt, user_blocks) for one SDK query: the ask, then one block per turn.
+
+    The blocks of one call are the start of the next call's (nothing closes the
+    transcript after the last turn), so the prompt cache, which matches a prefix
+    at a marked block boundary, reads everything but the new turns back (s10; the
+    core marks the last block). As one text block, the whole transcript changed
+    every call and was written afresh.
+    """
     system, turns = split_messages(messages)
     tool_block = render_tools(tools)
     if tool_block:
         system = f"{system}\n\n{tool_block}".strip()
-    transcript = render_transcript(turns)
     if tools:
         ask = (
-            "The conversation so far is below. Produce the next assistant reply as the single JSON "
-            "object described in the Tools section."
+            "The conversation so far follows, one block per turn. Produce the next assistant "
+            "reply as the single JSON object described in the Tools section."
         )
     else:
         ask = (
-            "The conversation so far is below. Produce the next assistant reply as plain text — "
-            "the reply only, no preamble and no role label."
+            "The conversation so far follows, one block per turn. Produce the next assistant "
+            "reply as plain text — the reply only, no preamble and no role label."
         )
-    user_prompt = f"{ask}\n\n<conversation>\n{transcript}\n</conversation>"
-    return system, user_prompt
+    return system, [ask, *(t for t in (render_turn(m) for m in turns) if t)]
+
+
+def build_prompt(
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
+) -> tuple[str, str]:
+    """(system_prompt, user_prompt) for one SDK query, the blocks joined into one text."""
+    system, blocks = build_blocks(messages, tools)
+    return system, "\n\n".join(blocks)
 
 
 def parse_reply(text: str, tools_present: bool) -> Reply:
