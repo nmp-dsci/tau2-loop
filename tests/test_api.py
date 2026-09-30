@@ -34,7 +34,8 @@ def test_domains_and_tasks() -> None:
     ds = c.get("/api/domains").json()
     assert [d["domain"] for d in ds] == ["airline", "retail", "telecom", "banking_knowledge"]
     # split v2: half of each base set on each side
-    assert [(d["train"], d["test"]) for d in ds] == [(25, 25), (57, 57), (57, 57), (48, 49)]
+    # banking's test is capped at 25 (s09), the other 24 of its half held back in reserve
+    assert [(d["train"], d["test"]) for d in ds] == [(25, 25), (57, 57), (57, 57), (48, 25)]
     airline = c.get("/api/domains/airline").json()
     assert airline["policy_words"] > 1000 and len(airline["tasks"]) == 50
     first = airline["tasks"][0]
@@ -118,7 +119,10 @@ def test_stats_is_the_overview_in_one_object() -> None:
     ]
     # the four base splits are the benchmark: 50 + 114 + 114 + 97
     assert s["base_total"] == 375
-    assert all(d["train"] + d["test"] == d["base_n"] for d in s["domains"])
+    # banking holds 24 of its test half back in reserve (s09's test cap)
+    assert all(
+        d["train"] + d["test"] + (d.get("reserve_n") or 0) == d["base_n"] for d in s["domains"]
+    )
     assert s["runs_scored"] <= s["runs"] and s["conversations"] > 0
 
 
@@ -237,7 +241,14 @@ def test_a_run_serves_the_agent_it_ran_with() -> None:
     assert p["slotted"] and p["policy"] in p["text"] and p["extra_context"]
     assert p["text"].endswith(p["extra_context"])
     v0 = c.get("/api/runs/20260915T075151Z_airline_v0_train/agent").json()
-    assert v0["hooks"] == {"extra_context": False, "on_tool_call": False, "on_reply": False}
+    assert v0["hooks"] == {
+        "extra_context": False,
+        "on_tool_call": False,
+        "on_reply": False,
+        "remember": False,
+        "guidance": False,
+        "check_write": False,
+    }
     assert "helper.py" not in v0["files"] and v0["prompt"]["extra_context"] is None
     assert c.get("/api/runs/nope/agent").status_code == 404
 

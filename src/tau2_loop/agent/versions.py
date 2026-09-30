@@ -1,8 +1,10 @@
-"""Agent versions are folders: `agents/<domain>/vN/{system.md, agent.yaml, helper.py}`.
+"""Agent versions are folders: `agents/<domain>/vN/{system.md, agent.yaml, helper.py, …}`.
 
-Two of those files are the optimiser's only surfaces (`system.md`, `helper.py`);
-`agent.yaml` is frozen across a loop cycle so a comparison is between prompts
-and helpers, not between models or budgets. The fingerprint is what a run is
+The optimiser's surfaces are `system.md` and `helper.py` and, since s09, three
+code surfaces the harness calls around each turn: `checks.py` (write-time
+checks), `memory.py` (facts kept within one conversation) and `guidance.py`
+(a per-turn reminder). `agent.yaml` is frozen across a loop cycle so a
+comparison is between prompts and code, not between models or budgets. The fingerprint is what a run is
 logged against, so two runs of the same bytes compare and two runs of
 different bytes never masquerade as one version. Versions are per domain: an
 airline prompt and a retail prompt evolve on their own ledgers.
@@ -14,7 +16,7 @@ import hashlib
 import json
 import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +24,10 @@ import yaml
 
 from tau2_loop.config import AGENTS_DIR
 
-SURFACES = ("system.md", "helper.py")
+# The classic optimiser's two surfaces, and the three code surfaces a routing optimiser may add (s09).
+PROMPT_SURFACES = ("system.md", "helper.py")
+CODE_SURFACES = ("checks.py", "memory.py", "guidance.py")
+SURFACES = PROMPT_SURFACES + CODE_SURFACES
 FROZEN = ("agent.yaml",)
 
 
@@ -43,6 +48,8 @@ class AgentVersion:
     config: AgentConfig
     helper: str | None
     fingerprint: str
+    # the code surfaces present, name → source (s09); empty for every version before them
+    code: dict[str, str] = field(default_factory=dict)
 
     @property
     def ref(self) -> str:
@@ -53,6 +60,10 @@ class AgentVersion:
         p = self.path / "helper.py"
         return p if p.exists() else None
 
+    def surface_path(self, name: str) -> Path | None:
+        p = self.path / name
+        return p if p.exists() else None
+
     def files(self) -> dict[str, str]:
         out = {
             "system.md": self.system_prompt,
@@ -60,10 +71,13 @@ class AgentVersion:
         }
         if self.helper is not None:
             out["helper.py"] = self.helper
+        out.update(self.code)
         return out
 
 
 def _fingerprint(path: Path) -> str:
+    """Only the files present count, in name order: adding a surface name leaves every older
+    version's fingerprint as it was."""
     h = hashlib.sha256()
     for name in sorted(SURFACES + FROZEN):
         p = path / name
@@ -94,6 +108,7 @@ def load_version(domain: str, name: str) -> AgentVersion:
         config=config,
         helper=helper,
         fingerprint=_fingerprint(path),
+        code={n: (path / n).read_text() for n in CODE_SURFACES if (path / n).exists()},
     )
 
 
@@ -156,14 +171,14 @@ def lineage(domain: str, name: str) -> list[str]:
 
 
 AGENT_YAML_HEADER = (
-    "# Frozen across a loop cycle: the optimiser edits system.md and helper.py only.\n"
+    "# Frozen across a loop cycle: the optimiser edits the version's surfaces, never this file.\n"
 )
 
 
 def fork_version(
     domain: str, source: str, model: str | None = None, effort: str | None = None
 ) -> AgentVersion:
-    """A hand-made version: `source`'s two surfaces unchanged, a different `agent.yaml`.
+    """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`.
 
     The optimiser may not touch `agent.yaml`, so a model or effort change is a
     fork, not a loop cycle. Its `diagnosis.json` says so (`kind: model swap`,

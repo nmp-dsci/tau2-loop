@@ -40,9 +40,15 @@ HALVES = {
 def test_committed_split_halves_the_base_set_disjoint_and_seeded(domain: str) -> None:
     s = read_split(domain)
     assert s["seed"] == SPLIT_SEED and s["version"] == SPLIT_VERSION
-    assert (len(s["train"]), len(s["test"])) == HALVES[domain]
-    assert not set(s["train"]) & set(s["test"])
-    assert s["reserve_n"] == 0 and len(s["train"]) + len(s["test"]) == s["base_n"]
+    # a capped test (banking, s09) keeps its first tasks and holds the rest back in reserve
+    held = (s.get("test_cap") or {}).get("held_back") or []
+    assert (len(s["train"]), len(s["test"]) + len(held)) == HALVES[domain]
+    assert not set(s["train"]) & set(s["test"]) and not set(held) & (
+        set(s["train"]) | set(s["test"])
+    )
+    assert (
+        s["reserve_n"] == len(held) and len(s["train"]) + len(s["test"]) + len(held) == s["base_n"]
+    )
     assert split_ids(domain, "all") == s["train"] + s["test"]
 
 
@@ -62,7 +68,8 @@ def test_split_v2_keeps_what_was_held_out_held_out(domain: str) -> None:
 def test_task_extract_covers_the_split(domain: str) -> None:
     ext = read_task_extract(domain)
     ids = {t["id"] for t in ext["tasks"]}
-    assert ids == set(split_ids(domain, "all"))
+    held = set((read_split(domain).get("test_cap") or {}).get("held_back") or [])
+    assert ids == set(split_ids(domain, "all")) | held
     assert ext["policy_words"] > 100
     assert ext["tools"]
 

@@ -20,11 +20,14 @@
   baked in and cannot call a model.
 - **tau2 is a pinned, unmodified submodule.** Never edit `vendor/tau2-bench`;
   route a change through our own code (`sdk_provider`, `factory`, `runner`).
-- **The optimiser may edit two files** (`agents/<domain>/vN/system.md`,
-  `helper.py`). "Improve the agent" means `make loop DOMAIN=…`, not a hand edit
-  — a hand edit without a re-run fails the CI gate.
+- **The optimiser may edit the version's surfaces only**: `system.md` and
+  `helper.py` (`MODE=classic`), plus `checks.py`, `memory.py`, `guidance.py`
+  when a routing diagnosis names them (`MODE=routing`, s09). It never reads
+  `runs/`, `data/`, `loop/` or `vendor/`. "Improve the agent" means
+  `make loop DOMAIN=…`, not a hand edit — a hand edit without a re-run fails
+  the CI gate.
 - **Run folders are immutable** once scored. Fix the code and re-run.
-- **The test split is reported, never optimised on.** It runs once per challenger, promoted or held; the gate never reads it.
+- **The test split is reported, never optimised on.** It runs once per challenger, promoted or held; the gate never reads it. Where train is halved (banking), the gate half is never shown to an optimiser either.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

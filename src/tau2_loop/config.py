@@ -35,6 +35,15 @@ SPLIT_SEED = 300
 # held the rest in reserve; version 2 keeps those 40 where they were and deals
 # the reserve out evenly, so train and test are each half of the base set.
 SPLIT_VERSION = 2
+# Banking's retrieval (s09 Q1): BM25 plus tau2's grep over the knowledge base, both local.
+# The board's AllTools adds OpenAI embeddings, which the subscription cannot call.
+BANKING_RETRIEVAL = "bm25_grep"
+# Domains whose train split is dealt into a read half (the optimiser's) and a gate half
+# (the gate's, never shown to an optimiser): s09 option B.
+HALVED_DOMAINS: tuple[str, ...] = ("banking_knowledge",)
+# A test split capped to its first n tasks (v1's test first, then the dealt ones), the rest held
+# back in reserve, never moved to train: banking's 49 cost ~50 minutes a version (s09).
+TEST_CAP: dict[str, int] = {"banking_knowledge": 25}
 V1_SIZE = 20
 
 # tau2 reads its data dir from this variable; the submodule's own `data/` is the

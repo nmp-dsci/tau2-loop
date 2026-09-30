@@ -24,11 +24,14 @@ from pathlib import Path
 from typing import Any
 
 from tau2_loop.config import (
+    BANKING_RETRIEVAL,
     DOMAINS,
+    HALVED_DOMAINS,
     SPLIT_SEED,
     SPLIT_VERSION,
     SPLITS_DIR,
     TASKS_DIR,
+    TEST_CAP,
     V1_SIZE,
     quiet_tau2,
 )
@@ -66,7 +69,7 @@ def cut_ids(ids: list[str], seed: int = SPLIT_SEED, v1_size: int = V1_SIZE) -> d
 def cut(domain: str, seed: int = SPLIT_SEED) -> dict[str, Any]:
     ids = _base_task_ids(domain)
     c = cut_ids(ids, seed)
-    return {
+    split: dict[str, Any] = {
         "domain": domain,
         "version": SPLIT_VERSION,
         "seed": seed,
@@ -80,7 +83,55 @@ def cut(domain: str, seed: int = SPLIT_SEED) -> dict[str, Any]:
         "test": c["test"],
         "reserve_n": len(ids) - len(c["train"]) - len(c["test"]),
         "v1": c["v1"],
+        **({"halves": cut_halves(c["train"], seed)} if domain in HALVED_DOMAINS else {}),
     }
+    return cap_test(split, TEST_CAP[domain]) if domain in TEST_CAP else split
+
+
+def cap_test(split: dict[str, Any], n: int) -> dict[str, Any]:
+    """Test cut to its first `n` tasks — v1's test first, then the dealt ones — and the rest held
+    back in reserve. Nothing moves to train: a task that was ever test is never trained on."""
+    full = list(split["test"]) + list((split.get("test_cap") or {}).get("held_back") or [])
+    kept, held = full[:n], full[n:]
+    out = dict(split)
+    out["test"] = kept
+    out["reserve_n"] = int(split.get("base_n") or 0) - len(split["train"]) - len(kept)
+    out["test_cap"] = {
+        "n": n,
+        "method": f"the first {n} of the v2 test list (v1's {len(split['v1']['test'])} test tasks, then the dealt ones); the other {len(held)} held back",
+        "held_back": held,
+    }
+    return out
+
+
+def cut_halves(train: list[str], seed: int = SPLIT_SEED) -> dict[str, Any]:
+    """Train dealt into a read half, whose failures the optimiser reads, and a gate half the gate
+    decides on and no optimiser is shown (s09 option B). Train and test keep their members."""
+    dealt = random.Random(seed).sample(train, len(train))
+    half = len(dealt) // 2
+    return {
+        "seed": seed,
+        "method": f"random.Random({seed}).sample(train, {len(train)}): first {half} read, the rest gate",
+        "read": dealt[:half],
+        "gate": dealt[half:],
+    }
+
+
+def add_halves(domain: str, seed: int = SPLIT_SEED) -> Path:
+    """Write a domain's read and gate halves into its committed split, leaving every other key as it was."""
+    p = SPLITS_DIR / f"{domain}.json"
+    split = read_split(domain)
+    split["halves"] = cut_halves(list(split["train"]), seed)
+    p.write_text(json.dumps(split, indent=2) + "\n")
+    return p
+
+
+def halves(domain: str) -> tuple[list[str], list[str]] | None:
+    """(read, gate): the halves of a domain's train split, or None where train is not halved."""
+    if domain == "mock":
+        return None
+    h = read_split(domain).get("halves")
+    return (list(h["read"]), list(h["gate"])) if h else None
 
 
 def write_splits(seed: int = SPLIT_SEED) -> list[Path]:
@@ -102,7 +153,8 @@ def _write_task_extract(domain: str, ids: list[str]) -> Path:
 
     wanted = set(ids)
     tasks = [t for t in load_tasks(domain, None) if t.id in wanted]
-    env_kwargs = {"retrieval_variant": "bm25"} if domain == "banking_knowledge" else {}
+    # the variant the runs use (s09: bm25_grep), so the extract's tools and policy are the agent's
+    env_kwargs = {"retrieval_variant": BANKING_RETRIEVAL} if domain == "banking_knowledge" else {}
     env = build_environment(domain, env_kwargs=env_kwargs)
     doc = {
         "domain": domain,
@@ -164,3 +216,18 @@ def read_task_extract(domain: str) -> dict[str, Any]:
     if not p.exists():
         return {"domain": domain, "policy": "", "policy_words": 0, "tools": [], "tasks": []}
     return dict(json.loads(p.read_text()))
+
+
+def tool_kinds(domain: str) -> dict[str, str]:
+    """Each domain tool's tau2 type (`read`, `write`, `generic`), from the committed extract."""
+    try:
+        return {t["name"]: str(t.get("type")) for t in read_task_extract(domain).get("tools", [])}
+    except (FileNotFoundError, OSError, ValueError, KeyError):
+        return {}
+
+
+def apply_test_cap(domain: str) -> Path:
+    """Cap a domain's committed test split in place (`TEST_CAP`), every other key as it was."""
+    p = SPLITS_DIR / f"{domain}.json"
+    p.write_text(json.dumps(cap_test(read_split(domain), TEST_CAP[domain]), indent=2) + "\n")
+    return p

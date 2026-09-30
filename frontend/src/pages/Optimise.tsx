@@ -171,7 +171,10 @@ function DiagnosisTable({ rows, cycle }: { rows: Diagnosis[]; cycle?: LedgerEntr
                 </td>
                 <td className="wrap">{d.symptom}</td>
                 <td className="wrap">{d.root_cause}</td>
-                <td className="mono">{d.surface}</td>
+                <td className="mono">
+                  {d.surfaces?.join(', ') ?? d.surface ?? '—'}
+                  {d.class && <span className="path">{d.class}</span>}
+                </td>
                 <td className="wrap">{d.change}</td>
                 <td>
                   {d.verified_in_session ? (
@@ -284,9 +287,13 @@ export function Optimise() {
                   >
                     {e.outcome?.verdict ?? 'pending'}
                   </td>
-                  <td className="num">{e.outcome?.passes ?? '—'}</td>
+                  <td className="num sub" title={e.outcome?.gate_on ? `the gate's passes on the ${e.outcome.gate_on}` : undefined}>
+                    {e.outcome?.passes ?? '—'}
+                    {e.outcome?.gate_on?.startsWith('gate half') && <span className="path">gate half</span>}
+                  </td>
                   <td className="num">{e.outcome?.test_passes ?? '—'}</td>
                   <td className="wrap small">
+                    {e.surfaces_changed?.length ? <b>{e.surfaces_changed.join(', ')}: </b> : null}
                     {e.kind && e.agent_yaml?.length
                       ? `agent.yaml: ${e.agent_yaml.join('; ')}`
                       : e.prompt_diff_summary || '—'}
@@ -295,6 +302,12 @@ export function Optimise() {
                   <td className={`small ${handMade(e) ? 'wrap' : 'nw'}`}>
                     {handMade(e) ? 'none' : (e.optimiser_model ?? '—')}
                     {handMade(e) && <span className="path">{handMade(e)}</span>}
+                    {e.optimiser_mode && (
+                      <span className="path">
+                        {e.optimiser_mode}
+                        {e.experiment ? ` · A/B, cycles ${e.experiment.pair.join(' and ')}` : ''}
+                      </span>
+                    )}
                     {e.optimiser && (
                       <span className="path">
                         {e.optimiser.turns} turns · {fmtS(e.optimiser.duration_ms)}
@@ -672,8 +685,27 @@ export function OptimiseRound() {
               </dd>
               <dt>reason</dt>
               <dd>{cycle.outcome?.reason ?? '—'}</dd>
-              <dt>train</dt>
-              <dd>{cycle.outcome?.passes ?? '—'}</dd>
+              <dt>gate</dt>
+              <dd>
+                {cycle.outcome?.passes ?? '—'}
+                {cycle.outcome?.gate_on ? ` on the ${cycle.outcome.gate_on}` : ''}
+              </dd>
+              {cycle.outcome?.train_passes && (
+                <>
+                  <dt>train</dt>
+                  <dd>{cycle.outcome.train_passes}, every train task</dd>
+                </>
+              )}
+              {cycle.surfaces_changed?.length ? (
+                <>
+                  <dt>surfaces</dt>
+                  <dd>
+                    {cycle.surfaces_changed.join(', ')}
+                    {cycle.optimiser_mode ? ` · the ${cycle.optimiser_mode} optimiser` : ''}
+                    {cycle.routed?.length ? ` · routed: ${cycle.routed.join(', ')}` : ''}
+                  </dd>
+                </>
+              ) : null}
               <dt>test</dt>
               <dd>{cycle.outcome?.test_passes ?? 'not run'}</dd>
               {cycle.optimiser?.error && (

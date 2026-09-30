@@ -18,7 +18,15 @@ from typing import Any
 POLICY_SLOT = "{policy}"
 
 # The three optional hooks a helper may define, in the order a turn meets them.
-HOOKS = ("extra_context", "on_tool_call", "on_reply")
+HELPER_HOOKS = ("extra_context", "on_tool_call", "on_reply")
+# s09: the code surfaces and the one hook each defines, in the order a turn meets them.
+#   memory.py    remember(state, name, arguments, result) -> None   after each tool result and user message
+#   guidance.py  guidance(state, trigger) -> str | None              before each model call ("user" | "tool")
+#   checks.py    check_write(name, arguments, state) -> str | None   on each write call; a string blocks it once
+CODE_HOOKS = {"memory.py": "remember", "guidance.py": "guidance", "checks.py": "check_write"}
+HOOKS = HELPER_HOOKS + tuple(CODE_HOOKS.values())
+# A per-turn reminder is cut to this many characters (s09 §5, the guidance budget).
+GUIDANCE_CHARS = 600
 
 
 @dataclass(frozen=True)
@@ -58,12 +66,25 @@ def call_hook(helper: types.ModuleType | None, name: str, *args: Any) -> Any:
         return None
 
 
-def hooks_defined(helper: types.ModuleType | None) -> dict[str, bool]:
-    return (
-        {h: callable(getattr(helper, h, None)) for h in HOOKS}
-        if helper
-        else dict.fromkeys(HOOKS, False)
-    )
+def load_code_surfaces(folder: Path, prefix: str) -> dict[str, types.ModuleType]:
+    """Each code surface present in a version (or run snapshot) folder, imported; a file that
+    does not import is left out, as a broken helper is."""
+    out: dict[str, types.ModuleType] = {}
+    for name in CODE_HOOKS:
+        mod = load_helper_file(folder / name, f"{prefix}_{name.removesuffix('.py')}")
+        if mod is not None:
+            out[name] = mod
+    return out
+
+
+def hooks_defined(
+    helper: types.ModuleType | None, code: dict[str, types.ModuleType] | None = None
+) -> dict[str, bool]:
+    out = {h: callable(getattr(helper, h, None)) if helper else False for h in HELPER_HOOKS}
+    for name, hook in CODE_HOOKS.items():
+        mod = (code or {}).get(name)
+        out[hook] = callable(getattr(mod, hook, None)) if mod else False
+    return out
 
 
 def compose(system_md: str, policy: str, helper: types.ModuleType | None) -> Composed:

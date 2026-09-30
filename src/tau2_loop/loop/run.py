@@ -13,6 +13,12 @@ optimising on it one step removed.
 `make challenge DOMAIN=… AGENT=vN` scores a version nobody's optimiser wrote — a
 model-swap fork, say — against the champion through the same code: everything a
 cycle does once its challenger exists is `_score_challenger`, called by both.
+
+A domain whose train split is halved (s09 option B, `data/splits`) shows the
+optimiser only its read half's failures and gates on the gate half, which no
+optimiser sees; every version still runs all of train and test. `make ab` runs
+two optimisers from one champion on the same input — the classic one and the
+routing one — scores both, and crowns at most one (s09 §6).
 """
 
 from __future__ import annotations
@@ -23,14 +29,14 @@ from typing import Any
 
 from rich.console import Console
 
-from tau2_loop.agent.versions import load_version
-from tau2_loop.data.splits import split_ids
+from tau2_loop.agent.versions import load_version, version_dir
+from tau2_loop.data.splits import halves, split_ids
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.results import TaskResult
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run, run_eval
 from tau2_loop.llm import model_label
 from tau2_loop.loop.ledger import append_entry, next_cycle_number, update_entry
-from tau2_loop.loop.optimiser import run_optimiser
+from tau2_loop.loop.optimiser import MODES, OptimiserOutput, build_context, run_optimiser
 from tau2_loop.tracking.registry import promote, read_registry, register
 
 console = Console()
@@ -39,6 +45,31 @@ console = Console()
 def _covers(meta: RunMeta, ids: list[str], trials: int) -> bool:
     """A run scored exactly these tasks at this many trials (a run on an older cut does not)."""
     return set(meta.task_ids) == set(ids) and meta.trials == trials and not meta.dry_run
+
+
+def _read_failures(domain: str, results: list[TaskResult]) -> list[TaskResult]:
+    """The champion's failures an optimiser may read: all of train, or its read half."""
+    h = halves(domain)
+    read = set(h[0]) if h else None
+    return [
+        r
+        for r in results
+        if (r.correct is False or r.error) and (read is None or r.task_id in read)
+    ]
+
+
+def _gate_rows(domain: str, results: list[TaskResult]) -> list[TaskResult]:
+    """The rows the gate decides on: all of train, or its gate half."""
+    h = halves(domain)
+    if not h:
+        return results
+    gate = set(h[1])
+    return [r for r in results if r.task_id in gate]
+
+
+def _gate_on(domain: str) -> str:
+    h = halves(domain)
+    return f"gate half ({len(h[1])} of {len(h[0]) + len(h[1])} train tasks)" if h else "train"
 
 
 def _champion_run(
@@ -129,6 +160,61 @@ def _refuse_in_flight(domain: str, agent: str, split: str, ids: list[str], trial
             )
 
 
+def _cycle_entry(
+    cycle: int,
+    domain: str,
+    agent: str,
+    champ_meta: RunMeta,
+    opt: OptimiserOutput,
+    optimiser_model: str,
+    trials: int,
+    failures: list[TaskResult],
+) -> dict[str, Any]:
+    """A loop cycle's ledger line as it stands when its optimiser has finished."""
+    return {
+        "cycle": cycle,
+        "domain": domain,
+        "champion": agent,
+        "champion_run": champ_meta.run_id,
+        "challenger": opt.new_version,
+        "optimiser_model": optimiser_model,
+        "optimiser_mode": opt.mode,
+        "routed": opt.routed,
+        "surfaces_changed": opt.surfaces_changed,
+        "trials": trials,
+        "split_version": champ_meta.split_version,
+        "gate_on": _gate_on(domain),
+        "failed": [r.task_id for r in failures],
+        "diagnoses": opt.diagnosis.get("diagnoses", []),
+        "prompt_diff_summary": opt.diagnosis.get("prompt_diff_summary", "") or "",
+        "helper_diff_summary": opt.diagnosis.get("helper_diff_summary", "") or "",
+        "expected_to_fix": opt.diagnosis.get("expected_to_fix", []),
+        "risks": opt.diagnosis.get("risks", []),
+        "optimiser": {
+            "turns": opt.n_turns,
+            "duration_ms": opt.duration_ms,
+            "cost_usd_est": opt.cost_usd,
+            "error": opt.error,
+        },
+        "tokens": {"optimiser_in": opt.input_tokens, "optimiser_out": opt.output_tokens},
+        "outcome": {"verdict": "pending"},
+    }
+
+
+def _rejected(opt: OptimiserOutput) -> bool:
+    """A guard, a write outside the version, a frozen file or no change at all: no challenger runs."""
+    legacy = ("outside agents", "frozen", "no change")
+    return opt.rejected or bool(opt.error and any(x in opt.error for x in legacy))
+
+
+def _reject(domain: str, entry: dict[str, Any], opt: OptimiserOutput) -> dict[str, Any]:
+    outcome = {"verdict": "rejected", "reason": opt.error}
+    update_entry(domain, int(entry["cycle"]), outcome=outcome)
+    console.print(f"[red]cycle {entry['cycle']} rejected:[/] {opt.error}")
+    entry["outcome"] = outcome
+    return entry
+
+
 async def run_cycle(
     domain: str,
     agent: str,
@@ -136,12 +222,16 @@ async def run_cycle(
     concurrency: int,
     run_test: bool = True,
     trials: int = 1,
+    mode: str = "classic",
 ) -> dict[str, Any]:
     cycle = next_cycle_number(domain)
     champion = load_version(domain, agent)
     champ_meta, champ_results = _champion_run(domain, agent, concurrency, trials)
-    failures = [r for r in champ_results if r.correct is False or r.error]
-    console.rule(f"[bold]{domain} · cycle {cycle}[/] · champion {agent} · {len(failures)} failures")
+    failures = _read_failures(domain, champ_results)
+    console.rule(
+        f"[bold]{domain} · cycle {cycle}[/] · champion {agent} · {len(failures)} failures to read"
+        f" · {mode} optimiser · gate on {_gate_on(domain)}"
+    )
     if not failures:
         clean: dict[str, Any] = {
             "cycle": cycle,
@@ -155,42 +245,13 @@ async def run_cycle(
         append_entry(domain, clean)
         return clean
 
-    opt = await run_optimiser(champion, champ_meta.run_id, failures, model=optimiser_model)
-    failed_ids = [r.task_id for r in failures]
-    opt_tokens = {"optimiser_in": opt.input_tokens, "optimiser_out": opt.output_tokens}
-    entry: dict[str, Any] = {
-        "cycle": cycle,
-        "domain": domain,
-        "champion": agent,
-        "champion_run": champ_meta.run_id,
-        "challenger": opt.new_version,
-        "optimiser_model": optimiser_model,
-        "trials": trials,
-        "split_version": champ_meta.split_version,
-        "failed": failed_ids,
-        "diagnoses": opt.diagnosis.get("diagnoses", []),
-        "prompt_diff_summary": opt.diagnosis.get("prompt_diff_summary", ""),
-        "helper_diff_summary": opt.diagnosis.get("helper_diff_summary", ""),
-        "expected_to_fix": opt.diagnosis.get("expected_to_fix", []),
-        "risks": opt.diagnosis.get("risks", []),
-        "optimiser": {
-            "turns": opt.n_turns,
-            "duration_ms": opt.duration_ms,
-            "cost_usd_est": opt.cost_usd,
-            "error": opt.error,
-        },
-        "tokens": opt_tokens,
-        "outcome": {"verdict": "pending"},
-    }
+    opt = await run_optimiser(
+        champion, champ_meta.run_id, failures, model=optimiser_model, mode=mode
+    )
+    entry = _cycle_entry(cycle, domain, agent, champ_meta, opt, optimiser_model, trials, failures)
     append_entry(domain, entry)
-    if opt.error and (
-        "outside agents" in opt.error or "frozen" in opt.error or "no change" in opt.error
-    ):
-        update_entry(domain, cycle, outcome={"verdict": "rejected", "reason": opt.error})
-        console.print(f"[red]cycle {cycle} rejected:[/] {opt.error}")
-        entry["outcome"] = {"verdict": "rejected", "reason": opt.error}
-        return entry
-
+    if _rejected(opt):
+        return _reject(domain, entry, opt)
     return _score_challenger(
         entry,
         champ_results,
@@ -199,8 +260,99 @@ async def run_cycle(
         trials=trials,
         run_test=run_test,
         reuse=False,
-        base_tokens=opt_tokens,
+        base_tokens=dict(entry["tokens"]),
     )
+
+
+async def run_ab(
+    domain: str,
+    optimiser_model: str = "opus",
+    concurrency: int = 3,
+    trials: int = 1,
+    run_test: bool = True,
+) -> list[dict[str, Any]]:
+    """Two challengers from one champion, one per optimiser mode, on exactly the same input.
+
+    Both optimisers read the same failures and the same history (one `Context`), and both run
+    before either result reaches the ledger, so neither sees the other; the second cannot read
+    the first's folder. Each challenger is gated against the champion and run on test. At most
+    one is crowned: of those that pass the gate, the one with more gate-half passes, then fewer
+    breaks; the other is recorded as held, with the reason."""
+    agent = str((read_registry(domain).get("champion") or {}).get("agent") or "")
+    if not agent:
+        raise ValueError(f"{domain} has no champion: promote a run first (make promote RUN=…)")
+    champion = load_version(domain, agent)
+    champ_meta, champ_results = _champion_run(domain, agent, concurrency, trials)
+    failures = _read_failures(domain, champ_results)
+    first = next_cycle_number(domain)
+    console.rule(
+        f"[bold]{domain} · A/B cycles {first}–{first + 1}[/] · champion {agent} · "
+        f"{len(failures)} failures to read · gate on {_gate_on(domain)}"
+    )
+    if not failures:
+        raise ValueError(f"{agent} has no failures to read on {domain}")
+    ctx = build_context(champion, champ_meta.run_id, failures)
+    outs: list[OptimiserOutput] = []
+    for mode in MODES:
+        hidden = [version_dir(domain, o.new_version) for o in outs]
+        console.print(f"[bold]{mode} optimiser[/] ({optimiser_model})")
+        outs.append(
+            await run_optimiser(
+                champion,
+                champ_meta.run_id,
+                failures,
+                model=optimiser_model,
+                mode=mode,
+                hidden=hidden,
+                ctx=ctx,
+            )
+        )
+    entries = []
+    for i, opt in enumerate(outs):
+        entry = _cycle_entry(
+            first + i, domain, agent, champ_meta, opt, optimiser_model, trials, failures
+        )
+        entry["experiment"] = {"name": "s09 A/B", "pair": [first, first + 1]}
+        append_entry(domain, entry)
+        entries.append(entry)
+    scored: list[dict[str, Any]] = []
+    for entry, opt in zip(entries, outs, strict=True):
+        if _rejected(opt):
+            scored.append(_reject(domain, entry, opt))
+            continue
+        scored.append(
+            _score_challenger(
+                entry,
+                champ_results,
+                champ_meta,
+                concurrency=concurrency,
+                trials=trials,
+                run_test=run_test,
+                reuse=False,
+                base_tokens=dict(entry["tokens"]),
+                crown=False,
+            )
+        )
+    passed = [e for e in scored if (e.get("outcome") or {}).get("verdict") == "promote"]
+    if passed:
+        best = max(
+            passed,
+            key=lambda e: (
+                e["outcome"]["gate_passes"]["challenger"],
+                -len(e["outcome"].get("broken") or []),
+            ),
+        )
+        promote(best["outcome"]["challenger_run"])
+        console.print(f"[green]crowned {best['challenger']}[/] of the A/B pair")
+        for e in passed:
+            if e is not best:
+                o = e["outcome"]
+                o["verdict"] = "hold"
+                o["reason"] = (
+                    f"{o.get('reason')} · passed the gate; its A/B partner {best['challenger']} took the title"
+                )
+                update_entry(domain, int(e["cycle"]), outcome=o)
+    return scored
 
 
 def _score_challenger(
@@ -213,6 +365,7 @@ def _score_challenger(
     run_test: bool,
     reuse: bool,
     base_tokens: dict[str, Any],
+    crown: bool = True,
 ) -> dict[str, Any]:
     """Everything a cycle does once its challenger exists, for a loop cycle and a challenge alike.
 
@@ -221,7 +374,9 @@ def _score_challenger(
     run and the champion's on the same tasks → `test_compare` → MLflow. `reuse` takes the
     newest scored run of the challenger's exact bytes on each split instead of a new one (a
     hand-made version may have been scored already); a loop's challenger is bytes nobody has
-    run, so a cycle passes False and always evaluates it.
+    run, so a cycle passes False and always evaluates it. The gate reads the gate half where
+    train is halved. `crown=False` records a passing verdict without promoting it (an A/B pair
+    crowns at most one, after both are scored).
     """
     domain = str(entry["domain"])
     cycle = int(entry["cycle"])
@@ -238,7 +393,19 @@ def _score_challenger(
         chall_meta, chall_results = run_eval(
             domain, challenger, split="train", trials=trials, concurrency=concurrency, note=note
         )
-    verdict = compare(champ_results, chall_results)
+    verdict = compare(_gate_rows(domain, champ_results), _gate_rows(domain, chall_results))
+    cs, hs = champ_meta.summary or {}, chall_meta.summary or {}
+    h = halves(domain)
+    # where train is halved, the fixes and breaks an optimiser may later read are the read half's;
+    # the gate half's ids stay in `fixed` / `broken` for the gate and never reach a prompt
+    read_seen = (
+        compare(
+            [r for r in champ_results if r.task_id in set(h[0])],
+            [r for r in chall_results if r.task_id in set(h[0])],
+        )
+        if h
+        else None
+    )
     still_failed = sorted(
         {r.task_id for r in chall_results if r.correct is False and r.task_id in failed_ids}
     )
@@ -248,6 +415,13 @@ def _score_challenger(
         "rule": verdict.rule,
         "p_value": verdict.p_value,
         "passes": f"{verdict.champion_passed} → {verdict.challenger_passed}",
+        "gate_on": _gate_on(domain),
+        "gate_passes": {
+            "champion": verdict.champion_passed,
+            "challenger": verdict.challenger_passed,
+            "n": verdict.n,
+        },
+        "train_passes": f"{cs.get('passed')}/{cs.get('n_scored')} → {hs.get('passed')}/{hs.get('n_scored')}",
         "pass_1": f"{verdict.champion_pass1:.3f} → {verdict.challenger_pass1:.3f}",
         "pass_k": {
             "champion": (champ_meta.summary or {}).get("pass_hat_k"),
@@ -257,6 +431,7 @@ def _score_challenger(
         "broken": verdict.broken,
         "still_failed": still_failed,
         "challenger_run": chall_meta.run_id,
+        **({"read_fixed": read_seen.fixed, "read_broken": read_seen.broken} if read_seen else {}),
     }
     eval_tokens = {
         "eval_agent_in": sum(r.agent_input_tokens for r in chall_results),
@@ -266,11 +441,13 @@ def _score_challenger(
     }
     tokens = {**base_tokens, **eval_tokens}
     register(chall_meta.run_id, "challenger")
-    if verdict.promote:
+    if verdict.promote and crown:
         promote(chall_meta.run_id)
         console.print(
             f"[green]promoted {challenger}[/]: {outcome['passes']} · fixed {verdict.fixed}"
         )
+    elif verdict.promote:
+        console.print(f"[green]{challenger} passed the gate[/]: {outcome['passes']}; crowned later")
     else:
         console.print(f"[yellow]hold on {agent}[/]: {verdict.reason} · {outcome['passes']}")
     # recorded before the test runs, so a cycle that dies there still carries its verdict
@@ -371,7 +548,7 @@ def run_challenge(
 
     cycle = next_cycle_number(domain)
     champ_meta, champ_results = _champion_run(domain, champ_name, concurrency, trials)
-    failures = [r for r in champ_results if r.correct is False or r.error]
+    failures = _read_failures(domain, champ_results)
     diag = _diagnosis(domain, challenger)
     kind = str(diag.get("kind") or "challenge")
     console.rule(
@@ -404,6 +581,7 @@ def run_challenge(
         "optimiser_model": None,
         "trials": trials,
         "split_version": champ_meta.split_version,
+        "gate_on": _gate_on(domain),
         "failed": [r.task_id for r in failures],
         # nobody diagnosed anything: the ledger's history reads these as strings and lists
         "diagnoses": [],
@@ -435,10 +613,13 @@ async def run_loop(
     optimiser_model: str = "opus",
     concurrency: int = 3,
     trials: int = 1,
+    mode: str = "classic",
 ) -> None:
     current = agent or (read_registry(domain).get("champion") or {}).get("agent") or "v0"
     for _ in range(cycles):
-        entry = await run_cycle(domain, current, optimiser_model, concurrency, trials=trials)
+        entry = await run_cycle(
+            domain, current, optimiser_model, concurrency, trials=trials, mode=mode
+        )
         outcome = entry.get("outcome") or {}
         if outcome.get("verdict") == "promote":
             current = str(entry["challenger"])
