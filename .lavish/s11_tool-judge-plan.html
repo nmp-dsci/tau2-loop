@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>s11 · tau2-loop — the tool judge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+
+/* DESIGN.md §5, verbatim (tau2-loop/frontend/src/tokens.css): red accent, --ok for passed. */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7;
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1240px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--t0)/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
+code,pre,.mono{font-family:var(--mono);font-size:var(--t-1)}
+p code,li code,td code,dd code,figcaption code{overflow-wrap:anywhere}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font:400 var(--t4)/1.15 var(--serif);overflow-wrap:anywhere}
+h1 em{font-style:italic;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);margin-top:var(--s8)}
+h3{font:600 var(--t1)/1.3 var(--sans);margin-top:var(--s5)}
+h4{font:600 var(--t0)/1.3 var(--sans)}
+p{margin:var(--s3) 0 0;max-width:var(--measure);text-wrap:pretty;color:var(--ink-2)}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure)}
+.label{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.muted{color:var(--muted)} .small{font-size:var(--t-1)}
+main{max-width:var(--w);margin:0 auto;padding-block:var(--s6) var(--s9);padding-inline:var(--s4)}
+header.top{position:sticky;top:0;z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top .in b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top .in .label{margin-left:auto}
+section{scroll-margin-top:72px}
+.toc{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.toc a{font:500 var(--t-2)/1 var(--mono);text-decoration:none;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.chip{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);background:var(--panel);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap;display:inline-block}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.chip.no{border-color:var(--line-3);color:var(--muted)}
+.chip.acc{border-color:var(--accent);color:var(--accent)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{font:500 var(--t-2)/1.3 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);white-space:nowrap}
+td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sub{color:var(--ink);font-weight:500}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+td.wrap{min-width:22ch;max-width:60ch;white-space:normal}
+td.dim{color:var(--faint)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+.v-ok{color:var(--ok);font-weight:500} .v-warn{color:var(--amber);font-weight:500} .v-no{color:var(--accent);font-weight:500}
+.fig-title{display:block;margin-top:var(--s5)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch}
+p.cap .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+.note{background:var(--band);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:var(--measure)}
+.note .label{display:block;margin-bottom:var(--s1)}
+.note p{margin-top:var(--s2)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.card{background:var(--panel);border-radius:var(--r);padding:var(--s5);box-shadow:var(--shadow);min-width:0}
+.card h3{margin-top:0}
+.card p{max-width:none}
+.card .n{font:400 var(--t3)/1.1 var(--serif);color:var(--ink);display:block;margin-top:var(--s2)}
+ul.bl{list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s3);max-width:84ch}
+ul.bl li{position:relative;padding-left:1.4rem;color:var(--ink-2)}
+ul.bl li::before{content:'◐';position:absolute;left:0;color:var(--amber)}
+ul.bl.done li::before{content:'●';color:var(--ok)}
+ul.bl.x li::before{content:'✕';color:var(--accent)}
+ol.steps{margin:var(--s4) 0 0;padding-left:1.4rem;max-width:84ch;display:grid;gap:var(--s2);color:var(--ink-2)}
+ol.steps li::marker{font-family:var(--mono);color:var(--accent)}
+pre.cmd{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:pre;max-width:84ch;font-size:var(--t-1);color:var(--ink)}
+pre.cmd .c{color:var(--faint)}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);margin-top:var(--s4);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);max-width:84ch}
+.rule .k{font:500 var(--t-2)/1.6 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:var(--track-label);white-space:nowrap}
+.rule .v{color:var(--ink-2);min-width:0}
+footer{max-width:var(--w);margin:0 auto;padding:var(--s6) var(--s4);color:var(--faint);font-size:var(--t-1);border-top:1px solid var(--line)}
+footer code{overflow-wrap:anywhere}
+
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+button.btn.alt{background:var(--panel);color:var(--ink);border:1px solid var(--line-2)}
+textarea.free{width:100%;margin-top:var(--s3);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3);min-height:64px;resize:vertical}
+.copyall{margin-top:var(--s5);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.copyall textarea{width:100%;font:400 var(--t-1)/1.5 var(--mono);margin-top:var(--s2)}
+@media (max-width:640px){ h1{font-size:var(--t3)} .rule{grid-template-columns:minmax(0,1fr)} }
+
+/* s08 additions: the ideas table's controls, source lists */
+select.disp{font:500 var(--t-1)/1.2 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s2);min-height:34px}
+td.id{font:600 var(--t-1)/1.3 var(--mono);color:var(--accent);white-space:nowrap}
+.tag{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap;display:inline-block;margin:0 var(--s1) var(--s1) 0}
+ul.src{margin:var(--s3) 0 0;padding-left:1.2rem;max-width:96ch;display:grid;gap:var(--s1);color:var(--ink-2);font-size:var(--t-1)}
+ul.src li{overflow-wrap:anywhere}
+h3.grp{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s5)}
+tr.pro td{background:var(--ok-soft)}
+tr.grp td{background:var(--band);font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+
+/* s09: figures (the frontend's .dia vocabulary, frontend/src/styles.css) and the decision form */
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.ext{fill:none;stroke:var(--line-3);stroke-dasharray:4 3}
+.dia .nd.warn{fill:var(--amber-soft);stroke:var(--amber)}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.hi{stroke:var(--accent)}
+.dia .ed.dash{stroke-dasharray:4 3}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 13px var(--sans);fill:var(--muted)}
+.dia .tx.k{font:500 13px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia .bar{fill:var(--line-2)}
+.dia .bar.hi{fill:var(--accent)}
+.dia .bar.pro{fill:var(--amber)}
+.dia .ax{stroke:var(--line-2);stroke-width:1}
+.dia .gl{stroke:var(--line);stroke-width:1}
+.dia .cap{font:400 13px var(--mono);fill:var(--faint)}
+.dia .bar.ok{fill:var(--ok)}
+.dia .trk{fill:var(--band)}
+.dia .tx.ok{fill:var(--ok)}
+.dia .tx.warn{fill:var(--amber)}
+.dia .pick{cursor:pointer}
+.dia .pick .hit{fill:transparent}
+.dia .pick:hover .hit,.dia .pick.on .hit{fill:var(--band)}
+.dia .pick:focus{outline:none}
+.dia .pick:focus-visible .hit{stroke:var(--focus);stroke-width:2}
+.dia{margin-top:var(--s3)}
+.dia .ed{marker-end:url(#arr)}
+fieldset{border:0;padding:0;margin:var(--s5) 0 0;min-width:0}
+fieldset:first-of-type{margin-top:0}
+.card .n{overflow-wrap:anywhere}
+td.num.v-no{color:var(--accent)}
+
+/* s10: figures wider than a phone scroll inside their own frame; SVG text at 15 in a 1000 box never renders under 12.8px */
+.figw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r)}
+.figw .dia{min-width:860px;margin-top:0}
+.dia .tx,.dia .tx.s{font-size:15px} .dia .tx.k,.dia .cap{font-size:14px}
+.dia .tx.ok{fill:var(--ok)}
+tr.rec td{background:var(--accent-soft)}
+td.num.wrap{white-space:normal;min-width:14ch}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:var(--s4);margin-top:var(--s5)}
+
+/* s11: the transcript mock, slice blocks, the layer matrix */
+.mock{margin-top:var(--s3);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s2) var(--s5) var(--s4);max-width:900px}
+.mock .turn{padding:var(--s3) 0 0;border-bottom:1px solid var(--line);padding-bottom:var(--s3)}
+.mock .turn:last-child{border-bottom:0}
+.mock .turn p{margin-top:var(--s1);max-width:none}
+.mock .turn code{overflow-wrap:anywhere}
+.mock .turn.call{background:var(--band);border-left:3px solid var(--accent);padding-left:var(--s3);margin-inline:calc(-1 * var(--s3))}
+.mock .turn.verdict .label{color:var(--accent)}
+.mock .turn.gold .label{color:var(--faint)}
+.slice{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);margin-top:var(--s4);max-width:980px}
+.slice h3{margin-top:0}
+.slice .rule{box-shadow:none;padding:0;margin-top:var(--s3);background:none;max-width:none}
+table.matrix td{white-space:nowrap}
+/* s11: the two judges, told apart everywhere: plan = the accent family, call = solid ink; each always carries its name */
+.chip.plan{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.chip.call{border-color:var(--ink-2);background:var(--ink-2);color:var(--panel)}
+.dia .nd.call{fill:var(--ink-2);stroke:var(--ink-2)}
+.dia .tx.on-call{fill:var(--panel)}
+.rule .v code{overflow-wrap:anywhere}
+
+/* s11 §0: screenshots of the built viewer */
+.shot{margin:var(--s3) 0 0}
+.shot a{display:block}
+.shot img{display:block;width:100%;height:auto;border:1px solid var(--line-2);border-radius:var(--r);background:var(--panel)}
+.shots2{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s5);align-items:start}
+.shots2>div{min-width:0}
+#s0 h3{margin-top:var(--s6)}
+/* s11 mocks: the viewer's own rules, copied from frontend/src/styles.css */
+.ev{border-left:3px solid var(--line-2);padding:var(--s3) var(--s4);margin-top:var(--s3);background:var(--panel);border-radius:0 var(--r-sm) var(--r-sm) 0;min-width:0}
+.ev.tool_use{border-left-color:var(--ink-2)}
+.ev.tool_result{border-left-color:var(--line-3)}
+.ev.text,.ev.final{border-left-color:var(--ok)}
+.ev.decline,.ev.error{border-left-color:var(--amber)}
+.ev.user{border-left-color:var(--line-3)}
+.ev .label{margin-bottom:var(--s2)}
+.ev p{max-width:none;margin-top:var(--s1)}
+.status::before{display:inline-block;width:.6em;margin-right:.35em}
+.status.ok::before{content:'●';color:var(--ok)}
+.status.no::before{content:'○';color:var(--line-3)}
+.status.warn::before{content:'◐';color:var(--amber)}
+.crumbs{font:500 var(--t-1)/1.4 var(--sans);color:var(--muted);margin-bottom:var(--s3)}
+.chips{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s2)}
+.chips.domainbar{margin:0 0 var(--s3);padding-bottom:var(--s3);border-bottom:1px solid var(--line)}
+a.chip.nav{display:inline-flex;align-items:center;gap:var(--s2);text-decoration:none;cursor:default}
+a.chip.nav.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* the frame around a mock */
+.mockframe{margin-top:var(--s3);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r);padding:0 var(--s4) var(--s4);max-width:980px;min-width:0}
+.mockbar{margin:0 calc(-1 * var(--s4)) var(--s3);padding:var(--s2) var(--s4);border-bottom:1px solid var(--line-2);background:var(--band);border-radius:var(--r) var(--r) 0 0}
+.mockframe code{overflow-wrap:anywhere}
+.mockbar .label,.mockframe .crumbs{overflow-wrap:anywhere;display:block}
+.ev.plan-ev{border-left-color:var(--accent)}
+.verdict-line{border-top:1px dashed var(--line-2);padding-top:var(--s2)}
+.gold-card{margin-top:var(--s2)}
+.gold-card .actions{display:flex;gap:var(--s4);align-items:center;margin-top:var(--s3);flex-wrap:wrap}
+a.linkish{color:var(--accent)}
+.card .n.dim,.n.dim{color:var(--faint)}
+ul.facts{margin:var(--s3) 0 0;padding-left:1.2rem;max-width:84ch;display:grid;gap:var(--s2);color:var(--ink-2)}
+ul.facts b{color:var(--ink)}
+.card.rec{box-shadow:inset 3px 0 0 var(--accent), var(--shadow)}
+.card h3 .chip{font-weight:500;vertical-align:middle}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span class="muted small">s11 · the tool judge</span><span class="label">plan · decided 2026-10-01 · J0–J2 built · branch tool-judge</span></div></header>
+<main>
+<p class="label">Plan · airline first · an independent judge on the agent's tool calls</p>
+<h1>A plan judge checks each plan before the user agrees, proven on <em>replays</em> first</h1>
+<p class="lead">s08 found that harnesses which check write calls report 87.0–88.5% pass^1 on airline (self-reported), against 84.0% for the best stock agent. This plan builds that checker as an independent plan judge: it reviews the plan the agent states before the user sees it. A call judge, which would check each write against the agreed plan, is designed but waits for volume: only 4 of the 20 bad train writes slipped from a right plan. Each of the 206 train conversations already committed first gets a golden answer, written with gold in view, saying why each step was right or wrong. The judge must recreate those answers without gold before it's released. All of it runs on train, before any new conversation runs. It goes live on v3 only if it rarely blocks a right one. The test split stays untouched until J6's standard report.</p>
+<div class="note"><span class="label">what this page is for</span><p>Revised from your review: the plan judge comes first and the call judge waits for volume (§4); everything runs on train (Fig 12); every train conversation gets a golden answer (§6); the judge improves through its own loop (§7); it is scored conversation by conversation at live frequency (§8); and the agent declares each reply's phase (Fig 5). The loop maximises balanced accuracy against the golden answers, with §9's bar as a guard (Fig 17). Every decision is recorded in §13 and §10 shows how the judge appears in the viewer. <b>§0 is new: J0, J1 and J2 are built and ran on train</b>, with screenshots from the viewer and the numbers that came back; nothing is committed yet on <code>tool-judge</code> (from <code>main@037fd02</code>). s09 built code checks (<code>checks.py</code>); this adds the model check s08 called H2.</p></div>
+<nav class="toc" aria-label="sections">
+<a href="#s0">0 · built</a><a href="#s1">1 · reach</a><a href="#s2">2 · mechanism</a><a href="#s3">3 · a real miss</a><a href="#s4">4 · plan or call</a><a href="#s5">5 · labels</a><a href="#s6">6 · golden answers</a><a href="#s7">7 · judge loop</a><a href="#s8">8 · live frequency</a><a href="#s9">9 · the bar</a><a href="#s10">10 · in the viewer</a><a href="#s11">11 · slices</a><a href="#s12">12 · risks</a><a href="#s13">13 · decisions</a>
+</nav>
+
+<section id="s0">
+<h2>0 · Built — J0 to J2 ran; untuned j1 misses every bar</h2>
+<p>You asked for J0, J1 and J2 built for review, each landing in the viewer. All three ran on train, with no new conversation. The screenshots are the real viewer (<code>make dev</code>, then <code>npm run dev</code>), taken from the committed files below.</p>
+<span class="label fig-title">Fig B1 · the three slices: what ran, what came back, where it shows</span>
+<div class="tw"><table>
+<thead><tr><th>slice</th><th>ran</th><th>came back</th><th>done when</th><th>in the viewer</th></tr></thead>
+<tbody>
+<tr><td class="sub">J0 · labels<span class="path">make judge-labels</span></td><td class="wrap">No model call. <code>tooljudge/labels.py</code> labels every checkpoint from gold and writes <code>data/judge/airline.json</code></td><td class="wrap">206 conversations (151 passed), 102 plans (83 right, 15 wrong, 4 slips), 141 writes (117 good, 20 bad, 4 errored), 517 trigger fires, Fig 12's five folds, and 31 synthetic positives</td><td class="v-ok">met: every count on this page reproduced, pinned by a test</td><td class="wrap">Runs › a conversation: each checkpoint carries its label (Fig B2)</td></tr>
+<tr><td class="sub">J1 · golden answers<span class="path">make judge-gold</span></td><td class="wrap">209 sealed calls to Opus 5.5 at high effort, one per conversation (3 asked twice). Output schema-enforced; Fig 15's machine checks ran on every answer</td><td class="wrap">206 of 206 answers pass every machine check (203 first time). On the 19 plans that led to a bad write, the annotator agrees with my hand reading on 16 of 19, and calls 3 of my 15 wrong plans slips</td><td class="v-warn">half met: the machine checks pass; the person's review (≥ 90% agreement on 131 cases) is yours to do</td><td class="wrap">Review › golden answers: the queue and each case (Figs B3, B4); the golden answer on each conversation</td></tr>
+<tr><td class="sub">J2 · first verdicts<span class="path">make judge-probe · make judge-replay</span></td><td class="wrap">The probe: <code>output_format</code> holds under the sealed core (SDK 0.2.160). Then 548 calls to Sonnet 5 at medium: all 517 trigger fires plus the 31 synthetic positives</td><td class="wrap">0 of 548 failed open. Gate half: balanced accuracy 0.41 against §9's 0.73; 10 of 55 passes interrupted against a bar of 2; 0 of 3 wrong plans stopped against 2 of 4</td><td class="v-ok">met: every checkpoint has the judge's answer beside its golden answer, with verdict and reason agreement recorded</td><td class="wrap">Verdict lines on each conversation (Figs B5, B6); Optimise › judge loop with the bar and the disagreements (Figs B7, B8)</td></tr>
+</tbody></table></div>
+<p class="cap">Fig 26 had Optimise's judge view arriving with J3. It arrives here, because J2's bar and disagreements are what you review next. J3 adds its ledger to the same page.<span class="path">data/judge/airline.json · data/judge/airline_gold.jsonl · data/judge/airline_gold_summary.json · data/judge/probe.json · judge_runs/20261001T041215Z_airline_j1_train/</span></p>
+
+<h3 id="b-j0">J0 · labels — every count on this page, now from the package</h3>
+<div class="rule">
+<span class="k">ships</span><span class="v"><code>src/tau2_loop/tooljudge/labels.py</code> (tau2's own match rule, the plan trigger, <code>CALL_SLIPS</code>, the snake-dealt folds), <code>make judge-labels</code>, and 8 tests on a fixture conversation and the committed runs. One of them checks the match rule against tau2's <code>Action.compare_with_tool_call</code> on committed writes.</span>
+<span class="k">synthetic</span><span class="v">31 right plans with one detail changed: a payment id not on the profile (20), the destination set to the origin (9), one passenger short (2), each kept in its source task's fold (11 read half, 20 gate half). A cancellation the policy refuses needs reasoning, not a string edit, so none was made.</span>
+<span class="k">viewer</span><span class="v">The conversation page gains a "Tool judge" section, a table of every checkpoint, and a line on each checkpoint's message. The API's trace events now carry message numbers.</span>
+</div>
+<span class="label fig-title">Fig B2 · Runs › a conversation, after J0: v4 on task 44, its wrong plan labelled from gold</span>
+<figure class="shot"><a href="s11_shots/j0_marks.jpg" target="_blank" rel="noopener" title="open full size"><img src="s11_shots/j0_marks.jpg" alt="The conversation page of v4 on train task 44, scrolled to message 34. Under the agent's message a dashed line reads: plan, wrong, it led to a bad write and the error was already in it, led to the write at message 36, the first wrong step, J0 label, plan judge. Under message 36, the cancel_reservation call: write, bad, matches no gold write." loading="lazy" width="1600" height="1875"></a></figure>
+<p class="cap">Taken right after J0, before any golden answer existed. Each line names its source: J0 label.<span class="path">frontend/src/lib/judge.tsx (<code>LabelLine</code>) · frontend/src/pages/Trace.tsx (<code>EventList</code> marks) · /api/runs/&lt;run&gt;/&lt;task&gt;/t1 → <code>judge.labels</code></span></p>
+
+<h3 id="b-j1">J1 · golden answers — 206 written, 131 cases wait for you</h3>
+<div class="rule">
+<span class="k">ships</span><span class="v"><code>tooljudge/gold.py</code> (the annotator prompt, its JSON schema, Fig 15's machine checks, the one retry, the review queue), <code>tooljudge/review.py</code> (checks, the freeze), the table <code>tau2_loop.gold_review</code> in this project's own Postgres database (<code>make db-migrate</code>), and <code>make judge-gold</code> and <code>make judge-gold-freeze</code>.</span>
+<span class="k">ran</span><span class="v">209 calls in 20 minutes at 4 at a time; 2.91M input tokens, 1.61M of them cache reads, and 0.25M output. The plan estimated 1.1M: whole tool results go in, about 14k input tokens a call on average, not 5.2k.</span>
+<span class="k">found</span><span class="v">The annotator's first wrong step, across the 55 failures: a flagged reply 19, another step 17, a plan 8, a transfer 7, a write 4. It blames the agent in 42, the user simulator in 7, the task or grader in 6. It blocks 44 of 127 flagged replies in failed conversations and 17 of 18 transfers in missed-write failures. Of its 56 blocks at the plan judge's checkpoints, it marks 54 as detectable without gold.</span>
+<span class="k">MLflow</span><span class="v">One run in the new experiment <code>tau2-loop/judge</code>, tagged <code>kind=judge-gold</code>, and the evaluation dataset <code>tau2-loop.airline.golden</code> with 206 records. The experiment is in <code>nmp-central-ai/registry/projects.yaml</code> through <code>make mlflow-init</code>, an uncommitted edit in that repo.</span>
+<span class="k">your part</span><span class="v">Review › golden answers holds 131 cases: 111 structure couldn't pin (each failure's first wrong step, each wrong-or-slip plan, each transfer in a missed-write failure, each reply the annotator blocks) and 20 pinned ones at random. Agree writes to Postgres; Correct it takes a verdict, a check, or a first-wrong message. <code>make judge-gold-freeze</code> copies the checks into the gold file, and every score re-reads it.</span>
+</div>
+<div class="shots2">
+<div><span class="label fig-title">Fig B3 · Review › golden answers: the queue</span>
+<figure class="shot"><a href="s11_shots/j1_queue.jpg" target="_blank" rel="noopener" title="open full size"><img src="s11_shots/j1_queue.jpg" alt="The Review tab with a second chip, golden answers, the tool judge. Headline: the tool judge is scored against an answer key a person checks. Cards: 0 of 131 cases checked; 206 of 206 answers pass every machine check, 203 first time; 16 of 19 plans where the annotator and the hand reading agree. Below, the queue: each row a conversation, a message, what to check, and the annotator's verdict." loading="lazy" width="1600" height="1437"></a></figure></div>
+<div><span class="label fig-title">Fig B4 · one case open: task 44's plan, with Agree and Correct it</span>
+<figure class="shot"><a href="s11_shots/j1_case.jpg" target="_blank" rel="noopener" title="open full size"><img src="s11_shots/j1_case.jpg" alt="A case card: Check, plan, wrong or a slip, the first wrong step. Message 9 cited as evidence, then message 34. The annotator says block, check 3, the policy allows it; rule: the user has travel insurance and the reason for cancellation is covered by insurance; evidence quotes; the fix it would send; first wrong step at message 34, blamed on the agent. Then a solid Agree button and an underlined Correct it link." loading="lazy" width="1600" height="2125"></a></figure></div>
+</div>
+<p class="cap">The case shows the messages the answer cites, so a check never needs another tab. Agree is the page's one solid button. Correct it opens a verdict, a check and a first-wrong message number, and the person's answer stands.<span class="path">frontend/src/pages/GoldReview.tsx · GET /api/judge/airline/gold · POST /api/review/golden/airline → tau2_loop.gold_review</span></p>
+
+<h3 id="b-j2">J2 · first verdicts — j1 catches contradictions, misses policy</h3>
+<div class="rule">
+<span class="k">ships</span><span class="v"><code>judges/airline/plan/j1/</code> (<code>judge.md</code>, a rubric with the five checks and no task, id or customer; <code>judge.yaml</code>: Sonnet 5, medium, threshold 0.5). Also <code>tooljudge/prompt.py</code> (the one input builder J5's hook will call), <code>tooljudge/core.py</code> (the sealed call, the Fig 7 schema, the decision rule, fail-open), <code>tooljudge/replay.py</code> (the replay and §9's scorer), the <code>output_format</code> option in <code>llm/core.py</code> (off unless asked, so the agent's calls are byte-identical), and <code>make judge-probe</code>, <code>make judge-replay</code> and <code>make judge-score</code>.</span>
+<span class="k">ran</span><span class="v">548 calls in 31 minutes at 6 at a time. 6.96M input tokens, 4.52M of them cache reads, and 0.48M output, against the plan's 2.7M: the judge reads whole tool results too. One MLflow run, tagged <code>kind=judge-replay</code>, with <code>plan_judge_model</code>.</span>
+<span class="k">found</span><span class="v">The synthetic contradictions are caught: 25 of 31. Real wrong plans mostly aren't: 1 of 14 blocked across train. Most false blocks land on flagged replies in passes, 38 of 289, mostly replies that invent a tool failure, 11 of them in v0's passes. On the champion v3's 39 passes, j1 interrupts 4.</span>
+<span class="k">the note rule</span><span class="v">Fig 7 turns a block whose rule isn't verbatim in the policy into a note. That happened to 10 blocks, 4 of them golden blocks, including task 44's wrong plan (Fig B6). What if an elided quote ("A … B", each part verbatim) counted: the gate half's balanced accuracy goes from 0.41 to 0.58, with passes interrupted unchanged at 10 of 55. That's J3's first candidate, measured on these verdicts, not a judge result.</span>
+<span class="k">a fix</span><span class="v">The first summary counted only passes with a checkpoint (126, not 151). The scorer now counts the other 25 as left alone. <code>make judge-score</code> rewrote <code>summary.json</code> from the unchanged verdicts, noted why in <code>run.json</code>, and updated the same MLflow run.</span>
+</div>
+<div class="shots2">
+<div><span class="label fig-title">Fig B5 · Runs › a conversation, after J2: label, golden answer and judge, checkpoint by checkpoint</span>
+<figure class="shot"><a href="s11_shots/j2_trace_panel.jpg" target="_blank" rel="noopener" title="open full size"><img src="s11_shots/j2_trace_panel.jpg" alt="The Tool judge section of task 44's conversation. Heading: the judge misses the first wrong step, message 34. A golden-answer card with the annotator's summary and the first wrong step. A table of six checkpoints with columns J0 label, golden answer, plan judge: message 34, plan, wrong, block, allow, differs; message 38, plan, right, allow, allow, agrees; the four writes are not its checkpoint." loading="lazy" width="1600" height="1125"></a></figure></div>
+<div><span class="label fig-title">Fig B6 · the same plan in the conversation: three lines, one per slice</span>
+<figure class="shot"><a href="s11_shots/j2_trace_marks.jpg" target="_blank" rel="noopener" title="open full size"><img src="s11_shots/j2_trace_marks.jpg" alt="Message 34 with three dashed lines under it: the J0 label, plan wrong, the first wrong step; the golden answer, block, check 3, with its policy rule, the golden first wrong step; plan judge j1, allow, with its reason that the cancellation reason has not been obtained, a block turned into a note because the rule is not verbatim in the policy, confidence 0.72, differs from the golden answer." loading="lazy" width="1600" height="2312"></a></figure></div>
+</div>
+<p class="cap">The judge saw task 44's flaw: its reason says the plan offers a cancellation before the reason is known. It blocked at confidence 0.72, but quoted the policy with an ellipsis, so the rule check turned the block into a note. This is the line the mocks in Fig 22 drew, now from a real replay.<span class="path">frontend/src/lib/judge.tsx (<code>GoldLine</code>, <code>VerdictLine</code>, <code>JudgePanel</code>) · judge_runs/20261001T041215Z_airline_j1_train/verdicts.jsonl</span></p>
+<span class="label fig-title">Fig B7 · Optimise › judge loop: j1 against every §9 bar, gate half first</span>
+<figure class="shot"><a href="s11_shots/j2_loop.jpg" target="_blank" rel="noopener" title="open full size"><img src="s11_shots/j2_loop.jpg" alt="The judge loop page. Headline: on the gate half, the plan judge stops 0 of 3 wrong plans and interrupts 10 of 55 passes. Cards for labels, golden answers and plan judge j1. The bar table: balanced accuracy 0.41 against 0.73, misses; passes interrupted 10 of 55, misses; wrong plans stopped 0 of 3, misses; right plans blocked 4 of 41; flagged replies blocked in passes 11 of 112; wrong plans blocked 0 of 4; reason agreement 2 of 5; synthetic positives 17 of 20; blocks turned into notes; failed open 0 of 212." loading="lazy" width="1600" height="1453"></a></figure>
+<span class="label fig-title">Fig B8 · the disagreements J3's optimiser will read (its half only)</span>
+<figure class="shot"><a href="s11_shots/j2_disagree.jpg" target="_blank" rel="noopener" title="open full size"><img src="s11_shots/j2_disagree.jpg" alt="The disagreements table: 96 checkpoints where the judge and the golden answer differ, each with its conversation as a link, message, checkpoint kind and label, golden verdict, judge verdict and the judge's reason, mostly blocks of replies that claim a technical difficulty in v0's passing conversations." loading="lazy" width="1600" height="1500"></a></figure>
+<p class="cap">Every number is scored live against the golden answers as they stand, so the page moves when your review is frozen. Each disagreement opens its conversation.<span class="path">frontend/src/pages/JudgeLoop.tsx · GET /api/judge/airline · judge_runs/*/verdicts.jsonl</span></p>
+
+<span class="label fig-title">Fig B9 · where the build differs from this plan</span>
+<div class="tw"><table>
+<thead><tr><th>what</th><th>the plan said</th><th>measured</th><th>what it changes</th></tr></thead>
+<tbody>
+<tr><td class="sub">failures whose first wrong step is a flagged plan</td><td class="num">13 of 55 (J0, Fig 19)</td><td class="num">8 of 55 (gold); gate half 3, not 4</td><td class="wrap">The annotator often puts the first wrong step earlier, at a reply before the plan. §9's "wrong plans stopped" bar now has 3 on the gate half</td></tr>
+<tr><td class="sub">wrong plans</td><td class="num">15, by my reading</td><td class="num">12 the annotator agrees; 3 it calls slips</td><td class="wrap">Your review settles the 19; the person's answer stands</td></tr>
+<tr><td class="sub">J1 input</td><td class="num">≈ 1.1M tokens</td><td class="num">2.91M (1.61M cache reads), 209 calls</td><td class="wrap">Whole tool results go in; the J5 golden answers will cost about 2.6 times the plan's 0.13M</td></tr>
+<tr><td class="sub">J2 input</td><td class="num">≈ 2.7M tokens</td><td class="num">6.96M (4.52M cache reads), 548 calls</td><td class="wrap">J3's sweep and loop scale the same way: ≈ 2.6 times §11's figures, mostly cache reads</td></tr>
+<tr><td class="sub">review queue</td><td class="num">≈ 110 cases</td><td class="num">131 (111 structural, 20 pinned)</td><td class="wrap">The annotator blocked 44 flagged replies in failures, and each is a case</td></tr>
+<tr><td class="sub">synthetic positives</td><td class="wrap">four kinds</td><td class="num">31, three kinds</td><td class="wrap">A refused cancellation needs a model to write; left out rather than faked</td></tr>
+<tr><td class="sub">Optimise's judge view</td><td class="wrap">J3</td><td class="wrap">J2</td><td class="wrap">The bar and the disagreements are what you review now</td></tr>
+</tbody></table></div>
+<p class="insight">j1 sees contradictions but rarely calls a policy breach, and it blocks harmless replies in passes. Both are J3's to fix, on the read half.</p>
+<div class="note"><span class="label">next, in order</span><p><b>1 · Your review.</b> Check the 131 cases in Review › golden answers, then run <code>make judge-gold-freeze</code>; Optimise re-scores j1 on the frozen answers at once. <b>2 · J3.</b> The sweep and the loop start from j1 on the read half. Its first candidates: a rubric that holds plans to the policy as hard as it holds replies to the transcript, and elided policy quotes. <b>3 · Nothing is committed yet.</b> Everything is on <code>tool-judge</code>, plus one line in <code>nmp-central-ai</code>'s registry.</p></div>
+</section>
+
+<section id="s1">
+<h2>1 · Reach — the plan judge reaches 13 of 55 train failures</h2>
+<div class="cards">
+<div class="card" id="k-bad"><span class="label">wrong writes among executed train writes</span><span class="n">20 / 137</span><p class="small">Each matched none of its task's gold writes under tau2's own rule. All 20 were in failed conversations, and none in the 151 that passed. These are the judge's positives.</p></div>
+<div class="card" id="k-reach"><span class="label">failed train conversations with a wrong write</span><span class="n">17 / 55</span><p class="small">Across 10 committed runs (v0–v6) on the 25 train tasks, 55 of 206 conversations failed. The plan judge can reach 13 of these 17 at their first wrong step.</p></div>
+<div class="card" id="k-missed"><span class="label">failed because a needed write never ran</span><span class="n">38 / 55</span><p class="small">18 ended in a transfer to a human and 20 in a refusal or a stall. The plan judge never sees these; transfer and decline checks (J7) can.</p></div>
+<div class="card" id="k-cost"><span class="label">judge input per conversation · estimate</span><span class="n">≤ 13k tokens</span><p class="small">About 2.5 plan-judge calls at ≈ 5.3k each with the regex trigger, or about 0.5 with a declared phase (Fig 4). A plan judge reads the 7,676-character policy, 2,015 characters of tool schemas and the transcript (11,461 characters at the median write), at 4 characters a token. That's at most about 14% of the agent's median 96.6k, most of it cache reads.</p></div>
+</div>
+<span class="label fig-title">Fig 1 · the 206 train conversations, and the 55 failures by what went wrong</span>
+<div class="figw"><svg class="dia" viewBox="0 0 1000 290" role="img" aria-label="Train, all versions: 151 of 206 conversations passed and 55 failed. The 55 failures: 17 a wrong write ran, 18 a missed write ending in a transfer, 20 a missed write otherwise. v3 on train: 11 failures, 5, 3 and 3.">
+<g id="f1-balance">
+<text class="tx" x="20" y="42">train · v0–v6</text><text class="tx s" x="20" y="62">206 conversations</text>
+<g><title>151 passed</title><rect class="bar ok" x="230" y="28" width="535.1" height="36"/><text class="tx" x="497.5" y="52" text-anchor="middle" style="fill:var(--accent-ink)">151 passed</text></g>
+<g><title>55 failed, expanded below</title><rect class="trk" x="765.1" y="28" width="194.9" height="36" style="stroke:var(--line-2)"/><text class="tx" x="862.6" y="52" text-anchor="middle">55 failed</text></g>
+</g>
+<g id="f1-brackets">
+<g><title>the plan judge, J2 to J6: the 17 wrong-write failures, 13 of them wrong at the plan</title><path class="ax" d="M232,104 V96 H453.6 V104" fill="none"/><text class="tx s" x="343" y="88" text-anchor="middle">the plan judge · J2–J6</text></g>
+<g><title>transfer and decline checks, J7: the 38 missed-write failures</title><path class="ax" d="M457.6,104 V96 H958 V104" fill="none"/><text class="tx s" x="708" y="88" text-anchor="middle">transfer and decline checks · J7</text></g>
+</g>
+<g id="f1-train">
+<text class="tx" x="20" y="128">the 55 failures</text><text class="tx s" x="20" y="148">by what went wrong</text>
+<g><title>17 wrong write ran</title><rect class="bar hi" x="230" y="112" width="225.6" height="40"/><text class="tx" x="342.8" y="138" text-anchor="middle" style="fill:var(--accent-ink)">17</text></g>
+<g><title>18 missed write, ended in a transfer</title><rect class="bar pro" x="455.6" y="112" width="238.9" height="40"/><text class="tx" x="575" y="138" text-anchor="middle" style="fill:var(--accent-ink)">18</text></g>
+<g><title>20 missed write, refusal or stall</title><rect class="bar" x="694.5" y="112" width="265.5" height="40"/><text class="tx" x="827.2" y="138" text-anchor="middle">20</text></g>
+</g>
+<g id="f1-v3">
+<text class="tx" x="20" y="196">v3 champion</text><text class="tx s" x="20" y="216">11 failed of 50</text>
+<g><title>5 wrong write ran</title><rect class="bar hi" x="230" y="180" width="66.4" height="40"/><text class="tx" x="263.2" y="206" text-anchor="middle" style="fill:var(--accent-ink)">5</text></g>
+<g><title>3 missed write, ended in a transfer</title><rect class="bar pro" x="296.4" y="180" width="39.8" height="40"/><text class="tx" x="316.3" y="206" text-anchor="middle" style="fill:var(--accent-ink)">3</text></g>
+<g><title>3 missed write, refusal or stall</title><rect class="bar" x="336.2" y="180" width="39.8" height="40"/><text class="tx" x="356.1" y="206" text-anchor="middle">3</text></g>
+</g>
+<g id="f1-legend">
+<rect class="bar hi" x="230" y="252" width="14" height="14"/><text class="tx s" x="252" y="264">wrong write ran</text>
+<rect class="bar pro" x="420" y="252" width="14" height="14"/><text class="tx s" x="442" y="264">missed · ended in a transfer</text>
+<rect class="bar" x="680" y="252" width="14" height="14"/><text class="tx s" x="702" y="264">missed · refusal or stall</text>
+</g>
+</svg></div>
+<p class="cap">Train holds both outcomes in useful numbers: 151 of 206 passed and 55 failed. Writes are the smaller part of what fails, 17 of 55 failures and 5 of v3's 11. The failure bars share one scale, one unit per conversation. A "missed" failure never ran one of the task's gold writes.<span class="path">.lavish/s11_judge-labels.py (default and --folds) over runs/2026091[5]*_airline_* and runs/2026092[8]*_airline_* · data/splits/airline.json (v2) · data/tasks/airline.json</span></p>
+<p class="insight">Build the plan judge first, because its labels exist today; then run the same ladder on transfers and declines, where 38 of 55 failures sit.</p>
+</section>
+
+<section id="s2">
+<h2>2 · Mechanism — the plan judge sits between plan and user</h2>
+<span class="label fig-title">Fig 2 · one exchange, phase by phase: which judge runs when</span>
+<div class="figw"><svg class="dia" viewBox="0 0 1000 380" role="img" aria-label="Five phases of an exchange across four lanes: user, agent, judges, tau2. Gather: the agent's read calls go straight to tau2, not judged. Plan: the agent states a plan; the plan judge checks it before the user sees it, and a block makes the agent rewrite once. Confirm: the user says yes. Call: the agent's write calls go to checks.py and then the call judge before tau2 runs them; a block gives the agent one retry. Report: the agent tells the user the result; judged only if it fires the plan trigger.">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--line-3)"/></marker></defs>
+<g id="f2-lanes"><title>the four lanes</title>
+<text class="tx k" x="20" y="75">user</text><text class="tx k" x="20" y="165">agent</text><text class="tx k" x="20" y="255">judges</text><text class="tx k" x="20" y="345">tau2</text>
+<line class="gl" x1="140" y1="112" x2="990" y2="112"/><line class="gl" x1="140" y1="204" x2="990" y2="204"/><line class="gl" x1="140" y1="306" x2="990" y2="306"/></g>
+<g id="f2-phases"><title>the five phases of an exchange</title>
+<text class="tx k" x="220" y="24" text-anchor="middle">1 · gather</text><text class="tx k" x="375" y="24" text-anchor="middle">2 · plan</text><text class="tx k" x="540" y="24" text-anchor="middle">3 · confirm</text><text class="tx k" x="705" y="24" text-anchor="middle">4 · call</text><text class="tx k" x="900" y="24" text-anchor="middle">5 · report</text></g>
+<g id="f2-gather"><title>gather: the agent's read calls go straight to tau2; reads are not judged</title>
+<rect class="nd" x="150" y="140" width="140" height="40" rx="10"/><text class="tx" x="220" y="165" text-anchor="middle">read calls</text>
+<rect class="nd ext" x="150" y="320" width="140" height="40" rx="10"/><text class="tx" x="220" y="345" text-anchor="middle">runs reads</text>
+<text class="tx s" x="222" y="255" text-anchor="middle">not judged</text>
+<path class="ed" d="M165,180 V318"/><path class="ed" d="M280,320 V182"/></g>
+<g id="f2-plan"><title>plan: the agent states a plan and asks to proceed; the plan judge checks it before the user sees it; a block makes the agent rewrite it once</title>
+<rect class="nd" x="320" y="140" width="110" height="40" rx="10"/><text class="tx" x="375" y="165" text-anchor="middle">states a plan</text>
+<rect class="nd hi" x="320" y="225" width="110" height="50" rx="10"/><text class="tx" x="375" y="255" text-anchor="middle">plan judge</text>
+<rect class="nd" x="320" y="50" width="110" height="40" rx="10"/><text class="tx" x="375" y="75" text-anchor="middle">sees the plan</text>
+<text class="tx s" x="375" y="296" text-anchor="middle">a block: rewrite once</text>
+<path class="ed" d="M375,180 V223"/><path class="ed" d="M430,250 H450 V72 H432"/></g>
+<g id="f2-confirm"><title>confirm: the user says yes to the plan</title>
+<rect class="nd" x="490" y="50" width="100" height="40" rx="10"/><text class="tx" x="540" y="75" text-anchor="middle">says yes</text>
+<path class="ed" d="M540,90 V160 H618"/></g>
+<g id="f2-call"><title>call: the agent's write calls go to checks.py, then the call judge, before tau2 runs them; a block gives the agent one retry</title>
+<rect class="nd" x="620" y="140" width="170" height="40" rx="10"/><text class="tx" x="705" y="165" text-anchor="middle">write calls</text>
+<rect class="nd" x="615" y="225" width="75" height="50" rx="10"/><text class="tx" x="652" y="255" text-anchor="middle">checks</text>
+<rect class="nd call" x="710" y="225" width="90" height="50" rx="10"/><text class="tx on-call" x="755" y="244" text-anchor="middle">call judge</text><text class="tx s on-call" x="755" y="267" text-anchor="middle">later</text>
+<rect class="nd ext" x="620" y="320" width="180" height="40" rx="10"/><text class="tx" x="700" y="345" text-anchor="middle">runs the write</text>
+<text class="tx s" x="690" y="296" text-anchor="middle">checks.py only, for now</text>
+<path class="ed" d="M652,180 V223"/><path class="ed" d="M690,250 H708"/><path class="ed" d="M785,275 V318"/></g>
+<g id="f2-report"><title>report: the agent tells the user the result; judged only if the reply fires the plan trigger</title>
+<rect class="nd" x="820" y="140" width="160" height="40" rx="10"/><text class="tx" x="900" y="165" text-anchor="middle">reports back</text>
+<rect class="nd" x="820" y="50" width="160" height="40" rx="10"/><text class="tx" x="900" y="75" text-anchor="middle">sees the result</text>
+<text class="tx s" x="900" y="255" text-anchor="middle">plan judge if flagged</text>
+<path class="ed" d="M900,140 V92"/></g>
+</svg></div>
+<p class="cap">Each agent output belongs to one phase. In v7, each reply declares its phase (Fig 5), so routing is a field read. The plan judge sits between the agent's plan and the user, and is built now. The call judge would sit between the agent's write calls and tau2, after <code>checks.py</code>'s code check; until the volume justifies it, writes get <code>checks.py</code> only. tau2 only ever sees the reply that passed; what was blocked, and the verdict, live on that reply's record. A blocked write gets the note as the call's result, as <code>checks.py</code> does (s09). A blocked plan gets it as a one-call system message, as <code>guidance.py</code> does. All three share one block per turn.<span class="path">src/tau2_loop/agent/factory.py (<code>generate_next_message</code>, <code>_check</code>, <code>BLOCKED</code>) · src/tau2_loop/llm/core.py</span></p>
+<span class="label fig-title">Fig 3 · what the judge does with each agent output, on the 206 train conversations</span>
+<div class="tw"><table>
+<thead><tr><th>agent output</th><th class="num">of 2,244</th><th class="num">a conversation</th><th>the judge</th><th>when, exactly</th></tr></thead>
+<tbody>
+<tr><td class="sub">a text reply that fires the plan trigger</td><td class="num">517 · 23.0%</td><td class="num">2.51</td><td><span class="chip plan">plan judge</span></td><td class="wrap">After the model call and <code>helper.py</code>'s <code>on_reply</code>, before tau2 passes the reply to the user</td></tr>
+<tr><td class="sub">a reply with write calls</td><td class="num">135 · 6.0%</td><td class="num">0.66</td><td class="wrap"><span class="chip call">call judge</span> later; <code>checks.py</code> only until then</td><td class="wrap">Would run after <code>checks.py</code>'s code check, before tau2 runs the calls</td></tr>
+<tr><td class="sub">a text reply, no trigger</td><td class="num">738 · 32.9%</td><td class="num">3.58</td><td class="dim">not judged</td><td class="wrap">Goes to the user as written</td></tr>
+<tr><td class="sub">read or generic calls only</td><td class="num">783 · 34.9%</td><td class="num">3.80</td><td class="dim">not judged</td><td class="wrap">Reads change nothing; tau2 runs them</td></tr>
+<tr><td class="sub">a transfer to a human</td><td class="num">71 · 3.2%</td><td class="num">0.34</td><td class="dim">not until J7</td><td class="wrap">J7 adds a transfer checkpoint</td></tr>
+<tr><td class="sub">the retry after a block</td><td class="num dim">—</td><td class="num dim">—</td><td class="dim">not judged</td><td class="wrap">One block per turn; the retry goes through</td></tr>
+<tr class="sum"><td class="sub">judged now</td><td class="num">517 · 23.0%</td><td class="num">2.51</td><td colspan="2" class="wrap">of 10.89 outputs a conversation, by the regex; a declared phase cuts it to the plans</td></tr>
+</tbody></table></div>
+<p class="cap">Under the reply contract, a reply is either text or tool calls, never both, so each output takes exactly one row. Deciding whether to judge is code (the trigger and the tool's type), so it costs nothing. The judge call itself is synchronous: the turn waits for the verdict in shadow mode too, so its timing matches enforce. A typical exchange: reads (not judged), then a plan asking "shall I proceed?" (plan judge), the user's yes, the write (call judge), and a closing reply (judged only if it fires the trigger).<span class="path">uv run python .lavish/s11_judge-labels.py --frequency · src/tau2_loop/llm/prompting.py (TOOL_CONTRACT) · src/tau2_loop/agent/factory.py (generate_next_message)</span></p>
+<span class="label fig-title">Fig 4 · how a plan is recognised live: a phase the agent declares, or a pattern we guess from</span>
+<div class="tw"><table>
+<thead><tr><th>trigger</th><th>how it marks a plan</th><th class="num">plan checks per passing conversation</th><th>cost and catch</th></tr></thead>
+<tbody>
+<tr><td class="sub">writes, for comparison</td><td class="wrap">tau2 types every tool as read, write or generic, so a reply with a write call is unambiguous</td><td class="num dim">—</td><td class="wrap">Exact and free, ready for the call judge if it comes</td></tr>
+<tr><td class="sub">the regex trigger</td><td class="wrap">A pattern over the reply text ("proceed", "confirm", "would you like"…). It found 101 of 102 train plans, and fired on 416 of 1,153 other replies</td><td class="num">2.38</td><td class="wrap">No change to the agent, and it works on past traces. Most of a pass's exposure is its false fires: 289 of its 359</td></tr>
+<tr class="rec"><td class="sub">a structured reply with a declared phase <span class="chip ok">recommended, regex as fallback</span></td><td class="wrap">Every reply states its <code>phase</code>: gather, plan, call or message. A plan lists the exact calls it will make in <code>proposed_calls</code>, and a call names the plan it carries out (Fig 5): <code>{"phase": "plan", "plan_id": "p1", "content": "…shall I proceed?", "tool_calls": [], "proposed_calls": [{"name": "book_reservation", "arguments": {…}}]}</code></td><td class="num">0.46</td><td class="wrap">At 5% false blocks per check, 2.3% of passes are interrupted, against 11.5% with the regex (Fig 20). If the call judge comes, it can diff each write against the proposal in code: Fig 6's JFK → JFK slip is a one-field diff</td></tr>
+<tr><td class="sub">a plan flag only</td><td class="wrap">Just <code>proposed_calls</code> on a plan, with no phase field and no plan reference</td><td class="num">0.46</td><td class="wrap">The same exposure, but a write can't say which plan it carries out</td></tr>
+<tr><td class="sub">a Haiku classifier</td><td class="wrap">One Haiku call on every text reply: "does this propose a change?"</td><td class="num">≈ 0.46, plus 6.1 classifier calls</td><td class="wrap">No change to the agent, but a model call on every reply</td></tr>
+</tbody></table></div>
+<p class="cap">The flag changes the agent's own contract, so it is opt-in per version in <code>agent.yaml</code>: v3 and every other version keep today's contract byte for byte, and v7 turns it on. Past traces have no flag, so J2–J3 calibrate on the regex. The flag arrives live in J5, where its recall is measured against the regex on the same conversations, with the regex as the fallback whenever the agent forgets the flag. The parser keeps <code>proposed_calls</code> on the reply's record; tau2 never sees it as a call.<span class="path">uv run python .lavish/s11_judge-labels.py --frequency · src/tau2_loop/llm/prompting.py (<code>TOOL_CONTRACT</code>, <code>parse_reply</code>)</span></p>
+<span class="label fig-title">Fig 5 · the structured reply: every output declares its phase, so routing is a field read</span>
+<div class="tw"><table>
+<thead><tr><th>field</th><th>values</th><th>present when</th><th>read by</th></tr></thead>
+<tbody>
+<tr><td class="sub"><code>phase</code></td><td class="wrap"><code>gather</code> · <code>plan</code> · <code>call</code> · <code>message</code></td><td class="wrap">every reply</td><td class="wrap">The router: <span class="chip plan">plan judge</span> on <code>plan</code>; <code>checks.py</code> on <code>call</code>, and the <span class="chip call">call judge</span> later; no judge otherwise (Fig 2's phases)</td></tr>
+<tr><td class="sub"><code>content</code></td><td class="wrap">text or null</td><td class="wrap">plan, message</td><td class="wrap">the user; the plan judge reads it</td></tr>
+<tr><td class="sub"><code>tool_calls</code></td><td class="wrap"><code>[{name, arguments}]</code></td><td class="wrap">gather (reads), call (writes)</td><td class="wrap">tau2; the call judge, for writes</td></tr>
+<tr><td class="sub"><code>proposed_calls</code></td><td class="wrap"><code>[{name, arguments}]</code>, writes only</td><td class="wrap">plan</td><td class="wrap">the plan judge, and the call judge's diff</td></tr>
+<tr><td class="sub"><code>plan_id</code> · <code>plan_ref</code></td><td class="wrap">a short id</td><td class="wrap">plan · call</td><td class="wrap">ties each write to the plan the user confirmed; used once the call judge comes</td></tr>
+</tbody></table></div>
+<p class="cap">The parser checks a declared phase against the tools' types: a write inside a <code>gather</code> is a breach, routed as a call and recorded. The schema is enforced by the SDK where it can be. Claude Agent SDK 0.2.160 takes <code>output_format={"type": "json_schema", "schema": …}</code> (the CLI's <code>--json-schema</code>) and returns <code>ResultMessage.structured_output</code>. Whether that works under our sealed core (<code>tools=[]</code>, <code>max_turns=4</code>) is unverified, and a one-call probe in J2 settles it; otherwise the prompt contract and <code>parse_reply</code> enforce it, as today. The judges' verdicts (Fig 7) use the same mechanism, so a verdict always parses. Opt-in per version (<code>structured: true</code>), so v3 keeps today's contract byte for byte.<span class="path">.venv/…/claude_agent_sdk/types.py (<code>output_format</code>, <code>structured_output</code>) · src/tau2_loop/llm/core.py (<code>_query</code>) · src/tau2_loop/llm/prompting.py</span></p>
+<div class="rule" id="invariants">
+<span class="k">independent</span><span class="v">The plan judge is its own sealed SDK session through <code>llm.core</code> (no tools, no settings, a temp cwd), with its own prompt (<code>judges/airline/plan/j1/judge.md</code>), model and effort. It shares nothing with the agent's session.</span>
+<span class="k">sees</span><span class="v">The policy and tool schemas the agent got, the transcript so far, and the proposed calls. Rubric, policy and tools make a system prompt that's the same on every call, so s10's cache mark reads it back.</span>
+<span class="k">never sees</span><span class="v">The task's gold actions, the user simulator's instructions, the grader, or any other conversation.</span>
+<span class="k">plan judge now</span><span class="v">Fig 3 shows which outputs trigger it, Fig 4 how a plan is recognised, and Fig 5 the structured reply that declares it. A reply declared <code>phase: plan</code>, or one that fires the regex as a fallback, is judged against the policy and the transcript before the user sees it.</span>
+<span class="k">call judge later</span><span class="v">Writes keep <code>checks.py</code>'s code checks. The call judge, which would check a write against the confirmed plan (starting as a code diff against its <code>proposed_calls</code>), is designed in §4 and joins only if the live runs show the slips to justify it.</span>
+<span class="k">blocks once</span><span class="v">One block per agent turn, shared with checks.py, and the retry goes through. In s08, ToolGuard's hard blocks lost 14 pass^4 points, and a reviewer commenting on every call raised over-talk errors from 10% to 27%.</span>
+<span class="k">fails open</span><span class="v">An unparsable verdict, an error or a time-out allows the call, and the record says so. The judge call gets the time limit review-2 asked for.</span>
+<span class="k">modes</span><span class="v"><code>off</code>, <code>shadow</code> (record, never block) and <code>enforce</code>, set in <code>agent.yaml</code>.</span>
+<span class="k">records</span><span class="v"><code>raw_data["tau2_loop"]["judge"]</code> on the reply tau2 keeps: verdict, confidence, check, rule, fix, tokens and milliseconds. The Agent tab draws it where it draws checks.py's blocks today.</span>
+</div>
+<p class="insight">Same block-once contracts as checks.py and guidance.py, so the harness change is one more gate, not a new loop.</p>
+</section>
+
+<section id="s3">
+<h2>3 · A real miss — one wrong write the transcript contradicts</h2>
+<span class="label fig-title">Fig 6 · train task 14, v5 (Opus 5.5): the last messages before a wrong booking</span>
+<div class="mock" id="f3">
+<div class="turn"><span class="label">assistant</span><p>Outbound, May 26 (direct): HAT023, <b>JFK to SFO</b>, departs 14:00, arrives 20:00. Business: $364 per passenger. Return, May 28 (one stop via SEA): HAT204, SFO to SEA … HAT100, SEA to JFK …</p></div>
+<div class="turn"><span class="label">user</span><p>I confirm yes to both: 1. Cancel reservation K1NW8N … 2. Book the new business class round trip with the payment breakdown you showed.</p></div>
+<div class="turn"><span class="label">tool call · ran · a gold write</span><p><code>cancel_reservation(reservation_id="K1NW8N")</code></p></div>
+<div class="turn call"><span class="label">proposed call · the call judge's input ends here</span><p><code>book_reservation(user_id="mohamed_silva_9265", origin="JFK", <b>destination="JFK"</b>, flight_type="round_trip", cabin="business", flights=[HAT023 05-26, HAT204 05-28, HAT100 05-28], passengers=[3 people], …)</code></p></div>
+<div class="turn verdict"><span class="label">what j1 should return · an illustration, no judge has run</span><p><b>block</b> · check 2, arguments trace to the transcript · evidence: "HAT023, JFK to SFO", the agent's own summary · fix: "A round trip's destination is the outbound flight's arrival, SFO. Send the booking again with destination SFO."</p></div>
+<div class="turn gold"><span class="label">gold · never shown to the judge</span><p>The same call with <code>destination="SFO"</code>. Every other argument matched.</p></div>
+</div>
+<p class="cap">The error is in the call, and the evidence is two messages up. It's one of the 4 slips in §4: the plan was right and the call wasn't, so the plan judge can't see it. 3 of the 4 slips set a round trip's destination to its origin, which a one-line <code>checks.py</code> rule catches without a model: a candidate for v7's checks, scored by the same challenge, until a call judge earns its place. Task 14 is on s08's suspect list for a payment-order grading bug, but this booking fails on its own.<span class="path">runs/20260928T094017Z_airline_v5_train/traces/14.json, messages 20–24 · data/tasks/airline.json (task 14, action 14_1)</span></p>
+<span class="label fig-title">Fig 7 · the verdict contract: one JSON object per judged plan or write</span>
+<div class="tw"><table>
+<thead><tr><th>field</th><th>values</th><th>meaning</th></tr></thead>
+<tbody>
+<tr><td class="sub"><code>verdict</code></td><td><code>allow</code> · <code>block</code></td><td class="wrap">A block stands only when <code>confidence</code> clears the threshold J3 sets on train.</td></tr>
+<tr><td class="sub"><code>confidence</code></td><td class="num">0–1</td><td class="wrap">Calibrated in J3 against the read half's golden answers.</td></tr>
+<tr><td class="sub"><code>check</code></td><td class="num">1–5</td><td class="wrap">Which rubric check failed: 1 identity and ownership, 2 arguments trace to the transcript, 3 the policy allows it, 4 the user confirmed exactly this, 5 the user asked for it. A plan is held to 1, 2, 3 and 5, and a write to all five. The five are generic; none names a task or a customer.</td></tr>
+<tr><td class="sub"><code>rule</code></td><td>a policy quote, or <code>transcript</code></td><td class="wrap">A quote that isn't in the policy text turns the block into a note. This is a string check, with no model involved.</td></tr>
+<tr><td class="sub"><code>evidence</code></td><td>a transcript quote</td><td class="wrap">What in the conversation contradicts the call.</td></tr>
+<tr><td class="sub"><code>fix</code></td><td>one sentence</td><td class="wrap">Sent back to the agent: as the blocked call's result, or as a one-call system message before a plan is rewritten.</td></tr>
+</tbody></table></div>
+<p class="insight">Most checks are reading, not reasoning: does each argument match something already said or returned? The golden answers in §6 use the same fields.</p>
+</section>
+
+<section id="s4">
+<h2>4 · Plan or call — 16 of 20 wrong writes were planned wrong</h2>
+<p>You asked whether the judge should review the agent's plan, or its chain of thought, rather than each call. Two facts from the traces shape the answer.</p>
+<ul class="facts">
+<li><b>A turn's calls come one reply at a time.</b> 208 of 1,461 train user turns held 2 or more tool calls, but only 34 of 989 replies with tool calls held more than one.</li>
+<li><b>Every write follows a stated plan.</b> Before any write, the airline policy makes the agent list the action's details and get an explicit yes. That confirmation message is the plan: 102 came before the 137 executed train writes, and 20 of them covered 2–4 writes.</li>
+</ul>
+<span class="label fig-title">Fig 8 · where each bad write's error began, and what the 102 train plans led to</span>
+<div class="figw"><svg class="dia" viewBox="0 0 1000 210" role="img" aria-label="Of 20 bad train writes, 16 carried out a plan that was already wrong when the user confirmed it, and 4 departed from a right plan. Of 102 train plans, 83 led only to good writes, 15 were wrong, and 4 were right but the call slipped.">
+<g id="f5-writes">
+<text class="tx" x="20" y="44">20 bad train writes</text><text class="tx s" x="20" y="64">where the error began</text>
+<g><title>16 bad writes carried out a plan that was already wrong when the user said yes (15 plans)</title><rect class="bar hi" x="230" y="28" width="584" height="40"/><text class="tx" x="522" y="54" text-anchor="middle" style="fill:var(--accent-ink)">16 · in the plan the user confirmed</text></g>
+<g><title>4 bad writes departed from a plan that was right</title><rect class="bar pro" x="814" y="28" width="146" height="40"/><text class="tx" x="887" y="54" text-anchor="middle" style="fill:var(--accent-ink)">4 · call slipped</text></g>
+</g>
+<g id="f5-plans">
+<text class="tx" x="20" y="124">102 train plans</text><text class="tx s" x="20" y="144">before 137 writes</text>
+<g><title>83 plans led only to good writes</title><rect class="bar" x="230" y="108" width="594" height="40"/><text class="tx" x="527" y="134" text-anchor="middle">83 · led only to good writes</text></g>
+<g><title>15 plans were wrong</title><rect class="bar hi" x="824" y="108" width="107.4" height="40"/><text class="tx" x="877.7" y="134" text-anchor="middle" style="fill:var(--accent-ink)">15</text></g>
+<g><title>4 plans were right, but the call slipped</title><rect class="bar pro" x="931.4" y="108" width="28.6" height="40"/><text class="tx" x="945.7" y="134" text-anchor="middle" style="fill:var(--accent-ink)">4</text></g>
+</g>
+<g id="f5-legend">
+<rect class="bar hi" x="230" y="176" width="14" height="14"/><text class="tx s" x="252" y="188">the plan was wrong</text>
+<rect class="bar pro" x="450" y="176" width="14" height="14"/><text class="tx s" x="472" y="188">the plan was right, the call slipped</text>
+<rect class="bar" x="770" y="176" width="14" height="14"/><text class="tx s" x="792" y="188">only good writes</text>
+</g>
+</svg></div>
+<p class="cap">Most wrong writes did exactly what the agent had said and the user had agreed to; the mistake was already in the plan. The 4 slips are the Fig 6 kind. The split is my reading of each confirmation message, recorded as <code>CALL_SLIPS</code> in the script and checkable in the traces. 3 of the 15 wrong plans followed a payment choice the user made that gold doesn't share, so a judge catches those only where the policy forbids the choice.<span class="path">uv run python .lavish/s11_judge-labels.py --plans (plans, slips, the trigger) and the default run (turn shape) · runs/*_airline_*/traces</span></p>
+<span class="label fig-title">Fig 9 · three things the judge could review</span>
+<div class="cards">
+<div class="card rec" id="u-plan"><span class="label">the stated plan · before the user sees it</span><h3>Reaches 16 of 20, before the yes <span class="chip ok">recommended, with the call check</span></h3><p class="small">One review covers every write in the plan. A block rewrites the message, so the user never agrees to a wrong promise, and a refusal is a plan too, which is how J7 gets in. A code trigger finds 101 of the 102 train plans, but it also fires on 416 of the 1,153 other text replies: about 2.5 checks a conversation.</p></div>
+<div class="card" id="u-call"><span class="label">the call · at the write</span><h3>Reaches all 20, but 16 after the yes</h3><p class="small">It sees the whole transcript, so it can catch a wrong plan too, but by then the user has agreed and a block means walking back a promise. It is the only check that catches the 4 slips. Paired with the plan judge, it just compares the call with the confirmed plan and the tool results: a short input, 0.68 times a conversation.</p></div>
+<div class="card" id="u-cot"><span class="label">hidden reasoning</span><h3>Not recorded, so it can't be calibrated</h3><p class="small"><code>llm/core.py</code> keeps only the model's text blocks. None of the 331 past conversations holds the agent's thinking, so it would take a core change and new runs before there were any labels. And what a model thinks is not always what it does. The plan the policy makes it state is the reasoning it commits to.</p></div>
+</div>
+<span class="label fig-title">Fig 10 · the plan judge now, the call judge if the volume comes, and why reads get neither</span>
+<div class="tw"><table>
+<thead><tr><th></th><th><span class="chip plan">plan judge</span></th><th><span class="chip call">call judge</span></th><th class="dim">a judge on every read</th></tr></thead>
+<tbody>
+<tr><td class="sub">runs</td><td class="wrap">higher up: on a text reply that fires the trigger, before the user sees it (2.51 a conversation)</td><td class="wrap">at the write: on each reply with write calls, before tau2 runs them (0.66 a conversation)</td><td class="wrap dim">on every read call (3.90 per passing conversation)</td></tr>
+<tr><td class="sub">asks</td><td class="wrap">Is this the right thing to do: identity, policy, what the user asked for?</td><td class="wrap">Does this call do exactly what was confirmed, with arguments the transcript supports?</td><td class="wrap dim">Is this the right thing to look up?</td></tr>
+<tr><td class="sub">reads</td><td class="wrap">the policy, the tools and the whole transcript, ≈ 5.3k tokens</td><td class="wrap">the confirmed plan, the call and the tool results it cites, a short input</td><td class="wrap dim">—</td></tr>
+<tr><td class="sub">its errors on train</td><td class="wrap">15 wrong plans, of 102</td><td class="wrap">4 slips, plus the backstop: 16 bad writes behind a wrong plan that got through</td><td class="wrap dim">none it can learn: in passing conversations 431 of 589 reads (73%) match no gold read, against 61% in failures</td></tr>
+<tr><td class="sub">model to start</td><td class="wrap">Sonnet 5, with Opus 5.5 in the sweep. As the agent on the same 366-character prompt and 20 train tasks, Haiku 4.5 passed 9 and 12, Sonnet 5 passed 14 and 17, and Opus 5.5 passed 14. A reviewer weaker than the agent at the policy would second-guess right plans</td><td class="wrap">Haiku 4.5: its job is a comparison, and mostly a code diff once the flag exists. Sonnet 5 if Haiku's false blocks miss the bar</td><td class="wrap dim">—</td></tr>
+<tr><td class="sub">tuned by</td><td class="wrap">its own golden labels, loop and gate (§7)</td><td class="wrap">its own golden labels, loop and gate, run with the plan judge frozen</td><td class="wrap dim">—</td></tr>
+<tr><td class="sub">status</td><td class="wrap"><b>built now</b>, J0–J6: it reaches 13 of the 17 wrong-write failures at their first wrong step</td><td class="wrap"><b>later, if the volume comes</b>: 4 of 20 bad writes were slips, and 3 of those are caught by a <code>checks.py</code> rule</td><td class="wrap dim">not planned</td></tr>
+</tbody></table></div>
+<p class="cap">The two errors need different judges: one reasons about policy and intent before the user agrees, the other checks a call against what was agreed. Plans are where the volume is, so the plan judge goes first; the call judge is designed so it can join on the same sealed core, verdict contract (Fig 7) and one block per turn. Reads change nothing, wander off the gold path in passes more often than in failures, and would more than double a passing conversation's checkpoints (3.01 to 6.91).<span class="path">uv run python .lavish/s11_judge-labels.py --frequency (reads) and --plans</span></p>
+<p class="insight">The plan judge first: plans hold 16 of the 20 errors. The call judge waits for volume, slips meanwhile meet <code>checks.py</code>, and reads stay unjudged.</p>
+</section>
+
+<section id="s5">
+<h2>5 · Labels — train alone has the balance for a go/no-go</h2>
+<span class="label fig-title">Fig 11 · the label sets, from committed runs, with no model call</span>
+<div class="tw"><table>
+<thead><tr><th>set</th><th class="num">train</th><th>label rule</th><th>used for</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">the plan judge</td></tr>
+<tr><td class="sub">plan, only good writes after it</td><td class="num">83</td><td class="wrap">The agent's last text message before a write; every write it led to matched gold</td><td class="wrap">plan false blocks</td></tr>
+<tr><td class="sub">plan, wrong</td><td class="num">15</td><td class="wrap">It led to a bad write, and the error was already in it</td><td class="wrap">plan catch rate</td></tr>
+<tr><td class="sub">plan, right, call slipped</td><td class="num">4</td><td class="wrap">It led to a bad write, but it was right and the call departed from it</td><td class="wrap">plan false blocks</td></tr>
+<tr><td class="sub">other replies the trigger flags</td><td class="num">416</td><td class="wrap">Not a plan before a write. Only those in passing conversations count as allow</td><td class="wrap">plan false blocks</td></tr>
+<tr class="grp"><td colspan="4">the call judge · labelled now, used if it comes</td></tr>
+<tr><td class="sub">good write</td><td class="num">117</td><td class="wrap">Executed, and matches a gold write under tau2's <code>compare_with_tool_call</code></td><td class="wrap">write false blocks</td></tr>
+<tr><td class="sub">bad write</td><td class="num">20</td><td class="wrap">Executed and matches no gold write. All 20 are in failed conversations</td><td class="wrap">write catch rate</td></tr>
+<tr><td class="sub">errored write</td><td class="num">4</td><td class="wrap">The tool refused it, so nothing changed</td><td class="dim">excluded</td></tr>
+<tr class="grp"><td colspan="4">J7's direction checks</td></tr>
+<tr><td class="sub">transfer in a pass</td><td class="num">50</td><td class="wrap">The conversation passed, so the transfer was right</td><td class="wrap">allow</td></tr>
+<tr><td class="sub">transfer in a missed-write failure</td><td class="num">18</td><td class="wrap">A gold write never ran and the agent handed off. Each is hand-checked before it counts</td><td class="wrap">block candidates</td></tr>
+<tr><td class="sub">decline replies</td><td class="num v-warn">—</td><td class="wrap">Not labelled yet: one Haiku pass finds them, then a hand check</td><td class="wrap">J7</td></tr>
+<tr class="sum"><td class="sub">conversations</td><td class="num">206</td><td class="wrap">151 passed, 55 failed. The test split's 125 are not used</td><td class="wrap">the split rule</td></tr>
+</tbody></table></div>
+<p class="cap">Labels come from each task's gold actions, which the judge never sees. Tasks are grouped by the split they sit in today (v2), so the 20 train tasks that v0–v2 ran under split v1 stay on the train side.<span class="path">.lavish/s11_judge-labels.py (default, --bad, --plans) · data/splits/airline.json</span></p>
+<span class="label fig-title">Fig 12 · how precise train alone can be, and the five task folds that keep it honest</span>
+<div class="tw"><table>
+<thead><tr><th>bar</th><th class="num">at the bar</th><th class="num">95% interval</th><th>what it can tell</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">all train</td></tr>
+<tr><td class="sub">plan catch</td><td class="num">8 / 15</td><td class="num">30–75%</td><td class="wrap">A working judge from one that blocks at random: at a 5% block rate, that catches about 1 of 15. Not two judges within about 20 points of each other</td></tr>
+<tr><td class="sub">plan false blocks</td><td class="num">4 / 87</td><td class="num">1.8–11.2%</td><td class="wrap">Whether a judge over-blocks, the failure that kills the idea</td></tr>
+<tr><td class="sub">write catch</td><td class="num">10 / 20</td><td class="num">30–70%</td><td class="wrap">As for plans. Most of the 20 should already be stopped at the plan</td></tr>
+<tr><td class="sub">write false blocks</td><td class="num">6 / 117</td><td class="num">2.4–10.7%</td><td class="wrap">The tightest number on the page; it carries the model choice</td></tr>
+<tr class="grp"><td colspan="4">the gate half the loop never reads (§7)</td></tr>
+<tr><td class="sub">plan catch</td><td class="num">3 / 5</td><td class="num">23–88%</td><td class="wrap">Almost nothing about catching; fresh conversations and synthetic positives carry that</td></tr>
+<tr><td class="sub">plan false blocks</td><td class="num">2 / 41</td><td class="num">1.3–16.1%</td><td class="wrap">Whether an edit starts over-blocking</td></tr>
+<tr><td class="sub">write false blocks</td><td class="num">2 / 50</td><td class="num">1.1–13.5%</td><td class="wrap">The same, for writes</td></tr>
+<tr><td class="sub">passing conversations interrupted</td><td class="num">2 / 55</td><td class="num">1.0–12.3%</td><td class="wrap">The deciding bar (§9): whether the judge over-blocks where it matters</td></tr>
+<tr><td class="sub">wrong plans stopped at the plan</td><td class="num">2 / 4</td><td class="num">15–85%</td><td class="wrap">Little on its own; fresh conversations confirm</td></tr>
+</tbody></table></div>
+<div class="tw"><table>
+<thead><tr><th>fold</th><th>loop role</th><th>train tasks</th><th class="num">conversations passed · failed</th><th class="num">plans right · wrong · slip</th><th class="num">writes good · bad</th></tr></thead>
+<tbody>
+<tr><td class="id">F1</td><td>read</td><td>0, 4, 23, 38, 39</td><td class="num">27 · 15</td><td class="num">13 · 3 · 1</td><td class="num">28 · 4</td></tr>
+<tr><td class="id">F2</td><td>read</td><td>6, 9, 30, 40, 47</td><td class="num">40 · 5</td><td class="num">16 · 4 · 0</td><td class="num">16 · 5</td></tr>
+<tr><td class="id">F3</td><td>read</td><td>10, 22, 33, 35, 45</td><td class="num">29 · 8</td><td class="num">15 · 3 · 1</td><td class="num">23 · 4</td></tr>
+<tr><td class="id">F4</td><td>gate</td><td>11, 14, 20, 25, 46</td><td class="num">30 · 11</td><td class="num">27 · 2 · 1</td><td class="num">28 · 3</td></tr>
+<tr><td class="id">F5</td><td>gate</td><td>13, 19, 24, 44, 48</td><td class="num">25 · 16</td><td class="num">12 · 3 · 1</td><td class="num">22 · 4</td></tr>
+<tr class="sum"><td class="id">all</td><td class="dim">—</td><td>25 tasks</td><td class="num">151 · 55</td><td class="num">83 · 15 · 4</td><td class="num">117 · 20</td></tr>
+</tbody></table></div>
+<p class="cap">Each fold holds 2–4 wrong plans, 3–5 bad writes and 5–16 failed conversations. J3's loop reads F1–F3 (10 wrong plans, 13 bad writes) and is gated on F4–F5 (5 wrong plans, 7 bad writes), so a task never sits on both sides. A split by version can't promise that, because each task recurs in 5–10 runs. Tasks were dealt to folds by their count of wrong plans and slips, most first.<span class="path">uv run python .lavish/s11_judge-labels.py --folds</span></p>
+<p class="insight">Train has the balance to decide go or no-go, but too few positives to rank close judges. The gate half alone can't prove a catch rate, which is why synthetic positives are added (§13) and J5 confirms on fresh conversations.</p>
+
+<span class="label fig-title">Fig 13 · the 20 bad train writes, and where each error began</span>
+<div class="tw"><table>
+<thead><tr><th>id</th><th>run · version</th><th class="num">task</th><th>tool</th><th>what differs from gold</th><th>began in</th></tr></thead>
+<tbody>
+<tr><td class="id">B01</td><td><code>124751Z</code> · v1</td><td class="num">14 ◐</td><td><code>book_reservation</code></td><td>total_baggages</td><td>plan</td></tr>
+<tr><td class="id">B02</td><td><code>124751Z</code> · v1</td><td class="num">23</td><td><code>book_reservation</code></td><td>passengers, payment_methods, total_baggages</td><td>plan</td></tr>
+<tr><td class="id">B03</td><td><code>132148Z</code> · v2</td><td class="num">24</td><td><code>book_reservation</code></td><td>origin, destination, flights, payment_methods</td><td>plan</td></tr>
+<tr><td class="id">B04</td><td><code>060029Z</code> · v3</td><td class="num">23</td><td><code>book_reservation</code></td><td>passengers, payment_methods</td><td>plan</td></tr>
+<tr><td class="id">B05</td><td><code>060029Z</code> · v3</td><td class="num">25</td><td><code>book_reservation</code></td><td>payment_methods</td><td>plan</td></tr>
+<tr><td class="id">B06</td><td><code>060029Z</code> · v3</td><td class="num">35 ◐</td><td><code>book_reservation</code></td><td>passengers</td><td>plan</td></tr>
+<tr><td class="id">B07</td><td><code>075613Z</code> · v4</td><td class="num">44</td><td><code>cancel_reservation</code></td><td class="dim">gold never cancels</td><td>plan</td></tr>
+<tr><td class="id">B08</td><td><code>075613Z</code> · v4</td><td class="num">47</td><td><code>cancel_reservation</code></td><td class="dim">gold makes no write at all</td><td>plan</td></tr>
+<tr><td class="id">B09</td><td><code>075613Z</code> · v4</td><td class="num">6 ◐</td><td><code>book_reservation</code></td><td class="dim">gold makes no write at all</td><td>plan</td></tr>
+<tr><td class="id">B10</td><td><code>093954Z</code> · v3</td><td class="num">23</td><td><code>update_reservation_flights</code></td><td class="dim">gold never changes flights</td><td>plan</td></tr>
+<tr><td class="id">B11</td><td><code>093954Z</code> · v3</td><td class="num">33</td><td><code>update_reservation_baggages</code></td><td>nonfree_baggages</td><td>plan</td></tr>
+<tr><td class="id">B12</td><td><code>094017Z</code> · v5</td><td class="num">14 ◐</td><td><code>book_reservation</code></td><td>destination (Fig 6)</td><td class="v-warn">call</td></tr>
+<tr><td class="id">B13</td><td><code>094017Z</code> · v5</td><td class="num">23</td><td><code>book_reservation</code></td><td>destination</td><td class="v-warn">call</td></tr>
+<tr><td class="id">B14</td><td><code>094017Z</code> · v5</td><td class="num">24</td><td><code>book_reservation</code></td><td>destination</td><td class="v-warn">call</td></tr>
+<tr><td class="id">B15</td><td><code>094017Z</code> · v5</td><td class="num">33</td><td><code>update_reservation_flights</code></td><td>payment_id</td><td>plan</td></tr>
+<tr><td class="id">B16</td><td><code>094017Z</code> · v5</td><td class="num">33</td><td><code>update_reservation_baggages</code></td><td>payment_id</td><td class="v-warn">call</td></tr>
+<tr><td class="id">B17</td><td><code>094017Z</code> · v5</td><td class="num">6 ◐</td><td><code>update_reservation_flights</code></td><td class="dim">gold makes no write at all</td><td>plan</td></tr>
+<tr><td class="id">B18</td><td><code>094017Z</code> · v5</td><td class="num">6 ◐</td><td><code>cancel_reservation</code></td><td class="dim">gold makes no write at all</td><td>plan (shared with B19)</td></tr>
+<tr><td class="id">B19</td><td><code>094017Z</code> · v5</td><td class="num">6 ◐</td><td><code>book_reservation</code></td><td class="dim">gold makes no write at all</td><td>plan (shared with B18)</td></tr>
+<tr><td class="id">B20</td><td><code>101605Z</code> · v6</td><td class="num">44</td><td><code>update_reservation_flights</code></td><td>reservation_id, flights, payment_id</td><td>plan</td></tr>
+</tbody></table></div>
+<p class="cap">13 of the 20 got an argument wrong: the payment in 7, the route in 4, passengers in 3 and bags in 3 (a call can get several wrong). 7 of 20 made a write gold never makes. ◐ marks s08's suspect tasks (6, 14 and 35), which hold 7 of the 20; metrics are reported with and without them.<span class="path">uv run python .lavish/s11_judge-labels.py --bad · run ids are the <code>runs/2026091[5]T…</code> and <code>runs/2026092[8]T…</code> airline folders</span></p>
+</section>
+
+<section id="s6">
+<h2>6 · Golden answers — every train conversation explained, with gold in view</h2>
+<p>Before the judge is tried, each of the 206 train conversations gets a golden answer. An annotator reads the trace alongside the task's gold actions and the grader's verdict, and writes why each plan, write and transfer was right or wrong. The judge then tries to recreate those answers without gold, and it is released only once it does.</p>
+<span class="label fig-title">Fig 14 · the annotator writes the answer key with gold; the judge must match it without</span>
+<div class="figw"><svg class="dia" viewBox="0 0 1000 320" role="img" aria-label="Top lane: the trace, policy and gold go to an annotator, Opus 5.5 at high effort, which writes golden answers for 206 conversations; they are validated by structure, quote checks and hand review. Bottom lane: the trace and policy only go to the tool judge, which writes its own answers in the same fields; these are compared with the golden answers for verdict and reason agreement. A dashed edge from the golden answers to the judge marks teaching, from training folds only.">
+<g id="f10-lane-a"><text class="tx k" x="20" y="22">with gold · J1</text></g>
+<g id="f10-in-a"><title>the annotator's input: the whole trace with message numbers, the policy and tool schemas, the task's gold actions and the grader's verdict</title><rect class="nd ext" x="20" y="34" width="180" height="64" rx="10"/><text class="tx" x="110" y="62" text-anchor="middle">trace · policy</text><text class="tx s" x="110" y="84" text-anchor="middle">+ gold · grader</text></g>
+<g id="f10-annot"><title>annotator: Opus 5.5 at high effort, a sealed call per conversation, sees gold; designed, not built</title><rect class="nd" x="250" y="34" width="200" height="64" rx="10"/><text class="tx" x="350" y="62" text-anchor="middle">annotator</text><text class="tx s" x="350" y="84" text-anchor="middle">Opus 5.5 · sees gold</text></g>
+<g id="f10-gold"><title>golden answers: one record per conversation, 206 in all, in the fields of Fig 15</title><rect class="nd hi" x="500" y="34" width="200" height="64" rx="10"/><text class="tx" x="600" y="62" text-anchor="middle">golden answers</text><text class="tx s" x="600" y="84" text-anchor="middle">206 conversations</text></g>
+<g id="f10-valid"><title>validated: pinned verdicts and quotes machine-checked on all 206; about 110 cases reviewed by a person</title><rect class="nd" x="750" y="34" width="230" height="64" rx="10"/><text class="tx" x="865" y="62" text-anchor="middle">validated</text><text class="tx s" x="865" y="84" text-anchor="middle">structure · quotes · review</text></g>
+<g id="f10-lane-b"><text class="tx k" x="20" y="200">without gold · J2–J3</text></g>
+<g id="f10-in-b"><title>the judge's input: the trace up to each checkpoint, the policy and tool schemas, never gold</title><rect class="nd ext" x="20" y="212" width="180" height="64" rx="10"/><text class="tx" x="110" y="240" text-anchor="middle">trace · policy</text><text class="tx s" x="110" y="262" text-anchor="middle">no gold</text></g>
+<g id="f10-judge"><title>tool judge: the same sealed core, its own rubric, no gold</title><rect class="nd hi" x="250" y="212" width="200" height="64" rx="10"/><text class="tx" x="350" y="240" text-anchor="middle">tool judge</text><text class="tx s" x="350" y="262" text-anchor="middle">j1 · rubric only</text></g>
+<g id="f10-jans"><title>the judge's answers, in the same fields as the golden answers</title><rect class="nd" x="500" y="212" width="200" height="64" rx="10"/><text class="tx" x="600" y="240" text-anchor="middle">judge's answers</text><text class="tx s" x="600" y="262" text-anchor="middle">same fields</text></g>
+<g id="f10-agree"><title>agreement: verdicts against the bar, reasons by check and evidence</title><rect class="nd" x="750" y="212" width="230" height="64" rx="10"/><text class="tx" x="865" y="240" text-anchor="middle">agreement</text><text class="tx s" x="865" y="262" text-anchor="middle">verdicts and reasons</text></g>
+<g id="f10-edges"><title>each lane runs left to right</title>
+<path class="ed" d="M200,66 H248"/><path class="ed" d="M450,66 H498"/><path class="ed" d="M700,66 H748"/>
+<path class="ed" d="M200,244 H248"/><path class="ed" d="M450,244 H498"/><path class="ed" d="M700,244 H748"/></g>
+<g id="f10-key"><title>the validated golden answers are the answer key for the comparison</title><path class="ed" d="M865,98 V210"/><text class="tx s" x="877" y="160">the answer key</text></g>
+<g id="f10-teach"><title>teaching: J3's loop draws generic lessons from the read half's golden answers into the rubric; the judge never sees a golden answer at run time</title><path class="ed dash" d="M560,98 V140 H390 V210"/><text class="tx s" x="402" y="176">teaching · read half only</text></g>
+</svg></div>
+<p class="cap">The annotator gets everything the grader knows; the judge gets only what the agent had. The golden answer is the bar's answer key, so a block counts only when it's for the right reason.<span class="path">designed in this plan · inputs measured by uv run python .lavish/s11_judge-labels.py</span></p>
+<span class="label fig-title">Fig 15 · one golden answer: what each field holds, who decides it, how it's checked</span>
+<div class="tw"><table>
+<thead><tr><th>field</th><th>decided by</th><th>checked by</th></tr></thead>
+<tbody>
+<tr><td class="sub">outcome and failure mode</td><td class="wrap">the grader and J0's structure</td><td class="wrap">copied, not written</td></tr>
+<tr><td class="sub">checkpoints, with message numbers</td><td class="wrap">structure finds every plan, write and transfer; the annotator adds the declines</td><td class="wrap">each message number must exist</td></tr>
+<tr><td class="sub">verdict at each checkpoint</td><td class="wrap">Structure pins 270: 117 good and 20 bad writes, 83 plans that led only to good writes, and 50 transfers in passes. The annotator decides the rest: wrong plan or slip for 19 plans, 18 transfers in failures, and the declines</td><td class="wrap">A pinned verdict that comes back different sends the record back to be regenerated. My 4 slips are a cross-check</td></tr>
+<tr><td class="sub">check, rule and evidence</td><td class="wrap">the annotator: which of the 5 checks, a policy quote, a transcript quote</td><td class="wrap">The rule must appear in the policy text and the evidence in the cited message (a string check)</td></tr>
+<tr><td class="sub">why and fix</td><td class="wrap">the annotator, a sentence each</td><td class="wrap">hand review</td></tr>
+<tr><td class="sub">first wrong step</td><td class="wrap">the annotator, for each of the 55 failures</td><td class="wrap">hand review</td></tr>
+<tr><td class="sub">summary</td><td class="wrap">the annotator: why this conversation passed or failed, in one paragraph</td><td class="wrap">read with the review</td></tr>
+</tbody></table></div>
+<p class="cap">The judge's verdict uses the same fields (Fig 7), so the two line up checkpoint by checkpoint. A person reviews every verdict structure can't pin (19 plans, 18 transfers, the declines and 55 first wrong steps), plus 20 pinned cases at random: about 110 in all. Below 90% agreement, the annotator's prompt is revised and the set regenerated. Where the person disagrees, the person's answer stands.<span class="path">counts: uv run python .lavish/s11_judge-labels.py (default, --plans)</span></p>
+<ul class="facts">
+<li><b>Verdicts.</b> The judge's blocks against the golden verdicts give §9's catch and false-block rates.</li>
+<li><b>Reasons.</b> When both say wrong, the judge must name the same check and cite an evidence message the golden answer cites, on at least 70% of those cases.</li>
+<li><b>First wrong step.</b> In each failure, is the judge's first block where the golden answer says it went wrong? Reported, and the target for J7.</li>
+<li><b>Why and fix.</b> A hand-read sample of 20, reported.</li>
+</ul>
+<p class="insight">Golden answers turn "did it block?" into "did it block for the right reason?", and give J3 something to teach from without the judge ever seeing gold.</p>
+</section>
+
+<section id="s7">
+<h2>7 · Judge loop — an optimiser tunes the rubric against golden answers</h2>
+<p>J3 becomes an optimisation loop with the same shape as the agent's, run offline on replays, with the golden answers as its grader. No conversation is spent: each cycle replays the judge, reads where it disagreed with the golden answers, edits the rubric, and gates the edit on tasks it never read.</p>
+<span class="label fig-title">Fig 16 · one cycle of the judge loop</span>
+<div class="figw"><svg class="dia" viewBox="0 0 1000 300" role="img" aria-label="One cycle: the champion judge is replayed on the read half; its disagreements with the golden answers go to a judge optimiser, Opus 5.5, which makes delta edits to judge.md; the challenger judge is replayed on the gate half and compared item by item with the champion; promoted or held, the cycle is written to the ledger and the next cycle starts from the champion.">
+<g id="f12-champ"><title>the champion judge: judge.md and judge.yaml at version jN</title><rect class="nd hi" x="20" y="40" width="160" height="64" rx="10"/><text class="tx" x="100" y="68" text-anchor="middle">champion judge</text><text class="tx s" x="100" y="90" text-anchor="middle">jN</text></g>
+<g id="f12-dis"><title>its disagreements with the golden answers on the read half, F1 to F3: the judge's answer, the golden answer, the trace around the checkpoint</title><rect class="nd" x="230" y="40" width="200" height="64" rx="10"/><text class="tx" x="330" y="68" text-anchor="middle">disagreements</text><text class="tx s" x="330" y="90" text-anchor="middle">read half · F1–F3</text></g>
+<g id="f12-opt"><title>the judge optimiser: an Opus 5.5 session, fenced, that may only make delta edits to judge.md's lessons</title><rect class="nd" x="480" y="40" width="210" height="64" rx="10"/><text class="tx" x="585" y="68" text-anchor="middle">judge optimiser</text><text class="tx s" x="585" y="90" text-anchor="middle">Opus 5.5 · delta edits</text></g>
+<g id="f12-chal"><title>the challenger judge, jN+1, after the guards accept the edit</title><rect class="nd" x="740" y="40" width="240" height="64" rx="10"/><text class="tx" x="860" y="68" text-anchor="middle">challenger judge</text><text class="tx s" x="860" y="90" text-anchor="middle">jN+1 · guards passed</text></g>
+<g id="f12-gate"><title>the gate: both judges replayed on the gate half, F4 and F5, and compared item by item</title><rect class="nd" x="740" y="190" width="240" height="64" rx="10"/><text class="tx" x="860" y="218" text-anchor="middle">gate · paired</text><text class="tx s" x="860" y="240" text-anchor="middle">gate half · F4–F5</text></g>
+<g id="f12-ledger"><title>the ledger: each cycle's fixes, breaks and verdict, and the champion for the next cycle</title><rect class="nd" x="420" y="190" width="220" height="64" rx="10"/><text class="tx" x="530" y="218" text-anchor="middle">promote or hold</text><text class="tx s" x="530" y="240" text-anchor="middle">ledger · registry</text></g>
+<g id="f12-edges"><title>the cycle</title>
+<path class="ed" d="M180,72 H228"/><path class="ed" d="M430,72 H478"/><path class="ed" d="M690,72 H738"/>
+<path class="ed" d="M860,104 V188"/><path class="ed" d="M740,222 H642"/>
+<path class="ed dash" d="M420,222 H100 V106"/></g>
+<g id="f12-labels"><text class="tx s" x="872" y="152">replay both</text><text class="tx s" x="112" y="210">next cycle</text></g>
+</svg></div>
+<p class="cap">The optimiser reads only the read half. The gate half decides, and the optimiser never sees it, so each cycle is judged on tasks it couldn't have fitted. The shape, fence and gate are the agent loop's.<span class="path">to reuse: src/tau2_loop/loop/optimiser.py · loop/guards.py · eval/compare.py · loop/ledger.py</span></p>
+<span class="label fig-title">Fig 17 · what the loop maximises: balanced accuracy against the golden answers, with §9's bar as a guard</span>
+<div class="tw"><table>
+<thead><tr><th>objective</th><th>what an allow-everything judge scores</th><th>what it rewards</th></tr></thead>
+<tbody>
+<tr><td class="sub">plain accuracy</td><td class="num wrap v-no">204 / 239 (85%)</td><td class="wrap">Never blocking: it is right on every right plan and good write and catches none of the 35 mistakes. Unusable</td></tr>
+<tr class="rec"><td class="sub">balanced accuracy against the golden answers <span class="chip ok">chosen</span></td><td class="num wrap">0.50</td><td class="wrap">Agreement with the golden answers, pass and fail weighted equally: the mean of the share of passing conversations left alone and the share of wrong-plan conversations stopped at the plan, walked in order at live frequency (§8). Per-checkpoint balanced accuracy is reported beside it. Ties go to reason agreement</td></tr>
+<tr><td class="sub">the guard: ≤ 5% of passes interrupted, and a positive net</td><td class="num wrap">—</td><td class="wrap">Kept as constraints, not the objective. Balanced accuracy values one more stopped wrong-plan conversation like 11.6 interrupted passes (151 to 13 on train), and at a drift of 1 in 4 that trade can lose more than it saves</td></tr>
+</tbody></table></div>
+<p class="cap">You chose the objective: accuracy to the golden answers, balanced across pass and fail, so neither class wins by size. §9's bar keeps the loop from buying that balance with interrupted passes. The 239 are train's 102 plans and 137 executed writes; 35 are wrong (15 plans, 20 writes).<span class="path">uv run python .lavish/s11_judge-labels.py --frequency (the 11.6) and --folds (the 239)</span></p>
+<div class="rule" id="loop-rules">
+<span class="k">edits</span><span class="v">The loop tunes the plan judge; a call judge would get its own loop later. It edits the plan judge's <code>judge.md</code> only, written as numbered lessons under the five checks. The optimiser adds, edits or removes lessons by number, up to 60 lessons. Whole rewrites are refused: s08 found that full rewrites collapse (ACE) and grow per-task lessons (RELAI). Thresholds are set by the scorer on the read half, never by the optimiser.</span>
+<span class="k">reads</span><span class="v">A prepared bundle with the read half's disagreements: the judge's answer, the golden answer, the trace around the checkpoint, and the policy. It never reads the gate half, <code>runs/</code>, <code>data/</code> or test.</span>
+<span class="k">guards</span><span class="v">The <code>loop/guards.py</code> fence, plus a check that refuses task, reservation, flight and user ids, names and transcript quotes in <code>judge.md</code>.</span>
+<span class="k">gate</span><span class="v">The challenger is compared with the champion on the gate half, conversation by conversation in order (§8): 55 passing and 7 wrong-write conversations, holding 41 right plans, 5 wrong plans, 2 slips, 50 good writes and 7 bad ones. It is promoted when its balanced accuracy against the golden answers rises, the paired test on the items it fixes and breaks agrees (the agent gate's McNemar p &lt; 0.05, or at least 2 fixes and no breaks; the agent gate needs only 1, but this gate is small), and no §9 bar breaks.</span>
+<span class="k">stops</span><span class="v">After two holds in a row, or 5 cycles. The champion is frozen as the judge for J4–J6.</span>
+<span class="k">confirms</span><span class="v">The gate half has only 5 wrong plans, so it guards against regressions more than it proves gains. Gains are confirmed on fresh conversations: J5's 25 new shadow conversations get golden answers from J1's annotator after the freeze, and the judge is scored on them. The synthetic positives add power to both halves, reported apart. J6's test report is the first number the judge never shaped.</span>
+</div>
+<span class="label fig-title">Fig 18 · what each judge step leaves in MLflow, beside what the agent already does</span>
+<div class="tw"><table>
+<thead><tr><th>what</th><th>MLflow object</th><th>name</th><th>holds</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">the agent · today</td></tr>
+<tr><td class="sub">agent versions</td><td class="wrap">registered model</td><td><code>tau2-loop-airline</code></td><td class="wrap">champion and challenger aliases, mirrored from <code>loop/airline/registry.json</code></td></tr>
+<tr><td class="sub">agent prompt</td><td class="wrap">prompt registry</td><td><code>tau2-loop.airline.system</code></td><td class="wrap">the promoted <code>system.md</code>, one version per fingerprint</td></tr>
+<tr><td class="sub">eval runs, loop cycles</td><td class="wrap">runs and traces in the experiment</td><td><code>tau2-loop</code></td><td class="wrap">one run per eval, one trace per conversation</td></tr>
+<tr class="grp"><td colspan="4"><span class="chip plan">plan judge</span> · new</td></tr>
+<tr><td class="sub">judge versions</td><td class="wrap">registered model</td><td><code>tau2-loop-airline-plan-judge</code></td><td class="wrap">j1, j2 and on, with champion and challenger aliases, mirrored from <code>judges/airline/plan/registry.json</code> (the file stays the truth)</td></tr>
+<tr><td class="sub">its rubric</td><td class="wrap">prompt registry</td><td><code>tau2-loop.airline.plan-judge</code></td><td class="wrap"><code>judge.md</code>, one version per judge fingerprint</td></tr>
+<tr><td class="sub">golden answers · J1</td><td class="wrap">evaluation dataset, plus the J1 run's artifact</td><td><code>tau2-loop.airline.golden</code></td><td class="wrap">206 records; <code>data/judge/airline_gold.jsonl</code> stays the truth</td></tr>
+<tr><td class="sub">replays, sweep, loop cycles, heal · J2–J4</td><td class="wrap">runs in a new experiment</td><td><code>tau2-loop/judge</code></td><td class="wrap">Tagged <code>kind</code> = judge-gold, judge-replay, judge-cycle or judge-heal. Params: <code>plan_judge_model</code>, effort, judge version, half. Metrics: wrong plans stopped, passes interrupted, reason agreement, tokens. Verdicts as an artifact</td></tr>
+<tr><td class="sub">live runs · J5–J6</td><td class="wrap">the agent's run and its traces</td><td><code>tau2-loop</code></td><td class="wrap">Params: the judge's ref, fingerprint, mode and <code>plan_judge_model</code>. Each judge call is a span inside its conversation's trace</td></tr>
+<tr class="grp"><td colspan="4"><span class="chip call">call judge</span> · if it comes</td></tr>
+<tr><td class="sub">its versions and rubric</td><td class="wrap">registered model, prompt</td><td><code>tau2-loop-airline-call-judge</code> · <code>tau2-loop.airline.call-judge</code></td><td class="wrap">the same pattern</td></tr>
+</tbody></table></div>
+<p class="cap">The agent and the judge are separate registered models. The judge's LLM (Sonnet 5, Haiku 4.5, Opus 5.5) is a run parameter, so J3's sweep compares models side by side in one experiment. The parameter is <code>plan_judge_model</code>, not <code>judge_model</code>, because <code>run.json</code> already uses that name for tau2's NL judge. New names follow the platform contract: a new experiment is <code>&lt;project&gt;/&lt;purpose&gt;</code>, no id is hardcoded, and every name joins <code>nmp-central-ai/registry/projects.yaml</code> through <code>make mlflow-init</code> before first use, a small PR in that repo. Replays log metrics and a verdict table, not traces, to keep trace volume sane (platform rule 4).<span class="path">src/tau2_loop/tracking/registry.py (<code>model_name</code>, <code>_mirror_alias</code>) · tracking/prompts.py · tracking/mlflow_log.py · tracking/tracing.py · ../nmp-central-ai/registry/projects.yaml (tau2-loop) · ../nmp-central-ai/PLATFORM.md</span></p>
+<p class="insight">The loop can only be trusted on what it never read. The gate half stops regressions, and fresh conversations confirm the gains.</p>
+</section>
+
+<section id="s8">
+<h2>8 · Live frequency — a pass offers 2.4 plan checks, a failure one</h2>
+<p>You asked whether the judge's data matches how often it will run, and whether a failed conversation counts only up to its first failure while a passing one offers many stages. Yes to both. The judge is scored the way it will run: every checkpoint of every train conversation, in order.</p>
+<span class="label fig-title">Fig 19 · every checkpoint the live judge would see, by how the conversation ended</span>
+<div class="tw"><table>
+<thead><tr><th>conversation</th><th class="num">conversations</th><th class="num">checkpoints</th><th class="num">each</th><th>scored · should allow</th><th>scored · should block</th><th>after the first wrong step</th></tr></thead>
+<tbody>
+<tr><td class="sub">passed</td><td class="num">151</td><td class="num">454</td><td class="num">3.01</td><td class="wrap">all 454: 70 plans, 289 other flagged replies, 95 writes</td><td class="dim">—</td><td class="dim">—</td></tr>
+<tr><td class="sub">failed · a wrong write ran</td><td class="num">17</td><td class="num">123</td><td class="num">7.24</td><td class="wrap">the 65 before the first wrong step</td><td class="wrap">the first wrong step, one per conversation: 13 plans, 4 writes</td><td class="wrap">41 replayed and reported, not scored, including 16 bad writes behind a missed wrong plan</td></tr>
+<tr><td class="sub">failed · a needed write never ran</td><td class="num">38</td><td class="num">81</td><td class="num">2.13</td><td class="wrap">labelled by J1's golden answers</td><td class="wrap">the wrong step is a decline or a transfer: J7's</td><td class="dim">—</td></tr>
+<tr class="sum"><td class="sub">all train</td><td class="num">206</td><td class="num">658</td><td class="num">3.19</td><td class="wrap" colspan="3">517 trigger fires (101 plans, 416 other replies) and 141 writes, errored ones included</td></tr>
+</tbody></table></div>
+<p class="cap">A "checkpoint" is a text reply that fires the plan trigger, or a reply with write calls. The trigger missed one plan of 102, and it was a wrong one, so in that conversation the first wrong step is the write. The 50 replies before the first wrong step in failed conversations get their labels from J1. The plan judge alone sees a pass's plans and flagged replies, 359 of its 454 checkpoints: 2.38 a pass by the regex, or 0.46 with a declared phase. It reaches 13 of the 17 wrong-write failures, the ones whose first wrong step is a plan.<span class="path">uv run python .lavish/s11_judge-labels.py --frequency</span></p>
+<ul class="facts">
+<li><b>Live frequency.</b> Every trigger fire and every write is scored, errored writes included, as they'd come live. Nothing is sampled, so J2 replays all 658.</li>
+<li><b>In order.</b> A conversation is walked checkpoint by checkpoint, and its first block ends the walk, because a live block changes everything after it.</li>
+<li><b>Failures count up to the first wrong step.</b> After it, the transcript is one the live judge reaches only if it missed that step. Those checkpoints are replayed and reported, with the call judge as the backstop behind a missed plan, but not scored.</li>
+<li><b>Passes count every stage.</b> A passing conversation offers about 3 checkpoints, so a per-checkpoint false-block rate compounds.</li>
+</ul>
+<span class="label fig-title">Fig 20 · what a per-check false-block rate does for the plan judge alone, by how plans are recognised</span>
+<div class="tw"><table>
+<thead><tr><th>trigger</th><th class="num">false blocks per check</th><th class="num">passing conversations interrupted</th><th class="num">lost, at drift 1/4</th><th class="num">recovered, at catch 1/2 and heal 1/2</th><th class="num">net, of 206</th></tr></thead>
+<tbody>
+<tr><td class="sub">regex · 2.38 per pass</td><td class="num">5%</td><td class="num">11.5% · 17.3 of 151</td><td class="num">4.3</td><td class="num">3.25 of 13</td><td class="num v-no">−1.1</td></tr>
+<tr><td class="sub">regex · 2.38 per pass</td><td class="num">2%</td><td class="num">4.7% · 7.1 of 151</td><td class="num">1.8</td><td class="num">3.25 of 13</td><td class="num">+1.5</td></tr>
+<tr><td class="sub">regex · 2.38 per pass</td><td class="num">1%</td><td class="num">2.4% · 3.6 of 151</td><td class="num">0.9</td><td class="num">3.25 of 13</td><td class="num">+2.4</td></tr>
+<tr class="rec"><td class="sub">declared phase · 0.46 per pass</td><td class="num">5%</td><td class="num">2.3% · 3.5 of 151</td><td class="num">0.9</td><td class="num">3.25 of 13</td><td class="num">+2.4</td></tr>
+<tr class="rec"><td class="sub">declared phase · 0.46 per pass</td><td class="num">2%</td><td class="num">0.9% · 1.4 of 151</td><td class="num">0.4</td><td class="num">3.25 of 13</td><td class="num">+2.9</td></tr>
+<tr class="rec"><td class="sub">declared phase · 0.46 per pass</td><td class="num">1%</td><td class="num">0.5% · 0.7 of 151</td><td class="num">0.2</td><td class="num">3.25 of 13</td><td class="num">+3.1</td></tr>
+</tbody></table></div>
+<p class="cap">Passing conversations outnumber the plan judge's reachable failures 151 to 13, so small per-check rates decide the sign, and how plans are recognised decides how many checks a pass gets. Catch, heal and drift here are assumptions; J3 and J4 measure the real ones. With the regex, 289 of a pass's 359 plan checks are its non-plan fires; a declared phase removes them.<span class="path">uv run python .lavish/s11_judge-labels.py --frequency</span></p>
+<p class="insight">At 5% per check, a regex-triggered plan judge interrupts 1 in 9 passes and loses about as much as it saves; with a declared phase, 1 in 43. The bar moves to whole conversations.</p>
+</section>
+
+<section id="s9">
+<h2>9 · The bar — at most 5% of passing conversations interrupted</h2>
+<span class="label fig-title">Fig 21 · what the judge must show before each next slice</span>
+<div class="tw"><table>
+<thead><tr><th>metric</th><th>definition</th><th class="num">bar</th><th>slice</th><th>why this number</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="5">per conversation, in order · these decide</td></tr>
+<tr class="rec"><td class="sub">balanced accuracy against the golden answers</td><td class="wrap">the mean of passes left alone and wrong-plan conversations stopped at the plan, on the gate half; maximised by J3</td><td class="num">≥ 0.73</td><td>J3</td><td class="wrap">The objective you chose. 0.73 is what the two bars below imply at their limits: ½ × (53/55 + 2/4)</td></tr>
+<tr><td class="sub">passing conversations interrupted</td><td class="wrap">gate-half passing conversations in which the judge blocks anything, walked in order (§8)</td><td class="num">≤ 2 / 55</td><td>J3</td><td class="wrap">Each interruption risks a pass. At 5% of passing conversations, a drift of 1 in 4 costs about 1.9 of 151 on all train</td></tr>
+<tr><td class="sub">wrong plans stopped at the plan</td><td class="wrap">gate-half wrong-write conversations whose first wrong step is a plan, blocked there</td><td class="num">≥ 2 / 4</td><td>J3</td><td class="wrap">The plan judge's one chance per failure; the gate half's other 3 failures went wrong at a write</td></tr>
+<tr><td class="sub">net conversations</td><td class="wrap">caught × heal − interrupted × drift, with J4's measured heal and drift, on the gate half</td><td class="num">&gt; 0</td><td>J4</td><td class="wrap">The judge must save more than it costs before it goes live</td></tr>
+<tr class="grp"><td colspan="5">the golden answers</td></tr>
+<tr><td class="sub">review agreement</td><td class="wrap">reviewed cases where the person agrees with the annotator, of about 110</td><td class="num">≥ 90%</td><td>J1</td><td class="wrap">An answer key that is wrong 1 time in 10 would cap the judge's measured accuracy there</td></tr>
+<tr class="grp"><td colspan="5">per checkpoint, the plan judge · diagnostic</td></tr>
+<tr><td class="sub">plan false blocks</td><td class="wrap">right plans blocked on the gate half, of 41 (39 that led only to good writes, 2 that were right before the call slipped)</td><td class="num">≤ 2 / 41</td><td>J3</td><td class="wrap">A blocked right plan makes the agent back away from a correct offer. Over-blocking is how ToolGuard lost 14 pass^4 points</td></tr>
+<tr><td class="sub">flagged-reply false blocks</td><td class="wrap">flagged replies in passing conversations that get blocked</td><td class="num">≤ 5%</td><td>J3</td><td class="wrap">The trigger fires on 416 of 1,153 other replies, so the judge must mostly let them through</td></tr>
+<tr><td class="sub">plan catch rate</td><td class="wrap">wrong plans blocked on the gate half, of 5; synthetic ones reported apart</td><td class="num">≥ 3 / 5</td><td>J3</td><td class="wrap">Below half, the gain can't cover the retries it costs</td></tr>
+<tr class="grp"><td colspan="5">per checkpoint, the call judge · if it comes</td></tr>
+<tr><td class="sub">write false blocks</td><td class="wrap">good writes blocked on the gate half, of 50</td><td class="num">≤ 2 / 50</td><td class="dim">later</td><td class="wrap">Each false block costs a retry and can derail a passing conversation</td></tr>
+<tr><td class="sub">write catch rate</td><td class="wrap">bad writes blocked on the gate half, of 7: the slips, and any wrong plan the plan judge missed</td><td class="num">reported</td><td class="dim">later</td><td class="wrap">Too few for a bar</td></tr>
+<tr class="grp"><td colspan="5">the plan judge, all checkpoints</td></tr>
+<tr><td class="sub">the gate half</td><td class="wrap">every bar above is read on folds F4–F5, which the loop never reads; the read half's rates are reported, not judged (Fig 12)</td><td class="num">the bars above</td><td>J3</td><td class="wrap">A task never sits on both sides, so the rubric can't pass by recognising tasks it was tuned on</td></tr>
+<tr><td class="sub">reason agreement</td><td class="wrap">cases where the judge and the golden answer both say wrong and the judge names the same check and cites an evidence message the golden answer cites</td><td class="num">≥ 70%</td><td>J3</td><td class="wrap">A block for the wrong reason sends the agent to fix the wrong thing</td></tr>
+<tr><td class="sub">consistency</td><td class="wrap">same verdict on 3 repeats</td><td class="num">≥ 90%</td><td>J3</td><td class="wrap">A coin-flip judge adds noise to a gate that already struggles with noise</td></tr>
+<tr><td class="sub">heal</td><td class="wrap">blocked wrong plans and writes that come back right, of those caught</td><td class="num">≥ 1 / 2</td><td>J4</td><td class="wrap">A block that ends in a different mistake helps no one</td></tr>
+<tr><td class="sub">drift</td><td class="wrap">falsely blocked right plans and writes that come back wrong</td><td class="num">≤ 1 / 4</td><td>J4</td><td class="wrap">The real cost of a false block</td></tr>
+<tr><td class="sub">fresh conversations</td><td class="wrap">the frozen judge on golden answers for J5's 25 new shadow conversations, written after the freeze</td><td class="num">reported</td><td>J5</td><td class="wrap">The first labelled data neither the loop nor anyone tuning it has seen; it confirms or refutes the gate half</td></tr>
+<tr><td class="sub">shadow agreement</td><td class="wrap">live verdicts equal to a replay of the same trace</td><td class="num">≥ 90%</td><td>J5</td><td class="wrap">The live input is the replayed input, built by the same function</td></tr>
+<tr><td class="sub">cost</td><td class="wrap">judge raw input tokens against the agent's, per conversation</td><td class="num">≤ 20%</td><td>J5</td><td class="wrap">Estimated at about 15% (§1), most of it cache reads</td></tr>
+</tbody></table></div>
+<div class="note"><span class="label">caveat · why the offline numbers carry the decision</span><p>On v3's two train runs, 5 of 50 conversations failed on a wrong write. At the bar (half caught, and half of those healed) the judge recovers about 1.25 of 50, or 2.5 points. Two single 50-task runs must differ by 5.5–10.7 points before the gap beats noise (s08 §3), and the train split has 25. So J2–J4's offline rates and J5's fresh conversations decide whether to go on. J6 runs one trial, as the loop does today (decided), so its verdict reads as direction, not proof.</p></div>
+<p class="insight">The judge earns live runs offline, conversation by conversation. Interrupting passes is what kills it, so the stop rule is written into J3.</p>
+</section>
+
+<section id="s10">
+<h2>10 · In the viewer — the judge appears in four existing tabs</h2>
+<p>The viewer keeps its eight tabs. The judge shows up where its evidence already lives:</p>
+<ul class="facts">
+<li><b>Runs.</b> Its verdict sits on each conversation, and the run list counts its blocks.</li>
+<li><b>Optimise.</b> Its own calibration: golden answers, the loop's ledger and the champion judge.</li>
+<li><b>Review.</b> A person checks the golden answers.</li>
+<li><b>Agent.</b> It joins the agent graph as a node.</li>
+</ul>
+<p>The mocks below use the viewer's own classes. The trace is real: v4 on train task 44. Fields with no run behind them yet stay blank.</p>
+
+<span class="label fig-title">Fig 22 · Runs › a conversation: the plan judge's verdict on a real wrong plan (mock)</span>
+<div class="mockframe" id="f22">
+<div class="mockbar"><span class="label">viewer · /runs/20260928T075613Z_airline_v4_train/44/1</span></div>
+<p class="label crumbs">Runs › 20260928T075613Z_airline_v4_train › task 44 · trial 1</p>
+<div class="ev tool_use"><div class="label">gather · read calls · not judged</div><p class="small muted">get_user_details, then get_reservation_details for each of 5 reservations</p></div>
+<div class="ev text plan-ev"><div class="label">assistant · plan · message 34</div>
+<p class="small">… <b>S61CZX</b> (LAX⇄EWR⇄CLT round trip, economy) … This reservation has travel insurance and is eligible for cancellation. …</p>
+<p class="small verdict-line"><span class="chip plan">plan judge</span> <span class="status warn">would block</span> check 3, the policy allows it · rule: "the reason for cancellation is covered by insurance" · fix: ask the reason first; insurance covers health or weather only</p>
+<p class="small verdict-line"><span class="status ok">agrees with the golden answer</span> wrong plan, check 3</p></div>
+<div class="ev user"><div class="label">user · message 35</div><p class="small">Yes, go ahead and cancel S61CZX – just a change of plans on my end.</p></div>
+<div class="ev tool_use"><div class="label">assistant · call · message 36</div><p class="small"><code>cancel_reservation(reservation_id="S61CZX")</code> · <span class="status ok">checks.py passed</span> · <span class="chip call">call judge</span> later</p></div>
+</div>
+<p class="cap">The verdict line sits on the reply it judged, in the same place checks.py's blocks and guidance.py's notes appear today. In shadow mode (J5) the line is recorded and the conversation runs on. In enforce mode (J6) a blocked plan never reaches the user: the next reply is marked "rewrite after a block", as checks.py's retries are now. On train runs the golden answer shows beside it. v6, on the same task, refused this cancellation unprompted: the healed reply is what a block aims for.<span class="path">runs/20260928T075613Z_airline_v4_train/traces/44.json, messages 33–36 · runs/20260928T101605Z_airline_v6_train/traces/44.json · frontend/src/pages/Trace.tsx (<code>EventList</code>) · lib/agentgraph.tsx (<code>Harness</code>)</span></p>
+
+<span class="label fig-title">Fig 23 · Runs › the run list: two new columns (mock)</span>
+<div class="tw"><table>
+<thead><tr><th>run</th><th>agent</th><th class="num">pass^1</th><th>judge</th><th class="num">plan checks</th><th class="num">blocks</th><th>note</th></tr></thead>
+<tbody>
+<tr><td class="sub"><code>20260928T093954Z_airline_v3_train</code></td><td>v3</td><td class="num">21 / 25</td><td class="dim">—</td><td class="num dim">—</td><td class="num dim">—</td><td class="wrap">the champion, no judge</td></tr>
+<tr><td class="sub dim">the J5 shadow run</td><td>v7</td><td class="num dim">—</td><td><span class="chip plan">plan j1</span> shadow</td><td class="num dim">—</td><td class="num dim">—</td><td class="wrap">planned: v3 with the plan judge and the structured reply</td></tr>
+</tbody></table></div>
+<p class="cap">"judge" names the version and mode from <code>run.json</code>. "plan checks" counts the plans it judged, and "blocks" the plans it would block (shadow) or did block (enforce), each read from the run's records like every other column. A run without a judge shows dashes.<span class="path">frontend/src/pages/Runs.tsx · runs/*/run.json</span></p>
+
+<span class="label fig-title">Fig 24 · Optimise › airline › judge loop: the judge's own calibration (mock)</span>
+<div class="mockframe" id="f24">
+<div class="mockbar"><span class="label">viewer · /optimise/airline/judge</span></div>
+<nav class="chips domainbar" aria-label="domains (mock)"><a class="chip nav on">airline</a><a class="chip nav">retail</a><a class="chip nav">telecom</a><a class="chip nav">banking_knowledge</a></nav>
+<nav class="chips" aria-label="loops (mock)"><a class="chip nav">agent loop</a><a class="chip nav on">judge loop</a></nav>
+<div class="cards">
+<div class="card"><span class="label">golden answers · J1</span><span class="n">206</span><p class="small">train conversations, each with a golden answer. Hand review: <span class="dim">—</span> of about 110 done.</p></div>
+<div class="card"><span class="label">champion judge · J3</span><span class="n dim">none yet</span><p class="small">The registered model <code>tau2-loop-airline-plan-judge</code> and its rubric in the prompt registry.</p></div>
+<div class="card"><span class="label">gate half · F4–F5</span><span class="n">55 · 4</span><p class="small">passing and wrong-plan conversations, never read by the loop. The objective is balanced accuracy against the golden answers.</p></div>
+</div>
+<div class="tw"><table>
+<thead><tr><th class="num">cycle</th><th>challenger</th><th class="num">fixes</th><th class="num">breaks</th><th class="num">balanced accuracy · gate half</th><th class="num">passes interrupted</th><th>verdict</th></tr></thead>
+<tbody><tr><td class="num dim" colspan="7">no cycle yet: J3 writes <code>judges/airline/plan/ledger.jsonl</code>, and each row opens that cycle's disagreements</td></tr></tbody>
+</table></div>
+</div>
+<p class="cap">The judge loop sits beside the agent loop on Optimise, with the same shape: a ledger of cycles, each opening its diff and verdict. Cards and table read the committed ledger, registry and golden file, never MLflow, so the demo image shows them too.<span class="path">frontend/src/pages/Optimise.tsx · judges/airline/plan/{ledger.jsonl,registry.json} · data/judge/airline_gold.jsonl</span></p>
+
+<span class="label fig-title">Fig 25 · Review › golden answers: a person checks the annotator (mock)</span>
+<div class="mockframe" id="f25">
+<div class="mockbar"><span class="label">viewer · /review/golden/airline</span></div>
+<p class="label crumbs">Review › golden answers › airline · 1 of about 110</p>
+<div class="card gold-card"><span class="label">train · v4 · task 44 · message 34 · plan</span>
+<p class="small"><b>The annotator says:</b> <span class="status warn">wrong plan</span> check 3, the policy allows it. It offers to cancel S61CZX on insurance before asking the reason, and insurance covers only health or weather. The user then gave "a change of plans", and the cancellation ran (gold never cancels).</p>
+<p class="small"><b>Evidence:</b> message 34 ("has travel insurance and is eligible for cancellation"); message 35 ("just a change of plans")</p>
+<div class="actions"><button class="btn" type="button" disabled>Agree</button> <a href="#f25" class="linkish">Correct it</a></div>
+</div>
+</div>
+<p class="cap">The queue holds the cases structure can't pin (Fig 15). Each review writes through the viewer's one write path, <code>POST /api/review/…</code>, to the central Postgres; the demo image stays read-only. When review is done, <code>make judge-gold-freeze</code> writes the corrected set back into the committed <code>data/judge/airline_gold.jsonl</code>, because every number in the viewer reads a committed file.<span class="path">frontend/src/pages/Review.tsx · src/tau2_loop/serving/app.py (<code>review_write</code>)</span></p>
+
+<span class="label fig-title">Fig 26 · what ships in the viewer, slice by slice</span>
+<div class="tw"><table>
+<thead><tr><th>tab</th><th>change</th><th>slice</th><th>reads</th></tr></thead>
+<tbody>
+<tr><td class="sub">Runs › conversation</td><td class="wrap">each checkpoint's J0 label, in a table and on its message <span class="chip ok">built</span></td><td>J0</td><td class="wrap"><code>data/judge/airline.json</code></td></tr>
+<tr><td class="sub">Review</td><td class="wrap">a golden-answers queue: agree, or correct <span class="chip ok">built</span></td><td>J1</td><td class="wrap"><code>data/judge/airline_gold.jsonl</code>, and Postgres for the reviews</td></tr>
+<tr><td class="sub">Runs › conversation</td><td class="wrap">the replayed verdict, and the golden answer, on each plan in a train trace <span class="chip ok">built</span></td><td>J2</td><td class="wrap"><code>judge_runs/&lt;id&gt;/verdicts.jsonl</code></td></tr>
+<tr><td class="sub">Optimise › judge loop</td><td class="wrap">labels, golden-answer and judge cards, the bar and the disagreements <span class="chip ok">built</span>; the loop's ledger with J3</td><td>J2 · J3</td><td class="wrap"><code>judges/airline/plan/</code></td></tr>
+<tr><td class="sub">Runs · Agent</td><td class="wrap">live verdict lines; the judge and blocks columns; a plan-judge node in the agent graph</td><td>J5</td><td class="wrap"><code>raw_data["tau2_loop"]["judge"]</code> on each reply, and <code>run.json</code></td></tr>
+<tr><td class="sub">Runs › conversation</td><td class="wrap">"rewrite after a block" on the reply that follows a block</td><td>J6</td><td class="wrap">the same records</td></tr>
+</tbody></table></div>
+<p class="insight">No new tab: the judge is evidence about conversations, so it lives on them, with its calibration beside the agent's loop.</p>
+</section>
+
+<section id="s11">
+<h2>11 · Slices — nine slices, each shippable and measured alone</h2>
+<span class="label fig-title">Fig 27 · which layer each slice builds</span>
+<div class="tw"><table class="matrix">
+<thead><tr><th>slice</th><th>labels</th><th>judge core</th><th>harness hook</th><th>records · viewer</th><th>measurement</th><th class="num">new conversations</th></tr></thead>
+<tbody>
+<tr><td class="sub">J0 · labels</td><td>● builds</td><td class="dim">—</td><td class="dim">—</td><td>● label file</td><td>● counts</td><td class="num">0</td></tr>
+<tr><td class="sub">J1 · golden answers</td><td>● with gold</td><td>○ sealed core</td><td class="dim">—</td><td>● gold file · Review queue</td><td>● machine checks · review</td><td class="num">0</td></tr>
+<tr><td class="sub">J2 · first verdicts</td><td>○ reuses</td><td>● builds</td><td class="dim">—</td><td>● judge runs · MLflow · trace verdicts</td><td>● confusion</td><td class="num">0</td></tr>
+<tr><td class="sub">J3 · sweep, loop, freeze</td><td>○ reuses</td><td>● sweep · loop</td><td class="dim">—</td><td>● Optimise · judge loop</td><td>● the bar · gate half</td><td class="num">0</td></tr>
+<tr><td class="sub">J4 · heal offline</td><td>○ reuses</td><td>○ reuses</td><td>● block messages</td><td class="dim">—</td><td>● heal · drift</td><td class="num">0</td></tr>
+<tr><td class="sub">J5 · live shadow</td><td class="dim">—</td><td>○ reuses</td><td>● shadow</td><td>● Agent · Runs tabs</td><td>● agreement · cost</td><td class="num">25</td></tr>
+<tr><td class="sub">J6 · enforce, gate</td><td class="dim">—</td><td>○ reuses</td><td>● enforce</td><td>● ledger</td><td>● the gate, 1 trial</td><td class="num">25 + the test report</td></tr>
+<tr><td class="sub">J7 · direction</td><td>● transfers · declines</td><td>● checkpoints</td><td>● checkpoints</td><td>● verdicts</td><td>● J2–J6 again</td><td class="num">as J5–J6</td></tr>
+<tr><td class="sub">J8 · deploy, extend</td><td>● retail · banking</td><td class="dim">—</td><td>● service route</td><td>● docs</td><td>● J0–J3 there</td><td class="num">0 to start</td></tr>
+</tbody></table></div>
+<p class="cap">Each row runs end to end: data in, a verdict out, a number recorded. J0–J4 spend no conversations, so the first 200-conversation run comes only after the judge has passed its bar offline. ● builds · ○ reuses · — untouched.</p>
+
+<div class="slice" id="j0"><h3>J0 · Labels — this page's numbers, produced by the package</h3><div class="rule">
+<span class="k">ships</span><span class="v"><code>src/tau2_loop/tooljudge/labels.py</code>, which calls tau2's own <code>Action.compare_with_tool_call</code> (this page's script copies it). <code>make judge-labels DOMAIN=airline</code> writes <code>data/judge/airline.json</code>: every plan, write and transfer, each with its run, task, message index, label, suspect flag and task fold. The 4 slips come in as a reviewed hand label. It also writes the synthetic positives: copies of right plans with one detail changed so the transcript or the policy contradicts it (a payment id not on the profile, the destination set to the origin, one passenger short, a cancellation the policy refuses), each tagged synthetic and kept in its source task's fold. Tests run on a fixture trace.</span>
+<span class="k">done when</span><span class="v">It reproduces 102 plans (83, 15, 4), 117 good, 20 bad and 4 errored writes, and Fig 12's five folds, all on train.</span>
+<span class="k">costs</span><span class="v">No model call.</span>
+</div></div>
+
+<div class="slice" id="j1"><h3>J1 · Golden answers — every train conversation explained, then reviewed</h3><div class="rule">
+<span class="k">ships</span><span class="v"><code>tooljudge/gold.py</code>: one sealed call per conversation to Opus 5.5 at high effort. Each call gets the policy, tool schemas, the whole trace with message numbers, the task's gold actions, the grader's verdict and J0's pinned verdicts. It writes <code>data/judge/airline_gold.jsonl</code> (one record per conversation, Fig 15) and queues the cases structure can't pin for Review's golden-answers queue (Fig 25). The machine checks of Fig 15 run on every record. The set is logged as the MLflow evaluation dataset <code>tau2-loop.airline.golden</code> (Fig 18).</span>
+<span class="k">run it</span><span class="v"><code>make judge-gold DOMAIN=airline</code></span>
+<span class="k">done when</span><span class="v">All 206 records pass the machine checks, and the person reviewing agrees with ≥ 90% of about 110 cases. Corrections are made by hand, and the person's answer stands.</span>
+<span class="k">costs</span><span class="v">206 annotator calls at ≈ 5.2k input tokens for the median conversation (policy, tools, a 7,526-character trace, 695 characters of gold), ≈ 1.1M in all. Plus the hand review.</span>
+</div></div>
+
+<div class="slice" id="j2"><h3>J2 · First verdicts — one judge replayed on plans and writes</h3><div class="rule">
+<span class="k">ships</span><span class="v">The plan judge's folder, <code>judges/airline/plan/j1/</code>, with a <code>judge.md</code> rubric and a <code>judge.yaml</code> (model, effort, thresholds, the trigger). A call judge would get <code>judges/airline/call/</code> later. <code>tooljudge/prompt.py</code> builds each judge's input from a trace prefix, and J5's live hook calls the same function. <code>tooljudge/core.py</code> makes the sealed call through <code>llm.core.run_query</code> and parses the verdict. First, a one-call probe of the SDK's <code>output_format</code> under the sealed core: if it holds, verdicts come back schema-enforced. A replay writes <code>judge_runs/&lt;ts&gt;_airline_j1_train/</code> (verdicts and a summary, immutable like <code>runs/</code>) and one MLflow run in the new experiment <code>tau2-loop/judge</code>, tagged <code>kind=judge-replay</code> (Fig 18). The new names join <code>nmp-central-ai/registry/projects.yaml</code> first.</span>
+<span class="k">run it</span><span class="v"><code>make judge-replay DOMAIN=airline JUDGE=j1 SPLIT=train</code></span>
+<span class="k">done when</span><span class="v">Every labelled plan and write has the judge's answer beside its golden answer, with verdict and reason agreement recorded, whatever the rates turn out to be.</span>
+<span class="k">costs</span><span class="v">All 517 plan-trigger fires at live frequency (§8). ≈ 2.7M raw input tokens.</span>
+</div></div>
+
+<div class="slice" id="j3"><h3>J3 · Judge loop — sweep the model, then an optimiser tunes the rubric</h3><div class="rule">
+<span class="k">ships</span><span class="v">First, a sweep on the read half: Haiku 4.5, Sonnet 5 and Opus 5.5 at medium, plus Sonnet 5 at high (arXiv 2607.01426 re-checks writes at higher effort). It starts the plan judge on Sonnet 5 (Fig 10). The sweep picks each judge's model, and the scorer sets the thresholds on the read half. Then the loop of §7 on the plan judge, built from the agent loop's parts: <code>tooljudge/loop.py</code> runs a fenced Opus 5.5 session through <code>loop/optimiser.py</code>'s machinery, checks the edit with <code>loop/guards.py</code>, gates with <code>eval/compare.py</code>'s paired test, and records <code>judges/airline/plan/ledger.jsonl</code> and <code>registry.json</code>. The plan trigger may be tightened, but never at the cost of a missed train plan. The champion is frozen by fingerprint and run 3 times for consistency. Each cycle is an MLflow run, the champion is mirrored to the registered model <code>tau2-loop-airline-plan-judge</code>, and its rubric to the prompt registry. Optimise gets the judge-loop view (Fig 24): golden-answer, champion and gate cards, and the ledger, each cycle opening its disagreements.</span>
+<span class="k">run it</span><span class="v"><code>make judge-loop DOMAIN=airline CYCLES=5</code></span>
+<span class="k">done when</span><span class="v">The frozen champion has the highest balanced accuracy against the golden answers on the gate half of any candidate, meets §9's per-conversation bars, and reaches reason agreement ≥ 70%.</span>
+<span class="k">stops if</span><span class="v">No champion stops 2 of the gate half's 4 wrong-plan conversations at the plan while interrupting ≤ 2 of its 55 passing ones. Then the page reports it and nothing goes live.</span>
+<span class="k">costs</span><span class="v">Sweep ≈ 11M raw input tokens (4 configurations × the J2 set). Each cycle ≈ 3M: one optimiser session plus replays of both halves, so up to ≈ 15M for 5 cycles. Repeats ≈ 5.5M. At most ≈ 31M in all, mostly cache reads, and no conversations.</span>
+</div></div>
+
+<div class="slice" id="j4"><h3>J4 · Heal offline — does the agent fix it when told why?</h3><div class="rule">
+<span class="k">ships</span><span class="v"><code>tooljudge/heal.py</code>. At each blocked write, the agent (v3's prompt, Sonnet 5) is asked again with the judge's note as the call's result. The new call is compared with gold, and <code>eval/replay.py</code> runs it against the database as it stood. At each blocked plan, the agent is asked again with the note as a one-call system message. The rewritten plan is judged again and hand-checked. In both cases this is the same message the live hook will send.</span>
+<span class="k">done when</span><span class="v">At least half of what was caught comes back right, and at most 1 in 4 false blocks comes back wrong.</span>
+<span class="k">costs</span><span class="v">One agent call per block: about 40 at most.</span>
+</div></div>
+
+<div class="slice" id="j5"><h3>J5 · Live shadow — the judge rides along, never blocks</h3><div class="rule">
+<span class="k">ships</span><span class="v">The structured reply (Fig 5), opt-in in <code>agent.yaml</code>, and the hook in <code>LoopAgent.generate_next_message</code>. A text reply that fires the plan trigger is judged before tau2 passes it to the user. Writes keep <code>checks.py</code>'s code checks. <code>agent.yaml</code> gains <code>tool_judge: {ref: airline/j1, mode: shadow}</code>, and v7 is a fork of v3 with it and with <code>structured: true</code>. <code>run.json</code> records the judge's ref and fingerprint. The Agent tab draws each verdict beside its message, the Runs tab counts judge blocks, and each judge call is a span in its conversation's MLflow trace.</span>
+<span class="k">run it</span><span class="v"><code>make eval DOMAIN=airline AGENT=v7 SPLIT=train</code></span>
+<span class="k">done when</span><span class="v">Live verdicts match a replay of the same traces on ≥ 90%, judge tokens stay ≤ 20% of the agent's, and the hook errors in no conversation. The 25 new conversations get golden answers from J1's annotator, and the frozen judge's rates on them are reported against §9's bars: the loop's first fresh test. Phase declarations are checked against the regex and the tools' types on the same 25: how often a plan isn't declared, and every breach.</span>
+<span class="k">costs</span><span class="v">25 conversations, plus ≈ 0.13M input tokens of golden answers and their review.</span>
+</div></div>
+
+<div class="slice" id="j6"><h3>J6 · Enforce — the loop's gate decides</h3><div class="rule">
+<span class="k">ships</span><span class="v"><code>mode: enforce</code>. A blocked plan is asked again with the note as a one-call system message, which is guidance.py's route. There's one block per turn across checks.py and the plan judge.</span>
+<span class="k">run it</span><span class="v"><code>make challenge DOMAIN=airline AGENT=v7</code> (one trial)</span>
+<span class="k">done when</span><span class="v">The gate gives its verdict against v3 on one train trial, and the loop reports v7 on test once, as it does for every challenger. v7 is promoted only through the gate.</span>
+<span class="k">costs</span><span class="v">25 conversations for v7. v3's registered train run already has one trial, so <code>_champion_run</code> reuses it while its bytes match. Then the test report, 25 more.</span>
+</div></div>
+
+<div class="slice" id="j7"><h3>J7 · Direction — transfers, then declines</h3><div class="rule">
+<span class="k">ships</span><span class="v">A <code>transfer</code> checkpoint, and declines labelled as plans. J0's labels grow: 50 train transfers in passing conversations to allow, and 18 in missed-write failures, hand-checked as block candidates. A decline is a plan not to act, and the plan trigger already sees many of them; one Haiku pass finds the rest, and each is hand-checked. Then J2–J6 run again for these.</span>
+<span class="k">done when</span><span class="v">The same kind of bar is met, set on its own labels. These checks reach 38 of 55 train failures.</span>
+<span class="k">costs</span><span class="v">A replay of 69 transfers plus the declines, then the J5–J6 runs again.</span>
+</div></div>
+
+<div class="slice" id="j8"><h3>J8 · Deploy and extend — the service route, then retail and banking</h3><div class="rule">
+<span class="k">ships</span><span class="v">The judge call on the agent-service route. An <code>AGENTS.md</code> row and a README status line. The call judge, if J5–J6 show slips the plan judge and <code>checks.py</code> leave through: it reuses this ladder with its own labels, already written in J0–J1. J0–J3 on retail and banking, each with its own labels. Banking's search results make long judge inputs (s10), so its judge relies on the cached prefix.</span>
+<span class="k">done when</span><span class="v">Airline's champion carries the judge through the gate, and retail's J3 report exists.</span>
+<span class="k">costs</span><span class="v">J0–J3 cost no conversations on the new domains.</span>
+</div></div>
+<p class="insight">The first slice to spend a conversation is J5, and only after J3's stop rule has had its chance.</p>
+</section>
+
+<section id="s12">
+<h2>12 · Risks — seventeen ways this fails, and what catches each</h2>
+<div class="tw"><table>
+<thead><tr><th>risk</th><th>what it looks like</th><th>what catches it</th></tr></thead>
+<tbody>
+<tr><td class="sub">overfitting 15 plans and 20 writes</td><td class="wrap">a rubric that quietly describes B01–B20</td><td class="wrap">Numbered lessons edited as deltas, at most 60. <code>loop/guards.py</code> refuses ids, names and transcript quotes in <code>judge.md</code>. The gate half is never read, and fresh conversations confirm</td></tr>
+<tr><td class="sub">gold is one valid path</td><td class="wrap">a correct alternative write labelled bad</td><td class="wrap">All 20 train positives sit in failed conversations. Suspect tasks are reported apart. Any block that argues well gets a hand check</td></tr>
+<tr><td class="sub">the structured reply changes the agent</td><td class="wrap">declaring a phase and listing proposed calls shifts how v7 behaves, or it mislabels a phase</td><td class="wrap">Opt-in per version, so v3 is untouched. The regex and the tools' types cross-check every declared phase. J5 measures misses and breaches, and J6's paired gate decides on v7 as a whole</td></tr>
+<tr><td class="sub">slips go unjudged</td><td class="wrap">a right plan becomes a wrong call, and only <code>checks.py</code> stands between it and tau2</td><td class="wrap">4 of 20 bad train writes; 3 set a round trip's destination to its origin, which a <code>checks.py</code> rule catches. J5–J6 count the slips, and the call judge comes if they justify it</td></tr>
+<tr><td class="sub">compounding false blocks</td><td class="wrap">5% per checkpoint interrupts 1 in 7 passing conversations and loses about as much as it saves (Fig 20)</td><td class="wrap">The deciding bar is per conversation. The trigger's 289 non-plan fires are most of the exposure, so J3 may tighten it, and the judge first asks whether a flagged reply is a plan at all</td></tr>
+<tr><td class="sub">over-blocking</td><td class="wrap">good writes delayed, the agent over-talks</td><td class="wrap">≤ 6 of 117, one block per turn, fails open, J4's drift rate</td></tr>
+<tr><td class="sub">shared blind spots</td><td class="wrap">Sonnet judging Sonnet agrees with its mistakes</td><td class="wrap">The sweep includes Haiku 4.5 and Opus 5.5; the bar picks</td></tr>
+<tr><td class="sub">the annotator is wrong</td><td class="wrap">a confident golden answer that misreads the trace</td><td class="wrap">Pinned verdicts can't move; quotes are machine-checked; about 110 cases reviewed by a person, whose answer stands</td></tr>
+<tr><td class="sub">gold leaking through teaching</td><td class="wrap">the judge passes J6's train gate because its rubric remembers train answers</td><td class="wrap">Lessons stated generically, with no transcripts, ids or names in <code>judge.md</code> (guards). J6's test report is the first number the judge never shaped</td></tr>
+<tr><td class="sub">the loop overfits its gate</td><td class="wrap">many cycles against the same 5 wrong plans select a rubric that got lucky there</td><td class="wrap">At most 5 cycles; promotion needs p &lt; 0.05 or 2 fixes and no breaks; J5's fresh golden answers confirm or refute the gain</td></tr>
+<tr><td class="sub">too few positives</td><td class="wrap">15 wrong plans put ±22 points on a catch rate</td><td class="wrap">Decide go or no-go on train; let false blocks carry the model choice; synthetic positives; confirm on fresh conversations (J5)</td></tr>
+<tr><td class="sub">an effect under the noise</td><td class="wrap">≈ 2.5 points against a 5.5–10.7-point noise floor</td><td class="wrap">Offline rates and J5's fresh conversations carry the decision; J6's one trial is read as direction (decided)</td></tr>
+<tr><td class="sub">less than the grader knows</td><td class="wrap">the judge can't see what the user secretly wants</td><td class="wrap">That's the design: it judges against the policy and the transcript, as a supervisor would</td></tr>
+<tr><td class="sub">leaking labels to the optimiser</td><td class="wrap">the optimiser reads verdicts stored beside gold labels</td><td class="wrap"><code>judges/</code> and <code>judge_runs/</code> join the fence in <code>loop/guards.py</code> (<code>data/</code> already is)</td></tr>
+<tr><td class="sub">a judge call that hangs</td><td class="wrap">one slow call stalls an eval worker</td><td class="wrap">A time limit on the judge call, failing open (review-2's point)</td></tr>
+<tr><td class="sub">the plan trigger misses a plan</td><td class="wrap">a wrong plan reaches the user unchecked</td><td class="wrap">It found 101 of 102 train plans; the call judge still sees every write</td></tr>
+<tr><td class="sub">subscription quota</td><td class="wrap">extra calls eat the window mid-run</td><td class="wrap">≈ 3.2 judge calls a conversation, most input a cache read; J3's sweep runs offline, off-peak</td></tr>
+</tbody></table></div>
+<p class="insight">Only over-blocking kills the idea outright. Every other risk has a measurement or a fence in some slice.</p>
+</section>
+
+<section id="s13">
+<h2>13 · Decisions — all settled, J0 and J1 start next</h2>
+<div class="note"><span class="label">fixed</span><p>Everything runs on train: labels, golden answers, the judge loop and the bar, over the 206 train-task conversations. The loop reads three task folds and is gated on the other two, and fresh shadow conversations confirm. The golden answers are written with gold in view, and the judge never sees one at run time. The test split's 125 conversations stay untouched until J6, where the loop reports v7 on test once, as it does for every challenger (CLAUDE.md: the test split is reported, never optimised on). The judge never sees gold actions, the user's instructions or the grader.</p></div>
+<span class="label fig-title">Fig 28 · every decision, how it was made, and where it lands</span>
+<div class="tw"><table>
+<thead><tr><th>decision</th><th>answer</th><th>made</th><th>lands in</th></tr></thead>
+<tbody>
+<tr><td class="sub">what reviews the agent</td><td class="wrap">the <span class="chip plan">plan judge</span> now; the <span class="chip call">call judge</span> only if the live runs show the volume</td><td>in review</td><td class="wrap">§4, Fig 10, J8</td></tr>
+<tr><td class="sub">which data</td><td class="wrap">train only, with task-grouped read and gate halves</td><td>in review</td><td class="wrap">Fig 12</td></tr>
+<tr><td class="sub">golden answers</td><td class="wrap">one per train conversation, written with gold in view, then reviewed</td><td>in review</td><td class="wrap">§6, J1</td></tr>
+<tr><td class="sub">how it's scored</td><td class="wrap">per conversation, in order, at live frequency</td><td>in review</td><td class="wrap">§8, §9</td></tr>
+<tr><td class="sub">MLflow</td><td class="wrap">its own registered model, prompt, dataset and experiment</td><td>in review</td><td class="wrap">Fig 18</td></tr>
+<tr><td class="sub">what the loop maximises</td><td class="wrap">balanced accuracy against the golden answers, guarded by §9's bar</td><td>Q8 · your call</td><td class="wrap">Fig 17, §9</td></tr>
+<tr><td class="sub">how a plan is recognised</td><td class="wrap">a structured reply that declares its phase, schema-enforced if J2's probe passes, with the regex as fallback</td><td>Q9 · recommended</td><td class="wrap">Figs 4–5, J2, J5</td></tr>
+<tr><td class="sub">how the judge learns</td><td class="wrap">the judge loop: generic lessons from the read half, gated on the gate half</td><td>Q7 · recommended</td><td class="wrap">§7, J3</td></tr>
+<tr><td class="sub">transfers and declines</td><td class="wrap">in J7, after the plan judge works</td><td>Q1 · recommended</td><td class="wrap">J7</td></tr>
+<tr><td class="sub">the plan judge's model</td><td class="wrap">Sonnet 5 to start; Opus 5.5 and Sonnet at high effort stay in the sweep</td><td>Q2 · recommended</td><td class="wrap">Fig 10, J3</td></tr>
+<tr><td class="sub">what a block does</td><td class="wrap">block once with a fix-it note; the rewrite goes through</td><td>Q3 · recommended</td><td class="wrap">§2, J6</td></tr>
+<tr><td class="sub">growing the positives</td><td class="wrap">perturbed copies of right plans, tagged synthetic, reported apart</td><td>Q4 · recommended</td><td class="wrap">J0, §9</td></tr>
+<tr><td class="sub">J6's live measurement</td><td class="wrap">one trial, as the loop runs today: 25 conversations, read as direction</td><td>Q5 · your call</td><td class="wrap">J6, §9's caveat</td></tr>
+<tr><td class="sub">where a judge version lives</td><td class="wrap"><code>judges/airline/plan/jN/</code>, named in <code>agent.yaml</code>; the optimiser's fence gains <code>judges/</code> and <code>judge_runs/</code></td><td>Q6 · recommended</td><td class="wrap">J2, §12</td></tr>
+</tbody></table></div>
+<p class="cap">Q1–Q9 are the queued answers; the rest were settled in the review conversation. One answer differs from the recommendation: J6 runs one trial rather than four, so the live gate saves 175 conversations and its verdict is read as direction, with J2–J5 carrying the evidence.</p>
+<p class="insight">Next: J0 (labels and synthetic positives, no model call) and J1 (golden answers), then J2's one-call probe of the SDK's structured output.</p>
+</section>
+</main>
+<footer>s11 · written 2026-09-30, decided 2026-10-01, on branch <code>tool-judge</code> from <code>main@037fd02</code>. Numbers: <code>.lavish/s11_judge-labels.py</code> (no model call; default, <code>--bad</code>, <code>--plans</code>, <code>--folds</code>, <code>--frequency</code>, <code>--models</code>) over the 15 committed airline runs, <code>runs/2026091[5]*_airline_*</code> and <code>runs/2026092[8]*_airline_*</code>; <code>data/tasks/airline.json</code>; <code>data/splits/airline.json</code>. Code read: <code>src/tau2_loop/llm/core.py</code> (keeps text blocks only), <code>src/tau2_loop/loop/optimiser.py</code>, <code>src/tau2_loop/agent/factory.py</code>, <code>src/tau2_loop/loop/run.py</code> (<code>_champion_run</code>), <code>src/tau2_loop/eval/compare.py</code>, <code>src/tau2_loop/loop/guards.py</code>, <code>vendor/tau2-bench/src/tau2/data_model/tasks.py</code> (<code>compare_with_tool_call</code>). External figures are quoted from <code>.lavish/s08_airline-agent-field-notes.html</code>, where each links to its source. Design: the project's own Field Guide (<code>DESIGN.md</code> §5).</footer>
+</body>
+</html>
