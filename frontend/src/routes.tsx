@@ -8,7 +8,9 @@ import { Runs } from './pages/Runs';
 import { Run } from './pages/Run';
 import { Trace } from './pages/Trace';
 import { Optimise, OptimiseRound } from './pages/Optimise';
+import { JudgeLoop } from './pages/JudgeLoop';
 import { Review } from './pages/Review';
+import { GoldReview } from './pages/GoldReview';
 import { Leaderboard } from './pages/Leaderboard';
 import { search } from './lib/url';
 
@@ -71,6 +73,8 @@ export const routes: RouteObject[] = [
           return redirect(`/optimise/${encodeURIComponent(d ?? 'airline')}`);
         },
       },
+      // the tool judge's own loop beside the agent's (s11); `judge` outranks a `:version`
+      { id: 'optimise-judge', path: '/optimise/:domain/judge', element: <JudgeLoop /> },
       {
         id: 'optimise',
         path: '/optimise/:domain',
@@ -81,6 +85,9 @@ export const routes: RouteObject[] = [
       // what a person thought of what the judge scored — the one write path
       { id: 'review', path: '/review', element: <Review /> },
       { id: 'review-one', path: '/review/:runId/:taskId/:trial', element: <Review /> },
+      // the tool judge's answer key (s11 J1): a person checks what structure could not pin
+      { id: 'review-golden', path: '/review/golden/:domain', element: <GoldReview /> },
+      { id: 'review-golden-one', path: '/review/golden/:domain/:runId/:taskId/:trial/:msg', element: <GoldReview /> },
 
       // what the agent is
       { id: 'agents', path: '/agent', element: <Agent /> },

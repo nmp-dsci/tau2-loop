@@ -69,6 +69,25 @@ challenge: platform-status ## score AGENT= (a fork) against DOMAIN's champion th
 	@if [ "$(origin AGENT)" = "file" ]; then echo "make challenge needs AGENT=vN: the version to score against the champion"; exit 1; fi
 	uv run tau2loop challenge --domain $(DOMAIN) --agent $(AGENT) --concurrency $(CONCURRENCY) --trials $(TRIALS) $(if $(NO_TEST),--no-test)
 
+judge-labels: ## J0 (s11): label every checkpoint of DOMAIN's scored train conversations from gold → data/judge/DOMAIN.json (no model)
+	uv run tau2loop judge-labels --domain $(DOMAIN)
+
+judge-gold: platform-status ## J1 (s11): a golden answer per DOMAIN train conversation, Opus 5.5 high, sees gold → data/judge/DOMAIN_gold.jsonl (resumable; CONCURRENCY=)
+	uv run tau2loop judge-gold --domain $(DOMAIN) --concurrency $(CONCURRENCY)
+
+judge-gold-freeze: ## J1 (s11): copy the person's golden-answer checks (Review › golden answers, Postgres) into data/judge/DOMAIN_gold.jsonl
+	uv run tau2loop judge-gold-freeze --domain $(DOMAIN)
+
+judge-probe: ## J2 (s11): one call proving the SDK's output_format holds under the sealed core → data/judge/probe.json
+	uv run tau2loop judge-probe
+
+JUDGE ?= j1
+judge-replay: platform-status ## J2 (s11): replay JUDGE= on every DOMAIN train checkpoint, scored on the golden answers → judge_runs/ (CONCURRENCY=)
+	uv run tau2loop judge-replay --domain $(DOMAIN) --judge $(JUDGE) --split $(SPLIT) --concurrency $(CONCURRENCY)
+
+judge-score: ## J2 (s11): rewrite REPLAY=<judge_runs id>'s summary with today's scorer and gold (WHY="…"); verdicts never change
+	uv run tau2loop judge-score $(REPLAY) $(if $(WHY),--why "$(WHY)")
+
 ledger: ## print DOMAIN's loop ledger
 	uv run tau2loop ledger --domain $(DOMAIN)
 
@@ -107,4 +126,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-score help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

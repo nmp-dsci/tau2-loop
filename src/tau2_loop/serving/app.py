@@ -42,6 +42,10 @@ from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
 from tau2_loop.loop.history import version_history
 from tau2_loop.loop.ledger import read_ledger
+from tau2_loop.tooljudge import gold as judge_gold_mod
+from tau2_loop.tooljudge import labels as judge_labels
+from tau2_loop.tooljudge import review as judge_review
+from tau2_loop.tooljudge import view as judge_view
 from tau2_loop.tracking.registry import read_all, read_registry
 from tau2_loop.tracking.snapshot import read_snapshot
 
@@ -54,6 +58,16 @@ class ToolIn(BaseModel):
     at: int
     after_calls: int = 0
     requestor: str = "assistant"
+
+
+class GoldReviewIn(BaseModel):
+    """A person's check of one golden answer (s11 J1): agree, or correct with what it should be."""
+
+    item_id: str
+    verdict: str
+    correction: dict[str, Any] = {}
+    note: str = ""
+    author: str = ""
 
 
 class ReviewIn(BaseModel):
@@ -426,6 +440,8 @@ def create_app() -> FastAPI:
             "task": spec,
             "tools": ext.get("tools") or [],
             "user_tools": ext.get("user_tools") or [],
+            # s11: the tool judge's labels, golden answer and verdicts, on a labelled train conversation
+            "judge": judge_view.conversation(meta.domain, run_id, row.task_id, row.trial),
         }
 
     @app.post("/api/runs/{run_id}/{task_id}/{trial}/tool")
@@ -640,6 +656,70 @@ def create_app() -> FastAPI:
     def experiments() -> dict[str, Any]:
         return read_snapshot()
 
+    # ── the tool judge (s11): labels, golden answers, replays — committed files ──
+    @app.get("/api/judge/{domain}")
+    def judge_overview(domain: str) -> dict[str, Any]:
+        """Optimise's judge view: J0's labels, J1's golden answers, every J2 replay scored on them."""
+        _check_domain(domain)
+        return judge_view.overview(domain)
+
+    @app.get("/api/judge/{domain}/gold")
+    def judge_gold(domain: str) -> dict[str, Any]:
+        """The golden answers' summary and Review's queue, with each item's current check."""
+        _check_domain(domain)
+        items = judge_review.queue(domain)
+        db = pg.reachable()
+        return {
+            # computed from the committed gold file, so a run still writing it shows its progress
+            "summary": judge_gold_mod.summarise(domain)
+            if judge_gold_mod.read_gold(domain)
+            else None,
+            "labels": (judge_labels.read_labels(domain) or {}).get("summary"),
+            "items": items,
+            "current": judge_review.current(domain) if db else {},
+            "writable": db and not s.demo_mode,
+            "reason": ""
+            if db and not s.demo_mode
+            else ("the demo image is read only" if s.demo_mode else _no_db()),
+        }
+
+    @app.get("/api/judge/{domain}/gold/item")
+    def judge_gold_item(domain: str, id: str) -> dict[str, Any]:  # noqa: A002 - the query's own name
+        """One review item: the annotator's answer, the messages it cites, and every check of it."""
+        _check_domain(domain)
+        item = next((i for i in judge_review.queue(domain) if i["id"] == id), None)
+        if item is None:
+            raise HTTPException(404, "no such review item")
+        return {
+            **item,
+            "messages": judge_review.item_messages(domain, item),
+            "history": judge_review.history(domain, id) if pg.reachable() else [],
+        }
+
+    @app.post("/api/review/golden/{domain}")
+    def judge_gold_review(domain: str, body: GoldReviewIn) -> dict[str, Any]:
+        """Record a person's check of one golden answer. Refused in the demo image and with no database."""
+        _check_domain(domain)
+        if s.demo_mode:
+            raise HTTPException(403, "the demo image is read only")
+        if not pg.reachable():
+            raise HTTPException(503, _no_db())
+        item = next((i for i in judge_review.queue(domain) if i["id"] == body.item_id), None)
+        if item is None:
+            raise HTTPException(404, "no such review item")
+        try:
+            return judge_review.add(
+                domain,
+                body.item_id,
+                body.verdict,
+                correction=body.correction,
+                note=body.note[:4000],
+                author=body.author[:120],
+                annotator_sha=item["annotator_sha"],
+            )
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+
     _mount_frontend(app)
     return app
 
@@ -840,13 +920,14 @@ def _basis_counts(ext: dict[str, Any]) -> dict[str, int]:
 def trace_events(t: dict[str, Any]) -> list[dict[str, Any]]:
     """The conversation as a flat event list for the viewer."""
     events: list[dict[str, Any]] = []
-    for m in t.get("messages") or []:
+    for i, m in enumerate(t.get("messages") or []):
         role = m.get("role")
         if role in {"user", "assistant"} and m.get("tool_calls"):
             for c in m["tool_calls"]:
                 events.append(
                     {
                         "type": "tool_call",
+                        "i": i,
                         "by": role,
                         "name": c.get("name"),
                         "arguments": c.get("arguments"),
@@ -856,12 +937,13 @@ def trace_events(t: dict[str, Any]) -> list[dict[str, Any]]:
             events.append(
                 {
                     "type": "tool_result",
+                    "i": i,
                     "error": bool(m.get("error")),
                     "text": str(m.get("content") or ""),
                 }
             )
         elif role in {"user", "assistant"}:
-            events.append({"type": role, "text": str(m.get("content") or "")})
+            events.append({"type": role, "i": i, "text": str(m.get("content") or "")})
     return events
 
 

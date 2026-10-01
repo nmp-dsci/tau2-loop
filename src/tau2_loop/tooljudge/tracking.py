@@ -1,0 +1,145 @@
+"""The tool judge in the central MLflow: experiment `tau2-loop/judge`, an index of committed files.
+
+J1's golden answers are one run tagged `kind=judge-gold` (the gold file and its summary as
+artifacts) and the evaluation dataset `tau2-loop.<domain>.golden`; J2's replays are runs tagged
+`kind=judge-replay`, with the judge model as `plan_judge_model` (`judge_model` is tau2's NL
+judge in `run.json`). Metrics and a verdict table, never traces (platform rule 4). The files stay
+the truth: a failure here is printed, never raised, and nothing is lost.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from tau2_loop.tracking.mlflow_log import PROJECT, required_tags
+
+EXPERIMENT = f"{PROJECT}/judge"
+
+
+def dataset_name(domain: str) -> str:
+    return f"{PROJECT}.{domain}.golden"
+
+
+def _experiment() -> str:
+    import mlflow
+
+    from tau2_loop.config import settings
+
+    mlflow.set_tracking_uri(settings().mlflow_tracking_uri)
+    exp = mlflow.set_experiment(EXPERIMENT)
+    return str(exp.experiment_id)
+
+
+def log_gold(domain: str) -> str:
+    """The golden answers as an MLflow run and evaluation dataset; returns a one-line receipt."""
+    import mlflow
+
+    from tau2_loop.tooljudge import gold
+
+    try:
+        exp_id = _experiment()
+        s = gold.read_summary(domain) or gold.write_summary(domain)
+        with mlflow.start_run(run_name=f"{domain}-golden") as run:
+            mlflow.set_tags({**required_tags(), "kind": "judge-gold", "domain": domain})
+            mlflow.log_params(
+                {"annotator_model": gold.ANNOTATOR_MODEL, "annotator_effort": gold.ANNOTATOR_EFFORT}
+            )
+            mlflow.log_metrics(
+                {
+                    "records": float(s["records"]),
+                    "machine_checks_pass": float(s["machine_checks"]["pass"]),
+                    "review_items": float(s["review_queue"]["items"]),
+                    **{f"tokens_{k}": float(v) for k, v in (s.get("tokens") or {}).items()},
+                }
+            )
+            for p in (gold.gold_path(domain), gold.summary_path(domain)):
+                mlflow.log_artifact(str(p))
+            run_id = run.info.run_id
+        n = _dataset(domain, exp_id)
+        return f"run {run_id} in {EXPERIMENT}; dataset {dataset_name(domain)} with {n} records"
+    except Exception as e:  # noqa: BLE001 - the gold file is the record; MLflow is the index
+        return f"not logged ({type(e).__name__}: {e})"
+
+
+def _dataset(domain: str, exp_id: str) -> int:
+    """`tau2-loop.<domain>.golden`: one record per conversation, gold-free inputs, golden expectations."""
+    from mlflow.genai import datasets
+
+    from tau2_loop.tooljudge import gold
+
+    records = []
+    for r in gold.read_gold(domain):
+        a = r.get("answer") or {}
+        records.append(
+            {
+                "inputs": {
+                    "key": r["key"],
+                    "task": r["task"],
+                    "fold": r["fold"],
+                    "half": r["half"],
+                },
+                "expectations": {
+                    "passed": r["passed"],
+                    "first_wrong_step": a.get("first_wrong_step"),
+                    "verdicts": {c["id"]: c["verdict"] for c in a.get("checkpoints") or []},
+                },
+            }
+        )
+    name = dataset_name(domain)
+    found = datasets.search_datasets(experiment_ids=exp_id, filter_string=f"name = '{name}'")
+    ds = (
+        found[0]
+        if found
+        else datasets.create_dataset(name=name, experiment_id=exp_id, tags={"project": PROJECT})
+    )
+    ds.merge_records(records)
+    return len(records)
+
+
+def log_replay(run_dir: Path, summary: dict[str, Any]) -> str:
+    """One J2 replay as an MLflow run; returns its id, or a note when MLflow refused."""
+    import mlflow
+
+    try:
+        exp_id = _experiment()
+        # a rescored replay updates its own run rather than adding a second one
+        found = mlflow.search_runs(
+            experiment_ids=[exp_id],
+            filter_string=f"tags.mlflow.runName = '{run_dir.name}'",
+            output_format="list",
+        )
+        resume = {"run_id": found[0].info.run_id} if found else {"run_name": run_dir.name}
+        with mlflow.start_run(**resume) as run:
+            mlflow.set_tags(
+                {
+                    **required_tags(),
+                    "kind": "judge-replay",
+                    "domain": str(summary.get("domain")),
+                    "judge": str(summary.get("judge")),
+                    "fingerprint": str(summary.get("fingerprint")),
+                }
+            )
+            mlflow.log_params(
+                {
+                    "plan_judge_model": summary.get("model"),
+                    "effort": summary.get("effort"),
+                    "judge": summary.get("judge"),
+                    "split": summary.get("split"),
+                    "structured": summary.get("structured"),
+                }
+            )
+            flat: dict[str, float] = {}
+            for half, m in (summary.get("scores") or {}).items():
+                for k, v in m.items():
+                    if isinstance(v, int | float) and not isinstance(v, bool):
+                        flat[f"{half}_{k}"] = float(v)
+            for k, v in (summary.get("tokens") or {}).items():
+                flat[f"tokens_{k}"] = float(v)
+            mlflow.log_metrics(flat)
+            for name in ("run.json", "summary.json", "verdicts.jsonl"):
+                if (run_dir / name).is_file():
+                    mlflow.log_artifact(str(run_dir / name))
+            return str(run.info.run_id)
+    except Exception as e:  # noqa: BLE001
+        return f"not logged ({type(e).__name__}: {e})"

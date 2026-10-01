@@ -18,6 +18,7 @@ import {
 import { Loading } from '../lib/ui';
 import { agentPath, optimisePath, runPath, useLens } from '../lib/url';
 import { CycleDumbbell, VersionsFig, frac, standing } from '../lib/versions';
+import { LoopChips } from './JudgeLoop';
 
 /**
  * The loop, as rounds. s04 M3 merged the old Loop tab (the ledger) and the old
@@ -227,6 +228,7 @@ export function Optimise() {
           </Link>
         ))}
       </nav>
+      <LoopChips domain={domain} on="agent" />
       <p className="label">The loop</p>
       <h1>
         A failed conversation becomes a diagnosis, a diff, and a <em>verdict</em> — and the ledger

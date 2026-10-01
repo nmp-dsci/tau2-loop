@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { type Event, fmtS, shortRun, shortTask, useGet } from '../lib/api';
+import { JudgePanel, type JudgeView, judgeMarks } from '../lib/judge';
 import { runPath } from '../lib/url';
 
 type RewardInfo = {
@@ -13,20 +15,28 @@ type RewardInfo = {
   env_assertions?: { env_assertion: { func_name?: string; arguments?: unknown }; met: boolean }[] | null;
   info?: Record<string, unknown> | null;
 };
-type TracePayload = { task_id: string; trial: number | null; termination_reason: string; duration: number; agent_cost: number | null; user_cost: number | null; reward_info: RewardInfo | null; events: Event[]; policy_words: number };
+type TracePayload = { task_id: string; trial: number | null; termination_reason: string; duration: number; agent_cost: number | null; user_cost: number | null; reward_info: RewardInfo | null; events: Event[]; policy_words: number; domain?: string; judge?: JudgeView | null };
 
-export function EventList({ events }: { events: Event[] }) {
+/** The conversation as events. `marks` are lines keyed by message index (the tool judge's
+ *  labels and verdicts), drawn inside the last event of that message. */
+export function EventList({ events, marks = {} }: { events: Event[]; marks?: Record<number, ReactNode> }) {
   return (
     <>
-      {events.map((e, i) => (
-        <div key={i} className={`ev ${e.type === 'assistant' ? 'text' : e.type === 'user' ? 'user' : e.type === 'tool_call' ? 'tool_use' : e.type === 'tool_result' ? (e.error ? 'error' : 'tool_result') : e.type}`}>
-          <div className="label">
-            {e.type === 'assistant' ? 'agent' : e.type === 'user' ? 'user (simulated)' : e.type === 'tool_call' ? `${e.by === 'user' ? 'user' : 'agent'} → ${String(e.name)}` : e.type === 'tool_result' ? (e.error ? 'tool result · error' : 'tool result') : e.type}
+      {events.map((e, i) => {
+        const msg = typeof e.i === 'number' ? e.i : null;
+        const last = msg != null && events[i + 1]?.i !== msg;
+        return (
+          <div key={i} className={`ev ${e.type === 'assistant' ? 'text' : e.type === 'user' ? 'user' : e.type === 'tool_call' ? 'tool_use' : e.type === 'tool_result' ? (e.error ? 'error' : 'tool_result') : e.type}`}>
+            <div className="label">
+              {e.type === 'assistant' ? 'agent' : e.type === 'user' ? 'user (simulated)' : e.type === 'tool_call' ? `${e.by === 'user' ? 'user' : 'agent'} → ${String(e.name)}` : e.type === 'tool_result' ? (e.error ? 'tool result · error' : 'tool result') : e.type}
+              {msg != null && <span className="muted"> · message {msg}</span>}
+            </div>
+            {e.type === 'tool_call' && <pre>{JSON.stringify(e.arguments, null, 1)}</pre>}
+            {(e.type === 'tool_result' || e.type === 'assistant' || e.type === 'user') && <pre>{String(e.text)}</pre>}
+            {last && msg != null && marks[msg]}
           </div>
-          {e.type === 'tool_call' && <pre>{JSON.stringify(e.arguments, null, 1)}</pre>}
-          {(e.type === 'tool_result' || e.type === 'assistant' || e.type === 'user') && <pre>{String(e.text)}</pre>}
-        </div>
-      ))}
+        );
+      })}
     </>
   );
 }
@@ -106,8 +116,9 @@ export function Trace() {
           )}
         </div>
       )}
+      {data.judge && <JudgePanel j={data.judge} domain={data.domain ?? 'airline'} />}
       <h2>The conversation, in order</h2>
-      <EventList events={data.events} />
+      <EventList events={data.events} marks={judgeMarks(data.judge)} />
     </>
   );
 }

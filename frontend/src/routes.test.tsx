@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 import {
   agentPath,
   domainPath,
+  goldReviewPath,
+  judgeLoopPath,
   leaderboardPath,
   optimisePath,
   parseTaskId,
@@ -146,8 +148,20 @@ describe('every address the viewer builds lands on the page it names', () => {
     [optimisePath('telecom'), 'optimise'],
     [optimisePath('airline', 'v2'), 'optimise-round'],
     [optimisePath('airline', 'v2', { step: 'outcome' }), 'optimise-round'],
+    // s11: the tool judge's loop is a page of its own, never mistaken for a version called `judge`
+    [judgeLoopPath('airline'), 'optimise-judge'],
+    [goldReviewPath('airline'), 'review-golden'],
+    [goldReviewPath('airline', undefined, { show: 'all' }), 'review-golden'],
   ])('%s → %s', async (url, route) => {
     expect((await land(url)).route).toBe(route);
+  });
+});
+
+describe('Review › golden answers (s11)', () => {
+  it('a case id `<run>/<task>/t<n>#<message>` becomes a path, and lands on its case', async () => {
+    const url = goldReviewPath('airline', '20260928T075613Z_airline_v4_train/44/t1#34');
+    expect(url).toBe('/review/golden/airline/20260928T075613Z_airline_v4_train/44/t1/34');
+    expect(await land(url)).toEqual({ path: url, route: 'review-golden-one' });
   });
 });
 

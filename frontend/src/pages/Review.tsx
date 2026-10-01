@@ -13,6 +13,7 @@ import {
   when,
 } from '../lib/api';
 import { Kpi, Loading } from '../lib/ui';
+import { ReviewTabs } from './GoldReview';
 import { reviewPath, runPath, trialId, trialPath, useLens } from '../lib/url';
 
 /**
@@ -87,6 +88,7 @@ export function Review() {
   return (
     <>
       <p className="label">Review</p>
+      <ReviewTabs current="conversations" />
       <h1>
         The NL judge is a <em>model</em>. Without a human label set, a regression and a judge flake
         look the same

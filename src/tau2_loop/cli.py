@@ -225,6 +225,120 @@ def ledger(domain: str = "airline") -> None:
     console.print(t)
 
 
+@app.command("judge-labels")
+def judge_labels(domain: str = "airline") -> None:
+    """J0 (s11): label every checkpoint of every scored train conversation from gold → data/judge/."""
+    from tau2_loop.tooljudge.labels import write
+
+    path, data = write(domain)
+    tr = data["summary"]["train"]
+    console.print(
+        f"{path}: {tr['conversations']} train conversations ({tr['passed']} passed) · "
+        f"plans {tr['plans']} · writes {tr['writes']} · plan-trigger fires "
+        f"{tr['trigger_fires']['plans'] + tr['trigger_fires']['replies']} · "
+        f"synthetic positives {len(data['synthetic'])} · folds "
+        + " ".join(f"{k}:{','.join(v)}" for k, v in data["folds"].items())
+    )
+
+
+@app.command("judge-gold")
+def judge_gold(
+    domain: str = "airline",
+    concurrency: int = 4,
+    limit: int | None = None,
+    key: Annotated[list[str] | None, typer.Option("--key", "-k")] = None,
+    redo: bool = False,
+    no_track: bool = False,
+) -> None:
+    """J1 (s11): a golden answer per train conversation, by an annotator that sees gold → data/judge/."""
+    from tau2_loop.llm import require_live
+    from tau2_loop.tooljudge import gold, tracking
+
+    require_live()
+    gold.run(domain, concurrency=concurrency, limit=limit, keys=key, redo=redo, log=console.print)
+    s = gold.write_summary(domain)
+    console.print(
+        f"{gold.gold_path(domain)}: {s['records']} of {s['conversations']} conversations · machine checks "
+        f"{s['machine_checks']['pass']} pass, {s['machine_checks']['fail']} fail · slip cross-check "
+        f"{s['slip_cross_check']} · review queue {s['review_queue']['items']}"
+    )
+    if not no_track and s["records"] == s["conversations"]:
+        console.print(f"MLflow: {tracking.log_gold(domain)}")
+
+
+@app.command("judge-gold-freeze")
+def judge_gold_freeze(domain: str = "airline") -> None:
+    """J1 (s11): copy the person's current golden-answer checks from Postgres into the committed gold file."""
+    from tau2_loop.tooljudge import review
+
+    h = review.freeze(domain)
+    console.print(f"froze {h['reviewed']} checks: {h['agree']} agree, {h['correct']} corrected")
+
+
+@app.command("judge-probe")
+def judge_probe(model: str = "sonnet") -> None:
+    """J2 (s11): one call proving the SDK's output_format holds under the sealed core → data/judge/probe.json."""
+    import json
+
+    from tau2_loop.llm import require_live
+    from tau2_loop.llm.core import resolve_model
+    from tau2_loop.tooljudge.core import probe
+    from tau2_loop.tooljudge.labels import JUDGE_DATA_DIR
+
+    require_live()
+    out = probe(resolve_model(model))
+    (JUDGE_DATA_DIR / "probe.json").write_text(json.dumps(out, indent=1) + "\n")
+    console.print(f"output_format holds: {out['holds']} · {out['structured_output']}")
+
+
+@app.command("judge-replay")
+def judge_replay(
+    domain: str = "airline",
+    judge: str = "j1",
+    split: str = "train",
+    concurrency: int = 4,
+    limit: int | None = None,
+    resume: str | None = None,
+    no_track: bool = False,
+) -> None:
+    """J2 (s11): replay a judge version on every train checkpoint, scored on the golden answers → judge_runs/."""
+    import json
+
+    from tau2_loop.llm import require_live
+    from tau2_loop.tooljudge.replay import run_replay
+
+    require_live()
+    out = run_replay(
+        domain, judge, split, concurrency, limit, resume, log=console.print, track=not no_track
+    )
+    s = json.loads((out / "summary.json").read_text())["scores"]
+    for half in ("read", "gate", "all"):
+        m = s[half]
+        console.print(
+            f"  {half}: balanced accuracy {m['balanced_accuracy']} · passes interrupted "
+            f"{m['passes_interrupted']['k']}/{m['passes_interrupted']['n']} · wrong plans stopped "
+            f"{m['wrong_plans_stopped']['k']}/{m['wrong_plans_stopped']['n']} · reason agreement "
+            f"{m['reason_agreement']['k']}/{m['reason_agreement']['n']}"
+        )
+    console.print(f"replay: {out}")
+
+
+@app.command("judge-score")
+def judge_score(replay_id: str, why: str = "re-scored on today's golden answers") -> None:
+    """J2 (s11): rewrite a finished replay's summary.json with today's scorer and gold (the verdicts never change)."""
+    from tau2_loop.tooljudge import tracking
+    from tau2_loop.tooljudge.replay import JUDGE_RUNS_DIR, rescore
+
+    s = rescore(replay_id, why)
+    g = s["scores"]["gate"]
+    console.print(
+        f"{replay_id}: gate balanced accuracy {g['balanced_accuracy']} · passes interrupted "
+        f"{g['passes_interrupted']['k']}/{g['passes_interrupted']['n']} · wrong plans stopped "
+        f"{g['wrong_plans_stopped']['k']}/{g['wrong_plans_stopped']['n']}"
+    )
+    console.print(f"MLflow: {tracking.log_replay(JUDGE_RUNS_DIR / replay_id, s)}")
+
+
 @app.command()
 def leaderboard() -> None:
     """Ingest τ²-bench's published submissions into data/index/leaderboard.json."""
