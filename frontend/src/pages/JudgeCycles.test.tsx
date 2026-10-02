@@ -56,4 +56,19 @@ describe('the judge loop’s ledger', () => {
     expect(h).toContain('lesson 1 names a flight number');
     expect(h).not.toContain('the gate’s pairs');
   });
+
+  it('marks a cycle that learned from v0’s traces, and states each bar on the gate half’s own n', () => {
+    const bars = { passes_interrupted: { op: '<=' as const, limit: 2 / 50 } };
+    const draw = (c: Cycle) =>
+      renderToStaticMarkup(
+        <StaticRouter location="/optimise/airline/judge">
+          <JudgeCycles cycles={[c]} registry={null} bars={bars} gateN={{ passes_interrupted: 50 }} />
+        </StaticRouter>,
+      );
+    const gate = { ...CYCLE.gate!, bars: { passes_interrupted: { champion: false, challenger: true } } };
+    expect(draw({ ...CYCLE, gate })).toContain('before the optimised-agents rule');
+    const clean = draw({ ...CYCLE, gate, agents: ['v1', 'v2', 'v3'] });
+    expect(clean).not.toContain('before the optimised-agents rule');
+    expect(clean).toContain('passes interrupted ≤ 2 / 50');
+  });
 });

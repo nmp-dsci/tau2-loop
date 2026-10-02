@@ -1,9 +1,9 @@
 import { Link, useParams } from 'react-router-dom';
 import { domainLabel, fmtK, useGet } from '../lib/api';
 import { CHECKS, runTag } from '../lib/judge';
-import { Loading } from '../lib/ui';
-import { modelFamily } from '../lib/scope';
-import { goldReviewPath, judgeLoopPath, trialPath, useLens } from '../lib/url';
+import { Loading, Points } from '../lib/ui';
+import { goldReviewPath, judgeEvalsPath, judgeLoopPath, trialPath, useLens } from '../lib/url';
+import { type BarRules, barText, meetsBar } from '../lib/bars';
 import { type Cycle, JudgeCycles, type Registry } from './JudgeCycles';
 
 /**
@@ -92,6 +92,7 @@ type Overview = {
   replays: Replay[];
   registry: Registry | null;
   cycles: Cycle[];
+  bars?: BarRules;
 };
 
 /** One `k / n` with its rate, per DESIGN.md's denominator rule. */
@@ -100,56 +101,50 @@ function kn(r: Rate | undefined): string {
   return `${r.k} / ${r.n} · ${Math.round((r.k / r.n) * 100)}%`;
 }
 
-type Bar = { label: string; def: string; get: (s: Scores) => string; meets?: (s: Scores) => boolean | null; bar: string };
+/** A row of the bars table: `key` names a bar the gate applies; the rest are reported. */
+type Bar = { label: string; def: string; get: (s: Scores) => string; key?: string; bar?: string };
 const BARS: Bar[] = [
   {
     label: 'balanced accuracy against the golden answers',
     def: 'the mean of passes left alone and wrong-plan conversations stopped at the plan',
     get: (s) => (s.balanced_accuracy == null ? '—' : s.balanced_accuracy.toFixed(2)),
-    meets: (s) => (s.balanced_accuracy == null ? null : s.balanced_accuracy >= 0.73),
-    bar: '≥ 0.73',
+    key: 'balanced_accuracy',
   },
   {
     label: 'passing conversations interrupted',
     def: 'passes in which the judge blocks anything, walked in order',
     get: (s) => kn(s.passes_interrupted),
-    meets: (s) => (s.passes_interrupted.n ? s.passes_interrupted.k / s.passes_interrupted.n <= 2 / 55 : null),
-    bar: '≤ 2 / 55',
+    key: 'passes_interrupted',
   },
   {
     label: 'wrong plans stopped at the plan',
     def: 'failures whose golden first wrong step is a flagged plan, blocked there first',
     get: (s) => kn(s.wrong_plans_stopped),
-    meets: (s) => (s.wrong_plans_stopped.n ? s.wrong_plans_stopped.k / s.wrong_plans_stopped.n >= 0.5 : null),
-    bar: '≥ 2 / 4',
+    key: 'wrong_plans_stopped',
   },
   {
     label: 'right plans blocked',
     def: 'plans that led only to good writes, or were right before the call slipped',
     get: (s) => kn(s.right_plans_blocked),
-    meets: (s) => (s.right_plans_blocked.n ? s.right_plans_blocked.k / s.right_plans_blocked.n <= 2 / 41 : null),
-    bar: '≤ 2 / 41',
+    key: 'right_plans_blocked',
   },
   {
     label: 'flagged replies blocked in passes',
     def: 'trigger fires that are not plans, in passing conversations',
     get: (s) => kn(s.pass_replies_blocked),
-    meets: (s) => (s.pass_replies_blocked.n ? s.pass_replies_blocked.k / s.pass_replies_blocked.n <= 0.05 : null),
-    bar: '≤ 5%',
+    key: 'pass_replies_blocked',
   },
   {
     label: 'wrong plans blocked',
     def: 'plans J0 labels wrong, each judged on its own',
     get: (s) => kn(s.wrong_plans_blocked),
-    meets: (s) => (s.wrong_plans_blocked.n ? s.wrong_plans_blocked.k / s.wrong_plans_blocked.n >= 0.6 : null),
-    bar: '≥ 3 / 5',
+    key: 'wrong_plans_blocked',
   },
   {
     label: 'reason agreement',
     def: 'both block: the same check and an evidence message in common',
     get: (s) => kn(s.reason_agreement),
-    meets: (s) => (s.reason_agreement.n ? s.reason_agreement.k / s.reason_agreement.n >= 0.7 : null),
-    bar: '≥ 70%',
+    key: 'reason_agreement',
   },
   { label: 'synthetic positives blocked', def: 'right plans with one detail changed so the transcript contradicts it', get: (s) => kn(s.synthetic_blocked), bar: 'reported' },
   { label: 'golden blocks caught, every checkpoint', def: 'flagged replies and plans the golden answer blocks', get: (s) => kn(s.golden_blocks_caught), bar: 'reported' },
@@ -166,11 +161,10 @@ const BARS: Bar[] = [
 export function JudgeLoop() {
   const { domain = 'airline' } = useParams();
   const [lens] = useLens();
-  const model = lens.get('model') ?? '';
   const { data, error } = useGet<Overview>(`/api/judge/${encodeURIComponent(domain)}`);
   if (!data) return <Loading error={error} />;
-  // the scope bar's model picks the judge's replays on it; `?replay=` names one
-  const reps = data.replays.filter((r) => !model || modelFamily(r.model) === model);
+  // `?replay=` names the replay drawn; else the newest finished one
+  const reps = data.replays;
   const rep = reps.find((r) => r.replay_id === lens.get('replay')) ?? reps.find((r) => r.finished_at) ?? reps[0];
   const g = rep?.scores.gate;
   const gold = data.gold;
@@ -201,12 +195,23 @@ export function JudgeLoop() {
               </>
             )}
           </h1>
-          <p className="lead">
-            An independent reviewer reads the agent’s plan before the customer does. It is tuned offline: J0 labels every
-            checkpoint from gold, J1’s annotator writes a golden answer for each conversation, and each judge version is
-            replayed on the same checkpoints without gold and scored against those answers. The gate half (folds{' '}
-            {lab.halves.gate.join(', ')}) is the one the judge loop never reads.
-          </p>
+          <Points
+            lead
+            items={[
+              <>
+                <b>This plan judge (j1–j3) is retired</b>: it reviewed text replies, and from 2026-10-02 the judge reviews only
+                writes and transfers, before they run. No tool-call judge has run yet; its golden answers are in{' '}
+                <Link to={judgeEvalsPath(domain)}>Evals</Link>.
+              </>,
+              <>
+                <b>Tuned offline</b>: each version is replayed on train checkpoints without gold and scored against golden
+                answers.
+              </>,
+              <>
+                <b>The gate half (folds {lab.halves.gate.join(', ')})</b> is never read by the judge loop.
+              </>,
+            ]}
+          />
           <div className="cards">
             <div className="card">
               <span className="label">labels · J0</span>
@@ -247,7 +252,16 @@ export function JudgeLoop() {
             )}
           </div>
 
-          <JudgeCycles cycles={data.cycles ?? []} registry={data.registry} />
+          <JudgeCycles
+            cycles={data.cycles ?? []}
+            registry={data.registry}
+            bars={data.bars ?? {}}
+            gateN={Object.fromEntries(
+              Object.entries((g ?? {}) as Record<string, unknown>)
+                .filter(([, v]) => typeof v === 'object' && v != null && 'n' in v)
+                .map(([k, v]) => [k, (v as Rate).n]),
+            )}
+          />
 
           {reps.length > 1 && (
             <nav className="chips" aria-label="replays">
@@ -255,7 +269,7 @@ export function JudgeLoop() {
                 <Link
                   key={r.replay_id}
                   className={`chip nav ${r.replay_id === rep?.replay_id ? 'on' : ''}`}
-                  to={judgeLoopPath(domain, { replay: r.replay_id, ...(model ? { model } : {}) })}
+                  to={judgeLoopPath(domain, { replay: r.replay_id })}
                 >
                   {r.name}
                   <span className="n">
@@ -288,7 +302,11 @@ export function JudgeLoop() {
                     </thead>
                     <tbody>
                       {BARS.map((b) => {
-                        const meets = b.meets?.(rep.scores.gate) ?? null;
+                        const gs = rep.scores.gate as unknown as Record<string, Rate | number | null>;
+                        const rule = b.key ? data.bars?.[b.key] : undefined;
+                        const r = b.key && b.key !== 'balanced_accuracy' ? (gs[b.key] as Rate | undefined) : undefined;
+                        const value = b.key === 'balanced_accuracy' ? rep.scores.gate.balanced_accuracy : r && r.n ? r.k / r.n : null;
+                        const meets = rule ? meetsBar(rule, value) : null;
                         return (
                           <tr key={b.label}>
                             <td className="sub">
@@ -297,7 +315,7 @@ export function JudgeLoop() {
                             </td>
                             <td className="num">{b.get(rep.scores.gate)}</td>
                             <td className="nw">
-                              {b.bar}
+                              {rule ? barText(rule, r ? r.n : null) : (b.bar ?? '—')}
                               {meets != null && (
                                 <>
                                   {' · '}
@@ -314,12 +332,30 @@ export function JudgeLoop() {
                   </table>
                 </div>
                 <figcaption>
-                  {rep.name === 'j1' ? 'J2’s first verdicts: j1, untuned. ' : `${rep.name}, from the judge loop. `}
-                  {rep.scores.all.checkpoints} checkpoints replayed
-                  {typeof rep.items === 'number' ? ` of ${rep.items} items` : ''}, scored on {rep.gold_records} golden answers
-                  {rep.gold_human ? ` with ${rep.gold_human} of a person’s checks frozen in` : ''}; input{' '}
-                  {fmtK(rep.tokens.input ?? 0)} tokens, {fmtK(rep.tokens.cache_read ?? 0)} of them cache reads. J3’s loop
-                  starts from here and is promoted only on the gate half.
+                  <Points
+                    items={[
+                      rep.name === 'j1' ? (
+                        <>
+                          <b>j1, untuned</b>: J2’s first verdicts, where J3’s loop starts.
+                        </>
+                      ) : (
+                        <>
+                          <b>{rep.name}, from the judge loop</b>, promoted only on the gate half.
+                        </>
+                      ),
+                      <>
+                        <b>
+                          {rep.scores.all.checkpoints} checkpoints replayed
+                          {typeof rep.items === 'number' ? ` of ${rep.items} items` : ''}
+                        </b>
+                        , scored on {rep.gold_records} golden answers
+                        {rep.gold_human ? ` with ${rep.gold_human} of a person’s checks frozen in` : ''}.
+                      </>,
+                      <>
+                        <b>Input {fmtK(rep.tokens.input ?? 0)} tokens</b>, {fmtK(rep.tokens.cache_read ?? 0)} of them cache reads.
+                      </>,
+                    ]}
+                  />
                   <span className="path">judge_runs/{rep.replay_id}/verdicts.jsonl · data/judge/{domain}_gold.jsonl → /api/judge/{domain}</span>
                 </figcaption>
               </figure>
@@ -370,9 +406,19 @@ export function JudgeLoop() {
                   </table>
                 </div>
                 <figcaption>
-                  A false block (golden allow, judge block) in a passing conversation interrupts a pass; a miss (golden block,
-                  judge allow) lets a wrong step through. Each row opens the conversation, where the label, the golden answer and
-                  the verdict sit on the message.
+                  <Points
+                    items={[
+                      <>
+                        <b>A false block</b> (golden allow, judge block) in a passing conversation interrupts a pass.
+                      </>,
+                      <>
+                        <b>A miss</b> (golden block, judge allow) lets a wrong step through.
+                      </>,
+                      <>
+                        <b>A row opens the conversation</b>, with the label, golden answer and verdict on the message.
+                      </>,
+                    ]}
+                  />
                   <span className="path">judge_runs/{rep.replay_id}/verdicts.jsonl</span>
                 </figcaption>
               </figure>

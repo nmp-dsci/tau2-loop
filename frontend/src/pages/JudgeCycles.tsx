@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { fmtK } from '../lib/api';
+import { type BarRules, barText } from '../lib/bars';
 import { runTag } from '../lib/judge';
+import { Points } from '../lib/ui';
 import { trialPath } from '../lib/url';
 
 /**
@@ -23,6 +25,8 @@ export type Cycle = {
   lessons: { added: string[]; edited: { n: number; from: string; to: string }[]; removed: { n: number; lesson: string }[] };
   verdict: 'promoted' | 'held' | 'rejected';
   reason: string;
+  /** The answering agents whose traces the cycle learned from; absent before the rule. */
+  agents?: string[];
   recheck?: { of: string; was: string; why: string | null };
   gate?: {
     promote: boolean;
@@ -39,14 +43,16 @@ export type Cycle = {
 export type Registry = { champion: string; versions: { name: string; made: string; cycle: number | null; verdict: string | null }[] };
 
 const BAR_NAMES: Record<string, string> = {
-  balanced_accuracy: 'balanced accuracy ≥ 0.73',
-  passes_interrupted: 'passes interrupted ≤ 2 / 55',
-  wrong_plans_stopped: 'wrong plans stopped ≥ 2 / 4',
-  right_plans_blocked: 'right plans blocked ≤ 2 / 41',
-  pass_replies_blocked: 'flagged replies blocked in passes ≤ 5%',
-  wrong_plans_blocked: 'wrong plans blocked ≥ 3 / 5',
-  reason_agreement: 'reason agreement ≥ 70%',
+  balanced_accuracy: 'balanced accuracy',
+  passes_interrupted: 'passes interrupted',
+  wrong_plans_stopped: 'wrong plans stopped',
+  right_plans_blocked: 'right plans blocked',
+  pass_replies_blocked: 'flagged replies blocked in passes',
+  wrong_plans_blocked: 'wrong plans blocked',
+  reason_agreement: 'reason agreement',
 };
+/** s11's rule: a cycle that learned from v0's traces, or ran before agents were recorded, came first. */
+export const beforeRule = (e: Cycle) => !e.agents || e.agents.includes('v0');
 const TONE = { promoted: 'ok', held: 'warn', rejected: 'err' } as const;
 const ba = (x: number | null | undefined) => (x == null ? '—' : x.toFixed(2));
 
@@ -67,7 +73,17 @@ function Meets({ v }: { v: boolean | null }) {
   return <span className={`status ${v ? 'ok' : 'err'}`}>{v ? 'meets' : 'misses'}</span>;
 }
 
-export function JudgeCycles({ cycles, registry }: { cycles: Cycle[]; registry: Registry | null }) {
+export function JudgeCycles({
+  cycles,
+  registry,
+  bars = {},
+  gateN = {},
+}: {
+  cycles: Cycle[];
+  registry: Registry | null;
+  bars?: BarRules;
+  gateN?: Record<string, number>;
+}) {
   if (!cycles.length) return null;
   const c = cycles[cycles.length - 1];
   const g = c.gate;
@@ -78,16 +94,21 @@ export function JudgeCycles({ cycles, registry }: { cycles: Cycle[]; registry: R
         The loop — cycle {c.cycle} {c.verdict} {c.challenger.name}
         {g ? `: gate balanced accuracy ${ba(g.balanced_accuracy.champion)} → ${ba(g.balanced_accuracy.challenger)}` : ''}
       </h2>
-      <p>
-        Each cycle an {c.optimiser.model === 'opus' ? 'Opus 5.5' : c.optimiser.model} session, fenced from every replay and the
-        gate half, reads the champion’s disagreements with the golden answers on the read half and adds, edits or removes
-        numbered lessons. The challenger is replayed on every train checkpoint and paired with the champion conversation by
-        conversation on the gate half. It is promoted only when its balanced accuracy there rises, the paired test agrees, and
-        it loses no bar the champion meets.{registry ? ` The champion now is ${registry.champion}.` : ''}
-      </p>
+      <Points
+        items={[
+          <>
+            <b>Each cycle, a fenced {c.optimiser.model === 'opus' ? 'Opus 5.5' : c.optimiser.model} session</b> reads the read
+            half’s disagreements and adds, edits or removes numbered lessons.
+          </>,
+          <>
+            <b>Promoted only if</b> gate-half balanced accuracy rises, the paired test agrees and no bar the champion meets is lost.
+          </>,
+          registry ? <b>{`The champion now is ${registry.champion}.`}</b> : null,
+        ]}
+      />
       <figure>
         <div className="label fig-title">the ledger: one row per cycle</div>
-        <div className="tw">
+        <div className="tw fit">
           <table>
             <thead>
               <tr>
@@ -142,6 +163,7 @@ export function JudgeCycles({ cycles, registry }: { cycles: Cycle[]; registry: R
                         the same changes.json, no new session: {e.recheck.why ?? 'after a fix to the harness'}
                       </span>
                     )}
+                    {beforeRule(e) && <span className="path v-warn">learned from v0’s traces too, before the optimised-agents rule</span>}
                   </td>
                 </tr>
               ))}
@@ -149,10 +171,20 @@ export function JudgeCycles({ cycles, registry }: { cycles: Cycle[]; registry: R
           </table>
         </div>
         <figcaption>
-          Balanced accuracy is the mean of passing conversations left alone and wrong-plan failures stopped at the plan. A gate
-          conversation is fixed when the challenger gets it right and the champion did not. The optimiser{' '}
-          {c.optimiser.error ? `ended with an error (${c.optimiser.error}); ` : ''}took {c.optimiser.turns} turns and{' '}
-          {fmtK(c.optimiser.input_tokens)} input tokens in cycle {c.cycle}.
+          <Points
+            items={[
+              <>
+                <b>Balanced accuracy</b> is the mean of passes left alone and wrong-plan failures stopped at the plan.
+              </>,
+              <>
+                <b>Fixed</b> means the challenger got a gate conversation right that the champion got wrong.
+              </>,
+              <>
+                <b>Cycle {c.cycle}’s optimiser</b> {c.optimiser.error ? `ended with an error (${c.optimiser.error}); ` : ''}took{' '}
+                {c.optimiser.turns} turns and {fmtK(c.optimiser.input_tokens)} input tokens.
+              </>,
+            ]}
+          />
           <span className="path">judges/airline/plan/ledger.jsonl · registry.json · src/tau2_loop/tooljudge/loop.py</span>
         </figcaption>
       </figure>
@@ -216,7 +248,10 @@ export function JudgeCycles({ cycles, registry }: { cycles: Cycle[]; registry: R
                 <tbody>
                   {Object.entries(g.bars).map(([k, b]) => (
                     <tr key={k}>
-                      <td className="small">{BAR_NAMES[k] ?? k}</td>
+                      <td className="small">
+                        {BAR_NAMES[k] ?? k}
+                        {bars[k] ? ` ${barText(bars[k], k === 'balanced_accuracy' ? null : (gateN[k] ?? null))}` : ''}
+                      </td>
                       <td>
                         <Meets v={b.champion} />
                       </td>

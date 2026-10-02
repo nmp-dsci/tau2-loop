@@ -57,6 +57,9 @@ export const domainPath = (domain: string, lens?: Lens): string =>
 export const taskPath = (id: string, lens?: Lens): string => `/evals/${encPath(id)}${search(lens)}`;
 /** The LLM judge's eval set on a dataset (s11): `/evals/airline/judge`. */
 export const judgeEvalsPath = (domain: string, lens?: Lens): string => `/evals/${enc(domain)}/judge${search(lens)}`;
+/** One golden conversation open in that eval set: `/evals/airline/judge/<run>/<task>/t<n>`. */
+export const judgeConvPath = (domain: string, key: string, lens?: Lens): string =>
+  `/evals/${enc(domain)}/judge/${encPath(key)}${search(lens)}`;
 export const runsPath = (lens?: Lens): string => `/runs${search(lens)}`;
 export const runPath = (runId: string, lens?: Lens): string => `/runs/${enc(runId)}${search(lens)}`;
 /** One conversation of one run: `/runs/<run>/0/t1`. */

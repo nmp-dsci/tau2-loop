@@ -19,7 +19,7 @@ const NAV: [Tab, string][] = [
   ['review', 'Review'],
 ];
 
-/** The eight tabs, each opening at its address under the current scope (dataset, agent, model). */
+/** The eight tabs, each opening at its address under the current scope (dataset, agent, experiment). */
 function Tabs() {
   const { href, tab } = useScope();
   return (

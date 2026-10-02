@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   type RunMeta,
   type TaskResult,
+  byTask,
   domainLabel,
   fmtK,
   fmtPct,
@@ -12,7 +13,7 @@ import {
   useGet,
   when,
 } from '../lib/api';
-import { Loading, Rate } from '../lib/ui';
+import { Loading, Points, Rate } from '../lib/ui';
 import { agentPath, runPath, runsPath, trialId, trialPath, useLens } from '../lib/url';
 
 /**
@@ -107,7 +108,8 @@ export function Run() {
           ? r.correct === false
           : true,
     )
-    .filter((r) => (q ? `${r.task_id} ${r.purpose}`.toLowerCase().includes(q) : true));
+    .filter((r) => (q ? `${r.task_id} ${r.purpose}`.toLowerCase().includes(q) : true))
+    .sort((a, b) => byTask(a.task_id, b.task_id) || a.trial - b.trial);
 
   // only runs of the same domain and split can be paired task by task
   const pairable = (runs ?? []).filter(
@@ -152,19 +154,35 @@ export function Run() {
       </div>
 
       <h2>1 · What it cost, as a distribution</h2>
-      <p>
-        Totals hide the tail that decides whether a full-split run fits a subscription window. The
-        median conversation here takes {profile.metrics.turns.p50} agent turns; the 95th takes{' '}
-        {profile.metrics.turns.p95}.
-        {profile.hit_turn_cap > 0
-          ? ` ${profile.hit_turn_cap} never got to answer: they ran out of turns.`
-          : ' None ran out of turns.'}
-      </p>
+      <Points
+        items={[
+          <>
+            <b>The median conversation takes {profile.metrics.turns.p50} agent turns</b>; the 95th
+            percentile takes {profile.metrics.turns.p95}.
+          </>,
+          profile.hit_turn_cap > 0 ? (
+            <>
+              <b>
+                {profile.hit_turn_cap} of {profile.n} ran out of turns
+              </b>{' '}
+              before they could answer.
+            </>
+          ) : (
+            <>
+              <b>None of {profile.n} ran out of turns.</b>
+            </>
+          ),
+          <>
+            <b>The tail, not the total</b>, decides whether a full-split run fits a subscription
+            window.
+          </>,
+        ]}
+      />
       <div className="tw">
         <table>
           <caption>
             {profile.n} conversations ({meta.n_tasks} tasks × {meta.trials} trial
-            {meta.trials > 1 ? 's' : ''}). Nearest-rank percentiles, so every figure is a real
+            {meta.trials > 1 ? 's' : ''}); nearest-rank percentiles, so each figure is a real
             conversation's.
           </caption>
           <thead>
@@ -201,16 +219,25 @@ export function Run() {
           </tbody>
         </table>
       </div>
-      <p className="small muted">
-        cost per passing conversation{' '}
-        {profile.cost_per_pass != null ? `$${profile.cost_per_pass.toFixed(3)}` : '—'} · per
-        conversation attempted{' '}
-        {profile.cost_per_conversation != null
-          ? `$${profile.cost_per_conversation.toFixed(3)}`
-          : '—'}{' '}
-        · tokens per pass {fmtK(profile.tokens_per_pass)}. Every call ran on the subscription, so the
-        amount paid was $0; these are litellm's per-token estimates.
-      </p>
+      <Points
+        className="small muted"
+        items={[
+          <>
+            <b>
+              Cost per passing conversation{' '}
+              {profile.cost_per_pass != null ? `$${profile.cost_per_pass.toFixed(3)}` : '—'}
+            </b>
+            ; per conversation attempted{' '}
+            {profile.cost_per_conversation != null
+              ? `$${profile.cost_per_conversation.toFixed(3)}`
+              : '—'}
+            ; tokens per pass {fmtK(profile.tokens_per_pass)}.
+          </>,
+          <>
+            <b>$0 paid</b>: every call ran on the subscription; costs are litellm's per-token estimates.
+          </>,
+        ]}
+      />
 
       <h2>2 · Every conversation</h2>
       <div className="filters">
@@ -320,13 +347,23 @@ function Gate({ cmp, v, focus }: { cmp: ComparePayload; v: Verdict; focus: strin
         3 · The gate — {shortRun(cmp.a.run_id)} vs {shortRun(cmp.b.run_id)}:{' '}
         <span className={v.promote ? 'v-ok' : 'v-warn'}>{v.promote ? 'promote' : 'hold'}</span>
       </h2>
-      <p>
-        Two runs of the same tasks, paired by task{(v.trials ?? 1) > 1 ? `, each scored by its pass fraction over ${v.trials} trials` : ''};
-        only the tasks that changed count — {v.fixed.length} fixed, {v.broken.length} broken of {discordant}. Under "no real
-        difference" each is a coin flip, so p = P(breaks ≤ {v.broken.length} | {discordant}, ½) = {v.p_value.toFixed(3)}. The
-        gate promotes at p &lt; {v.alpha} (five fixes with no break, seven with one), or when the challenger fixes at least one
-        task and breaks none.
-      </p>
+      <Points
+        items={[
+          <>
+            <b>Only the tasks that changed count</b>: {v.fixed.length} fixed and {v.broken.length} broken, of {discordant}
+            {(v.trials ?? 1) > 1 ? `, each task scored by its pass fraction over ${v.trials} trials` : ''}.
+          </>,
+          <>
+            <b>
+              p = P(breaks ≤ {v.broken.length} | {discordant}, ½) = {v.p_value.toFixed(3)}
+            </b>
+            : with no real difference, each change is a coin flip.
+          </>,
+          <>
+            <b>It promotes at p &lt; {v.alpha}</b> (five fixes and no break, seven with one), or on at least one fix and no break.
+          </>,
+        ]}
+      />
       {cmp.note && <p className="warn-note v-warn">Not the gate's comparison: {cmp.note}.</p>}
       {!sameShape && (
         <p className="warn-note v-warn">
@@ -369,9 +406,7 @@ function Gate({ cmp, v, focus }: { cmp: ComparePayload; v: Verdict; focus: strin
       </div>
       <div className="tw">
         <table>
-          <caption>
-            One row per task. A row where the two disagree is what the test is computed from.
-          </caption>
+          <caption>One row per task; the test counts only the rows where the two disagree.</caption>
           <thead>
             <tr>
               <th>task</th>

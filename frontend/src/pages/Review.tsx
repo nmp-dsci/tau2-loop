@@ -12,8 +12,8 @@ import {
   useGet,
   when,
 } from '../lib/api';
-import { Kpi, Loading } from '../lib/ui';
-import { modelFamily } from '../lib/scope';
+import { Kpi, Loading, Points } from '../lib/ui';
+import { useExp } from '../lib/scope';
 import { reviewPath, runPath, trialId, trialPath, useLens } from '../lib/url';
 
 /**
@@ -66,15 +66,15 @@ export function Review() {
   const [nonce, setNonce] = useState(0);
   const { data: health } = useGet<Health>('/healthz');
   const { data: runs } = useGet<RunMeta[]>('/api/runs');
-  // the scope bar: this dataset's runs, on its model when one is set
+  // the scope bar: this dataset's runs, of its experiment when one is set
   const scopeDomain = lens.get('domain') ?? '';
-  const scopeModel = lens.get('model') ?? '';
+  const exp = useExp();
   const scored = (runs ?? []).filter(
     (r) =>
       !r.dry_run &&
       r.summary?.n_scored &&
       (!scopeDomain || r.domain === scopeDomain) &&
-      (!scopeModel || modelFamily(r.model) === scopeModel),
+      (!exp || r.agent === exp),
   );
   const run = lens.get('run') || openRun || scored[scored.length - 1]?.run_id || '';
   const { data: index, error } = useGet<ReviewIndex>(
@@ -101,18 +101,28 @@ export function Review() {
         The NL judge is a <em>model</em>. Without a human label set, a regression and a judge flake
         look the same
       </h1>
-      <p className="lead">
-        Four of τ²'s five checks are deterministic — the database hash, the expected actions, the
-        things that must be said, the environment assertions. The fifth asks a model whether a
-        sentence is true of the transcript, and it can be wrong twice: by missing a real failure, and
-        by inventing one. This page records what a person thought, beside what the judge scored.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>This page records a person's verdict</b> beside the judge's score for each
+            conversation.
+          </>,
+          <>
+            <b>The NL check asks a model</b> if a sentence is true of the transcript, so it can miss
+            a failure or invent one.
+          </>,
+          <>
+            <b>The other four of τ²'s five checks are deterministic</b>: database hash, actions, things
+            said, environment.
+          </>,
+        ]}
+      />
 
       {!index.writable && (
         <div className="empty">
-          <b>Read only.</b> {index.reason || health?.mode === 'demo' ? index.reason : ''} Reviews are
-          the one thing here that is not a committed file, so they need the central Postgres; every
-          other page works without it.
+          <b>Read only.</b> {index.reason || health?.mode === 'demo' ? index.reason : ''} Reviews need
+          the central Postgres; every other page works without it.
         </div>
       )}
 
@@ -120,7 +130,7 @@ export function Review() {
         <Kpi n={String(reviewed)} b={`conversations reviewed${run ? ` in ${shortRun(run)}` : ''}`} />
         <Kpi
           n={String(index.tally.agree ?? 0)}
-          b="where the judge was right — the ordinary case, and the one worth counting"
+          b="where the judge was right, the ordinary case"
           tone="ok"
         />
         <Kpi
@@ -135,11 +145,20 @@ export function Review() {
         />
       </div>
       {reviewed > 0 && (
-        <p className="small muted">
-          {fmtPct(disagreed / reviewed)} of reviewed conversations were scored in a way a person
-          disputed. Until that number is small, a change of a point or two in a pass rate is not
-          evidence of anything.
-        </p>
+        <Points
+          className="small muted"
+          items={[
+            <>
+              <b>
+                {disagreed} of {reviewed} reviewed conversations ({fmtPct(disagreed / reviewed)})
+              </b>{' '}
+              were scored in a way a person disputed.
+            </>,
+            <>
+              <b>Until that is small</b>, a pass rate moving a point or two is not evidence.
+            </>,
+          ]}
+        />
       )}
 
       <div className="filters">
@@ -149,7 +168,7 @@ export function Review() {
             value={run}
             onChange={(e) => {
               setLens({ run: e.target.value });
-              nav(reviewPath(undefined, undefined, { run: e.target.value, domain: scopeDomain, model: scopeModel }));
+              nav(reviewPath(undefined, undefined, { run: e.target.value, domain: scopeDomain, exp }));
             }}
           >
             {scored.map((r) => (
@@ -189,8 +208,8 @@ export function Review() {
         <div className="tw">
           <table>
             <caption>
-              {domainLabel(meta.domain)} · {meta.agent} · {meta.split}. Pick a conversation to read
-              the judge's verdict and record your own.
+              {domainLabel(meta.domain)} · {meta.agent} · {meta.split}. Pick a conversation to review
+              the judge's verdict.
             </caption>
             <thead>
               <tr>
@@ -419,8 +438,8 @@ function Editor({
             </table>
           </div>
           <p className="small muted">
-            Rows are append-only and the judge's reward is copied at the time of review, so a later
-            re-score cannot quietly rewrite what was disagreed with.
+            Rows are append-only and keep the judge's reward at review time, so a re-score cannot
+            rewrite them.
           </p>
         </>
       )}

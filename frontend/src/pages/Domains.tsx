@@ -4,11 +4,12 @@ import {
   type DomainDetail,
   type DomainSummary,
   type TaskRow,
+  byTask,
   domainLabel,
   shortTask,
   useGet,
 } from '../lib/api';
-import { Loading } from '../lib/ui';
+import { Loading, Points } from '../lib/ui';
 import { domainPath, taskId as makeTaskId, taskPath, useLens } from '../lib/url';
 
 /**
@@ -27,17 +28,26 @@ export function Domains() {
         Four domains, each a policy, a toolset and a database; nothing is <em>held out</em>, so the
         test split is ours
       </h1>
-      <p className="lead">
-        τ²-bench ships every task with its answer key. The loop therefore cuts its own split per
-        domain — half of the public <code>base</code> set for train, half for test, drawn with seed
-        300 and committed under <code>data/splits/</code> — and the agent reads only the policy and
-        the tools; the scenario and the expected actions stay with the simulator and the evaluator.
-        This is the cut's second version: the first drew 20 train and 20 test per domain, and both
-        lists sit inside this one on the same side, so no task that was ever test has been trained on.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>τ²-bench ships every answer key</b>, so the loop cuts its own split: half of{' '}
+            <code>base</code> for train, half for test.
+          </>,
+          <>
+            <b>No test task was ever trained on</b>: cut v2 keeps v1's 20 train and 20 test per domain
+            on the same sides.
+          </>,
+          <>
+            <b>Drawn with seed 300</b>, committed under <code>data/splits/</code>; the agent reads only
+            the policy and the tools.
+          </>,
+        ]}
+      />
       <div className="tw">
         <table>
-          <caption>Pick a domain to read its policy, its tools and every one of its tasks.</caption>
+          <caption>Pick a domain for its policy, tools and tasks.</caption>
           <thead>
             <tr>
               <th>domain</th>
@@ -70,11 +80,20 @@ export function Domains() {
           </tbody>
         </table>
       </div>
-      <p className="small muted">
-        Telecom's base set is 114 of its 2,285 generated tasks (tau2's own <code>base</code> split);
-        banking_knowledge has no tau2 split, so its base is all 97, and its odd count puts the extra
-        task on the test side. Every base task is train or test; none is held in reserve.
-      </p>
+      <Points
+        className="small muted"
+        items={[
+          <>
+            <b>Every base task is train or test</b>; none is held in reserve.
+          </>,
+          <>
+            <b>Telecom's base is 114 of its 2,285 tasks</b>, tau2's own <code>base</code> split.
+          </>,
+          <>
+            <b>banking_knowledge has no tau2 split</b>: its base is all 97, the odd one on the test side.
+          </>,
+        ]}
+      />
     </>
   );
 }
@@ -137,11 +156,19 @@ export function Domain() {
         Every base task, split in half <em>once</em>; the agent never sees a scenario or an expected
         action
       </h1>
-      <p className="lead">
-        Each task is a user scenario the simulator plays, a purpose the annotator wrote, the policy
-        clauses it exercises, and the evaluation criteria the score is a product of. Train tasks feed
-        the optimiser; test tasks are run once per challenger and only reported.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>Each task is a scenario the simulator plays</b>, with a purpose, policy clauses and the
+            criteria the score multiplies.
+          </>,
+          <>
+            <b>Train tasks feed the optimiser</b>; test tasks run once per challenger and are only
+            reported.
+          </>,
+        ]}
+      />
 
       {task && (
         <section className="card hi task-open">
@@ -215,11 +242,18 @@ export function Domain() {
               )}
             </div>
           </div>
-          <p className="small muted">
-            This is the answer key, and it is public: it ships in <code>tasks.json</code>. The
-            optimiser is shown it only for <b>failed train tasks</b>, which is why the test split is
-            the number worth reporting.
-          </p>
+          <Points
+            className="small muted"
+            items={[
+              <>
+                <b>The optimiser sees this key only for failed train tasks</b>, so test is the number
+                worth reporting.
+              </>,
+              <>
+                <b>The answer key is public</b>: it ships in <code>tasks.json</code>.
+              </>,
+            ]}
+          />
         </section>
       )}
 
@@ -325,7 +359,9 @@ export function Domain() {
   );
 }
 
+/** The column a person picked, then always task order, so equal rows never shuffle. */
 function cmp(a: TaskRow, b: TaskRow, key: SortKey): number {
-  if (key === 'id' || key === 'split') return String(a[key]).localeCompare(String(b[key]));
-  return (a[key] ?? 0) - (b[key] ?? 0);
+  if (key === 'id') return byTask(a.id, b.id);
+  const k = key === 'split' ? String(a.split).localeCompare(String(b.split)) : (a[key] ?? 0) - (b[key] ?? 0);
+  return k || byTask(a.id, b.id);
 }

@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
 import { type AgentInfo, type Registries, domainLabel, useGet } from '../lib/api';
 import { MODELS, modelFamily } from '../lib/scope';
-import { Loading } from '../lib/ui';
+import { Loading, Points } from '../lib/ui';
 import { agentPath, judgeLoopPath, runsPath, useLens } from '../lib/url';
 
 /**
@@ -32,15 +32,13 @@ const short = (m: string) => MODELS.find(([k]) => k === modelFamily(m))?.[1] ?? 
 export function JudgeAgent() {
   const { domain = 'airline' } = useParams();
   const [lens, setLens] = useLens();
-  const model = lens.get('model') ?? '';
   const { data, error } = useGet<Payload>(`/api/judge/${encodeURIComponent(domain)}/versions`);
   const { data: agents } = useGet<{ versions: AgentInfo[]; registry: Registries }>('/api/agents');
   if (!data) return <Loading error={error} />;
-  const vs = data.versions.filter((v) => !model || modelFamily(v.model) === model);
+  const vs = data.versions;
   const j = vs.find((v) => v.name === lens.get('version')) ?? vs[vs.length - 1];
   const champ = agents?.registry[domain]?.champion?.agent;
   const champInfo = agents?.versions.find((v) => v.domain === domain && v.name === champ);
-  const label = MODELS.find(([k]) => k === model)?.[1];
 
   return (
     <>
@@ -48,14 +46,23 @@ export function JudgeAgent() {
       <h1>
         The LLM judge is a second agent that only <em>reads</em>: it never talks to the customer or calls a tool
       </h1>
-      <p className="lead">
-        Two agents work on each conversation. The answering agent talks to the customer and calls the airline’s tools. The
-        LLM judge is a separate sealed session with its own rubric, model and effort; it reads the answering agent’s plan
-        before the customer sees it, and says allow or block.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>The judge reads each plan before the customer does</b> and says allow or block.
+          </>,
+          <>
+            <b>It is a separate sealed session</b> with its own rubric, model and effort.
+          </>,
+          <>
+            <b>The answering agent</b> talks to the customer and calls the tools.
+          </>,
+        ]}
+      />
       {!j ? (
         <div className="empty">
-          No LLM judge {label ? `on ${label} ` : ''}for {domainLabel(domain)} yet. Airline’s is <code>judges/airline/plan/j1/</code>;
+          No LLM judge for {domainLabel(domain)} yet. Airline’s is <code>judges/airline/plan/j1/</code>;
           s11’s J8 brings one here.
         </div>
       ) : (
@@ -148,10 +155,23 @@ export function JudgeAgent() {
               </table>
             </div>
             <figcaption>
-              The judge runs through the same sealed core (<code>llm/core.py</code>: no tools, no settings, a temporary working
-              directory), in its own session. A block stands only at confidence ≥ {j.threshold} with a rule that is verbatim in
-              the policy; an error lets the reply through.
-              {data.probe ? ` The SDK's schema-enforced output held under that core (probe on ${data.probe.sdk}, ${data.probe.at.slice(0, 10)}).` : ''}
+              <Points
+                items={[
+                  <>
+                    <b>A block stands only at confidence ≥ {j.threshold}</b> with a rule verbatim in the policy; an error lets the
+                    reply through.
+                  </>,
+                  <>
+                    <b>The same sealed core, its own session</b>: <code>llm/core.py</code>, no tools, no settings, a temporary
+                    directory.
+                  </>,
+                  data.probe ? (
+                    <>
+                      <b>Schema-enforced output held</b> under that core (probe on {data.probe.sdk}, {data.probe.at.slice(0, 10)}).
+                    </>
+                  ) : null,
+                ]}
+              />
               <span className="path">
                 judges/{domain}/{j.kind}/{j.name}/ · agents/{domain}/{champ ?? 'vN'}/ · src/tau2_loop/tooljudge/
               </span>
@@ -163,7 +183,7 @@ export function JudgeAgent() {
             <div className="label fig-title">judge.md, the judge’s whole system prompt before the policy and tools are added</div>
             <pre className="filebody">{j.files['judge.md']}</pre>
             <figcaption>
-              J3’s loop edits only this file, as numbered lessons, and is gated on the half of train it never reads.
+              J3’s loop edits only this file, as numbered lessons, gated on the train half it never reads.
               <span className="path">judges/{domain}/{j.kind}/{j.name}/judge.md</span>
             </figcaption>
           </figure>

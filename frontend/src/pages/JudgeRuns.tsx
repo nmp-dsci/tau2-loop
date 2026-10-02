@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { domainLabel, fmtK, shortRun, useGet, when } from '../lib/api';
-import { MODELS, modelFamily } from '../lib/scope';
-import { Loading } from '../lib/ui';
+import { Loading, Points } from '../lib/ui';
 import { judgeLoopPath } from '../lib/url';
 
 /**
@@ -34,30 +33,38 @@ type Replay = {
 
 const kn = (r: Rate) => (r.n ? `${r.k} / ${r.n}` : '—');
 
-export function JudgeRuns({ domain, model }: { domain: string; model: string }) {
+export function JudgeRuns({ domain }: { domain: string }) {
   const nav = useNavigate();
   const { data, error } = useGet<{ replays: Replay[]; labels: unknown }>(`/api/judge/${encodeURIComponent(domain)}`);
   if (!data) return <Loading error={error} />;
-  const reps = data.replays.filter((r) => !model || modelFamily(r.model) === model);
-  const label = MODELS.find(([k]) => k === model)?.[1];
+  const reps = data.replays;
   return (
     <>
       <p className="label">Judge replays · {domainLabel(domain)}</p>
       <h1>
         A judge replay is a <em>folder</em>: every verdict at every checkpoint, scored against the golden answers
       </h1>
-      <p className="lead">
-        Each row is <code>judge_runs/&lt;id&gt;/</code>: the LLM judge asked at every checkpoint of every train conversation it
-        would see live, with the real conversation up to that point and no gold. The verdicts never change; the scores are
-        read live, so they move when a person’s review of the golden answers is frozen in.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>
+              Each row is a folder, <code>judge_runs/&lt;id&gt;/</code>
+            </b>
+            : the judge’s verdict at every train checkpoint, never shown gold.
+          </>,
+          <>
+            <b>The verdicts never change</b>; the scores are read live, so they move when golden answers are frozen.
+          </>,
+        ]}
+      />
       {!data.labels ? (
         <div className="empty">
           No LLM judge has been calibrated on {domainLabel(domain)}: <code>make judge-labels DOMAIN={domain}</code> starts it.
         </div>
       ) : reps.length === 0 ? (
         <div className="empty">
-          No replay of the {domainLabel(domain)} judge {label ? `on ${label}` : ''} yet. <code>make judge-replay DOMAIN={domain}</code>{' '}
+          No replay of the {domainLabel(domain)} judge yet. <code>make judge-replay DOMAIN={domain}</code>{' '}
           runs one.
         </div>
       ) : (

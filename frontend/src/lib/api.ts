@@ -353,6 +353,11 @@ export function when(iso: string | null | undefined): string {
   const d = new Date(iso);
   return d.toISOString().slice(0, 16).replace('T', ' ') + 'Z';
 }
+/** Task ids in task order: 2 before 10, and named ids (telecom's) alphabetically. */
+export function byTask(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
 export function shortTask(id: string, n = 36): string {
   return id.length > n ? id.slice(0, n - 1) + '…' : id;
 }

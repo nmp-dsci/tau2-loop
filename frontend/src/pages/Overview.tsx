@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { type DomainSummary, type LedgerEntry, type RunMeta, domainLabel, fmtK, shortRun, useGet } from '../lib/api';
-import { Rate } from '../lib/ui';
+import { Points, Rate } from '../lib/ui';
 import { domainPath, optimisePath, rubricPath, runPath, runsPath } from '../lib/url';
 
 /** One object the whole strip is read from (`/api/stats`). */
@@ -49,12 +49,22 @@ export function Overview() {
       <h1>
         A policy agent on four domains, and the loop that <em>learns</em> from the conversations it failed
       </h1>
-      <p className="lead">
-        The agent is a system prompt and an optional helper on Haiku 4.5; tau2's harness owns the tools, the simulated
-        customer and the score. The loop around it is one optimiser session per cycle that reads every failed
-        conversation, edits those two files, and hands the result to a gate. Every diagnosis and every verdict is
-        kept per domain, so the next cycle starts from what the last one learnt.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>The agent is a system prompt and an optional helper</b> on Haiku 4.5; tau2 owns the tools, the simulated
+            customer and the score.
+          </>,
+          <>
+            <b>Each loop cycle is one optimiser session</b>: it reads every failed conversation, edits those two files and
+            hands them to a gate.
+          </>,
+          <>
+            <b>Every diagnosis and verdict is kept per domain</b>, so the next cycle starts from what the last one learnt.
+          </>,
+        ]}
+      />
 
       <div className="kpis">
         <div className="kpi">
@@ -83,7 +93,7 @@ export function Overview() {
         <div className="kpi">
           <div className="label">model calls billed</div>
           <div className="n ok">$0</div>
-          <div className="b">every role runs through the Claude subscription; `cost est.` on the runs page is the SDK's per-token estimate</div>
+          <div className="b">every role runs on the Claude subscription; "cost est." on Runs is only the per-token estimate</div>
         </div>
       </div>
 
@@ -131,9 +141,18 @@ export function Overview() {
           </tbody>
         </table>
       </div>
-      <p className="small muted">
-        A champion's train number is the run its registry entry points at; the test number is the last test-split run of that version. Both are folders under <code>runs/</code>. The benchmark is {stats?.base_total ?? '—'} base tasks in total; {stats?.cycles ?? 0} loop cycles have run, at an estimated ${stats?.cost_usd_est?.toFixed(2) ?? '0.00'} of tokens had they been billed.
-      </p>
+      <Points
+        className="small muted"
+        items={[
+          <>
+            <b>Train is the run the champion's registry entry points at</b>; test is that version's last test-split run.
+          </>,
+          <>
+            <b>{stats?.cycles ?? 0} loop cycles have run</b>, an estimated ${stats?.cost_usd_est?.toFixed(2) ?? '0.00'} of tokens had
+            they been billed.
+          </>,
+        ]}
+      />
 
       <h2>2 · One conversation — tau2 runs the environment, our agent is one factory in its registry</h2>
       <figure>
@@ -198,7 +217,19 @@ export function Overview() {
           <path className="ed dash" d="M838 230 L838 254" />
         </svg>
         <figcaption>
-          The harness executes tools and scores; our only code in the conversation is the factory that turns <code>system.md</code> and <code>helper.py</code> into the next reply, and the provider that carries every model call to the subscription.
+          <Points
+            items={[
+              <>
+                <b>Our only code in the conversation</b> is the factory and the provider; tau2 executes the tools and scores.
+              </>,
+              <>
+                <b>The factory</b> turns <code>system.md</code> and <code>helper.py</code> into the next reply.
+              </>,
+              <>
+                <b>The provider</b> carries every model call to the subscription.
+              </>,
+            ]}
+          />
           <span className="path">src/tau2_loop/agent/factory.py · src/tau2_loop/llm/sdk_provider.py · vendor/tau2-bench/src/tau2/orchestrator/</span>
         </figcaption>
       </figure>
@@ -237,7 +268,16 @@ export function Overview() {
           <path className="ed dash" d="M300 188 L300 130" />
         </svg>
         <figcaption>
-          The optimiser never sees the gate's verdict except through the ledger on the next cycle: what worked is a file it reads, not a memory it keeps.
+          <Points
+            items={[
+              <>
+                <b>The optimiser sees the gate's verdict only through the ledger</b>, on the next cycle.
+              </>,
+              <>
+                <b>What worked is a file it reads</b>, not a memory it keeps.
+              </>,
+            ]}
+          />
           <span className="path">src/tau2_loop/loop/{'{'}run,optimiser,ledger{'}'}.py · src/tau2_loop/eval/compare.py</span>
         </figcaption>
       </figure>

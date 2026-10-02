@@ -56,6 +56,7 @@ export const routes: RouteObject[] = [
       { id: 'evals-domain', path: '/evals/:domain', element: <Domain /> },
       // the LLM judge's eval set (s11); `judge` outranks a task id
       { id: 'evals-judge', path: '/evals/:domain/judge', element: <JudgeEvals /> },
+      { id: 'evals-judge-conv', path: '/evals/:domain/judge/:runId/:taskId/:trial', element: <JudgeEvals /> },
       { id: 'evals-task', path: '/evals/:domain/:taskId', element: <Domain /> },
 
       // how a conversation is judged

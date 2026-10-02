@@ -247,13 +247,13 @@ export function Agent() {
 
       {!versionRuns.length && runs && (
         <p className="empty">
-          {domainLabel(domain)}/{name} has no committed run, so there is no conversation to draw. Its files and the reasoning that wrote it are on <Link to={optimisePath(domain, name)}>Optimise</Link>.
+          {domainLabel(domain)}/{name} has no committed run to draw; its files and reasoning are on <Link to={optimisePath(domain, name)}>Optimise</Link>.
         </p>
       )}
       {tErr && <p className="empty">Could not load this conversation: {tErr}</p>}
       {behind && (
         <p className="empty">
-          The API behind this page is older than the page: it sent this conversation without its messages, so there is nothing to draw. Restart it with <code>make dev</code>, which now reloads itself when the code changes.
+          The API is older than this page and sent no messages to draw: restart it with <code>make dev</code>.
         </p>
       )}
 

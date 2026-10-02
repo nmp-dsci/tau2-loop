@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { post, useGet, when } from '../lib/api';
-import { CHECKS, runTag } from '../lib/judge';
-import { Kpi, Loading } from '../lib/ui';
+import { useGet, when } from '../lib/api';
+import { type Check, GoldCheck } from '../lib/goldcheck';
+import { CHECKS, runTag, runVersion } from '../lib/judge';
+import { useExp } from '../lib/scope';
+import { Kpi, Loading, Points } from '../lib/ui';
 import { goldReviewPath, trialPath, useLens } from '../lib/url';
 
 /**
@@ -45,15 +47,6 @@ type Item = {
   summary: string | null;
   problems: string[];
 };
-type Check = {
-  id: number;
-  item_id: string;
-  verdict: 'agree' | 'correct';
-  correction: { verdict?: string; check?: number | null; first_wrong_msg?: number | null };
-  note: string;
-  author: string;
-  created_at: string;
-};
 type GoldSummary = {
   records: number;
   conversations: number;
@@ -91,15 +84,18 @@ export function GoldReview() {
   const [lens, setLens] = useLens();
   const nav = useNavigate();
   const [nonce, setNonce] = useState(0);
+  const exp = useExp();
   const { data, error } = useGet<GoldIndex>(`/api/judge/${encodeURIComponent(domain)}/gold`, nonce);
   if (!data) return <Loading error={error} />;
   const s = data.summary;
   const show = lens.get('show') ?? 'todo';
   const checked = data.items.filter((i) => data.current[i.id]);
   const agreed = checked.filter((i) => data.current[i.id].verdict === 'agree').length;
-  const rows = data.items.filter((i) =>
-    show === 'todo' ? !data.current[i.id] : show === 'checked' ? !!data.current[i.id] : show === 'corrected' ? data.current[i.id]?.verdict === 'correct' : true,
-  );
+  const rows = data.items
+    .filter((i) => !exp || runVersion(i.run) === exp)
+    .filter((i) =>
+      show === 'todo' ? !data.current[i.id] : show === 'checked' ? !!data.current[i.id] : show === 'corrected' ? data.current[i.id]?.verdict === 'correct' : true,
+    );
 
   return (
     <>
@@ -107,12 +103,18 @@ export function GoldReview() {
       <h1>
         The tool judge is scored against an answer key a <em>person</em> checks
       </h1>
-      <p className="lead">
-        An annotator ({s?.annotator.model ?? 'Opus 5.5'} at {s?.annotator.effort ?? 'high'} effort) read every train
-        conversation with the task’s gold actions and the grader’s verdict in view, and wrote whether each plan, write
-        and transfer should be allowed or blocked, and why. Structure pins most of those verdicts. You check the rest,
-        and where you disagree your answer stands.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>An annotator wrote the key with gold in view</b> ({s?.annotator.model ?? 'Opus 5.5'},{' '}
+            {s?.annotator.effort ?? 'high'} effort): allow or block, and why, for every plan, write and transfer.
+          </>,
+          <>
+            <b>Structure pins most verdicts; you check the rest</b>, and where you disagree your answer stands.
+          </>,
+        ]}
+      />
       {!data.writable && (
         <div className="empty">
           <b>Read only.</b> {data.reason}
@@ -120,22 +122,22 @@ export function GoldReview() {
       )}
       {s && (
         <div className="kpis">
-          <Kpi n={`${checked.length} / ${data.items.length}`} b="cases checked by a person: every case structure could not pin, plus 20 pinned ones at random" />
+          <Kpi n={`${checked.length} / ${data.items.length}`} b="cases a person has checked: every unpinned case, plus 20 pinned ones at random" />
           {checked.length > 0 && (
             <Kpi
               n={`${agreed} / ${checked.length}`}
-              b="where the person agrees with the annotator; the bar is 90% before the judge is scored on it"
+              b="where the person agrees with the annotator; the judge is scored on it only at 90% or above"
               tone={checked.length && agreed / checked.length < 0.9 ? 'warn' : undefined}
             />
           )}
           <Kpi
             n={`${s.machine_checks.pass} / ${s.records}`}
-            b={`answers that pass every machine check: pinned verdicts unchanged, quotes verbatim in the policy and the cited message (${s.machine_checks.pass_first_time} first time)`}
+            b={`answers that pass every machine check: pins unchanged, quotes verbatim (${s.machine_checks.pass_first_time} first time)`}
             tone={s.machine_checks.fail ? 'warn' : 'ok'}
           />
           <Kpi
             n={`${s.slip_cross_check.agree ?? 0} / ${(s.slip_cross_check.agree ?? 0) + (s.slip_cross_check.disagree ?? 0)}`}
-            b="plans that led to a bad write where the annotator and the hand reading agree: wrong plan, or a slip"
+            b="plans before a bad write where annotator and hand reading agree: wrong plan, or a slip"
           />
         </div>
       )}
@@ -166,14 +168,12 @@ export function GoldReview() {
           </select>
         </label>
         <span className="count">
-          {rows.length} of {data.items.length} cases
+          {rows.length} of {data.items.length} cases{exp ? ` · ${exp}’s conversations` : ''}
         </span>
       </div>
       <div className="tw">
         <table>
-          <caption>
-            Each case is one message in one conversation. Pick one to read the annotator’s answer and check it.
-          </caption>
+          <caption>Each case is one message in one conversation; pick one to check the annotator’s answer.</caption>
           <thead>
             <tr>
               <th>conversation</th>
@@ -217,10 +217,18 @@ export function GoldReview() {
           </tbody>
         </table>
       </div>
-      <p className="small muted">
-        Checks are append-only rows in the central Postgres; <code>make judge-gold-freeze DOMAIN={domain}</code> copies the
-        current ones into <code>data/judge/{domain}_gold.jsonl</code>, which every score reads.
-      </p>
+      <Points
+        className="small muted"
+        items={[
+          <>
+            <b>Every score reads</b> <code>data/judge/{domain}_gold.jsonl</code>;{' '}
+            <code>make judge-gold-freeze DOMAIN={domain}</code> writes it.
+          </>,
+          <>
+            <b>Checks are append-only rows</b> in the central Postgres; the freeze copies the current ones.
+          </>,
+        ]}
+      />
     </>
   );
 }
@@ -228,39 +236,9 @@ export function GoldReview() {
 function ItemEditor({ domain, id, writable, onSaved, onClose }: { domain: string; id: string; writable: boolean; onSaved: () => void; onClose: () => void }) {
   const [nonce, setNonce] = useState(0);
   const { data, error } = useGet<ItemDetail>(`/api/judge/${encodeURIComponent(domain)}/gold/item?id=${encodeURIComponent(id)}`, nonce);
-  const [correcting, setCorrecting] = useState(false);
-  const [verdict, setVerdict] = useState<'allow' | 'block' | ''>('');
-  const [check, setCheck] = useState<string>('');
-  const [firstWrong, setFirstWrong] = useState<string>('');
-  const [note, setNote] = useState('');
-  const [author, setAuthor] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
   if (!data) return <Loading error={error} />;
   const a = data.answer;
   const current = data.history[0];
-
-  const save = async (kind: 'agree' | 'correct') => {
-    setSaving(true);
-    setErr(null);
-    try {
-      const correction: Record<string, unknown> = {};
-      if (kind === 'correct') {
-        if (verdict) correction.verdict = verdict;
-        if (verdict === 'block' && check) correction.check = Number(check);
-        if (data.is_first_wrong && firstWrong !== '') correction.first_wrong_msg = firstWrong === 'none' ? null : Number(firstWrong);
-      }
-      await post(`/api/review/golden/${encodeURIComponent(domain)}`, { item_id: id, verdict: kind, correction, note, author });
-      setCorrecting(false);
-      setNote('');
-      setNonce((n) => n + 1);
-      onSaved();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <section className="card hi round-open">
@@ -307,7 +285,7 @@ function ItemEditor({ domain, id, writable, onSaved, onClose }: { domain: string
                 </p>
               )}
               <p className="small muted">
-                {a.detectable ? 'Detectable from the policy and transcript alone.' : 'Only gold reveals it: a judge without gold cannot be expected to catch it.'} J0’s
+                {a.detectable ? 'Detectable from the policy and transcript alone.' : 'Only gold reveals it: a judge without gold is not expected to catch it.'} J0’s
                 label: {data.checkpoint.label}
                 {data.checkpoint.pinned ? ' (pinned)' : ''}.
               </p>
@@ -324,63 +302,18 @@ function ItemEditor({ domain, id, writable, onSaved, onClose }: { domain: string
       {data.summary && <p className="small muted">{data.summary}</p>}
       {data.problems.length > 0 && <p className="small v-warn">Machine checks still failing: {data.problems.join('; ')}</p>}
 
-      <fieldset disabled={!writable || saving}>
-        <div className="row">
-          <button type="button" className="btn" onClick={() => save('agree')}>
-            Agree
-          </button>{' '}
-          <button type="button" className="linkish" aria-expanded={correcting} onClick={() => setCorrecting((v) => !v)}>
-            Correct it
-          </button>
-          <input type="text" placeholder="who (optional)" value={author} onChange={(e) => setAuthor(e.target.value)} style={{ maxWidth: '14rem' }} />
-          {err && <span className="v-warn small">{err}</span>}
-        </div>
-        {correcting && (
-          <div className="correct-form">
-            {data.checkpoint && (
-              <div className="row">
-                <label className="pick">
-                  <span className="label">verdict</span>
-                  <select value={verdict} onChange={(e) => setVerdict(e.target.value as 'allow' | 'block' | '')}>
-                    <option value="">unchanged</option>
-                    <option value="allow">allow</option>
-                    <option value="block">block</option>
-                  </select>
-                </label>
-                {verdict === 'block' && (
-                  <label className="pick">
-                    <span className="label">check</span>
-                    <select value={check} onChange={(e) => setCheck(e.target.value)}>
-                      <option value="">—</option>
-                      {Object.entries(CHECKS).map(([k, v]) => (
-                        <option key={k} value={k}>
-                          {k} · {v}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-            )}
-            {data.is_first_wrong && (
-              <div className="row">
-                <label className="pick">
-                  <span className="label">first wrong step at message</span>
-                  <input type="text" inputMode="numeric" placeholder="a number, or none" value={firstWrong} onChange={(e) => setFirstWrong(e.target.value.trim())} style={{ maxWidth: '10rem' }} />
-                </label>
-              </div>
-            )}
-            <div className="row">
-              <textarea placeholder="why — the sentence a future reader needs" value={note} onChange={(e) => setNote(e.target.value)} />
-            </div>
-            <div className="row">
-              <button type="button" className="linkish" disabled={!note && !verdict && firstWrong === ''} onClick={() => save('correct')}>
-                record the correction
-              </button>
-            </div>
-          </div>
-        )}
-      </fieldset>
+      <GoldCheck
+        key={id}
+        domain={domain}
+        itemId={id}
+        verdictNow={data.checkpoint && a ? a.verdict : null}
+        firstWrongNow={data.is_first_wrong && data.first_wrong_step ? data.first_wrong_step.msg : null}
+        writable={writable}
+        onSaved={() => {
+          setNonce((n) => n + 1);
+          onSaved();
+        }}
+      />
       {current && (
         <p className="small muted">
           Current: {current.verdict === 'agree' ? 'agrees' : 'corrected'}

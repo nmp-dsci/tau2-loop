@@ -1,6 +1,7 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { type Event, fmtS, shortRun, shortTask, useGet } from '../lib/api';
+import type { Check } from '../lib/goldcheck';
 import { JudgePanel, type JudgeView, judgeMarks } from '../lib/judge';
 import { runPath } from '../lib/url';
 
@@ -48,9 +49,13 @@ export function Trace() {
   const { data, error } = useGet<TracePayload>(
     `/api/runs/${encodeURIComponent(runId)}/${encodeURIComponent(taskId)}/${encodeURIComponent(trial)}`,
   );
+  // a person's checks made on this page, by case id, so a correction shows without a reload
+  const [mine, setMine] = useState<Record<string, Check>>({});
   if (error) return <div className="empty">{error}</div>;
   if (!data) return <p className="muted">loading…</p>;
   const ri = data.reward_info;
+  const judge = withChecks(data.judge, mine);
+  const edit = { domain: data.domain ?? 'airline', onSaved: (c: Check) => setMine((m) => ({ ...m, [c.item_id]: c })) };
   return (
     <>
       <p className="label crumbs">
@@ -118,9 +123,17 @@ export function Trace() {
           )}
         </div>
       )}
-      {data.judge && <JudgePanel j={data.judge} domain={data.domain ?? 'airline'} />}
+      {judge && <JudgePanel j={judge} domain={edit.domain} />}
       <h2>The conversation, in order</h2>
-      <EventList events={data.events} marks={judgeMarks(data.judge)} />
+      <EventList events={data.events} marks={judgeMarks(judge, judge?.gold ? edit : undefined)} />
     </>
   );
+}
+
+/** The judge's view with this page's own checks laid over the ones the server sent. */
+function withChecks(j: JudgeView | null | undefined, mine: Record<string, Check>): JudgeView | null {
+  if (!j) return null;
+  const here = Object.values(mine).filter((c) => c.conv_key === j.labels.key);
+  if (!here.length) return j;
+  return { ...j, checks: { ...j.checks, ...Object.fromEntries(here.map((c) => [String(c.msg), c])) } };
 }

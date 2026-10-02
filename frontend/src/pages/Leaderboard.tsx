@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { domainLabel, fmtPct, shortModel, shortRun, useGet, when } from '../lib/api';
-import { Kpi, Loading } from '../lib/ui';
+import { Kpi, Loading, Points } from '../lib/ui';
 import { domainPath, runPath, useLens } from '../lib/url';
 
 /**
@@ -72,8 +72,8 @@ export function Leaderboard() {
   if (!data.entries.length) {
     return (
       <div className="empty">
-        No leaderboard ingested. <code>make leaderboard</code> reads the pinned submodule's
-        submissions folder and writes <code>data/index/leaderboard.json</code>.
+        No leaderboard ingested: <code>make leaderboard</code> writes{' '}
+        <code>data/index/leaderboard.json</code> from the pinned submodule.
       </div>
     );
   }
@@ -98,13 +98,21 @@ export function Leaderboard() {
         Every entry is <em>self-reported</em>: a team runs the harness itself and opens a pull
         request
       </h1>
-      <p className="lead">
-        There is no holdout server and no submission endpoint. The board at taubench.com renders a
-        folder of <code>submission.json</code> files in the upstream repo, one per entry, and a
-        maintainer merges the pull request that adds one. That is why{' '}
-        <code>methodology.verification</code> matters more than the number beside it: it is the only
-        thing separating a standard run from one with rewritten prompts.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>There is no holdout server</b>: taubench.com renders the upstream repo's{' '}
+            <code>submission.json</code> files, one per merged pull request.
+          </>,
+          <>
+            <b>
+              <code>methodology.verification</code> matters more than the score
+            </b>
+            : it alone tells a standard run from one with rewritten prompts.
+          </>,
+        ]}
+      />
 
 
       <div className="kpis">
@@ -134,8 +142,7 @@ export function Leaderboard() {
         <table>
           <caption>
             Ingested from <code>{data.source}</code> at <code>{data.tau2_sha}</code> · {data.listed}{' '}
-            submissions listed in the manifest. pass^k is the probability that all k trials of a task
-            pass, as the site reports it.
+            submissions in the manifest · pass^k: the chance that all k trials of a task pass.
           </caption>
           <thead>
             <tr>
@@ -194,8 +201,7 @@ export function Leaderboard() {
         <div className="tw">
           <table>
             <caption>
-              Our own <code>pass^k</code>, from each run's summary — the same statistic the board
-              reports, over a different set of tasks.
+              Our own <code>pass^k</code>: the board's statistic, over a different set of tasks.
             </caption>
             <thead>
               <tr>
@@ -239,17 +245,24 @@ export function Leaderboard() {
       )}
 
       <h2>3 · What a submission of ours would have to declare</h2>
-      <p>
-        Four differences, each of which the form asks about. Three of them would make the entry
-        unverified, and the fourth means the numbers above are not measuring the same thing as the
-        board.
-      </p>
+      <Points
+        items={[
+          <>
+            <b>Three of the four would make the entry unverified</b>; the submission form asks about
+            each.
+          </>,
+          <>
+            <b>The fourth, the task set</b>, means our numbers above do not measure what the board
+            does.
+          </>,
+        ]}
+      />
       <div className="cards">
         <div className="card">
           <h3>The user simulator</h3>
           <p className="small">
-            Ours is <code>{data.our_caveats.user_simulator}</code>. The board's entries mostly use
-            gpt-5.2. The simulator is half the conversation, so this alone moves a pass rate.
+            Ours is <code>{data.our_caveats.user_simulator}</code>; most entries use gpt-5.2. The
+            simulator is half the conversation, so this alone moves a pass rate.
           </p>
         </div>
         <div className="card">
@@ -259,21 +272,20 @@ export function Leaderboard() {
         <div className="card">
           <h3>The prompts</h3>
           <p className="small">
-            {data.our_caveats.prompts} — which is the point of this project, and which the form
-            records as <code>modified_prompts: true</code>.
+            {data.our_caveats.prompts}, which is the point of this project.
           </p>
         </div>
         <div className="card">
           <h3>The task set</h3>
           <p className="small">
-            {data.our_caveats.split}. A submission must run the whole <code>base</code> set; see{' '}
-            <Link to={domainPath(domain)}>{domainLabel(domain)}</Link> for how big that is.
+            {data.our_caveats.split}. A submission must run the whole <code>base</code> set;{' '}
+            <Link to={domainPath(domain)}>{domainLabel(domain)}</Link> gives its size.
           </p>
         </div>
       </div>
       <p className="small muted">
-        The plan for closing that gap is <code>.lavish/s03_eval-submission-plan.html</code>: score
-        one domain's full base set at four trials, then prepare and validate a submission.
+        The plan, <code>.lavish/s03_eval-submission-plan.html</code>: score one domain's full base
+        set at four trials, then validate a submission.
       </p>
     </>
   );
