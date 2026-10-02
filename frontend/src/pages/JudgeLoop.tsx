@@ -3,14 +3,15 @@ import { domainLabel, fmtK, useGet } from '../lib/api';
 import { CHECKS, runTag } from '../lib/judge';
 import { Loading } from '../lib/ui';
 import { modelFamily } from '../lib/scope';
-import { goldReviewPath, trialPath, useLens } from '../lib/url';
+import { goldReviewPath, judgeLoopPath, trialPath, useLens } from '../lib/url';
+import { type Cycle, JudgeCycles, type Registry } from './JudgeCycles';
 
 /**
  * Optimise › judge loop (plan s11, Fig 24): the tool judge's own calibration, beside the agent's
  * loop. J0's labels, J1's golden answers, and every J2 replay scored on them as they stand now, read
  * from committed files (`data/judge/`, `judge_runs/`) so the demo image draws it too. J3's loop adds
- * its ledger here; until it runs, the page shows the first verdicts and the disagreements it will
- * read.
+ * its ledger (`judges/<domain>/plan/ledger.jsonl`) above the bar; `?replay=` picks the replay the bar
+ * and the disagreements are read from.
  */
 
 type Rate = { k: number; n: number; rate: number | null };
@@ -89,6 +90,8 @@ type Overview = {
   } | null;
   probe: { holds: boolean; sdk: string; model: string } | null;
   replays: Replay[];
+  registry: Registry | null;
+  cycles: Cycle[];
 };
 
 /** One `k / n` with its rate, per DESIGN.md's denominator rule. */
@@ -244,6 +247,25 @@ export function JudgeLoop() {
             )}
           </div>
 
+          <JudgeCycles cycles={data.cycles ?? []} registry={data.registry} />
+
+          {reps.length > 1 && (
+            <nav className="chips" aria-label="replays">
+              {reps.map((r) => (
+                <Link
+                  key={r.replay_id}
+                  className={`chip nav ${r.replay_id === rep?.replay_id ? 'on' : ''}`}
+                  to={judgeLoopPath(domain, { replay: r.replay_id, ...(model ? { model } : {}) })}
+                >
+                  {r.name}
+                  <span className="n">
+                    {r.name === data.registry?.champion ? 'champion · ' : ''}
+                    {r.replay_id.slice(9, 16)}
+                  </span>
+                </Link>
+              ))}
+            </nav>
+          )}
           {rep && (
             <>
               <h2>
@@ -292,7 +314,8 @@ export function JudgeLoop() {
                   </table>
                 </div>
                 <figcaption>
-                  J2’s first verdicts: j1, untuned. {rep.scores.all.checkpoints} checkpoints replayed
+                  {rep.name === 'j1' ? 'J2’s first verdicts: j1, untuned. ' : `${rep.name}, from the judge loop. `}
+                  {rep.scores.all.checkpoints} checkpoints replayed
                   {typeof rep.items === 'number' ? ` of ${rep.items} items` : ''}, scored on {rep.gold_records} golden answers
                   {rep.gold_human ? ` with ${rep.gold_human} of a person’s checks frozen in` : ''}; input{' '}
                   {fmtK(rep.tokens.input ?? 0)} tokens, {fmtK(rep.tokens.cache_read ?? 0)} of them cache reads. J3’s loop

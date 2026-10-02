@@ -5,8 +5,9 @@ On one conversation: J0's labels (`data/judge/<domain>.json`), J1's golden answe
 verdicts (`judge_runs/<id>/verdicts.jsonl`). Each part is None until its slice has run, so the
 Trace page grows with the slices and never shows a placeholder.
 
-Across the domain (`overview`): the label counts, the golden answers' summary, and every replay
-scored against the golden answers as they stand now, which is what Optimise's judge view draws.
+Across the domain (`overview`): the label counts, the golden answers' summary, every replay scored
+against the golden answers as they stand now, and J3's ledger and registry, which is what Optimise's
+judge view draws.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from tau2_loop.tooljudge import gold, labels, prompt, replay
+from tau2_loop.tooljudge import loop as judge_loop
 
 
 @functools.lru_cache(maxsize=8)
@@ -93,6 +95,10 @@ def overview(domain: str) -> dict[str, Any]:
         "gold": gold.summarise(domain) if gold.read_gold(domain) else None,
         "probe": labels.read_json(labels.JUDGE_DATA_DIR / "probe.json"),
         "replays": reps,
+        "registry": judge_loop.read_registry(domain)
+        if judge_loop.registry_path(domain).is_file()
+        else None,
+        "cycles": judge_loop.read_ledger(domain),
     }
 
 

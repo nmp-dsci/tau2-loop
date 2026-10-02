@@ -323,6 +323,34 @@ def judge_replay(
     console.print(f"replay: {out}")
 
 
+@app.command("judge-loop")
+def judge_loop(
+    domain: str = "airline",
+    cycles: int = 1,
+    concurrency: int = 4,
+    recheck: str | None = None,
+    why: str | None = None,
+    no_track: bool = False,
+) -> None:
+    """J3 (s11 §7): CYCLES of the plan judge's loop: lessons from the read half, gated on the gate half → judges/.
+    --recheck jN re-checks a rejected challenger's changes.json (after a guard fix, --why) with no new session."""
+    from tau2_loop.llm import require_live
+    from tau2_loop.tooljudge.loop import run_cycle, run_loop
+
+    require_live()
+    track = not no_track
+    done = (
+        [run_cycle(domain, concurrency, log=console.print, track=track, recheck=recheck, why=why)]
+        if recheck
+        else run_loop(domain, cycles, concurrency, log=console.print, track=track)
+    )
+    for e in done:
+        console.print(
+            f"cycle {e['cycle']}: {e['champion']['name']} → {e['challenger']['name']} "
+            f"{e['verdict']} · {e['reason']}"
+        )
+
+
 @app.command("judge-score")
 def judge_score(replay_id: str, why: str = "re-scored on today's golden answers") -> None:
     """J2 (s11): rewrite a finished replay's summary.json with today's scorer and gold (the verdicts never change)."""

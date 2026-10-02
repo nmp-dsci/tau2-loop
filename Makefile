@@ -85,6 +85,9 @@ JUDGE ?= j1
 judge-replay: platform-status ## J2 (s11): replay JUDGE= on every DOMAIN train checkpoint, scored on the golden answers → judge_runs/ (CONCURRENCY=)
 	uv run tau2loop judge-replay --domain $(DOMAIN) --judge $(JUDGE) --split $(SPLIT) --concurrency $(CONCURRENCY)
 
+judge-loop: platform-status ## J3 (s11): CYCLES= of the plan judge's loop on DOMAIN: an optimiser adds lessons from the read half, the gate half decides → judges/DOMAIN/plan/ (CONCURRENCY=)
+	uv run tau2loop judge-loop --domain $(DOMAIN) --cycles $(CYCLES) --concurrency $(CONCURRENCY)
+
 judge-score: ## J2 (s11): rewrite REPLAY=<judge_runs id>'s summary with today's scorer and gold (WHY="…"); verdicts never change
 	uv run tau2loop judge-score $(REPLAY) $(if $(WHY),--why "$(WHY)")
 
@@ -126,4 +129,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-score help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

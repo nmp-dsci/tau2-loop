@@ -143,3 +143,67 @@ def log_replay(run_dir: Path, summary: dict[str, Any]) -> str:
             return str(run.info.run_id)
     except Exception as e:  # noqa: BLE001
         return f"not logged ({type(e).__name__}: {e})"
+
+
+def log_cycle(entry: dict[str, Any]) -> str:
+    """One J3 cycle as an MLflow run (`kind=judge-cycle`); returns its id, or a note when refused."""
+    import json
+    import tempfile
+
+    import mlflow
+
+    try:
+        exp_id = _experiment()
+        name = f"{entry['domain']}_cycle{entry['cycle']}_{entry['challenger']['name']}"
+        gate = entry.get("gate") or {}
+        with mlflow.start_run(run_name=name, experiment_id=exp_id) as run:
+            mlflow.set_tags(
+                {
+                    **required_tags(),
+                    "kind": "judge-cycle",
+                    "domain": str(entry["domain"]),
+                    "verdict": str(entry["verdict"]),
+                    "champion": str(entry["champion"]["name"]),
+                    "challenger": str(entry["challenger"]["name"]),
+                }
+            )
+            mlflow.log_params(
+                {
+                    "cycle": entry["cycle"],
+                    "champion_fingerprint": entry["champion"]["fingerprint"],
+                    "challenger_fingerprint": entry["challenger"]["fingerprint"],
+                    "optimiser_model": entry["optimiser"]["model"],
+                    "optimiser_effort": entry["optimiser"]["effort"],
+                    "gate_rule": gate.get("rule"),
+                }
+            )
+            metrics: dict[str, float] = {
+                "lessons_added": float(len(entry["lessons"]["added"])),
+                "lessons_edited": float(len(entry["lessons"]["edited"])),
+                "lessons_removed": float(len(entry["lessons"]["removed"])),
+                "disagreements_read": float(entry["read"]["disagreements"]),
+                "optimiser_input_tokens": float(entry["optimiser"]["input_tokens"]),
+                "promoted": float(entry["verdict"] == "promoted"),
+            }
+            if gate:
+                ba = gate["balanced_accuracy"]
+                metrics.update(
+                    {
+                        "gate_fixed": float(len(gate["fixed"])),
+                        "gate_broken": float(len(gate["broken"])),
+                        "gate_p_value": float(gate["p_value"]),
+                    }
+                )
+                for who in ("champion", "challenger"):
+                    if ba[who] is not None:
+                        metrics[f"gate_balanced_accuracy_{who}"] = float(ba[who])
+                    if gate["read"][who] is not None:
+                        metrics[f"read_balanced_accuracy_{who}"] = float(gate["read"][who])
+            mlflow.log_metrics(metrics)
+            with tempfile.TemporaryDirectory() as tmp:
+                p = Path(tmp) / "cycle.json"
+                p.write_text(json.dumps(entry, indent=1, ensure_ascii=False))
+                mlflow.log_artifact(str(p))
+            return str(run.info.run_id)
+    except Exception as e:  # noqa: BLE001
+        return f"not logged ({type(e).__name__}: {e})"

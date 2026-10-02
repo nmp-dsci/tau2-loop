@@ -656,9 +656,12 @@ async def _run_session(
     model: str,
     effort: Effort,
     transcript: list[dict[str, Any]],
+    where: str | None = None,
 ) -> Session:
-    """One Agent SDK session inside the fence: it writes only `writable` and reads nothing fenced."""
+    """One Agent SDK session inside the fence: it writes only `writable` and reads nothing fenced.
+    `where` names the folder it writes in, for the refusal (an agent version's by default)."""
     names = ", ".join(sorted(p.name for p in writable))
+    where = where or f"agents/{domain}/{new_name}/"
 
     def deny(reason: str) -> dict[str, Any]:
         return {
@@ -677,7 +680,7 @@ async def _run_session(
         resolved = Path(path).resolve() if path else None
         if resolved is not None and resolved in writable:
             return {}
-        return deny(f"This step may write only agents/{domain}/{new_name}/: {names}.")
+        return deny(f"This step may write only {where}: {names}.")
 
     async def guard_reads(input_data: Any, tool_use_id: str | None, context: Any) -> dict[str, Any]:
         """Refuse a Read/Glob/Grep of a fenced folder or of this cycle's other challenger."""
@@ -689,7 +692,16 @@ async def _run_session(
     async def guard_bash(input_data: Any, tool_use_id: str | None, context: Any) -> dict[str, Any]:
         """No simulations, no model calls and no fenced folders from inside the optimiser session."""
         cmd = str(input_data.get("tool_input", {}).get("command", ""))
-        banned = ("tau2loop eval", "make eval", "make loop", "tau2 run", "claude ", "make smoke")
+        banned = (
+            "tau2loop eval",
+            "tau2loop judge",
+            "make eval",
+            "make loop",
+            "make judge",
+            "tau2 run",
+            "claude ",
+            "make smoke",
+        )
         if any(b in cmd for b in banned):
             return deny(
                 "The harness runs the evaluation after you finish; do not run simulations or models here."
