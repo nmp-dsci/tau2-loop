@@ -2,6 +2,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { type Check, type Checks, DOMAINS, type RunMeta, type VersionHistory, type VersionNode, domainLabel, fmtK, fmtPct, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
 import { Loading, Rate } from '../lib/ui';
 import { runPath, useLens } from '../lib/url';
+import { modelFamily } from '../lib/scope';
+import { JudgeRuns } from './JudgeRuns';
 import { DomainBars, VersionsFig, standing, versionsWidth } from '../lib/versions';
 
 /** The reward checks, in the order τ² multiplies them, with the name a column shows. */
@@ -12,6 +14,15 @@ const CHECKS: [keyof Checks, string, string][] = [
   ['nl', 'NL', "an LLM judge finds the task's NL assertions met"],
   ['env', 'env', "the environment's assertions hold at the end (telecom)"],
 ];
+
+/** `banking_knowledge_v2_train`, breakable after each underscore, so a long run name wraps instead of widening its column. */
+const breakable = (s: string) => s.split(/(?<=_)/).flatMap((part, i) => (i ? [<wbr key={i} />, part] : [part]));
+
+const PASS_K: Record<number, string> = {
+  1: 'the probability that one trial of a task passes, averaged over tasks',
+  2: 'the probability that 2 trials of a task all pass; needs a run of 2 or more trials',
+  3: 'the probability that 3 trials of a task all pass; needs a run of 3 or more trials',
+};
 
 /** passes over conversations that carry the check; muted when this domain's score does not use it */
 function CheckCell({ c, what }: { c?: Check; what: string }) {
@@ -115,18 +126,26 @@ export function Runs() {
   const { data: runs } = useGet<RunMeta[]>('/api/runs');
   const { data: snap } = useGet<Snapshot>('/api/experiments');
   const { data: hist, error: histError } = useGet<Record<string, VersionHistory>>('/api/versions');
-  const hs = DOMAINS.flatMap((d) => (hist?.[d] ? [hist[d]] : []));
   const domain = lens.get('domain') ?? '';
+  const model = lens.get('model') ?? '';
+  // the scope bar's dataset narrows the figures to it; with no dataset in the address, all four
+  const hs = DOMAINS.filter((d) => !domain || d === domain).flatMap((d) => (hist?.[d] ? [hist[d]] : []));
   const split = lens.get('split') ?? '';
   const q = (lens.get('q') ?? '').toLowerCase();
   const all = (runs ?? []).filter((r) => !r.dry_run).slice().reverse();
   const real = all
     .filter((r) => (domain ? r.domain === domain : true))
+    .filter((r) => (model ? modelFamily(r.model) === model : true))
     .filter((r) => (split ? r.split === split : true))
     .filter((r) => (q ? `${r.run_id} ${r.agent} ${r.note}`.toLowerCase().includes(q) : true));
+  // the scope bar on the LLM judge: its replays, not the answering agent's runs
+  if (lens.get('agent') === 'judge') return <JudgeRuns domain={domain || 'airline'} model={model} />;
+  // so the table fits the page: a column with nothing to show for the runs listed is left out
+  const ks = [1, 2, 3].filter((k) => k === 1 || real.some((r) => r.summary?.pass_hat_k[`pass^${k}`] != null));
+  const checks = CHECKS.filter(([key]) => real.some((r) => r.checks?.[key]));
   return (
     <>
-      <p className="label">Evaluation runs</p>
+      <p className="label">Evaluation runs · the answering agent</p>
       <h1>
         A run is a <em>folder</em>: one row per conversation, every trace, the exact agent files
       </h1>
@@ -141,17 +160,6 @@ export function Runs() {
         03 · Every run — {all.length} folders under <code>runs/</code>, each re-scorable offline
       </h2>
       <div className="filters">
-        <label className="pick">
-          <span className="label">domain</span>
-          <select value={domain} onChange={(e) => setLens({ domain: e.target.value })}>
-            <option value="">all</option>
-            {DOMAINS.map((d) => (
-              <option key={d} value={d}>
-                {domainLabel(d)}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="pick">
           <span className="label">split</span>
           <select value={split} onChange={(e) => setLens({ split: e.target.value })}>
@@ -170,34 +178,33 @@ export function Runs() {
         pass^1 · 2 · 3 are the leaderboard's statistic: the chance that all k trials of a task pass, averaged over its tasks; a run
         of one trial per task has only pass^1. A check's cell is conversations that met every item of it over those that carry
         it; a muted cell is a check τ² records in this domain but does not multiply into the score, and hovering says how many
-        items passed. Under a split, "25 × 1 trial · v2" is tasks × trials and the cut: v1 is 20 train / 20 test, v2 half of each
-        base set, and two runs on different cuts are not the same tasks.
+        items passed. Under a split, "25 × 1 trial" is tasks × trials, and the cut is v1, 20 train / 20 test, or v2, half
+        of each base set; two runs on different cuts are not the same tasks.
       </p>
-      <div className="tw">
+      <div className="tw fit">
         <table>
+          <caption>
+            A column with nothing to show for the runs listed is left out: pass^2 and pass^3 need a run of 2 or more trials, and a
+            check shows only where a listed run carries it. Each run's name starts with its dataset.
+          </caption>
           <thead>
             <tr>
               <th>run</th>
-              <th>domain</th>
               <th>agent</th>
               <th>split</th>
-              <th className="num" title="the probability that one trial of a task passes, averaged over tasks">
-                pass^1
-              </th>
-              <th className="num" title="the probability that 2 trials of a task all pass; needs a run of 2 or more trials">
-                pass^2
-              </th>
-              <th className="num" title="the probability that 3 trials of a task all pass; needs a run of 3 or more trials">
-                pass^3
-              </th>
-              {CHECKS.map(([key, label, what]) => (
+              {ks.map((k) => (
+                <th key={k} className="num" title={PASS_K[k]}>
+                  pass^{k}
+                </th>
+              ))}
+              {checks.map(([key, label, what]) => (
                 <th key={key} className="num" title={what}>
                   {label}
                 </th>
               ))}
               <th className="num">errors</th>
-              <th className="num">turns/conv</th>
-              <th className="num">tokens/conv</th>
+              <th className="num">turns / conv</th>
+              <th className="num">tokens / conv</th>
               <th className="num">time</th>
               <th>note</th>
             </tr>
@@ -205,29 +212,30 @@ export function Runs() {
           <tbody>
             {real.map((r) => (
               <tr key={r.run_id}>
-                <td className="sub nw">
-                  <Link to={runPath(r.run_id)}>{shortRun(r.run_id)}</Link>
-                  <span className="path">{when(r.started_at)}</span>
+                <td className="sub">
+                  <Link to={runPath(r.run_id)}>{breakable(shortRun(r.run_id))}</Link>
+                  <span className="path nw">{when(r.started_at)}</span>
                   <span className="path">
                     {shortModel(r.model)}
-                    {r.agent_route?.startsWith('service') ? ' via service' : ''} · user {shortModel(r.user_model)}
+                    {r.agent_route?.startsWith('service') ? ' via service' : ''}
                   </span>
+                  <span className="path">user {shortModel(r.user_model)}</span>
                 </td>
-                <td>{domainLabel(r.domain)}</td>
                 <td className="mono">
-                  {r.agent} · {r.fingerprint}
+                  {r.agent}
+                  <span className="path">{r.fingerprint}</span>
                 </td>
-                <td className="sub nw">
+                <td className="sub">
                   {r.split}
-                  <span className="path">
+                  <span className="path nw">
                     {r.n_tasks} × {r.trials} trial{r.trials > 1 ? 's' : ''}
-                    {r.split_version ? ` · v${r.split_version}` : ''}
                   </span>
+                  {r.split_version ? <span className="path">cut v{r.split_version}</span> : null}
                 </td>
-                {[1, 2, 3].map((k) => (
+                {ks.map((k) => (
                   <PassK key={k} r={r} k={k} />
                 ))}
-                {CHECKS.map(([key, , what]) => (
+                {checks.map(([key, , what]) => (
                   <CheckCell key={key} c={r.checks?.[key]} what={what} />
                 ))}
                 <td className="num">{r.summary?.errored_ids.length ?? '—'}</td>

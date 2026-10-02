@@ -1,8 +1,9 @@
 import { Link, useParams } from 'react-router-dom';
-import { DOMAINS, domainLabel, fmtK, useGet } from '../lib/api';
+import { domainLabel, fmtK, useGet } from '../lib/api';
 import { CHECKS, runTag } from '../lib/judge';
 import { Loading } from '../lib/ui';
-import { goldReviewPath, judgeLoopPath, optimisePath, trialPath } from '../lib/url';
+import { modelFamily } from '../lib/scope';
+import { goldReviewPath, trialPath, useLens } from '../lib/url';
 
 /**
  * Optimise › judge loop (plan s11, Fig 24): the tool judge's own calibration, beside the agent's
@@ -161,23 +162,19 @@ const BARS: Bar[] = [
 
 export function JudgeLoop() {
   const { domain = 'airline' } = useParams();
+  const [lens] = useLens();
+  const model = lens.get('model') ?? '';
   const { data, error } = useGet<Overview>(`/api/judge/${encodeURIComponent(domain)}`);
   if (!data) return <Loading error={error} />;
-  const rep = data.replays.find((r) => r.finished_at) ?? data.replays[0];
+  // the scope bar's model picks the judge's replays on it; `?replay=` names one
+  const reps = data.replays.filter((r) => !model || modelFamily(r.model) === model);
+  const rep = reps.find((r) => r.replay_id === lens.get('replay')) ?? reps.find((r) => r.finished_at) ?? reps[0];
   const g = rep?.scores.gate;
   const gold = data.gold;
   const lab = data.labels;
   return (
     <>
-      <nav className="chips domainbar" aria-label="domains">
-        {DOMAINS.map((d) => (
-          <Link key={d} to={judgeLoopPath(d)} className={`chip nav ${d === domain ? 'on' : ''}`}>
-            {domainLabel(d)}
-          </Link>
-        ))}
-      </nav>
-      <LoopChips domain={domain} on="judge" />
-      <p className="label">The judge loop · {domainLabel(domain)}</p>
+      <p className="label">The loop · the LLM judge · {domainLabel(domain)}</p>
       {!lab ? (
         <>
           <h1>No tool judge has been calibrated on {domainLabel(domain)}</h1>
@@ -361,19 +358,5 @@ export function JudgeLoop() {
         </>
       )}
     </>
-  );
-}
-
-/** The agent's loop and the judge's, one click apart under Optimise. */
-export function LoopChips({ domain, on }: { domain: string; on: 'agent' | 'judge' }) {
-  return (
-    <nav className="chips" aria-label="loops">
-      <Link to={optimisePath(domain)} className={`chip nav ${on === 'agent' ? 'on' : ''}`}>
-        agent loop
-      </Link>
-      <Link to={judgeLoopPath(domain)} className={`chip nav ${on === 'judge' ? 'on' : ''}`}>
-        judge loop
-      </Link>
-    </nav>
   );
 }

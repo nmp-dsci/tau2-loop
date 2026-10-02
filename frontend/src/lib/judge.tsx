@@ -174,12 +174,11 @@ function GoldLine({ a, first }: { a: GoldAnswer; first: boolean }) {
   );
 }
 
-function VerdictLine({ v, g, judge }: { v: JudgeVerdict; g: GoldAnswer | null; judge: string }) {
+function VerdictLine({ v, g }: { v: JudgeVerdict; g: GoldAnswer | null }) {
   const r = v.raw;
-  const name = judge.split('/').pop();
   return (
     <p className="small judge-line">
-      <span className="chip">plan judge {name}</span> <Status v={v.verdict} />
+      <span className="chip">verdict</span> <Status v={v.verdict} />
       {v.error ? <span className="v-warn"> · {v.error}</span> : null}
       {r && v.verdict === 'block' ? (
         <>
@@ -202,22 +201,40 @@ function VerdictLine({ v, g, judge }: { v: JudgeVerdict; g: GoldAnswer | null; j
   );
 }
 
-/** The lines on each checkpoint message: J0's label, the golden answer, the judge's verdict. */
+/** The LLM judge's bar after each checkpoint message: its verdict first, in its own voice, then the
+ *  golden answer it is scored against and J0's label. The judge is a second agent, so it gets a bar
+ *  of its own in `--judge` purple, never lines inside the answering agent's message. */
 export function judgeMarks(j: JudgeView | null | undefined): Record<number, ReactNode> {
   if (!j) return {};
-  const out: Record<number, ReactNode[]> = {};
+  const out: Record<number, { nodes: ReactNode[]; judged: boolean }> = {};
   const fw = j.labels.first_wrong;
   const gfw = j.gold?.answer?.first_wrong_step;
   j.labels.checkpoints.forEach((cp, k) => {
     const g = golden(j, cp);
-    const v = verdictOf(j, cp);
-    (out[cp.msg] ??= []).push(
-      <LabelLine key={`l${k}`} cp={cp} first={!!fw && fw.msg === cp.msg && fw.kind === cp.kind} />,
+    const v = j.verdicts ? verdictOf(j, cp) : null;
+    const bar = (out[cp.msg] ??= { nodes: [], judged: false });
+    bar.judged ||= !!v;
+    bar.nodes.push(
+      v ? <VerdictLine key={`v${k}`} v={v} g={g} /> : null,
       g ? <GoldLine key={`g${k}`} a={g} first={!!gfw && gfw.msg === cp.msg} /> : null,
-      v && j.verdicts ? <VerdictLine key={`v${k}`} v={v} g={g} judge={j.verdicts.judge} /> : null,
+      <LabelLine key={`l${k}`} cp={cp} first={!!fw && fw.msg === cp.msg && fw.kind === cp.kind} />,
     );
   });
-  return Object.fromEntries(Object.entries(out).map(([m, nodes]) => [m, <>{nodes}</>]));
+  const name = j.verdicts?.judge.split('/').pop();
+  const who = (judged: boolean) =>
+    judged ? `plan judge ${name}` : j.verdicts ? 'not asked at this checkpoint' : 'a checkpoint, not replayed yet';
+  return Object.fromEntries(
+    Object.entries(out).map(([m, bar]) => [
+      m,
+      <div key={`judge-${m}`} className="ev judge">
+        <div className="label">
+          LLM judge · {who(bar.judged)}
+          <span className="muted"> · on message {m}</span>
+        </div>
+        {bar.nodes}
+      </div>,
+    ]),
+  );
 }
 
 function count(cps: Checkpoint[], kind: Checkpoint['kind'], label: string): number {

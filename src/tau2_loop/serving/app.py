@@ -44,6 +44,7 @@ from tau2_loop.loop.history import version_history
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tooljudge import gold as judge_gold_mod
 from tau2_loop.tooljudge import labels as judge_labels
+from tau2_loop.tooljudge import replay as judge_replay_mod
 from tau2_loop.tooljudge import review as judge_review
 from tau2_loop.tooljudge import view as judge_view
 from tau2_loop.tracking.registry import read_all, read_registry
@@ -662,6 +663,27 @@ def create_app() -> FastAPI:
         """Optimise's judge view: J0's labels, J1's golden answers, every J2 replay scored on them."""
         _check_domain(domain)
         return judge_view.overview(domain)
+
+    @app.get("/api/judge/{domain}/evals")
+    def judge_evals(domain: str) -> dict[str, Any]:
+        """The LLM judge's eval set: labelled train conversations, golden answers, folds, synthetics."""
+        _check_domain(domain)
+        return judge_view.evals(domain) or {"domain": domain, "conversations": None}
+
+    @app.get("/api/judge/{domain}/versions")
+    def judge_versions(domain: str) -> dict[str, Any]:
+        """The judge agent itself: each version's rubric and config, and the SDK probe."""
+        _check_domain(domain)
+        return {
+            "versions": judge_view.versions(domain),
+            "probe": judge_labels.read_json(judge_labels.JUDGE_DATA_DIR / "probe.json"),
+        }
+
+    @app.get("/api/judge/{domain}/replays")
+    def judge_replays(domain: str) -> list[dict[str, Any]]:
+        """Every replay folder's run.json, newest first, unscored: cheap enough for a filter."""
+        _check_domain(domain)
+        return judge_replay_mod.list_replays(domain)
 
     @app.get("/api/judge/{domain}/gold")
     def judge_gold(domain: str) -> dict[str, Any]:

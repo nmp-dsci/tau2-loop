@@ -81,6 +81,11 @@ ONE INSIGHT LINE    — what it means, once, in under 25 words
   `tr.pro`). It is this project's extension to the site palette, not a site
   token, and exists because `--accent` is red here: a pass must never render
   as a failure.
+- **`--judge` means exactly one thing: the LLM judge is speaking** — its
+  message bar in a conversation, beside the answering agent's messages, so the
+  two agents never read as one voice. It is this project's only purple, added
+  2026-10-01 at the reviewer's request (plan `.lavish/s11_…`); it never marks
+  a status, an action or a link.
 - **`--amber` means exactly one thing: partial** (a warning, a caveat, a
   provisional number). `--line-3` outlines mean **designed, not built**.
 - Status is never colour alone; every glyph is accompanied by the word.
@@ -137,7 +142,8 @@ bigger unverified one.
 5. **No placeholder for a result that does not exist.** No "score coming".
 6. **No headline metric strip without stakes.** A number appears with the
    thing it measures and the baseline it beats, or not at all.
-7. **No purple, no Inter, no wide letter-spacing on display type.**
+7. **No purple, no Inter, no wide letter-spacing on display type.** The one
+   purple is `--judge`, on the LLM judge's message bar (§2 Colour).
 8. **No paragraph over 80 words; no heading that names a topic.** Two or more
     distinct points are a bold-led list, not a paragraph: structure, not blobs of text.
 9. **No published figure with no committed source.**
@@ -161,16 +167,17 @@ bigger unverified one.
 | Surface | What it is | How the brief applies |
 |---|---|---|
 | `.lavish/sNN_*.html` | the review artifact written before each change | full system: tokens block copied verbatim, assertion headings, `.dia` figures, `form.q` decision controls |
-| `frontend/` | the React + Vite demo site (served from FastAPI, deployed to App Runner as read-only) | `frontend/src/tokens.css` is the token block below, including its two recorded divergences (`--accent` red, `--ok` added); `frontend/scripts/design_lint.mjs` hard-fails on hex outside it; three voices; status words with glyphs; tables per §2; every page led by an assertion headline; no metric strip without a baseline |
+| `frontend/` | the React + Vite demo site (served from FastAPI, deployed to App Runner as read-only) | `frontend/src/tokens.css` is the token block below, including its three recorded divergences (`--accent` red, `--ok` and `--judge` added); `frontend/scripts/design_lint.mjs` hard-fails on hex outside it; three voices; status words with glyphs; tables per §2; every page led by an assertion headline; no metric strip without a baseline |
 | `README.md`, `docs/` | the repo's public face | assertion headings; every number with its denominator; figures as committed SVG with a title and caption |
 | `nmp-dsci.github.io/_projects/tau2-loop.md` | the eventual case study | the site's own contract applies, run `scripts/lint_case_study.py` there |
 
 ## 5. The tokens
 
 The light palette below is the site's
-(`nmp-dsci.github.io/assets/css/tokens.css`), with this project's two recorded
-divergences: `--accent` is red, not the site's green, and `--ok` carries the
-"passed" meaning the site's green accent carried (§2 Colour). Everything else
+(`nmp-dsci.github.io/assets/css/tokens.css`), with this project's three recorded
+divergences: `--accent` is red, not the site's green; `--ok` carries the
+"passed" meaning the site's green accent carried; and `--judge` is the LLM
+judge's voice (§2 Colour). Everything else
 is pasted into every artifact unchanged, with the dark override that follows
 it. Fonts load from Google Fonts in artifacts (the site self-hosts).
 
@@ -182,6 +189,7 @@ it. Fonts load from Google Fonts in artifacts (the site self-hosts).
   --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7; /* divergence: red, not the site's #0A6552 */
   --amber:#8A5006; --amber-soft:#F6E6CF;
   --ok:#0A6552; --ok-soft:#DFEFE8; /* project extension: passed (§2 Colour) */
+  --judge:#5B3A8C; --judge-soft:#EEE9F6; /* project extension: the LLM judge speaking (§2 Colour) */
   --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
   --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
   --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -199,6 +207,7 @@ it. Fonts load from Google Fonts in artifacts (the site self-hosts).
   --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
   --amber:#D99A4E; --amber-soft:#3A2A14;
   --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
   --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
 }}
 :root[data-theme="dark"]{ /* same values as the dark block above */ }

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { type Event, fmtS, shortRun, shortTask, useGet } from '../lib/api';
 import { JudgePanel, type JudgeView, judgeMarks } from '../lib/judge';
@@ -17,8 +17,8 @@ type RewardInfo = {
 };
 type TracePayload = { task_id: string; trial: number | null; termination_reason: string; duration: number; agent_cost: number | null; user_cost: number | null; reward_info: RewardInfo | null; events: Event[]; policy_words: number; domain?: string; judge?: JudgeView | null };
 
-/** The conversation as events. `marks` are lines keyed by message index (the tool judge's
- *  labels and verdicts), drawn inside the last event of that message. */
+/** The conversation as events. `marks` are keyed by message index (the LLM judge's bar, s11) and
+ *  drawn after the last event of that message, as a message of their own. */
 export function EventList({ events, marks = {} }: { events: Event[]; marks?: Record<number, ReactNode> }) {
   return (
     <>
@@ -26,15 +26,17 @@ export function EventList({ events, marks = {} }: { events: Event[]; marks?: Rec
         const msg = typeof e.i === 'number' ? e.i : null;
         const last = msg != null && events[i + 1]?.i !== msg;
         return (
-          <div key={i} className={`ev ${e.type === 'assistant' ? 'text' : e.type === 'user' ? 'user' : e.type === 'tool_call' ? 'tool_use' : e.type === 'tool_result' ? (e.error ? 'error' : 'tool_result') : e.type}`}>
-            <div className="label">
-              {e.type === 'assistant' ? 'agent' : e.type === 'user' ? 'user (simulated)' : e.type === 'tool_call' ? `${e.by === 'user' ? 'user' : 'agent'} → ${String(e.name)}` : e.type === 'tool_result' ? (e.error ? 'tool result · error' : 'tool result') : e.type}
-              {msg != null && <span className="muted"> · message {msg}</span>}
+          <Fragment key={i}>
+            <div className={`ev ${e.type === 'assistant' ? 'text' : e.type === 'user' ? 'user' : e.type === 'tool_call' ? 'tool_use' : e.type === 'tool_result' ? (e.error ? 'error' : 'tool_result') : e.type}`}>
+              <div className="label">
+                {e.type === 'assistant' ? 'answering agent' : e.type === 'user' ? 'user (simulated)' : e.type === 'tool_call' ? `${e.by === 'user' ? 'user' : 'answering agent'} → ${String(e.name)}` : e.type === 'tool_result' ? (e.error ? 'tool result · error' : 'tool result') : e.type}
+                {msg != null && <span className="muted"> · message {msg}</span>}
+              </div>
+              {e.type === 'tool_call' && <pre>{JSON.stringify(e.arguments, null, 1)}</pre>}
+              {(e.type === 'tool_result' || e.type === 'assistant' || e.type === 'user') && <pre>{String(e.text)}</pre>}
             </div>
-            {e.type === 'tool_call' && <pre>{JSON.stringify(e.arguments, null, 1)}</pre>}
-            {(e.type === 'tool_result' || e.type === 'assistant' || e.type === 'user') && <pre>{String(e.text)}</pre>}
             {last && msg != null && marks[msg]}
-          </div>
+          </Fragment>
         );
       })}
     </>

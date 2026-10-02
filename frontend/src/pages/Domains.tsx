@@ -8,7 +8,7 @@ import {
   shortTask,
   useGet,
 } from '../lib/api';
-import { DomainChips, Loading } from '../lib/ui';
+import { Loading } from '../lib/ui';
 import { domainPath, taskId as makeTaskId, taskPath, useLens } from '../lib/url';
 
 /**
@@ -22,7 +22,7 @@ export function Domains() {
   if (!domains) return <Loading error={error} />;
   return (
     <>
-      <p className="label">The benchmark</p>
+      <p className="label">Evals · the benchmark</p>
       <h1>
         Four domains, each a policy, a toolset and a database; nothing is <em>held out</em>, so the
         test split is ours
@@ -132,8 +132,7 @@ export function Domain() {
 
   return (
     <>
-      <DomainChips current={domain} />
-      <p className="label">Tasks</p>
+      <p className="label">Evals · the answering agent · {domainLabel(domain)}</p>
       <h1>
         Every base task, split in half <em>once</em>; the agent never sees a scenario or an expected
         action

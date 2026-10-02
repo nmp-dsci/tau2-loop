@@ -350,3 +350,28 @@ def test_the_golden_review_write_is_refused_in_the_demo_image_and_without_a_data
     assert queue["writable"] is False and queue["current"] == {}
     monkeypatch.setenv("DEMO_MODE", "1")
     assert _client().post("/api/review/golden/airline", json=body).status_code == 403
+
+
+def test_the_judge_agent_and_its_replays_are_listed_for_the_scope_bar() -> None:
+    c = _client()
+    vs = c.get("/api/judge/airline/versions").json()["versions"]
+    refs = [v["ref"] for v in vs]
+    assert refs[0] == "airline/plan/j1"
+    assert all("## The checks" in v["files"]["judge.md"] and v["model"] for v in vs)
+    # a version is listed only once it has a rubric: a rejected challenger's folder has none
+    on_disk = sorted(p.parent.name for p in judge_prompt.JUDGES_DIR.glob("airline/plan/*/judge.md"))
+    assert sorted(r.rsplit("/", 1)[1] for r in refs) == on_disk
+    reps = c.get("/api/judge/airline/replays").json()
+    assert reps and all(r["judge"] in refs for r in reps)
+    # a domain with no judge yet is an empty list, never an error
+    assert c.get("/api/judge/retail/versions").json()["versions"] == []
+    assert c.get("/api/judge/retail/replays").json() == []
+
+
+def test_evals_on_the_judge_lists_its_whole_eval_set_and_none_where_it_has_none() -> None:
+    c = _client()
+    e = c.get("/api/judge/airline/evals").json()
+    convs = e["conversations"]
+    assert len(convs) == 206 and sum(x["checkpoints"] for x in convs) == 517
+    assert {x["half"] for x in convs} == {"read", "gate"} and len(e["synthetic"]) == 31
+    assert c.get("/api/judge/retail/evals").json()["conversations"] is None

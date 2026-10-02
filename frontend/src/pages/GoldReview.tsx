@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { post, useGet, when } from '../lib/api';
 import { CHECKS, runTag } from '../lib/judge';
 import { Kpi, Loading } from '../lib/ui';
-import { goldReviewPath, reviewPath, trialPath, useLens } from '../lib/url';
+import { goldReviewPath, trialPath, useLens } from '../lib/url';
 
 /**
  * Review › golden answers (plan s11, J1). The tool judge is scored against an answer key an
@@ -75,20 +75,6 @@ type GoldIndex = {
 };
 type ItemDetail = Item & { messages: Record<string, { role: string; text: string }>; history: Check[] };
 
-/** The two things Review checks: the NL judge's scores, and the tool judge's answer key. */
-export function ReviewTabs({ current }: { current: 'conversations' | 'golden' }) {
-  return (
-    <nav className="chips domainbar" aria-label="what to review">
-      <Link to={reviewPath()} className={`chip nav ${current === 'conversations' ? 'on' : ''}`}>
-        conversations · the NL judge
-      </Link>
-      <Link to={goldReviewPath('airline')} className={`chip nav ${current === 'golden' ? 'on' : ''}`}>
-        golden answers · the tool judge
-      </Link>
-    </nav>
-  );
-}
-
 function verdictLine(a: Answer | null) {
   if (!a) return <span className="muted">no answer</span>;
   return (
@@ -117,8 +103,7 @@ export function GoldReview() {
 
   return (
     <>
-      <p className="label">Review · golden answers</p>
-      <ReviewTabs current="golden" />
+      <p className="label">Review · the LLM judge’s golden answers</p>
       <h1>
         The tool judge is scored against an answer key a <em>person</em> checks
       </h1>

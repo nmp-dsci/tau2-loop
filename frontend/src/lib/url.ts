@@ -49,11 +49,14 @@ export function parseTrialId(id: string): { task: string; trial: number } | null
 }
 
 // ── paths ─────────────────────────────────────────────────────────────────
-export const domainsPath = (lens?: Lens): string => `/domains${search(lens)}`;
+/** Evals (renamed from Domains & tasks): a dataset's eval set, under the answering agent or the LLM judge. */
+export const domainsPath = (lens?: Lens): string => `/evals${search(lens)}`;
 export const domainPath = (domain: string, lens?: Lens): string =>
-  `/domains/${enc(domain)}${search(lens)}`;
-/** A task lives under its domain: `/domains/airline/0`. */
-export const taskPath = (id: string, lens?: Lens): string => `/domains/${encPath(id)}${search(lens)}`;
+  `/evals/${enc(domain)}${search(lens)}`;
+/** A task lives under its dataset: `/evals/airline/0`. */
+export const taskPath = (id: string, lens?: Lens): string => `/evals/${encPath(id)}${search(lens)}`;
+/** The LLM judge's eval set on a dataset (s11): `/evals/airline/judge`. */
+export const judgeEvalsPath = (domain: string, lens?: Lens): string => `/evals/${enc(domain)}/judge${search(lens)}`;
 export const runsPath = (lens?: Lens): string => `/runs${search(lens)}`;
 export const runPath = (runId: string, lens?: Lens): string => `/runs/${enc(runId)}${search(lens)}`;
 /** One conversation of one run: `/runs/<run>/0/t1`. */

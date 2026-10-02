@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { DOMAINS, domainLabel, fmtPct, shortModel, shortRun, useGet, when } from '../lib/api';
+import { domainLabel, fmtPct, shortModel, shortRun, useGet, when } from '../lib/api';
 import { Kpi, Loading } from '../lib/ui';
 import { domainPath, runPath, useLens } from '../lib/url';
 
@@ -65,7 +65,7 @@ type Board = {
 const pct = (x: number | null | undefined) => (x == null ? '—' : `${x.toFixed(1)}%`);
 
 export function Leaderboard() {
-  const [lens, setLens] = useLens();
+  const [lens] = useLens();
   const { data, error } = useGet<Board>('/api/leaderboard');
   const domain = lens.get('domain') ?? 'airline';
   if (!data) return <Loading error={error} />;
@@ -106,19 +106,6 @@ export function Leaderboard() {
         thing separating a standard run from one with rewritten prompts.
       </p>
 
-      <nav className="chips domainbar" aria-label="domains">
-        {DOMAINS.map((d) => (
-          <button
-            key={d}
-            type="button"
-            className={`chip nav ${d === domain ? 'on' : ''}`}
-            onClick={() => setLens({ domain: d })}
-          >
-            {domainLabel(d)}
-            <span className="n">{data.entries.filter((e) => e.scores[d]?.pass_1 != null).length}</span>
-          </button>
-        ))}
-      </nav>
 
       <div className="kpis">
         <Kpi

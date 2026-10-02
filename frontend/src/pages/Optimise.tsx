@@ -18,7 +18,7 @@ import {
 import { Loading } from '../lib/ui';
 import { agentPath, optimisePath, runPath, useLens } from '../lib/url';
 import { CycleDumbbell, VersionsFig, frac, standing } from '../lib/versions';
-import { LoopChips } from './JudgeLoop';
+import { MODELS, modelFamily } from '../lib/scope';
 
 /**
  * The loop, as rounds. s04 M3 merged the old Loop tab (the ledger) and the old
@@ -205,9 +205,14 @@ export function Optimise() {
   const nav = useNavigate();
   const { data: ledger, error } = useGet<Record<string, LedgerEntry[]>>('/api/ledger');
   const { data: hist } = useGet<Record<string, VersionHistory>>('/api/versions');
+  const { data: agents } = useGet<{ versions: AgentInfo[] }>('/api/agents');
+  const [lens] = useLens();
+  const model = lens.get('model') ?? '';
   if (!ledger) return <Loading error={error} />;
-  const entries = ledger[domain] ?? [];
-  const counts = Object.fromEntries(DOMAINS.map((d) => [d, (ledger[d] ?? []).length]));
+  // the scope bar's model: a round counts when its challenger ran on that model
+  const modelOf = Object.fromEntries((agents?.versions ?? []).filter((v) => v.domain === domain).map((v) => [v.name, modelFamily(String(v.config.model))]));
+  const allEntries = ledger[domain] ?? [];
+  const entries = model ? allEntries.filter((e) => e.challenger && modelOf[e.challenger] === model) : allEntries;
   const hs = DOMAINS.flatMap((d) => (hist?.[d] ? [hist[d]] : []));
   const gated = hs.flatMap((h) => h.versions.filter((v) => v.made.cycle != null));
   const promoted = gated.filter((v) => v.verdict === 'promote').length;
@@ -215,21 +220,7 @@ export function Optimise() {
   const mixed = gated.filter((v) => v.verdict === 'hold' && (v.fixed ?? 0) > 0 && (v.broke ?? 0) > 0).length;
   return (
     <>
-      <nav className="chips domainbar" aria-label="domains">
-        {DOMAINS.map((d) => (
-          <Link
-            key={d}
-            to={optimisePath(d)}
-            className={`chip nav ${d === domain ? 'on' : ''}`}
-            aria-current={d === domain ? 'page' : undefined}
-          >
-            {domainLabel(d)}
-            <span className="n">{counts[d] ?? 0}</span>
-          </Link>
-        ))}
-      </nav>
-      <LoopChips domain={domain} on="agent" />
-      <p className="label">The loop</p>
+      <p className="label">The loop · the answering agent</p>
       <h1>
         A failed conversation becomes a diagnosis, a diff, and a <em>verdict</em> — and the ledger
         keeps all three
@@ -243,11 +234,17 @@ export function Optimise() {
 
       {hist?.[domain] && hist[domain].versions.length > 1 && <VersionsSection h={hist[domain]} open={version ?? null} />}
 
-      {entries.length === 0 && (
+      {allEntries.length === 0 && (
         <div className="empty">
           No cycle has run on {domainLabel(domain)}. <code>make loop DOMAIN={domain}</code> starts
           one.
         </div>
+      )}
+      {model && allEntries.length > 0 && (
+        <p className="small muted">
+          {entries.length} of {allEntries.length} rounds wrote a challenger on {MODELS.find(([k]) => k === model)?.[1] ?? model}, the scope bar’s
+          model.
+        </p>
       )}
 
       <Outlet />

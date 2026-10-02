@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tau2_loop.tooljudge import gold, labels, replay
+from tau2_loop.tooljudge import gold, labels, prompt, replay
 
 
 @functools.lru_cache(maxsize=8)
@@ -93,4 +93,88 @@ def overview(domain: str) -> dict[str, Any]:
         "gold": gold.summarise(domain) if gold.read_gold(domain) else None,
         "probe": labels.read_json(labels.JUDGE_DATA_DIR / "probe.json"),
         "replays": reps,
+    }
+
+
+def versions(domain: str) -> list[dict[str, Any]]:
+    """Every judge version of the domain, its files whole: the Agent tab's view of the judge agent."""
+    out: list[dict[str, Any]] = []
+    root = prompt.JUDGES_DIR / domain
+    if not root.is_dir():
+        return out
+    replays = replay.list_replays(domain)
+    for kind_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        for d in sorted(p for p in kind_dir.iterdir() if (p / "judge.md").is_file()):
+            j = prompt.load(domain, d.name, kind_dir.name)
+            out.append(
+                {
+                    "ref": j.ref,
+                    "kind": j.kind,
+                    "name": j.name,
+                    "model": j.model,
+                    "effort": j.effort,
+                    "threshold": j.threshold,
+                    "structured": j.structured,
+                    "fingerprint": j.fingerprint,
+                    "config": j.config,
+                    "files": {"judge.md": j.rubric, "judge.yaml": (d / "judge.yaml").read_text()},
+                    "replays": [m["replay_id"] for m in replays if m.get("judge") == j.ref],
+                }
+            )
+    return out
+
+
+def evals(domain: str) -> dict[str, Any] | None:
+    """The LLM judge's eval set: every labelled train conversation, its checkpoints and golden answer.
+
+    What Evals shows with the scope bar on the judge: the items it is scored on, the folds and
+    halves that keep the judge loop honest, and the synthetic positives. None before J0 has run."""
+    data = labels.read_labels(domain)
+    if not data:
+        return None
+    by_key = _by_key(gold.gold_path(domain))
+    rows = []
+    for c in data["conversations"]:
+        found = by_key.get(c["key"])
+        rec = found[0] if found else None
+        answers = {a["id"]: a for a in ((rec or {}).get("answer") or {}).get("checkpoints") or []}
+        ids = gold.checkpoint_ids(c)
+        live = [(cid, cp) for cid, cp in ids if cp["live"]]
+        rows.append(
+            {
+                "key": c["key"],
+                "run": c["run"],
+                "version": c["version"],
+                "model": c.get("model"),
+                "task": c["task"],
+                "trial": c["trial"],
+                "fold": c["fold"],
+                "half": c["half"],
+                "passed": c["passed"],
+                "mode": c["mode"],
+                "suspect": c.get("suspect", False),
+                "checkpoints": len(live),
+                "plans": sum(cp["kind"] == "plan" for _, cp in live),
+                "golden_blocks": sum(
+                    (answers.get(cid) or {}).get("verdict") == "block" for cid, _ in live
+                ),
+                "first_wrong": ((rec or {}).get("answer") or {}).get("first_wrong_step"),
+                "has_gold": rec is not None,
+                "human": len((rec or {}).get("human") or {}),
+            }
+        )
+    return {
+        "domain": domain,
+        "summary": data["summary"],
+        "folds": data["folds"],
+        "halves": data["halves"],
+        "conversations": rows,
+        "synthetic": [
+            {
+                k: s[k]
+                for k in ("id", "key", "msg", "task", "fold", "half", "kind", "what", "change")
+            }
+            for s in data["synthetic"]
+        ],
+        "gold": gold.summarise(domain) if by_key else None,
     }

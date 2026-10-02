@@ -13,7 +13,7 @@ import {
   when,
 } from '../lib/api';
 import { Kpi, Loading } from '../lib/ui';
-import { ReviewTabs } from './GoldReview';
+import { modelFamily } from '../lib/scope';
 import { reviewPath, runPath, trialId, trialPath, useLens } from '../lib/url';
 
 /**
@@ -66,7 +66,16 @@ export function Review() {
   const [nonce, setNonce] = useState(0);
   const { data: health } = useGet<Health>('/healthz');
   const { data: runs } = useGet<RunMeta[]>('/api/runs');
-  const scored = (runs ?? []).filter((r) => !r.dry_run && r.summary?.n_scored);
+  // the scope bar: this dataset's runs, on its model when one is set
+  const scopeDomain = lens.get('domain') ?? '';
+  const scopeModel = lens.get('model') ?? '';
+  const scored = (runs ?? []).filter(
+    (r) =>
+      !r.dry_run &&
+      r.summary?.n_scored &&
+      (!scopeDomain || r.domain === scopeDomain) &&
+      (!scopeModel || modelFamily(r.model) === scopeModel),
+  );
   const run = lens.get('run') || openRun || scored[scored.length - 1]?.run_id || '';
   const { data: index, error } = useGet<ReviewIndex>(
     run ? `/api/review?run_id=${encodeURIComponent(run)}` : '/api/review',
@@ -87,8 +96,7 @@ export function Review() {
 
   return (
     <>
-      <p className="label">Review</p>
-      <ReviewTabs current="conversations" />
+      <p className="label">Review · the answering agent’s conversations</p>
       <h1>
         The NL judge is a <em>model</em>. Without a human label set, a regression and a judge flake
         look the same
@@ -141,7 +149,7 @@ export function Review() {
             value={run}
             onChange={(e) => {
               setLens({ run: e.target.value });
-              nav(reviewPath(undefined, undefined, { run: e.target.value }));
+              nav(reviewPath(undefined, undefined, { run: e.target.value, domain: scopeDomain, model: scopeModel }));
             }}
           >
             {scored.map((r) => (
