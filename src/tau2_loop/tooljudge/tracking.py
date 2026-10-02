@@ -94,6 +94,16 @@ def _dataset(domain: str, exp_id: str) -> int:
         else datasets.create_dataset(name=name, experiment_id=exp_id, tags={"project": PROJECT})
     )
     ds.merge_records(records)
+    # a conversation that left the gold file (v0's, under the optimised-agents rule) leaves the set
+    keep = {r["inputs"]["key"] for r in records}
+    df = ds.to_df()
+    stale = [
+        str(rid)
+        for rid, inputs in zip(df.get("dataset_record_id", []), df.get("inputs", []), strict=False)
+        if isinstance(inputs, dict) and inputs.get("key") not in keep
+    ]
+    if stale:
+        ds.delete_records(stale)
     return len(records)
 
 

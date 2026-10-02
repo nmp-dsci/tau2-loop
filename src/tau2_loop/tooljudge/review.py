@@ -1,11 +1,18 @@
 """A person's check of the golden answers (s11 J1): the queue, the verdicts, and the freeze.
 
+The passed rule (2026-10-02): a passed conversation is confirmed by the grader. tau2 matched its
+database to gold's, so every write and transfer in it was right and its golden answer is `allow`
+at each, whatever the annotator said; no person checks it. A person confirms each failed one: the
+golden answer at every write and transfer, so the first call the judge should block (or none), and
+a failed conversation with no write or transfer as a whole (`WHOLE`), since the judge is never
+called in it.
+
 The queue is every case structure could not pin (`gold.review_items`) plus 20 pinned ones drawn
-at random. A person agrees with the annotator or corrects it; rows go to the central Postgres
-(`tau2_loop.gold_review`, append-only, newest current), because a person typed them after the
-run. `freeze` copies the current rows into the committed gold file as each record's `human`
-answers, and the person's answer stands wherever it differs: `effective_verdicts` is what J2 and
-J3 score against.
+at random, from failed conversations only. A person agrees with the annotator or corrects it, and
+can take a check back (`withdraw`); rows go to the central Postgres (`tau2_loop.gold_review`,
+append-only, newest current), because a person typed them after the run. `freeze` copies the
+current rows into the committed gold file as each record's `human` answers, and the person's answer
+stands wherever it differs: `effective_verdicts` is what J2 and J3 score against.
 """
 
 from __future__ import annotations
@@ -17,7 +24,9 @@ from tau2_loop.data import pg
 from tau2_loop.tooljudge import gold
 from tau2_loop.tooljudge.labels import read_labels
 
-VERDICTS = ("agree", "correct")
+VERDICTS = ("agree", "correct", "withdraw")
+#: The message number of a check on the conversation as a whole, not one message.
+WHOLE = -1
 _COLUMNS = "id, domain, item_id, conv_key, msg, verdict, correction, note, author, annotator_sha, created_at"
 
 
@@ -36,11 +45,13 @@ def add(
     author: str = "",
     annotator_sha: str = "",
 ) -> dict[str, Any]:
-    """Append one check. Raises ValueError on a verdict or an item the queue does not hold."""
+    """Append one check. Raises ValueError on a bad verdict, correction or item id."""
     if verdict not in VERDICTS:
         raise ValueError(f"verdict must be one of {VERDICTS}")
     if verdict == "correct" and not correction:
         raise ValueError("a correction says what the answer should be")
+    if verdict == "withdraw" and correction:
+        raise ValueError("a withdrawal takes a check back; it carries no correction")
     from psycopg.types.json import Jsonb
 
     key, _, msg = item_id.rpartition("#")
@@ -68,14 +79,25 @@ def add(
 
 
 def current(domain: str) -> dict[str, dict[str, Any]]:
-    """The newest check per item."""
+    """The newest check per item; an item whose newest row withdraws its check has none."""
     with pg.connect_ro() as con:
         rows = con.execute(
             f"select distinct on (item_id) {_COLUMNS} from {pg.SCHEMA}.gold_review "
             "where domain = %s order by item_id, created_at desc, id desc",
             (domain,),
         ).fetchall()
-    return {r["item_id"]: r for r in map(_row, rows)}
+    return {r["item_id"]: r for r in map(_row, rows) if r["verdict"] != "withdraw"}
+
+
+def current_conversation(domain: str, conv_key: str) -> dict[str, dict[str, Any]]:
+    """The newest check per message of one conversation, keyed by message number."""
+    with pg.connect_ro() as con:
+        rows = con.execute(
+            f"select distinct on (item_id) {_COLUMNS} from {pg.SCHEMA}.gold_review "
+            "where domain = %s and conv_key = %s order by item_id, created_at desc, id desc",
+            (domain, conv_key),
+        ).fetchall()
+    return {str(r["msg"]): r for r in map(_row, rows) if r["verdict"] != "withdraw"}
 
 
 def history(domain: str, item_id: str) -> list[dict[str, Any]]:
@@ -103,10 +125,53 @@ def queue(domain: str) -> list[dict[str, Any]]:
     out = []
     for it in items:
         rec, conv = by_key.get(it["key"]), convs.get(it["key"])
-        if rec is None or conv is None:
+        # the passed rule: the grader confirmed a pass, so nothing in it waits for a person
+        if rec is None or conv is None or conv["passed"]:
             continue
         out.append(describe(it, rec, conv))
     return sorted(out, key=lambda x: (x["key"], x["msg"]))
+
+
+def item(domain: str, item_id: str) -> dict[str, Any] | None:
+    """One case: the queue's, or a case opened from its conversation at any other write or transfer
+    the judge reviews, so a person can correct a golden answer wherever they read it, or the
+    conversation as a whole (`#-1`). A text reply is never a case: the judge is not called there
+    (s11's second rule)."""
+    found = next((i for i in queue(domain) if i["id"] == item_id), None)
+    if found is not None:
+        return found
+    key, _, msg = item_id.rpartition("#")
+    if not key or not msg.lstrip("-").isdigit():
+        return None
+    m = int(msg)
+    rec = gold.gold_by_key(domain).get(key)
+    conv = next(
+        (
+            c
+            for c in (read_labels(domain) or {"conversations": []})["conversations"]
+            if c["key"] == key
+        ),
+        None,
+    )
+    if rec is None or conv is None or not rec.get("answer"):
+        return None
+    if m == WHOLE:
+        whole = {
+            "id": item_id,
+            "msg": m,
+            "checkpoint": None,
+            "asks": ["the conversation as a whole"],
+        }
+        return describe(whole, rec, conv)
+    if m < 0:
+        return None
+    cid = next(
+        (c for c, cp in gold.checkpoint_ids(conv) if cp["msg"] == m and cp.get("judged")), None
+    )
+    if cid is None:
+        return None
+    opened = {"id": item_id, "msg": m, "checkpoint": cid, "asks": ["opened from the conversation"]}
+    return describe(opened, rec, conv)
 
 
 def describe(it: dict[str, Any], rec: dict[str, Any], conv: dict[str, Any]) -> dict[str, Any]:
@@ -188,19 +253,27 @@ def freeze(domain: str) -> dict[str, Any]:
 
 
 def effective_verdicts(record: dict[str, Any], conv: dict[str, Any]) -> dict[str, str]:
-    """Each checkpoint id's golden verdict, with the person's correction where there is one."""
+    """Each checkpoint id's golden verdict, with the person's correction where there is one; in a
+    passed conversation every write and transfer is `allow` (the passed rule)."""
     ids = gold.checkpoint_ids(conv)
     out = {c["id"]: c["verdict"] for c in (record.get("answer") or {}).get("checkpoints") or []}
     for cid, cp in ids:
         h = (record.get("human") or {}).get(str(cp["msg"]))
         if h and h["verdict"] == "correct" and h["correction"].get("verdict") in ("allow", "block"):
             out[cid] = h["correction"]["verdict"]
+        if conv["passed"] and cp.get("judged"):
+            out[cid] = "allow"
     return out
 
 
 def effective_first_wrong(record: dict[str, Any]) -> dict[str, Any] | None:
     fw = (record.get("answer") or {}).get("first_wrong_step")
-    for h in (record.get("human") or {}).values():
+    newest_first = sorted(
+        (record.get("human") or {}).values(),
+        key=lambda h: str(h.get("created_at") or ""),
+        reverse=True,
+    )
+    for h in newest_first:
         c = h.get("correction") or {}
         if h["verdict"] == "correct" and "first_wrong_msg" in c:
             m = c["first_wrong_msg"]

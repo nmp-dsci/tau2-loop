@@ -365,8 +365,10 @@ def check_answer(
 
 
 def review_items(record: dict[str, Any], conv: dict[str, Any]) -> list[dict[str, Any]]:
-    """What a person checks in this record: everything structure could not pin."""
-    if not record.get("answer"):
+    """What a person checks in this record: every write or transfer the judge reviews (s11's second
+    rule) that structure could not pin, and the golden first wrong step where it is one of them.
+    Nothing in a passed conversation: the grader confirmed it (the passed rule)."""
+    if not record.get("answer") or conv["passed"]:
         return []
     by_id = {c["id"]: c for c in record["answer"]["checkpoints"]}
     items: dict[int, dict[str, Any]] = {}
@@ -376,18 +378,20 @@ def review_items(record: dict[str, Any], conv: dict[str, Any]) -> list[dict[str,
         it["asks"].append(why)
         it["checkpoint"] = it["checkpoint"] or cid
 
-    for cid, cp in checkpoint_ids(conv):
+    judged = [(cid, cp) for cid, cp in checkpoint_ids(conv) if cp.get("judged")]
+    for cid, cp in judged:
         ans = by_id.get(cid) or {}
-        if cp["kind"] == "plan" and cp["label"] in ("wrong", "slip"):
-            add(cp["msg"], "plan · wrong or a slip", cid)
-        elif cp["kind"] == "transfer" and cp["label"] == "candidate":
+        if cp["kind"] == "transfer" and cp["label"] == "candidate":
             add(cp["msg"], "transfer in a missed-write failure", cid)
-        elif not cp["pinned"] and ans.get("verdict") == "block":
-            add(cp["msg"], f"{cp['kind']} · the annotator blocks it", cid)
+        elif not cp["pinned"]:
+            add(cp["msg"], f"{cp['kind']} · {cp['label']}, which structure does not decide", cid)
+        elif ans.get("verdict") != pinned_verdict(cp):
+            add(cp["msg"], f"{cp['kind']} · the annotator differs from J0", cid)
     fw = record["answer"].get("first_wrong_step")
     if fw:
-        at = next((c for c, cp in checkpoint_ids(conv) if cp["msg"] == fw["msg"]), None)
-        add(int(fw["msg"]), "the first wrong step", at)
+        at = next((c for c, cp in judged if cp["msg"] == fw["msg"]), None)
+        if at:
+            add(int(fw["msg"]), "the first wrong step", at)
     if record.get("problems"):
         add(-1, "machine checks failed twice", None)
     return [
@@ -399,13 +403,14 @@ def review_items(record: dict[str, Any], conv: dict[str, Any]) -> list[dict[str,
 def pinned_sample(
     records: list[dict[str, Any]], convs: dict[str, dict[str, Any]], k: int = REVIEW_PINNED_SAMPLE
 ) -> list[dict[str, Any]]:
-    """k pinned checkpoints drawn at random (seed 300): the check that pinning itself is sound."""
+    """k pinned checkpoints the judge reviews in failed conversations, drawn at random (seed 300):
+    the check that pinning itself is sound. A pass needs no check (the passed rule)."""
     pool = [
         (r["key"], cid, cp)
         for r in sorted(records, key=lambda r: r["key"])
-        if r.get("answer")
+        if r.get("answer") and not convs[r["key"]]["passed"]
         for cid, cp in checkpoint_ids(convs[r["key"]])
-        if cp["pinned"]
+        if cp["pinned"] and cp.get("judged")
     ]
     pick = random.Random(REVIEW_SEED).sample(pool, min(k, len(pool)))
     return [
@@ -435,6 +440,50 @@ def gold_by_key(domain: str) -> dict[str, dict[str, Any]]:
 
 
 QueryFn = Callable[..., Any]
+
+#: Why every checkpoint of a passed conversation is allowed (the passed rule).
+PASSED_WHY = (
+    "The conversation passed: tau2 matched its database to gold's, so every write and transfer in "
+    "it was right."
+)
+
+
+def passed_record(conv: dict[str, Any]) -> dict[str, Any]:
+    """A passed conversation's golden answer, by the passed rule and with no model call: `allow` at
+    every checkpoint and no first wrong step, because the grader already confirmed it."""
+    return {
+        "key": conv["key"],
+        "run": conv["run"],
+        "task": conv["task"],
+        "trial": conv["trial"],
+        "fold": conv["fold"],
+        "half": conv["half"],
+        "passed": True,
+        "mode": conv["mode"],
+        "annotator": {"model": "rule", "effort": "none", "prompt_sha": ""},
+        "attempts": 0,
+        "tokens": {"input": 0, "output": 0, "cache_read": 0},
+        "seconds": 0.0,
+        "answer": {
+            "summary": PASSED_WHY,
+            "first_wrong_step": None,
+            "checkpoints": [
+                {
+                    "id": cid,
+                    "verdict": "allow",
+                    "check": None,
+                    "rule": None,
+                    "evidence": [],
+                    "detectable": None,
+                    "why": PASSED_WHY,
+                    "fix": None,
+                }
+                for cid, _ in checkpoint_ids(conv)
+            ],
+        },
+        "problems": [],
+        "review": [],
+    }
 
 
 def annotate_one(
@@ -510,7 +559,8 @@ def run(
     query: QueryFn | None = None,
     log: Callable[[str], None] = print,
 ) -> list[dict[str, Any]]:
-    """Annotate every labelled train conversation not yet in the gold file (all with `redo`)."""
+    """Annotate every labelled train conversation not yet in the gold file (all with `redo`). A
+    passed one is written by the passed rule (`passed_record`), so only failures call the model."""
     from tau2_loop.llm import core
 
     query = query or core.run_query
@@ -530,15 +580,21 @@ def run(
     ]
     if limit is not None:
         todo = todo[:limit]
+    passes = [c for c in todo if c["passed"]]
+    todo = [c for c in todo if not c["passed"]]
     log(
-        f"golden answers: {len(done)} kept, {len(todo)} to write with {ANNOTATOR_MODEL} at {ANNOTATOR_EFFORT}"
+        f"golden answers: {len(done)} kept, {len(passes)} passes by the passed rule (no model), "
+        f"{len(todo)} failures to write with {ANNOTATOR_MODEL} at {ANNOTATOR_EFFORT}"
     )
     out = gold_path(domain)
     out.parent.mkdir(parents=True, exist_ok=True)
     if redo and keys is None:
         out.write_text("")
     lock = threading.Lock()
-    written: list[dict[str, Any]] = []
+    written: list[dict[str, Any]] = [passed_record(c) for c in passes]
+    if written:
+        with out.open("a") as fh:
+            fh.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in written)
     started = time.time()
 
     def one(c: dict[str, Any]) -> dict[str, Any]:
@@ -554,7 +610,7 @@ def run(
                     fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 written.append(rec)
             log(
-                f"  [{len(written)}/{len(todo)}] {rec['key']}: "
+                f"  [{len(written) - len(passes)}/{len(todo)}] {rec['key']}: "
                 + ("ok" if not rec["problems"] else f"{len(rec['problems'])} problems")
                 + f" · {rec['attempts']} call(s) · {rec['seconds']:.0f}s · {(time.time() - started) / 60:.1f} min in"
             )
@@ -595,7 +651,7 @@ def summarise(domain: str) -> dict[str, Any]:
         if f:
             fw[f["kind"]] += 1
             blame[f["blame"]] += 1
-    queue = [it for r in records for it in r.get("review") or []]
+    queue = [it for r in records if not r["passed"] for it in r.get("review") or []]
     sample = pinned_sample(records, convs)
     human: collections.Counter[str] = collections.Counter(
         h["verdict"] for r in records for h in (r.get("human") or {}).values()
@@ -607,6 +663,7 @@ def summarise(domain: str) -> dict[str, Any]:
         "domain": domain,
         "conversations": len(convs),
         "records": len(records),
+        "by_rule": sum((r.get("annotator") or {}).get("model") == "rule" for r in records),
         "machine_checks": {
             "pass": sum(not r["problems"] for r in records),
             "pass_first_time": sum(not r["problems"] and r["attempts"] == 1 for r in records),

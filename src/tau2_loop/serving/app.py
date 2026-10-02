@@ -442,8 +442,24 @@ def create_app() -> FastAPI:
             "tools": ext.get("tools") or [],
             "user_tools": ext.get("user_tools") or [],
             # s11: the tool judge's labels, golden answer and verdicts, on a labelled train conversation
-            "judge": judge_view.conversation(meta.domain, run_id, row.task_id, row.trial),
+            "judge": _judge_with_checks(meta.domain, run_id, row.task_id, row.trial),
         }
+
+    def _judge_with_checks(
+        domain: str, run_id: str, task_id: str, trial: int
+    ) -> dict[str, Any] | None:
+        """The judge's view of a conversation plus a person's checks not yet frozen into the gold
+        file, so a correction made on the conversation shows there at once."""
+        j = judge_view.conversation(domain, run_id, task_id, trial)
+        if j is None or j.get("gold") is None:
+            return j
+        db = pg.reachable()
+        j["checks"] = judge_review.current_conversation(domain, j["labels"]["key"]) if db else {}
+        j["writable"] = db and not s.demo_mode
+        j["reason"] = (
+            "" if j["writable"] else ("the demo image is read only" if s.demo_mode else _no_db())
+        )
+        return j
 
     @app.post("/api/runs/{run_id}/{task_id}/{trial}/tool")
     def playground(run_id: str, task_id: str, trial: str, body: ToolIn) -> dict[str, Any]:
@@ -709,9 +725,9 @@ def create_app() -> FastAPI:
     def judge_gold_item(domain: str, id: str) -> dict[str, Any]:  # noqa: A002 - the query's own name
         """One review item: the annotator's answer, the messages it cites, and every check of it."""
         _check_domain(domain)
-        item = next((i for i in judge_review.queue(domain) if i["id"] == id), None)
+        item = judge_review.item(domain, id)
         if item is None:
-            raise HTTPException(404, "no such review item")
+            raise HTTPException(404, "no golden answer at that message")
         return {
             **item,
             "messages": judge_review.item_messages(domain, item),
@@ -726,9 +742,9 @@ def create_app() -> FastAPI:
             raise HTTPException(403, "the demo image is read only")
         if not pg.reachable():
             raise HTTPException(503, _no_db())
-        item = next((i for i in judge_review.queue(domain) if i["id"] == body.item_id), None)
+        item = judge_review.item(domain, body.item_id)
         if item is None:
-            raise HTTPException(404, "no such review item")
+            raise HTTPException(404, "no golden answer at that message")
         try:
             return judge_review.add(
                 domain,

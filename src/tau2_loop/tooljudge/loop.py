@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import shutil
 import time
@@ -43,7 +44,7 @@ from tau2_loop.loop.guards import leak_values, leaks
 from tau2_loop.loop.optimiser import CONTEXT_DIR, _run_session, _write_context, tree_checksum
 from tau2_loop.tooljudge import prompt, replay
 from tau2_loop.tooljudge.gold import checkpoint_ids, gold_by_key, gold_path
-from tau2_loop.tooljudge.labels import labels_path, read_labels
+from tau2_loop.tooljudge.labels import UNOPTIMISED, labels_path, read_labels
 
 KIND = "plan"
 OPTIMISER_MODEL = "opus"
@@ -65,12 +66,14 @@ NO_LESSONS = (
     "None yet. J3's loop adds numbered lessons here, each a general rule, never a customer, task "
     "or\nid."
 )
-# s11 §9's bars for the plan judge, read on the gate half: (direction, limit)
+# s11 §9's bars for the plan judge, read on the gate half: (direction, limit). Two are "at most 2"
+# of the gate half, restated when v0 left the data (2026-10-02): 2 of 50 passes, 2 of 40 right
+# plans (they were 2 of 55 and 2 of 41). The viewer reads them from here.
 BARS: dict[str, tuple[str, float]] = {
     "balanced_accuracy": (">=", 0.73),
-    "passes_interrupted": ("<=", 2 / 55),
+    "passes_interrupted": ("<=", 2 / 50),
     "wrong_plans_stopped": (">=", 0.5),
-    "right_plans_blocked": ("<=", 2 / 41),
+    "right_plans_blocked": ("<=", 2 / 40),
     "pass_replies_blocked": ("<=", 0.05),
     "wrong_plans_blocked": (">=", 0.6),
     "reason_agreement": (">=", 0.7),
@@ -473,6 +476,11 @@ def build_prompt(
     n_miss = sum(d["direction"] == "miss" for d in dis)
     n_syn = sum(d["item"] == "synthetic" for d in dis)
     _, lessons = split_rubric(champion.rubric)
+    gate_passes = sum(
+        c["passed"] and c["half"] == "gate"
+        for c in (read_labels(domain) or {"conversations": []})["conversations"]
+    )
+    history = rule_era(history)
     past = (
         "\n".join(
             f"- cycle {h['cycle']}: {h['challenger']['name']} added {len(h['lessons']['added'])}, "
@@ -491,7 +499,7 @@ rubric. Its model ({champion.model}, {champion.effort} effort), its decision rul
 
 ## What the judge is for, and how it is scored
 - Interrupting a conversation that was going to succeed is the costliest mistake: a block on a right
-  reply can push the agent off a correct path. The bar is at most 2 of 55 passing conversations with
+  reply can push the agent off a correct path. The bar is at most {bar_count("passes_interrupted", gate_passes)} of {gate_passes} passing conversations with
   any block in them.
 - The gain is stopping a wrong plan before the customer agrees to it: a failed conversation whose first
   wrong step is a plan, blocked at that plan.
@@ -560,6 +568,17 @@ def outcomes(scored: dict[str, Any]) -> dict[str, dict[str, Any]]:
             right = c["first_block"] == int(c["first_wrong"]["msg"])
             out[c["key"]] = {"half": c["half"], "kind": "wrong plan", "right": right}
     return out
+
+
+def bar_count(key: str, n: int) -> int:
+    """The most (for ≤) or fewest (for ≥) of n a bar allows."""
+    op, limit = BARS[key]
+    return math.floor(limit * n + 1e-9) if op == "<=" else math.ceil(limit * n - 1e-9)
+
+
+def rule_era(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The cycles run under the optimised-agents rule: an entry records its agents from then on."""
+    return [h for h in history if h.get("agents") and not UNOPTIMISED & set(h["agents"])]
 
 
 def bars(scores: dict[str, Any]) -> dict[str, bool | None]:
@@ -837,6 +856,10 @@ def run_cycle(
         "lessons": delta,
         "labels_sha": replay._sha(labels_path(domain)),
         "gold_sha": replay._sha(gold_path(domain)),
+        # the answering agents whose traces this cycle learned from (s11's rule: never v0)
+        "agents": sorted(
+            {c["version"] for c in (read_labels(domain) or {"conversations": []})["conversations"]}
+        ),
     }
     if prev is not None:
         entry["recheck"] = {"of": prev["at"], "was": prev["reason"], "why": why}

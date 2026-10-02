@@ -1,7 +1,7 @@
 """J2 · first verdicts: a judge version replayed on every checkpoint it would see live, then scored.
 
 The replay walks each labelled train conversation and asks the judge at every checkpoint the plan
-trigger flags (517 on airline train), in order, with the real conversation up to that point, plus
+trigger flags (456 on airline train, v1 onwards), in order, with the real conversation up to that point, plus
 J0's synthetic positives (a right plan with one detail changed). Each conversation's checkpoints go
 to one worker in order, so the later ones read the earlier prefix from the prompt cache.
 

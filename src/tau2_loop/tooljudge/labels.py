@@ -1,5 +1,16 @@
 """J0 · labels: every checkpoint of every scored train conversation, from gold, with no model call.
 
+The rule (s11, 2026-10-02): the judge learns from optimised answering agents only. A version the
+loop produced (v1 onwards) is what the judge will guard; v0, the hand-written baseline, fails in
+ways no optimised agent does (it tells a user it cannot see their payment methods and never calls
+`get_user_details`), and a golden set built on it is a golden set about hallucinations. So v0's
+runs never enter the labels, the golden answers, the replays or the judge loop.
+
+The second rule (2026-10-02): the judge is called only when the agent issues a tool call that acts,
+a write or a transfer, and before it runs; never on a text reply. Those checkpoints are `judged`.
+The plan and reply checkpoints stay in the file, because golden answers are keyed by position
+(`gold.checkpoint_ids`), and `live` still marks what the retired plan judge (j1–j3) reviewed.
+
 A checkpoint is a moment the live judge could stop: a text reply (a plan, or another reply the
 plan trigger flags), a write call, or a transfer. Each gets a label from the task's gold actions,
 which no judge ever sees:
@@ -39,7 +50,7 @@ from tau2_loop.config import DATA_DIR, RUNS_DIR
 from tau2_loop.data.splits import read_split, read_task_extract
 
 JUDGE_DATA_DIR = DATA_DIR / "judge"
-LABELS_VERSION = 1
+LABELS_VERSION = 2
 
 # The fallback trigger until a reply declares its phase (s11 Fig 4): it found 101 of the 102
 # train plans, and fired on 416 of the 1,153 other text replies.
@@ -47,6 +58,31 @@ PLAN_TRIGGER = re.compile(r"(proceed|go ahead|confirm|\byes\b|correct\?|would yo
 TRANSFER = "transfer_to_human_agents"
 FOLDS = 5
 HALVES: dict[str, tuple[int, ...]] = {"read": (1, 2, 3), "gate": (4, 5)}
+
+#: The checkpoints the judge reviews, before the call runs: tool calls that change something.
+JUDGED_KINDS: frozenset[str] = frozenset({"write", "transfer"})
+
+#: Versions whose traces the judge never learns from: the baseline, before any loop cycle.
+UNOPTIMISED: frozenset[str] = frozenset({"v0"})
+
+# Folds pinned as J3's cycle 1 dealt them (2026-10-01): its optimiser read F1–F3, so re-dealing
+# after v0 left could move a task it read into the gate half. A new domain is dealt by `task_folds`.
+PINNED_FOLDS: dict[str, dict[str, int]] = {
+    "airline": {
+        t: f
+        for f, ts in enumerate(
+            [
+                ["0", "4", "23", "38", "39"],
+                ["6", "9", "30", "40", "47"],
+                ["10", "22", "33", "35", "45"],
+                ["11", "14", "20", "25", "46"],
+                ["13", "19", "24", "44", "48"],
+            ],
+            start=1,
+        )
+        for t in ts
+    },
+}
 
 # s08 §5: tasks with open problems on tau2 1.0.1 (simulator faults, grader bugs, policy
 # loopholes). Metrics are reported with and without them.
@@ -102,14 +138,22 @@ def _errored(result: dict[str, Any]) -> bool:
     return bool(result.get("error")) or str(result.get("content") or "").startswith("Error")
 
 
+def optimised(meta: dict[str, Any]) -> bool:
+    """Whether a run's answering agent came out of the loop: the judge learns from no other."""
+    return str(meta.get("agent") or "") not in UNOPTIMISED
+
+
 def _scored_traces(domain: str) -> Iterator[tuple[str, dict[str, Any], str, dict[str, Any]]]:
-    """(run id, run.json, trace file name, trace) for every finished, scored run of the domain."""
+    """(run id, run.json, trace file name, trace) for every finished, scored run of an optimised
+    agent of the domain."""
     for run_dir in sorted(p for p in RUNS_DIR.iterdir() if p.is_dir()):
         meta_path, traces = run_dir / "run.json", run_dir / "traces"
         if not meta_path.is_file() or not traces.is_dir():
             continue
         meta = json.loads(meta_path.read_text())
         if meta.get("domain") != domain or meta.get("dry_run") or not meta.get("finished_at"):
+            continue
+        if not optimised(meta):
             continue
         for f in sorted(traces.iterdir()):
             if f.suffix == ".json":
@@ -260,6 +304,8 @@ def label_conversation(
                     }
                 )
 
+    for c in cps:
+        c["judged"] = c["kind"] in JUDGED_KINDS
     # the first wrong step among what a live judge sees in order: trigger-flagged replies and
     # writes (a plan the trigger missed is reached only at its write)
     seen = [c for c in cps if c["live"] or c["kind"] == "write"]
@@ -443,7 +489,9 @@ def build(domain: str = "airline") -> dict[str, Any]:
             msgs_of[c["key"]] = t.get("messages") or []
 
     convs = by_split["train"]
-    fold_of = task_folds(convs, sorted(train))
+    fold_of = PINNED_FOLDS.get(domain) or task_folds(convs, sorted(train))
+    if set(fold_of) != train:
+        raise ValueError(f"{domain}'s pinned folds no longer match its train split: re-deal them")
     for c in convs:
         c["fold"] = fold_of.get(c["task"])
         c["half"] = half_of(c["fold"])
@@ -504,6 +552,14 @@ def summarise(
             collections.Counter(c["first_wrong"]["kind"] for c in convs if c["first_wrong"])
         ),
         "pinned": sum(cp["pinned"] for cp in cps),
+        # what the judge reviews (the second rule): checkpoints, and the messages that hold them
+        "judged": {
+            "checkpoints": sum(cp["judged"] for cp in cps),
+            "messages": sum(
+                len({cp["msg"] for cp in c["checkpoints"] if cp["judged"]}) for c in convs
+            ),
+            "conversations": sum(any(cp["judged"] for cp in c["checkpoints"]) for c in convs),
+        },
     }
     if msgs_of is not None:
         text_replies = sum(sum(1 for m in msgs_of[c["key"]] if is_text_reply(m)) for c in convs)
@@ -533,6 +589,26 @@ def read_json(path: Path) -> dict[str, Any] | None:
 
 def read_labels(domain: str) -> dict[str, Any] | None:
     return read_json(labels_path(domain))
+
+
+def unlabelled_runs(domain: str) -> list[dict[str, Any]]:
+    """Finished runs of an optimised agent with train traces that `make judge-labels` has not read
+    yet: what a new experiment adds to the judge's eval set. Reads run.json and file names only."""
+    data = read_labels(domain)
+    have = {c["run"] for c in (data or {}).get("conversations") or []}
+    train = set(read_split(domain)["train"])
+    out = []
+    for run_dir in sorted(p for p in RUNS_DIR.iterdir() if p.is_dir()):
+        meta_path, traces = run_dir / "run.json", run_dir / "traces"
+        if run_dir.name in have or not meta_path.is_file() or not traces.is_dir():
+            continue
+        meta = json.loads(meta_path.read_text())
+        if meta.get("domain") != domain or meta.get("dry_run") or not meta.get("finished_at"):
+            continue
+        n = sum(f.suffix == ".json" and f.stem.split("_")[0] in train for f in traces.iterdir())
+        if optimised(meta) and n:
+            out.append({"run": run_dir.name, "agent": meta.get("agent"), "traces": n})
+    return out
 
 
 def conversation_labels(domain: str, run: str, task: str, trial: int) -> dict[str, Any] | None:

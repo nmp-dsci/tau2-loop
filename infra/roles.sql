@@ -69,15 +69,16 @@ CREATE INDEX IF NOT EXISTS review_conversation_idx
 -- ── a person's check of one golden answer (s11 J1) ───────────────────────────
 -- The tool judge's answer key is written by an annotator that sees gold; a person agrees with
 -- each case structure could not pin, or corrects it, and the person's answer stands. Append-only
--- like `review`: the newest row per (domain, item_id) is current. `make judge-gold-freeze` copies
--- the current rows into the committed gold file, because every number the viewer shows is a file.
+-- like `review`: the newest row per (domain, item_id) is current, and a `withdraw` row takes the
+-- check back. `make judge-gold-freeze` copies the current rows into the committed gold file,
+-- because every number the viewer shows is a file.
 CREATE TABLE IF NOT EXISTS tau2_loop.gold_review (
   id             bigserial PRIMARY KEY,
   domain         text        NOT NULL,
-  item_id        text        NOT NULL,   -- <run>/<task>/t<n>#<message>
+  item_id        text        NOT NULL,   -- <run>/<task>/t<n>#<message>; #-1 is the whole conversation
   conv_key       text        NOT NULL,   -- <run>/<task>/t<n>
   msg            integer     NOT NULL,
-  verdict        text        NOT NULL CHECK (verdict IN ('agree', 'correct')),
+  verdict        text        NOT NULL CHECK (verdict IN ('agree', 'correct', 'withdraw')),
   correction     jsonb       NOT NULL DEFAULT '{}'::jsonb,
   note           text        NOT NULL DEFAULT '',
   author         text        NOT NULL DEFAULT '',
@@ -86,6 +87,10 @@ CREATE TABLE IF NOT EXISTS tau2_loop.gold_review (
 );
 CREATE INDEX IF NOT EXISTS gold_review_item_idx
   ON tau2_loop.gold_review (domain, item_id, created_at DESC);
+-- 2026-10-02: a tick in Evals can be taken back, so a table made before then learns `withdraw`
+ALTER TABLE tau2_loop.gold_review DROP CONSTRAINT IF EXISTS gold_review_verdict_check;
+ALTER TABLE tau2_loop.gold_review ADD CONSTRAINT gold_review_verdict_check
+  CHECK (verdict IN ('agree', 'correct', 'withdraw'));
 
 -- ── one row per `submit prepare` for the τ²-bench leaderboard ────────────────
 CREATE TABLE IF NOT EXISTS tau2_loop.submission (
