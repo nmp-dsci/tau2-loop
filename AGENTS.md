@@ -82,6 +82,10 @@ agents/<domain>/vN/       system.md ({policy} slot) · helper.py (hooks) · chec
                           (s09 code surfaces, each optional) · agent.yaml (frozen) · diagnosis.json
 runs/<ts>_<domain>_<vN>_<split>/  run.json · results.jsonl · traces/<task>.json · tau2_results.json · agent/
 loop/<domain>/            ledger.jsonl · registry.json;  loop/mlflow_snapshot.json for the demo
+data/judge/<domain>*      s11 tool judge: J0 labels (<domain>.json) · golden answers (_gold.jsonl) · probe.json
+judges/<domain>/plan/jN/  the plan judge: judge.md (rubric; J3 edits only its numbered lessons) · judge.yaml
+                          (model, effort, threshold) · changes.json (the optimiser's record);  ledger.jsonl · registry.json
+judge_runs/<ts>_<domain>_<jN>_train/  a judge replay: run.json · verdicts.jsonl · summary.json (immutable)
 src/tau2_loop/
   config.py               paths, Settings (boots keyless), DOMAINS, split seed
   llm/                    core (sealed: models, billing check, env allow-list, one SDK answer) · prompting (contract)
@@ -93,6 +97,9 @@ src/tau2_loop/
                           compare (the gate: pass fractions, sign test) · rescore (offline replay) · review
   loop/                   run (cycle, challenge) · optimiser (Opus session, hooks) · ledger
                           history (every version per domain: how made, the gate's runs, the reigns)
+  tooljudge/              s11: labels (J0) · gold, review (J1 golden answers, a person's checks) · prompt, core,
+                          replay (J2: a judge version on every train checkpoint, scored) · loop (J3: lessons
+                          from the read half, gated on the gate half) · view · tracking (experiment tau2-loop/judge)
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
@@ -126,6 +133,10 @@ make ab DOMAIN=banking_knowledge   two challengers from the champion on the same
                           routing optimiser; both gated and tested; at most one crowned (s09 §6)
 make ledger DOMAIN=…      make snapshot
 make gate                 CI gate: champions re-score offline to their registry entries
+make judge-labels · judge-gold · judge-gold-freeze   s11 J0–J1: label train checkpoints from gold; golden answers
+make judge-replay DOMAIN=airline JUDGE=j1   s11 J2: a judge version on every train checkpoint → judge_runs/
+make judge-loop DOMAIN=airline CYCLES=1     s11 J3: an Opus session adds lessons from the read half's
+                          disagreements; the challenger is replayed and gated, paired by conversation, on the gate half
 make leaderboard          ingest τ²-bench's published submissions → data/index/leaderboard.json
 make db-migrate           apply infra/roles.sql to the central Postgres (database `tau2`, idempotent)
 make db-smoke             zero-LLM proof this project can reach its database
@@ -140,13 +151,20 @@ make test · make lint
 | tab | address | what it answers |
 |---|---|---|
 | Overview | `/` | where each domain stands |
-| Domains & tasks | `/domains/<domain>/<task>` | what the benchmark is; a task's answer key |
+| Evals | `/evals/<domain>/<task>` · `/evals/<domain>/judge` | a dataset's eval set: for the answering agent, every task and its answer key; for the LLM judge, the labelled train conversations it is scored on (s11) |
 | Rubric | `/rubric` | how τ² decides a conversation passed, and which check failed |
 | Leaderboard | `/leaderboard` | who else has tried, and why we are not comparable yet |
 | Runs | `/runs/<run>[?vs=<run>]` | who holds each domain and how the title moved; what we ran, what it cost, and the gate against another run |
 | Optimise | `/optimise/<domain>/<version>` | every version of a domain, train and test; a round: diagnose → propose → outcome; every cycle across the domains |
 | Agent | `/agent/<domain>/<version>?run=&trial=&node=&step=` | one conversation drawn as the agent in its harness; each node's inputs and outputs; a tool playground (plan s05) |
 | Review | `/review/<run>/<task>/t<n>` | what a person thought of what the judge scored (writes) |
+
+Under the tabs, the scope bar (`frontend/src/lib/scope.tsx`, s11) sets the dataset, the agent and
+the model. The agent is either the answering agent, which talks to the customer and calls the
+tools, or the LLM judge (s11), which reviews the answering agent's plans. Evals, Runs, Optimise,
+Agent and Review each have a view for both (`/evals/<d>/judge`, `/runs?agent=judge`,
+`/optimise/<d>/judge`, `/agent/<d>/judge`, `/review/golden/<d>`). The bar reads its values back
+from those addresses, and every tab link carries them.
 
 The grammar is `frontend/src/lib/url.ts`: one id per thing, the path names the
 subject, the query holds the lens, and a detail opens inside its list. Every
