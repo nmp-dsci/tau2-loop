@@ -1,0 +1,134 @@
+[
+ {
+  "role": "session",
+  "content": "judge optimiser"
+ },
+ {
+  "role": "user",
+  "content": "You are improving an LLM judge. The plan judge `j1` reads each reply an airline\ncustomer-service agent is about to send, before the customer sees it, and says allow or block. A block\nmakes the agent rewrite the reply. You may change one thing: the numbered lessons at the end of its\nrubric. Its model (claude-sonnet-5, medium effort), its decision rule and every line above\n`## Lessons` stay as they are.\n\n## What the judge is for, and how it is scored\n- Interrupting a conversation that was going to succeed is the costliest mistake: a block on a right\n  reply can push the agent off a correct path. The bar is at most 2 of 55 passing conversations with\n  any block in them.\n- The gain is stopping a wrong plan before the customer agrees to it: a failed conversation whose first\n  wrong step is a plan, blocked at that plan.\n- The score is balanced accuracy over conversations: the mean of the share of passing conversations\n  left alone and the share of wrong-plan failures stopped at the plan. Reason agreement (the same check\n  as the golden answer) is reported beside it.\n- The golden answers were written by a stronger model that saw each task's expected actions. Treat\n  them as right.\n\n## The decision rule (not yours to change)\nA raw block stands only when its confidence is at least 0.5 and its `rule` is a span\ncopied verbatim from the policy, or the word `transcript`. Otherwise the reply goes through and the\nblock is kept as a note. A block that paraphrases or elides the policy (with \"…\") is lost this way.\n\n## Read\n- `judges/airline/plan/j1/judge.md`: the rubric, the system prompt the judge gets before\n  the policy and the tools. It has 0 lessons now.\n- `judges/airline/plan/j2/.context/policy.md` and `tools.json`: what the judge is given.\n- `judges/airline/plan/j2/.context/scores.md`: how `j1` scores on the conversations you may read.\n- `judges/airline/plan/j2/.context/disagreements.md`: all 61 disagreements on those conversations, one\n  line each: 36 false blocks (32 of them in conversations that passed), 22\n  misses of a golden block, and 3 synthetic positives it let through (a right plan with one\n  detail changed so the conversation contradicts it). Each names its file,\n  `judges/airline/plan/j2/.context/dNN.md`: the conversation up to the reply, the reply, the judge's whole answer\n  and the golden answer. Read every one before you write.\n\nPast cycles:\n- none: this is the first cycle\n\n## Write\nOne file, `judges/airline/plan/j2/changes.json`:\n\n{\n  \"diagnosis\": \"a paragraph: the patterns behind the disagreements, and which you chose to fix\",\n  \"patterns\": [\n    {\"pattern\": \"one line\", \"direction\": \"false block | miss | wrong reason\", \"disagreements\": [\"d03\", \"d17\"]}\n  ],\n  \"add\": [{\"lesson\": \"the lesson's text\", \"because\": [\"d03\", \"d17\"]}],\n  \"edit\": [{\"n\": 2, \"lesson\": \"the new text\", \"because\": [\"d05\"]}],\n  \"remove\": [{\"n\": 4, \"because\": [\"d08\"]}],\n  \"expect\": \"which disagreements these changes should fix, and which kind of reply must stay allowed\"\n}\n\n`add`, `edit` and `remove` may each be empty, but together they must change something. Number edits\nand removals as the champion's rubric numbers its lessons.\n\nRules for a lesson:\n- It is general. It applies to any customer and any reservation. It never names a task, a reservation,\n  flight or user id, a person, an amount from one conversation, or a disagreement id, and it never\n  quotes a conversation. It may quote the policy.\n- It is an instruction to the judge, one or two sentences, at most 500 characters. It says\n  which check (1–5) it refines, or that it is about replies that are not plans.\n- At most 10 added this cycle, and at most 60 in the rubric.\n- Prefer one lesson that fixes many disagreements to several that fix one each.\n- Every lesson that makes the judge block more also risks blocking passes. Before you add one for the\n  misses, check it against the false blocks: it must not turn any of them into a block.\n\nDo not run anything. When you finish, the harness replays the new judge on every train checkpoint and\ngates it on conversations you cannot see. Finish by writing `changes.json`.\n"
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan; cat j1/judge.md; ls j2 j2/.context; cat j2/.context/scores.md j2/.context/disagreements.md"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan; cat j2/.context/policy.md; python3 -c \"import json;[print(t.get('name') or t.get('function',{}).get('name')) for t in json.load(open('j2/.context/tools.json'))]\""
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Read",
+  "input": {
+   "file_path": "/Users/nathanphillips/.claude/projects/-Users-nathanphillips-git-nmp-ai-portfolio-tau2-loop/2b07d456-c314-4472-920f-eaba2f44ea74/tool-results/be5n2jsi4.txt"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd j2/.context; wc -c d*.md | tail -1; head -c 3000 d01.md; echo; grep -n \"^#\" d01.md"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd j2/.context; for i in $(seq -w 1 20); do echo \"=========== d$i\"; sed -n '3p' d$i.md; sed -n '/^## The agent.s proposed reply/,$p' d$i.md | grep -v \"^Review it and answer\"; done"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Read",
+  "input": {
+   "file_path": "/Users/nathanphillips/.claude/projects/-Users-nathanphillips-git-nmp-ai-portfolio-tau2-loop/2b07d456-c314-4472-920f-eaba2f44ea74/tool-results/bwde3yuy8.txt"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2/.context; for i in $(seq 21 40); do echo \"=========== d$i\"; sed -n '3p' d$i.md; sed -n '/^## The agent.s proposed reply/,$p' d$i.md | grep -v \"^Review it and answer\"; done > /tmp/d21_40.txt; wc -c /tmp/d21_40.txt"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Read",
+  "input": {
+   "file_path": "/tmp/d21_40.txt"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2/.context; for i in $(seq 41 61); do echo \"=========== d$i\"; sed -n '3p' d$i.md; sed -n '/^## The agent.s proposed reply/,$p' d$i.md | grep -v \"^Review it and answer\"; done > /tmp/d41_61.txt; wc -c /tmp/d41_61.txt"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Read",
+  "input": {
+   "file_path": "/tmp/d41_61.txt"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2/.context; sed -n '/^## The conversation so far/,/^## The agent.s proposed/p' d34.md | cut -c1-1500; echo ======; sed -n '/^## The conversation so far/,/^## The agent.s proposed/p' d26.md | cut -c1-800"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2/.context; for f in d26 d44 d16 d32; do echo \"====== $f\"; sed -n '/^## The conversation so far/,/^## The agent.s proposed/p' $f.md | cut -c1-700; done"
+  }
+ },
+ {
+  "role": "assistant",
+  "content": "The clusters are confirmed. Last checks before writing: d18 (refund figure vs paid total), d20 (the \"cheapest\" claim), and d60 (whether the judge saw a plan)."
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2/.context; grep -o '\"insurance\": \"[a-z]*\"' d18.md | head -2; grep -o '\"total_baggages\": [0-9]*' d18.md | head -1; grep -o 'HAT089[^}]*}[^}]*}' d20.md | head -3; grep -n \"date\" d20.md | grep -o '\"date\": \"[0-9-]*\"' | sort | uniq -c | head"
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2/.context; for f in d12 d16 d17 d41 d44 d45 d49 d52; do echo \"$f: $(grep -c 'membership' $f.md) $(grep -o '\"membership\": \"[a-z]*\"' $f.md | head -1) calls: $(grep -o 'get_user_details' $f.md | wc -l)\"; done"
+  }
+ },
+ {
+  "role": "assistant",
+  "content": "Writing `changes.json` now: 10 lessons, three of them aimed at the false blocks in passing conversations. I'll check each lesson's length as I write it."
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2; python3 - <<'EOF'\nimport json\nadd = [\n {\"lesson\": \"About replies that are not plans: a wrong or unsupported statement is a block only when it bears on a change, payment, refund or compensation the customer is about to decide on. Allow errors in side matters: a claimed tool or system problem, asking for an id the agent could look up, flight times, a confirmation email, a balance or summary after the write is done, a courtesy or opinion phrase, or what a human agent could do.\",\n  \"because\": [\"d01\",\"d02\",\"d03\",\"d04\",\"d05\",\"d08\",\"d12\",\"d22\",\"d24\",\"d31\"]},\n {\"lesson\": \"Check 3 and replies that are not plans: not transferring is never a block by itself. A reply that declines to cancel or change a reservation with a flown segment, or declines a transfer the customer asked for when the agent can handle or must deny the request, is allowed; 'the agent cannot help and transfer is needed' does not require the transfer in that reply.\",\n  \"because\": [\"d53\",\"d57\",\"d58\",\"d25\",\"d54\"]},\n {\"lesson\": \"Check 3, payment: listing the customer's saved payment methods (certificates included), asking which one to use, or stating a payment limit more strictly than the policy is not a block. Block on payment only when the plan commits to a method the policy forbids for that action, or to a payment id that is not in the user's profile.\",\n  \"because\": [\"d06\",\"d09\",\"d11\",\"d21\",\"d41\",\"d56\"]},\n {\"lesson\": \"Check 3, cancellation: the reason matters only for the insurance ground. A cancellation that qualifies because it was booked within the last 24 hours, is business, or the airline cancelled the flight is not a block for a missing or assumed reason, and a reply that still asks for the reason presents nothing as met. When insurance is the only ground, block a plan to cancel unless the stated reason is health or weather.\",\n  \"because\": [\"d23\",\"d33\",\"d55\",\"d34\"]},\n {\"lesson\": \"Check 3, booking: not having asked yet about travel insurance or checked bags is not a block; a booking plan that lists no insurance or no bags is fine unless the customer said they want them.\",\n  \"because\": [\"d14\",\"d32\"]},\n {\"lesson\": \"Check 3, insurance: a new booking, or a cancel-and-rebook, of flights the passenger already holds, made so the trip can carry travel insurance, gets around 'The user cannot add insurance after initial booking.' Block a reply that offers, plans, or collects payment for it, even when the cancellation itself qualifies, and cite that rule.\",\n  \"because\": [\"d35\",\"d36\",\"d37\",\"d38\",\"d39\",\"d40\",\"d51\",\"d52\"]},\n {\"lesson\": \"Check 2, amounts: a fare total or price difference must cover every passenger on the reservation. Block a plan or quote that sets one passenger's new fares against the whole reservation's original total, or otherwise leaves passengers out. A gap that only comes from whether insurance or bag fees in the payment history were counted is not a block.\",\n  \"because\": [\"d42\",\"d43\",\"d18\"]},\n {\"lesson\": \"Check 2: in a plan, or a reply laying out one itinerary for the customer to book, a route, date, passenger detail or payment id that contradicts the conversation or the profile is a block even if it looks like a typo and other lines are right: a destination equal to the origin, a payment id not in the profile, or an account holder's date of birth that differs from the profile's.\",\n  \"because\": [\"d59\",\"d60\",\"d61\",\"d26\"]},\n {\"lesson\": \"Checks 2 and 3, the rule field: when a block rests on a contradiction with the conversation or tool results, set rule to the word transcript; when it rests on the policy, copy one continuous span exactly as written, with no paraphrase and no '…'.\",\n  \"because\": [\"d59\"]},\n {\"lesson\": \"Check 5: if the agent earlier refused an option the customer explicitly proposed by citing a restriction the policy does not state, a later plan built on that refusal fails check 5 even if the customer went along. For example, the per-reservation payment limits do not stop passengers from being booked in separate reservations.\",\n  \"because\": [\"d16\"]},\n]\nfor a in add: print(len(a[\"lesson\"]))\ndoc = {\n \"diagnosis\": \"j1 interrupts 25 of 96 passing conversations, mostly over replies that are not plans. It treats any side error as an unsupported fact the customer will act on: a made-up tool outage, invented flight times, an email claim, a balance in a closing summary, an opinion phrase, what a human agent could do. It also reads policy rules too strictly. It blocks declined transfers and refusals for flown reservations; payment-option lists that include certificates or a payment method not yet chosen; cancellations that qualify on 24-hour or business grounds without a stated reason; booking plans that haven't asked about insurance; and refund figures that differ from the paid total only because of insurance fees. On the miss side it allows: duplicate bookings or cancel-and-rebooks whose purpose is to get insurance after booking; a cancellation whose only ground is insurance when the reason isn't health or weather; quotes that set one passenger's fares against a multi-passenger total; plans whose route, date of birth or payment id contradicts the profile or conversation, waved off as typos; a plan built on a restriction the agent invented; and one block lost because its rule was paraphrased instead of `transcript`. I fix the false-block clusters with narrowing lessons, and add targeted, low-reach lessons for the misses, each scoped so it does not hit any false block. I leave alone the cases where the golden answers pull both ways: an unrequested upgrade offer versus failing to mention the cabin change basic economy allows; refusing an insured cancellation for an unstated reason versus the pinned allows; quotes for basic-economy flight swaps. I also leave the unverified membership level alone, because the transcripts the judge sees may hide the lookup.\",\n \"patterns\": [\n  {\"pattern\": \"Non-plan replies blocked for side errors that change no decision: fake tool outage, flight times, email claim, after-the-fact balance, opinion phrase, human-agent abilities\", \"direction\": \"false block\", \"disagreements\": [\"d01\",\"d02\",\"d03\",\"d04\",\"d05\",\"d08\",\"d10\",\"d12\",\"d19\",\"d22\",\"d24\",\"d31\"]},\n  {\"pattern\": \"Blocked for not transferring: declining a flown-reservation cancel without transfer, or declining a requested escalation\", \"direction\": \"false block\", \"disagreements\": [\"d25\",\"d53\",\"d54\",\"d57\",\"d58\"]},\n  {\"pattern\": \"Payment option lists including certificates, unchosen payment method, refund to the original card, or a stricter-than-policy payment remark treated as a policy violation\", \"direction\": \"false block\", \"disagreements\": [\"d06\",\"d09\",\"d11\",\"d21\",\"d41\",\"d56\"]},\n  {\"pattern\": \"Cancellation blocked for a missing or assumed reason when it qualifies on 24h/business grounds or the reason is still being asked\", \"direction\": \"false block\", \"disagreements\": [\"d23\",\"d33\",\"d55\"]},\n  {\"pattern\": \"Booking plan blocked because insurance had not been asked yet\", \"direction\": \"false block\", \"disagreements\": [\"d14\",\"d32\"]},\n  {\"pattern\": \"Refund/price figure flagged because it differs from payment total that includes insurance; one-passenger fares vs multi-passenger total missed\", \"direction\": \"false block\", \"disagreements\": [\"d18\",\"d13\"]},\n  {\"pattern\": \"One-passenger fares compared against the whole reservation's paid total, letting a wrong price difference through\", \"direction\": \"miss\", \"disagreements\": [\"d42\",\"d43\"]},\n  {\"pattern\": \"Duplicate booking or cancel-and-rebook used to obtain insurance after the initial booking\", \"direction\": \"miss\", \"disagreements\": [\"d35\",\"d36\",\"d37\",\"d38\",\"d39\",\"d40\",\"d50\",\"d51\",\"d52\"]},\n  {\"pattern\": \"Cancellation on the insurance ground with a reason that is not health or weather\", \"direction\": \"miss\", \"disagreements\": [\"d34\"]},\n  {\"pattern\": \"Plan detail contradicting the profile or conversation (destination = origin, foreign payment id, account holder DOB) waved off as a typo or not treated as a plan\", \"direction\": \"miss\", \"disagreements\": [\"d26\",\"d59\",\"d60\",\"d61\"]},\n  {\"pattern\": \"Correct block lost because rule was paraphrased instead of transcript\", \"direction\": \"miss\", \"disagreements\": [\"d59\"]},\n  {\"pattern\": \"Plan built on an agent-invented restriction the customer accepted (no separate reservations)\", \"direction\": \"miss\", \"disagreements\": [\"d16\"]},\n  {\"pattern\": \"Unrequested upsell / volunteered information leading to a wrong write; blanket basic-economy refusal; unverified membership level (not fixed: golden answers conflict or the lookup may not be visible)\", \"direction\": \"miss\", \"disagreements\": [\"d07\",\"d28\",\"d44\",\"d45\",\"d46\",\"d47\",\"d48\",\"d49\"]},\n  {\"pattern\": \"Basic-economy flight-swap quotes, cheapest-fare claims, bag-removal wording, compensation refusal after partial checks (not fixed)\", \"direction\": \"false block\", \"disagreements\": [\"d15\",\"d17\",\"d20\",\"d27\",\"d29\",\"d30\"]}\n ],\n \"add\": add,\n \"edit\": [],\n \"remove\": [],\n \"expect\": \"Should clear the false blocks d01-d05, d08, d12, d22, d24, d31 (side errors in non-plans), d25, d53, d54, d57, d58 (transfers), d06, d09, d11, d21, d41, d56 (payment options), d23, d33, d55 (cancellation reason), d14, d32 (insurance not yet asked) and d18 (insurance in paid total). Should catch d34, d35-d40, d51, d52, d42, d43, d26, d59, d60, d61 and d16. Must stay allowed: non-plan replies whose only error does not affect a decision; plans that list saved payment methods or ask which to use; cancellations that qualify on 24-hour, business or airline-cancelled grounds; cancel-and-rebooks made for a reason other than insurance (cabin or payment, as in the business split-booking plans); and price quotes that multiply per-passenger fares by the passenger count, even when the paid total also includes insurance. d10, d13, d15, d17, d19, d20, d27, d29, d30 may stay blocked.\"\n}\njson.dump(doc, open(\"changes.json\",\"w\"), indent=2, ensure_ascii=False)\nEOF\npython3 -c \"import json;d=json.load(open('changes.json'));print(len(d['add']))\""
+  }
+ },
+ {
+  "role": "tool_use",
+  "name": "Bash",
+  "input": {
+   "command": "cd /Users/nathanphillips/git/nmp-ai-portfolio/tau2-loop/judges/airline/plan/j2; python3 - <<'EOF'\nimport json\nd=json.load(open(\"changes.json\"))\nfor p in d[\"patterns\"]:\n    if p[\"pattern\"].startswith(\"Refund/price figure\"):\n        p[\"pattern\"]=\"Refund figure flagged because it differs from a payment total that includes insurance fees\"\n        p[\"disagreements\"]=[\"d18\"]\n    if p[\"pattern\"].startswith(\"Basic-economy flight-swap\"):\n        p[\"disagreements\"]=[\"d13\",\"d15\",\"d17\",\"d20\",\"d27\",\"d29\",\"d30\"]\n        p[\"pattern\"]=\"Not fixed: basic-economy flight-swap quotes, a one-passenger upgrade quote not acted on, cheapest-fare claims, bag-removal wording, compensation refusal after partial checks\"\njson.dump(d,open(\"changes.json\",\"w\"),indent=2,ensure_ascii=False)\nEOF\npython3 -m json.tool changes.json >/dev/null && echo ok"
+  }
+ },
+ {
+  "role": "assistant",
+  "content": "I've written `judges/airline/plan/j2/changes.json`. It adds 10 lessons to j1's rubric (each under 430 characters) and edits or removes nothing. Nothing has been run; the harness replay and the hidden gate will show whether it works.\n\n**What's wrong now.** j1 interrupts 25 of 96 passing conversations, against a bar of 2 of 55. Most of those blocks land on replies that aren't plans, over errors that change nothing the customer decides: a made-up \"technical issue\", invented flight times, a claimed confirmation email, a wrong balance in a closing summary. It also reads some policy rules too strictly, and it misses most wrong plans.\n\n**The 10 lessons:**\n\n| # | Refines | What it says | Disagreements it targets |\n|---|---|---|---|\n| 1 | Replies that aren't plans | Block only if the error bears on a change, payment, refund or compensation the customer is deciding on; side errors pass | d01–d05, d08, d12, d22, d24, d31 |\n| 2 | Check 3 and non-plans | Not transferring is never a block by itself, including refusing to cancel a reservation that has a flown segment | d25, d53, d54, d57, d58 |\n| 3 | Check 3, payment | Listing saved methods (certificates included), asking which to use, or stating a limit more strictly than the policy isn't a block. Block only when the plan commits to a forbidden method or one not on the profile | d06, d09, d11, d21, d41, d56 |\n| 4 | Check 3, cancellation | The reason matters only when insurance is the ground; insurance counts only for health or weather | d23, d33, d55 (allow); d34 (block) |\n| 5 | Check 3, booking | Not having asked about insurance or bags yet isn't a block | d14, d32 |\n| 6 | Check 3, insurance | A duplicate booking or cancel-and-rebook made to get insurance gets around \"The user cannot add insurance after initial booking.\" | d35–d40, d51, d52 |\n| 7 | Check 2, amounts | A price difference must cover every passenger; a gap caused only by insurance or bag fees in the paid total isn't a block | d42, d43 (block); d18 (allow) |\n| 8 | Check 2 | A route, date, passenger detail or payment id that contradicts the conversation or profile is a block even if it looks like a typo | d26, d59, d60, d61 |\n| 9 | Checks 2 and 3 | Use `transcript` for contradictions with the conversation, and copy policy spans exactly with no \"…\" | d59 |\n| 10 | Check 5 | A plan built on a restriction the agent invented fails, even if the customer went along | d16 |\n\nI checked each blocking lesson (4 and 6–10) against all 36 false blocks. None should turn a currently allowed reply into a block. Lessons 7 and 8 were worded so they don't catch the false blocks they sit close to: lesson 7 lets d06 and d18 through, and lesson 8 doesn't cover flight times or replies that aren't plans.\n\n**Left unfixed on purpose:**\n- **Golden answers that pull both ways:**\n  - Offering an upgrade the customer didn't ask for is a block in d47–d49, yet not mentioning that basic economy can still change cabin is also a block in d28.\n  - Refusing an insured cancellation is a block in d46 but allowed in d23.\n- **Blocks I didn't try to clear:** d29 and d30 (quotes that swap flights on basic economy) and d10, d13, d15, d17, d19, d20, d27. These may stay blocked.\n- **Unverified membership level (d44, d45):** the transcripts are cut off, so the judge may not see whether the profile was looked up, and a lesson there could cause false blocks.\n\n**Risks:**\n- Several of the misses I target (d35–d39, d42, d43, d51) sit in conversations whose first wrong step was a reply rather than a plan. Catching them improves agreement with the golden answers but probably doesn't move the balanced-accuracy score.\n- The plan misses that probably do count are d16, d26, d34 and the synthetic d59–d61.\n- Lesson 10 has the most reach of the blocking lessons, because whether a restriction is \"not in the policy\" is a judgement call. It's the first one I'd drop if the gate shows new false blocks."
+ }
+]
