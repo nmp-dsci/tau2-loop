@@ -28,6 +28,20 @@
   the CI gate.
 - **Run folders are immutable** once scored. Fix the code and re-run.
 - **The test split is reported, never optimised on.** It runs once per challenger, promoted or held; the gate never reads it. Where train is halved (banking), the gate half is never shown to an optimiser either.
+- **The LLM judge learns from optimised answering agents only** (s11): never
+  v0's traces. J0's labels skip them (`labels.UNOPTIMISED`), so the golden
+  answers, replays and the judge loop never see them. Never add a v0 run to
+  the judge's data, and never re-deal its folds.
+- **The LLM judge is called only at a write or a transfer, before it runs**
+  (s11): never on a text reply. J0 marks those checkpoints `judged`
+  (`labels.JUDGED_KINDS`); Evals, the review queue and the judge's bar show
+  only them. The plan judge (j1–j3, text replies) is retired. No judge is
+  replayed until the person has confirmed the golden answers.
+- **A passed conversation is confirmed by the grader** (s11, the passed rule):
+  tau2 matched its database to gold's, so every write and transfer in it is
+  golden `allow` (`review.effective_verdicts`), whatever the annotator said; no
+  person checks it and `make judge-gold` calls no model for it. A person ticks
+  each failed one in Evals: the first call the judge must block, or none.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

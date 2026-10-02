@@ -60,6 +60,9 @@ leaderboard submission in this build (that is M6, a separate decision).
 | Billing | `require_live()` refuses a key alongside `BILLING=subscription`, scrubs a key tau2's dotenv search injects from `~/.env`, blanks the key in the SDK child; the service image sets `BILLING=subscription` and logs in with `CLAUDE_CODE_OAUTH_TOKEN` | tau2's `utils.py` calls `load_dotenv()` with a directory search on import |
 | Deploy | DABStep-loop's pattern: ECR + App Runner, OIDC role, `workflow_run` after CI, `DEMO_MODE=1` in the Dockerfile | keyless by construction |
 | Frontend | React 18 + Vite + TS, plain CSS on `tokens.css` from DESIGN.md | the Field Guide brief; no Tailwind/DaisyUI |
+| Judge checkpoints (s11, 2026-10-02) | the judge is called only when the agent issues a write or a transfer, before it runs; never on a text reply. J0 keeps every checkpoint (golden answers are keyed by position) and marks writes and transfers `judged` (`labels.JUDGED_KINDS`): 181 calls in 174 messages, 118 of 165 conversations. `live` still marks what the retired plan judge (j1–j3) reviewed, so its replays score as they did | a call that changes something is where a wrong direction costs; a text reply can be rewritten. Every write and transfer already had a golden answer, so the set needed no new annotation |
+| Passed rule (s11, 2026-10-02) | a passed conversation is confirmed by the grader: every write and transfer in it is golden `allow` (`review.effective_verdicts`), it never enters the review queue, and `make judge-gold` writes its record by rule with no model call (`gold.passed_record`). A person confirms each failed one in Evals with a tick: an agree at every call, or one on the conversation as a whole (`#-1`) when it has no write or transfer; unticking writes `withdraw` and keeps any correction | tau2's database check is the authority on a pass, so a person reviewing 129 of them adds nothing. The annotator had blocked a write in 3 passing task-25 runs (a booking the API rejected); the grader overrules it. What needs a person is whether the judge could stop each failure at its first wrong call |
+| Judge data (s11, 2026-10-02) | the LLM judge learns from optimised answering agents only: v1 onwards, never v0 (`labels.UNOPTIMISED`). v0's runs stay in `runs/` and on the leaderboard, but never enter the J0 labels, the J1 golden answers, a J2 replay's score or the J3 loop. Folds stay as cycle 1 dealt them (`labels.PINNED_FOLDS`) | v0, the hand-written baseline, fails in ways no optimised agent does (it tells a user it cannot see their payment methods without calling `get_user_details`); a golden set built on it teaches the judge about hallucinations, not about the agent it will guard. Pinned folds keep every task the optimiser read out of the gate half |
 
 **Platform migration (2026-09-21).** Tracking moved from this repo's own MLflow (`make mlflow-up`, sqlite
 under `.mlflow/`, `:5601`) to the portfolio's central server in `../nmp-central-ai` (experiment `tau2-loop`,
@@ -151,7 +154,7 @@ make test · make lint
 | tab | address | what it answers |
 |---|---|---|
 | Overview | `/` | where each domain stands |
-| Evals | `/evals/<domain>/<task>` · `/evals/<domain>/judge` | a dataset's eval set: for the answering agent, every task and its answer key; for the LLM judge, the labelled train conversations it is scored on (s11) |
+| Evals | `/evals/<domain>/<task>` · `/evals/<domain>/judge` | a dataset's eval set: for the answering agent, every task and its answer key; for the LLM judge, every conversation it is scored on, in task order, with the first call to block and a tick per failed one (passes are ticked by the grader); a row opens the whole conversation with the judge's bar after each write and transfer, to agree with or correct; newer runs not yet in the set are named with the commands that add them (s11) |
 | Rubric | `/rubric` | how τ² decides a conversation passed, and which check failed |
 | Leaderboard | `/leaderboard` | who else has tried, and why we are not comparable yet |
 | Runs | `/runs/<run>[?vs=<run>]` | who holds each domain and how the title moved; what we ran, what it cost, and the gate against another run |
@@ -160,11 +163,16 @@ make test · make lint
 | Review | `/review/<run>/<task>/t<n>` | what a person thought of what the judge scored (writes) |
 
 Under the tabs, the scope bar (`frontend/src/lib/scope.tsx`, s11) sets the dataset, the agent and
-the model. The agent is either the answering agent, which talks to the customer and calls the
-tools, or the LLM judge (s11), which reviews the answering agent's plans. Evals, Runs, Optimise,
+the experiment. The agent is either the answering agent, which talks to the customer and calls the
+tools, or the LLM judge (s11), which reviews its writes and transfers. Evals, Runs, Optimise,
 Agent and Review each have a view for both (`/evals/<d>/judge`, `/runs?agent=judge`,
-`/optimise/<d>/judge`, `/agent/<d>/judge`, `/review/golden/<d>`). The bar reads its values back
-from those addresses, and every tab link carries them.
+`/optimise/<d>/judge`, `/agent/<d>/judge`, `/review/golden/<d>`). The experiment is a version of
+the answering agent (`?exp=v6`, the `<agent>` in a run id), default all: it filters what that
+version produced (its runs and their MLflow rows, the rounds that made or defended it, the version
+the Agent tab opens, its conversations in Review and in the judge's Evals and golden answers), and
+is hidden where it filters nothing (the answering agent's tasks, the judge's replays, loop and
+versions). The bar reads its values back from those addresses and remembers them, so the
+experiment carries from tab to tab until it is set back to all.
 
 The grammar is `frontend/src/lib/url.ts`: one id per thing, the path names the
 subject, the query holds the lens, and a detail opens inside its list. Every
