@@ -2,7 +2,8 @@
 
 The playground behind the Agent tab: pick a message in a committed trace, edit a
 tool call's arguments, and see what tau2's own tool code returns against the
-database as it stood at that point. The state is rebuilt the way the evaluator
+database as it stood at that point. `db_diff` rebuilds both sides of the DB check
+whole, the conversation's final database and gold's, and says where they differ. The state is rebuilt the way the evaluator
 builds it for the DB check — the task's initial state, then every state-changing
 call before the chosen message, replayed through `Environment.set_state` — so
 the playground and the grade cannot disagree about what the database held.
@@ -184,6 +185,270 @@ def run_tool(
     }
 
 
+def gold_env(conv: Conversation, upto: int | None = None) -> tuple[Any, list[dict[str, Any]]]:
+    """Gold's environment as the evaluator builds it: the task's initial state and initial
+    history, then the first `upto` expected actions (all of them by default). Returns it with
+    each action that raised, which the evaluator logs and skips."""
+    from tau2.registry import registry
+
+    init = conv.task.initial_state
+    env = registry.get_env_constructor(conv.domain)(
+        **env_kwargs_for(conv.domain, conv.task, conv.retrieval)
+    )
+    env.set_state(
+        initialization_data=init.initialization_data if init else None,
+        initialization_actions=init.initialization_actions if init else None,
+        message_history=list(init.message_history or []) if init else [],
+        strict=False,
+    )
+    actions = list(
+        (conv.task.evaluation_criteria.actions or []) if conv.task.evaluation_criteria else []
+    )
+    errors = []
+    for a in actions[:upto]:
+        try:
+            env.make_tool_call(tool_name=a.name, requestor=a.requestor, **a.arguments)
+        except Exception as e:  # noqa: BLE001 - the evaluator skips a failing gold action too
+            errors.append({"action_id": a.action_id, "name": a.name, "error": str(e)[:200]})
+    return env, errors
+
+
+def db_diff(conv: Conversation) -> dict[str, Any]:
+    """Where the conversation's final database differs from gold's, as the DB check compares them.
+
+    The agent's side replays the whole trajectory on the task's initial state; gold's applies
+    every expected action to it. Each differing field carries its value before the conversation
+    too, and each record the agent's calls and the expected actions that changed it, so a missed
+    write, a wrong write and a write with the wrong arguments read apart."""
+    agent = build_env(conv, len(conv.messages))
+    base, _ = gold_env(conv, upto=0)
+    before = _dump(base)
+    gold_side, gold_errors = gold_env(conv)
+    a_dump, g_dump = _dump(agent), _dump(gold_side)
+    match = _hashes(agent) == _hashes(gold_side)
+
+    paths: list[list[str]] = []
+    _paths(g_dump, a_dump, [], paths)
+    by_record: dict[str, dict[str, Any]] = {}
+    for path in paths[:MAX_DIFF_FIELDS]:
+        record = ".".join(path[:2]) or "(database)"
+        field = ".".join(path[2:])
+        g, a = _at(g_dump, path), _at(a_dump, path)
+        rec = by_record.setdefault(
+            record,
+            {
+                "record": record,
+                "kind": "changed",
+                "fields": [],
+                "agent_calls": [],
+                "gold_actions": [],
+            },
+        )
+        if not field:
+            rec["kind"] = "agent_only" if g is None else "gold_only" if a is None else "changed"
+        rec["fields"].append(
+            {
+                "field": field or "(record)",
+                "before": _short(_at(before, path), 4000 if not field else 400),
+                "agent": _short(a, 4000 if not field else 400),
+                "gold": _short(g, 4000 if not field else 400),
+            }
+        )
+    for record, who in _agent_writes(conv).items():
+        if record in by_record:
+            by_record[record]["agent_calls"] = who
+    for record, who in _gold_writes(conv).items():
+        if record in by_record:
+            by_record[record]["gold_actions"] = who
+    for rec in by_record.values():
+        rec["verdict"] = record_verdict(rec)
+    return {
+        "match": match,
+        "records": list(by_record.values()),
+        "fields": len(paths),
+        "shown": min(len(paths), MAX_DIFF_FIELDS),
+        "gold_errors": gold_errors,
+    }
+
+
+def record_verdict(rec: dict[str, Any]) -> str:
+    """Why one record differs: gold changed it and the agent did not (`missed write`), the agent
+    changed it and gold did not (`wrong write`), or both did and the results differ (`wrong
+    arguments`); `differs` when no recorded write on either side touched it directly."""
+    mine, gold = bool(rec["agent_calls"]), bool(rec["gold_actions"])
+    if gold and not mine:
+        return "missed write"
+    if mine and not gold:
+        return "wrong write"
+    return "wrong arguments" if mine and gold else "differs"
+
+
+def action_diff(conv: Conversation) -> dict[str, Any]:
+    """The expected actions against the conversation's calls, paired as tau2's action check pairs
+    them (`Action.compare_with_tool_call`: the same tool, the same arguments).
+
+    Each expected action is matched at a message or missing; a missing one names the nearest call
+    of the same tool that matches no other expected action, and the arguments that differ. `unexpected_writes` are the state-changing
+    calls no expected action matches, each marked when the tool refused it. `graded` says whether
+    the task's reward basis scores the actions themselves (ACTION); without it an action counts
+    only through the database it produces."""
+    crit = conv.task.evaluation_criteria
+    actions = list((crit.actions or []) if crit else [])
+    basis = [str(getattr(b, "value", b)) for b in ((crit.reward_basis or []) if crit else [])]
+    mutating = _mutating(conv.domain)
+    refused = {
+        m.id
+        for m in conv.messages
+        if getattr(m, "role", None) == "tool" and getattr(m, "error", False)
+    }
+    calls = [
+        (i, tc)
+        for i, m in enumerate(conv.messages)
+        if getattr(m, "role", None) in ("assistant", "user")
+        for tc in (getattr(m, "tool_calls", None) or [])
+    ]
+
+    def call(i: int, tc: Any) -> dict[str, Any]:
+        return {"msg": i, "name": tc.name, "arguments": tc.arguments, "refused": tc.id in refused}
+
+    expected = []
+    for a in actions:
+        hit = next(((i, tc) for i, tc in calls if a.compare_with_tool_call(tc)), None)
+        row: dict[str, Any] = {
+            "action_id": a.action_id,
+            "name": a.name,
+            "arguments": a.arguments,
+            "write": a.name in mutating,
+            "matched_at": hit[0] if hit else None,
+            "nearest": None,
+        }
+        if hit is None:
+            # a call that is another expected action's match is not a near miss for this one
+            same = [
+                (i, tc, _arg_diff(a, tc))
+                for i, tc in calls
+                if tc.name == a.name and not any(b.compare_with_tool_call(tc) for b in actions)
+            ]
+            if same:
+                i, tc, differs = min(same, key=lambda x: len(x[2]))
+                row["nearest"] = {**call(i, tc), "differs": differs}
+        expected.append(row)
+    unexpected = [
+        call(i, tc)
+        for i, tc in calls
+        if tc.name in mutating and not any(a.compare_with_tool_call(tc) for a in actions)
+    ]
+    return {
+        "graded": "ACTION" in basis,
+        "basis": basis,
+        "expected": expected,
+        "called": sorted({tc.name for _, tc in calls}),
+        "unexpected_writes": unexpected,
+    }
+
+
+def _arg_diff(action: Any, tc: Any) -> list[dict[str, Any]]:
+    """The arguments tau2 compares that differ between an expected action and a call: the
+    action's `compare_args`, else every argument the call passed (an expected argument the call
+    left out is not compared)."""
+    keys = action.compare_args if action.compare_args is not None else tc.arguments.keys()
+    return [
+        {
+            "argument": k,
+            "agent": _short(tc.arguments.get(k)),
+            "expected": _short(action.arguments.get(k)),
+        }
+        for k in sorted(keys)
+        if tc.arguments.get(k) != action.arguments.get(k)
+    ]
+
+
+def _agent_writes(conv: Conversation) -> dict[str, list[dict[str, Any]]]:
+    """Each record a state-changing call of the conversation changed, with the calls that did."""
+    mutating = _mutating(conv.domain)
+    out: dict[str, list[dict[str, Any]]] = {}
+    msgs = conv.messages
+    for i, m in enumerate(msgs):
+        calls = [tc for tc in (getattr(m, "tool_calls", None) or []) if tc.name in mutating]
+        if not calls:
+            continue
+        j = i + 1
+        while j < len(msgs) and getattr(msgs[j], "role", None) == "tool":
+            j += 1
+        pre, post = build_env(conv, i), build_env(conv, j)
+        if _hashes(pre) == _hashes(post):
+            continue  # every call here was refused: nothing changed
+        for record in _records(_dump(pre), _dump(post)):
+            out.setdefault(record, []).extend(
+                {"msg": i, "name": tc.name, "arguments": tc.arguments, "requestor": tc.requestor}
+                for tc in calls
+            )
+    return out
+
+
+def _gold_writes(conv: Conversation) -> dict[str, list[dict[str, Any]]]:
+    """Each record an expected action changed, with the actions that did."""
+    actions = list(
+        (conv.task.evaluation_criteria.actions or []) if conv.task.evaluation_criteria else []
+    )
+    out: dict[str, list[dict[str, Any]]] = {}
+    env, _ = gold_env(conv, upto=0)
+    prev, h = _dump(env), _hashes(env)
+    for a in actions:
+        try:
+            env.make_tool_call(tool_name=a.name, requestor=a.requestor, **a.arguments)
+        except Exception:  # noqa: BLE001, S112 - a refused gold action changes nothing
+            continue
+        if _hashes(env) == h:
+            continue
+        cur, h = _dump(env), _hashes(env)
+        for record in _records(prev, cur):
+            out.setdefault(record, []).append(
+                {"action_id": a.action_id, "name": a.name, "arguments": a.arguments}
+            )
+        prev = cur
+    return out
+
+
+def _mutating(domain: str) -> set[str]:
+    ext = read_task_extract(domain)
+    return {
+        t["name"] for t in [*ext.get("tools", []), *ext.get("user_tools", [])] if t.get("mutates")
+    }
+
+
+def _records(a: dict[str, Any], b: dict[str, Any]) -> set[str]:
+    paths: list[list[str]] = []
+    _paths(a, b, [], paths)
+    return {".".join(p[:2]) or "(database)" for p in paths}
+
+
+def _paths(a: Any, b: Any, path: list[str], out: list[list[str]]) -> None:
+    """Every leaf path where `a` and `b` differ, walked as `_leaves` walks them."""
+    if a == b:
+        return
+    if isinstance(a, dict) and isinstance(b, dict):
+        for k in sorted(set(a) | set(b), key=str):
+            _paths(a.get(k), b.get(k), [*path, str(k)], out)
+        return
+    if isinstance(a, list) and isinstance(b, list) and len(a) == len(b) and len(path) < 2:
+        for i, (x, y) in enumerate(zip(a, b, strict=True)):
+            _paths(x, y, [*path, str(i)], out)
+        return
+    out.append(path)
+
+
+def _at(d: Any, path: list[str]) -> Any:
+    for k in path:
+        if isinstance(d, dict):
+            d = d.get(k)
+        elif isinstance(d, list) and k.isdigit() and int(k) < len(d):
+            d = d[int(k)]
+        else:
+            return None
+    return d
+
+
 def diff(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str, Any]]:
     """The records that changed, each with the field paths that differ.
 
@@ -213,11 +478,11 @@ def _leaves(a: Any, b: Any, path: list[str], out: list[tuple[str, str, Any, Any]
     out.append((record, field, a, b))
 
 
-def _short(v: Any) -> str | None:
+def _short(v: Any, cap: int = 400) -> str | None:
     if v is None:
         return None
     s = json.dumps(v, ensure_ascii=False, default=str)
-    return s if len(s) <= 400 else f"{s[:399]}…"
+    return s if len(s) <= cap else f"{s[: cap - 1]}…"
 
 
 def _dump(env: Any) -> dict[str, Any]:

@@ -133,3 +133,91 @@ def test_a_write_in_the_playground_touches_no_file() -> None:
     )
     assert r.status_code == 200 and r.json()["wrote"] is True
     assert [hashlib.sha256(p.read_bytes()).hexdigest() for p in watched] == before
+
+
+def _diff(run_id: str, task: str) -> dict:
+    meta = json.loads((RUNS_DIR / run_id / "run.json").read_text())
+    return replay.db_diff(replay.load_conversation(run_id, f"{task}.json", meta["domain"], task))
+
+
+def test_the_db_diff_names_a_missed_write_a_wrong_write_and_a_wrong_argument() -> None:
+    """Both sides of tau2's DB check, rebuilt: each differing field, and who changed its record."""
+    # v6 task 39: gold cancels MSJ4OA; the agent never wrote to it
+    missed = _diff("20260928T101605Z_airline_v6_train", "39")
+    assert missed["match"] is False
+    (rec,) = missed["records"]
+    assert rec["record"] == "reservations.MSJ4OA" and rec["agent_calls"] == []
+    assert [g["action_id"] for g in rec["gold_actions"]] == ["39_10"]
+    status = next(f for f in rec["fields"] if f["field"] == "status")
+    assert (status["before"], status["agent"], status["gold"]) == (None, None, '"cancelled"')
+    # v4 task 6: the agent's second booking at message 50 made every difference
+    wrong = _diff("20260928T075613Z_airline_v4_train", "6")
+    assert {r["record"]: r["kind"] for r in wrong["records"]}["reservations.HATHAT"] == "agent_only"
+    assert all([c["msg"] for c in r["agent_calls"]] == [50] for r in wrong["records"])
+    assert all(r["gold_actions"] == [] for r in wrong["records"])
+    # v5 task 14: both book HATHAT; the agent's destination is JFK where gold's is SFO
+    args = _diff("20260928T094017Z_airline_v5_train", "14")
+    (rec,) = args["records"]
+    assert rec["fields"] == [
+        {"field": "destination", "before": None, "agent": '"JFK"', "gold": '"SFO"'}
+    ]
+    assert rec["agent_calls"][0]["msg"] == 24 and rec["gold_actions"][0]["action_id"] == "14_1"
+    # each record says which of the three it is, the word the viewer and the optimiser both read
+    assert [r["verdict"] for r in missed["records"]] == ["missed write"]
+    assert {r["verdict"] for r in wrong["records"]} == {"wrong write"}
+    assert [r["verdict"] for r in args["records"]] == ["wrong arguments"]
+
+
+def _acts(run_id: str, task: str) -> dict:
+    meta = json.loads((RUNS_DIR / run_id / "run.json").read_text())
+    return replay.action_diff(
+        replay.load_conversation(run_id, f"{task}.json", meta["domain"], task)
+    )
+
+
+def test_the_action_diff_pairs_expected_actions_with_calls_as_tau2_does() -> None:
+    """Matched or missing as tau2's action check has it; a missing write's nearest call names the
+    argument that differs; a write no expected action matches is listed, refused or not."""
+    for run_id, task in [
+        ("20260928T101605Z_airline_v6_train", "39"),
+        ("20260928T075613Z_airline_v4_train", "6"),
+        ("20260928T094017Z_airline_v5_train", "14"),
+        ("20260928T060029Z_airline_v3_train", "25"),
+    ]:
+        trace = json.loads((RUNS_DIR / run_id / "traces" / f"{task}.json").read_text())
+        tau2_says = [c["action_match"] for c in trace["reward_info"]["action_checks"]]
+        got = _acts(run_id, task)
+        assert [e["matched_at"] is not None for e in got["expected"]] == tau2_says
+        # airline grades the database and what was said, never the actions themselves
+        assert got["graded"] is False and got["basis"] == ["DB", "COMMUNICATE"]
+
+    # v6 task 39: the third cancel is missing, and both cancels the agent made are other actions'
+    a = _acts("20260928T101605Z_airline_v6_train", "39")
+    (miss,) = [e for e in a["expected"] if e["matched_at"] is None]
+    assert (miss["action_id"], miss["write"], miss["nearest"]) == ("39_10", True, None)
+    assert "cancel_reservation" in a["called"] and a["unexpected_writes"] == []
+    # v5 task 14: the booking at message 24 differs from 14_1 in its destination only
+    a = _acts("20260928T094017Z_airline_v5_train", "14")
+    (miss,) = [e for e in a["expected"] if e["matched_at"] is None]
+    assert miss["action_id"] == "14_1" and miss["nearest"]["msg"] == 24
+    assert miss["nearest"]["differs"] == [
+        {"argument": "destination", "agent": '"JFK"', "expected": '"SFO"'}
+    ]
+    assert [(u["msg"], u["name"]) for u in a["unexpected_writes"]] == [(24, "book_reservation")]
+    # v4 task 6: one expected lookup, matched; the second booking is a write gold never makes
+    a = _acts("20260928T075613Z_airline_v4_train", "6")
+    assert [(u["msg"], u["name"], u["refused"]) for u in a["unexpected_writes"]] == [
+        (50, "book_reservation", False)
+    ]
+    # v3 task 25: the booking the API refused is still a write no expected action matches
+    a = _acts("20260928T060029Z_airline_v3_train", "25")
+    assert any(u["name"] == "book_reservation" and u["refused"] for u in a["unexpected_writes"])
+    # a task whose basis has ACTION says so
+    assert _acts("20260915T014228Z_mock_v0_all", "update_task_with_user_tools")["graded"] is True
+
+
+def test_a_passing_conversation_has_no_db_diff_and_the_route_agrees_with_the_grade() -> None:
+    assert _diff(RUN, "0")["records"] == []
+    c = TestClient(create_app())
+    got = c.get("/api/runs/20260928T101605Z_airline_v6_train/39/t1/db").json()
+    assert got["match"] is False and got["graded"] is False and got["records"]

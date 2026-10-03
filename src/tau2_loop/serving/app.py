@@ -223,6 +223,42 @@ def create_app() -> FastAPI:
             "tasks": [_task_row(t, split) for t in ext.get("tasks", [])],
         }
 
+    @app.get("/api/domains/{domain}/conversations")
+    def task_conversations(domain: str, task: str) -> list[dict[str, Any]]:
+        """Every conversation of one task across the domain's runs, newest run first: the task's
+        trace in each experiment, which the scope bar's task opens on Runs."""
+        _check_domain(domain)
+        out: list[dict[str, Any]] = []
+        for m in reversed(list_runs(domain)):
+            if m.dry_run or task not in (m.task_ids or [task]):
+                continue
+            try:
+                _, results = load_run(m.run_id)
+            except FileNotFoundError:
+                continue
+            out += [
+                {
+                    "run_id": m.run_id,
+                    "agent": m.agent,
+                    "split": m.split,
+                    "model": m.model,
+                    "started_at": m.started_at,
+                    "trial": r.trial,
+                    "correct": r.correct,
+                    "reward": r.reward,
+                    "db_check": r.db_check,
+                    "action_checks": r.action_checks,
+                    "communicate_checks": r.communicate_checks,
+                    "n_agent_turns": r.n_agent_turns,
+                    "n_tool_calls": r.n_tool_calls,
+                    "termination_reason": r.termination_reason,
+                    "duration_ms": r.duration_ms,
+                }
+                for r in results
+                if r.task_id == task
+            ]
+        return out
+
     @app.get("/api/domains/{domain}/tasks/{task_id:path}")
     def task(domain: str, task_id: str) -> dict[str, Any]:
         _check_domain(domain)
@@ -400,7 +436,8 @@ def create_app() -> FastAPI:
         helper = load_helper_file(
             snap / "helper.py" if "helper.py" in files else None, f"tau2_loop_run_helper_{run_id}"
         )
-        c = compose(files["system.md"], policy, helper)
+        # a run before the clock note (no `sim_rules`) was sent no note: show what it was sent
+        c = compose(files["system.md"], policy, helper, clock=meta.sim_rules is not None)
         return {
             "run_id": run_id,
             "domain": meta.domain,
@@ -417,6 +454,7 @@ def create_app() -> FastAPI:
                 "policy": c.policy,
                 "policy_words": len(c.policy.split()),
                 "extra_context": c.extra_context,
+                "clock_note": c.clock_note,
                 "slotted": c.slotted,
             },
         }
@@ -486,6 +524,27 @@ def create_app() -> FastAPI:
             )
         except replay.ReplayError as e:
             raise HTTPException(422, str(e)) from e
+
+    @app.get("/api/runs/{run_id}/{task_id}/{trial}/db")
+    def db_check(run_id: str, task_id: str, trial: str) -> dict[str, Any]:
+        """Where the conversation's final database differs from gold's: both sides of tau2's DB
+        check rebuilt in memory, each differing field with its value before the conversation,
+        and the agent's calls and the expected actions that changed each record.
+
+        Writes nothing, calls no model. Answers 503 where tau2 is not installed (the demo image)."""
+        if not replay.available():
+            raise HTTPException(
+                503,
+                "the database diff needs tau2, which the demo image does not ship: "
+                "run the viewer from a checkout (`make dev`)",
+            )
+        meta, row = _conversation(run_id, task_id, trial)
+        try:
+            out = _db_diff(run_id, row.trace, meta.domain, row.task_id)
+        except replay.ReplayError as e:
+            raise HTTPException(422, str(e)) from e
+        # what the run was graded: a rebuild that disagrees with it says so rather than hides it
+        return {**out, "graded": row.db_check}
 
     @app.get("/api/leaderboard")
     def leaderboard() -> dict[str, Any]:
@@ -779,6 +838,13 @@ def _conversation(run_id: str, task_id: str, trial: str) -> tuple[Any, Any]:
     if row is None or not row.trace:
         raise HTTPException(404, "no such conversation")
     return meta, row
+
+
+@lru_cache(maxsize=64)
+def _db_diff(run_id: str, trace_name: str, domain: str, task_id: str) -> dict[str, Any]:
+    """A conversation's database diff against gold. Run folders never change once scored, so
+    it is computed once per conversation (about a second: a replay per write)."""
+    return replay.db_diff(_loaded_conversation(run_id, trace_name, domain, task_id))
 
 
 @lru_cache(maxsize=32)

@@ -27,6 +27,14 @@ CODE_HOOKS = {"memory.py": "remember", "guidance.py": "guidance", "checks.py": "
 HOOKS = HELPER_HOOKS + tuple(CODE_HOOKS.values())
 # A per-turn reminder is cut to this many characters (s09 §5, the guidance budget).
 GUIDANCE_CHARS = 600
+# The Claude CLI tells every session the real date in a system reminder, and nothing switches it
+# off but `--bare`, which drops the subscription login. The agent may know only the time its world
+# gives it (the policy's "The current time is …", or a tool), so its prompt ends with this. A run
+# records it in `RunMeta.sim_rules`; one without ran before it, with no note.
+CLOCK_NOTE = (
+    "A system reminder may tell you today's date. It is not this conversation's date: the current "
+    "time is only what the policy above or a tool says."
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +46,7 @@ class Composed:
     policy: str
     extra_context: str | None
     slotted: bool
+    clock_note: str | None = None
 
 
 def load_helper_file(path: Path | None, module_name: str) -> types.ModuleType | None:
@@ -87,8 +96,11 @@ def hooks_defined(
     return out
 
 
-def compose(system_md: str, policy: str, helper: types.ModuleType | None) -> Composed:
-    """`system.md` with the policy in its slot (or appended), then `extra_context(policy)`."""
+def compose(
+    system_md: str, policy: str, helper: types.ModuleType | None, clock: bool = True
+) -> Composed:
+    """`system.md` with the policy in its slot (or appended), then `extra_context(policy)`, then
+    `CLOCK_NOTE` (`clock=False` for a run made before it)."""
     slotted = POLICY_SLOT in system_md
     text = (
         system_md.replace(POLICY_SLOT, policy)
@@ -99,6 +111,13 @@ def compose(system_md: str, policy: str, helper: types.ModuleType | None) -> Com
     extra = extra.strip() if isinstance(extra, str) and extra.strip() else None
     if extra:
         text = f"{text}\n\n{extra}"
+    if clock:
+        text = f"{text}\n\n{CLOCK_NOTE}"
     return Composed(
-        text=text, system_md=system_md, policy=policy, extra_context=extra, slotted=slotted
+        text=text,
+        system_md=system_md,
+        policy=policy,
+        extra_context=extra,
+        slotted=slotted,
+        clock_note=CLOCK_NOTE if clock else None,
     )

@@ -157,17 +157,21 @@ def test_the_committed_airline_history() -> None:
         .json()["airline"]
     )
     assert h["champion"] == "v3"
-    # v0 first, then v3 twice: promoted by hand as a model swap, re-run and re-baselined on the new SDK
+    # v0 first, then v3 three times: promoted by hand as a model swap, re-baselined on the new
+    # SDK, and again under our simulation rules (2 Oct 2026) before cycle 6's gate
     assert [(r["version"], r["kind"], r["passed"], r["n"]) for r in h["reigns"]] == [
         ("v0", "first", 12, 20),
         ("v3", "model swap", 18, 25),
         ("v3", "re-baseline", 21, 25),
+        ("v3", "re-baseline", 19, 25),
     ]
     v = {x["version"]: x for x in h["versions"]}
-    assert list(v) == ["v0", "v1", "v2", "v3", "v4", "v5", "v6"]
-    assert [v[k]["train"]["cut"] for k in v] == [1, 1, 1, 2, 2, 2, 2]
+    assert list(v) == ["v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7"]
+    assert [v[k]["train"]["cut"] for k in v] == [1, 1, 1, 2, 2, 2, 2, 2]
     assert v["v3"]["made"]["kind"] == "model swap" and v["v3"]["verdict"] == "by hand"
-    assert (v["v3"]["train"]["passed"], v["v3"]["test"]["passed"]) == (21, 21)
+    assert (v["v3"]["train"]["passed"], v["v3"]["test"]["passed"]) == (19, 21)
+    assert (v["v7"]["verdict"], v["v7"]["fixed"], v["v7"]["broke"]) == ("hold", 5, 1)
+    assert v["v7"]["vs"]["train"]["passed"] == 19 and v["v7"]["test"]["passed"] == 21
     assert v["v5"]["made"] == {
         "kind": "model swap",
         "cycle": 4,

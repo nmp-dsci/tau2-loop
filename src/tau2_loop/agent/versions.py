@@ -163,11 +163,23 @@ def forked_from(domain: str, name: str) -> str | None:
 
 
 def lineage(domain: str, name: str) -> list[str]:
-    """`name`, then the version it was forked from, and so on back: v3 forked from v0 → [v3, v0]."""
+    """`name`, then the version it was forked from, and so on back: v3 forked from v0 → [v3, v0].
+    It stops at a source whose folder is gone (banking's v0, retired when v1 became its base)."""
     out = [name]
-    while (parent := forked_from(domain, out[-1])) and parent not in out:
+    while (
+        (parent := forked_from(domain, out[-1]))
+        and parent not in out
+        and version_dir(domain, parent).exists()
+    ):
         out.append(parent)
     return out
+
+
+def base_version(domain: str) -> str:
+    """The version a plain `make eval` runs: v0, or the oldest version left where v0 was retired
+    (banking: v1), never a later champion."""
+    versions = list_versions(domain)
+    return versions[0].name if versions else "v0"
 
 
 AGENT_YAML_HEADER = (

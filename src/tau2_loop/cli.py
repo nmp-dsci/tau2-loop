@@ -49,7 +49,10 @@ def fork(
 @app.command()
 def eval(  # noqa: A001 - the Makefile target is `eval`
     domain: str = "airline",
-    agent: str = "v0",
+    agent: Annotated[
+        str | None,
+        typer.Option(help="default: v0, or the oldest version where v0 was retired (banking: v1)"),
+    ] = None,
     split: str = "train",
     trials: int = 1,
     concurrency: int = 3,
@@ -59,10 +62,19 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
     dry_run: bool = False,
 ) -> None:
     """Run an agent version over a split of one domain and score it."""
+    from tau2_loop.agent.versions import base_version
     from tau2_loop.eval.runner import run_eval
 
     meta, _ = run_eval(
-        domain, agent, split, trials, concurrency, task, note, track=not no_track, dry_run=dry_run
+        domain,
+        agent or base_version(domain),
+        split,
+        trials,
+        concurrency,
+        task,
+        note,
+        track=not no_track,
+        dry_run=dry_run,
     )
     console.print(f"run: runs/{meta.run_id}")
 
@@ -75,6 +87,21 @@ def score(run_id: str) -> None:
 
     _, results = load_run(run_id)
     console.print(summarise(results))
+
+
+@app.command()
+def extend(run_id: str, concurrency: int = 3) -> None:
+    """Play only the tasks a run's split has gained since it was scored, and join them to it: one
+    run of the whole split. A champion's train run extended this way stays its record."""
+    from tau2_loop.eval.runner import extend_run
+    from tau2_loop.tracking.registry import promote as _promote
+    from tau2_loop.tracking.registry import read_registry
+
+    meta, _ = extend_run(run_id, concurrency)
+    if (read_registry(meta.domain).get("champion") or {}).get("run_id") == run_id:
+        _promote(meta.run_id, kind="re-baseline")  # the same bytes on the split's new cut
+        console.print(f"{meta.domain}'s champion {meta.agent} is now scored on runs/{meta.run_id}")
+    console.print(f"run: runs/{meta.run_id}")
 
 
 @app.command()
@@ -194,10 +221,12 @@ def challenge(
     console.print(
         f"cycle {entry['cycle']} · {entry.get('kind')} {entry['champion']} → {entry['challenger']}"
         f" ({entry.get('challenger_model')}, {entry.get('challenger_effort')}): "
-        f"[bold]{o.get('verdict')}[/] · train {o.get('passes')} · fixed {len(o.get('fixed') or [])}"
+        f"[bold]{o.get('verdict')}[/] · gate on {o.get('gate_on')} {o.get('passes')} · fixed {len(o.get('fixed') or [])}"
         f" · broke {len(o.get('broken') or [])} · {o.get('reason')}"
         + (
-            f" · test {tc['passes']} (reported, not gated)"
+            ""
+            if tc.get("gated")
+            else f" · test {tc['passes']} (reported, not gated)"
             if tc.get("passes")
             else f" · test {tc.get('error') or 'not run'}"
         )

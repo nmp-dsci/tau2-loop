@@ -66,7 +66,7 @@ def next_cycle_number(domain: str) -> int:
     return (max(cycles) + 1) if cycles else 1
 
 
-def _swap_note(e: dict[str, Any]) -> str:
+def swap_note(e: dict[str, Any]) -> str:
     """A cycle no optimiser wrote (`make challenge`): what changed instead, e.g.
     `model swap (model: sonnet → opus)`; "" for a loop cycle."""
     if not e.get("kind"):
@@ -76,7 +76,8 @@ def _swap_note(e: dict[str, Any]) -> str:
 
 def seen_changes(outcome: dict[str, Any]) -> tuple[list[str], list[str]]:
     """(fixed, broken) as an optimiser may see them: the read half's where train is halved
-    (s09), since the gate half's ids must never reach a prompt; else the gate's own lists."""
+    (s09), since the gate half's ids must never reach a prompt, and all of train's where the gate
+    is on test, whose ids must not either (`read_fixed` holds both); else the gate's own lists."""
     if "read_fixed" in outcome:
         return list(outcome.get("read_fixed") or []), list(outcome.get("read_broken") or [])
     return list(outcome.get("fixed") or []), list(outcome.get("broken") or [])
@@ -97,7 +98,7 @@ def prior_attempts(domain: str, task_id: str) -> list[dict[str, Any]]:
                     "challenger": e.get("challenger"),
                     "root_cause": "not diagnosed: this task passed on the champion and BROKE on the challenger",
                     "surface": "agent.yaml" if e.get("kind") else "both",
-                    "change": _swap_note(e)
+                    "change": swap_note(e)
                     or f"the cycle's edits ({e.get('prompt_diff_summary', '')[:160]} / {e.get('helper_diff_summary', '')[:160]})",
                     "verdict": outcome.get("verdict", "pending"),
                     "task_outcome": "broken",
@@ -139,20 +140,23 @@ def render_history(domain: str, task_ids: list[str]) -> str:
     ]
     for e in entries:
         o = e.get("outcome") or {}
-        swap = _swap_note(e)
+        swap = swap_note(e)
         fixed_ids, broken_ids = seen_changes(o)
-        halved = "read_fixed" in o
+        hidden = "read_fixed" in o
+        on_test = str(o.get("gate_on") or "").startswith("test")
         reason = (
-            "" if halved else str(o.get("reason") or "")
-        )  # a halved gate's reason names gate ids
+            "" if hidden else str(o.get("reason") or "")
+        )  # the reason of a gate on the gate half or on test names its ids
         lines.append(
             f"- cycle {e.get('cycle')}: {e.get('champion')} → {e.get('challenger')}"
             + (f", a {swap}, no optimiser" if swap else "")
             + (f", the {e['optimiser_mode']} optimiser" if e.get("optimiser_mode") else "")
             + f" · verdict {o.get('verdict', 'pending')}"
             + (
-                f" · gate-half passes {o.get('passes', '?')} · on the read half fixed {fixed_ids} · broken {broken_ids}"
-                if halved
+                f" · the gate's test passes {o.get('passes', '?')} · on train {o.get('train_passes', '?')}, fixed {fixed_ids} · broken {broken_ids}"
+                if on_test
+                else f" · gate-half passes {o.get('passes', '?')} · on the read half fixed {fixed_ids} · broken {broken_ids}"
+                if hidden
                 else f" · passes {o.get('passes', '?')} · fixed {fixed_ids} · broken {broken_ids}"
             )
             + (f" · reason: {reason[:300]}" if reason else "")

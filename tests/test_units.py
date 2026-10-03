@@ -28,28 +28,39 @@ def _r(tid: str, ok: bool, trial: int = 1) -> TaskResult:
 
 
 # ── splits ───────────────────────────────────────────────────────────────
-HALVES = {
-    "airline": (25, 25),
-    "retail": (57, 57),
-    "telecom": (57, 57),
-    "banking_knowledge": (48, 49),
+# (train, test, split version): half of each base set, except banking at split v3 (60 / 37)
+SIDES = {
+    "airline": (25, 25, SPLIT_VERSION),
+    "retail": (57, 57, SPLIT_VERSION),
+    "telecom": (57, 57, SPLIT_VERSION),
+    "banking_knowledge": (60, 37, 3),
 }
 
 
 @pytest.mark.parametrize("domain", DOMAINS)
-def test_committed_split_halves_the_base_set_disjoint_and_seeded(domain: str) -> None:
+def test_committed_split_covers_the_base_set_disjoint_and_seeded(domain: str) -> None:
     s = read_split(domain)
-    assert s["seed"] == SPLIT_SEED and s["version"] == SPLIT_VERSION
-    # a capped test (banking, s09) keeps its first tasks and holds the rest back in reserve
-    held = (s.get("test_cap") or {}).get("held_back") or []
-    assert (len(s["train"]), len(s["test"]) + len(held)) == HALVES[domain]
-    assert not set(s["train"]) & set(s["test"]) and not set(held) & (
-        set(s["train"]) | set(s["test"])
-    )
-    assert (
-        s["reserve_n"] == len(held) and len(s["train"]) + len(s["test"]) + len(held) == s["base_n"]
-    )
+    assert s["seed"] == SPLIT_SEED
+    assert (len(s["train"]), len(s["test"]), s["version"]) == SIDES[domain]
+    # every base task is train or test: nothing is held in reserve
+    assert not set(s["train"]) & set(s["test"]) and "test_cap" not in s
+    assert s["reserve_n"] == 0 and len(s["train"]) + len(s["test"]) == s["base_n"]
     assert split_ids(domain, "all") == s["train"] + s["test"]
+
+
+def test_banking_split_v3_is_its_seeded_cut_and_moves_no_task_side() -> None:
+    """The 24 tasks s09 held back are dealt, seed 300: 12 to train (60), 12 to test (37). Every
+    v2 member keeps its side, so v1's runs (48 train, 25 test) are still on the sides they ran."""
+    from tau2_loop.data.splits import cut
+
+    s = read_split("banking_knowledge")
+    assert cut("banking_knowledge") == s
+    assert s["train"][:48] == s["v2"]["train"] and s["test"][:25] == s["v2"]["test"]
+    assert set(s["v1"]["train"]) <= set(s["train"]) and set(s["v1"]["test"]) <= set(s["test"])
+    read, gate = s["halves"]["read"], s["halves"]["gate"]
+    assert (len(read), len(gate)) == (30, 30) and sorted(read + gate) == sorted(s["train"])
+    # the halves keep their members and take six of the new train tasks each
+    assert set(s["train"][48:]) == set(read[24:]) | set(gate[24:])
 
 
 @pytest.mark.parametrize("domain", DOMAINS)
@@ -98,12 +109,17 @@ def test_an_odd_reserve_puts_its_extra_task_on_the_reported_side() -> None:
 
 # ── versions ──────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("domain", DOMAINS + ("mock",))
-def test_v0_exists_with_policy_slot(domain: str) -> None:
-    v = load_version(domain, "v0")
+def test_each_domain_has_its_base_version_with_policy_slot(domain: str) -> None:
+    """v0 on Haiku, except banking, whose v0 was retired on 3 Oct 2026: v1, v0's prompt on Sonnet."""
+    from tau2_loop.agent.versions import base_version
+
+    name = base_version(domain)
+    v = load_version(domain, name)
     assert "{policy}" in v.system_prompt
-    assert v.config.model == "haiku" and v.config.tool_mode == "json"
-    assert len(v.fingerprint) == 12
-    assert v.ref == f"{domain}/v0"
+    model = "sonnet" if domain == "banking_knowledge" else "haiku"
+    assert (name, v.config.model) == ("v1" if model == "sonnet" else "v0", model)
+    assert v.config.tool_mode == "json" and len(v.fingerprint) == 12
+    assert v.ref == f"{domain}/{name}"
 
 
 def test_next_version_name_counts_per_domain(

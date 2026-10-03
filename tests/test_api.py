@@ -6,6 +6,7 @@ import json
 
 from fastapi.testclient import TestClient
 
+from tau2_loop.agent.compose import CLOCK_NOTE, compose
 from tau2_loop.config import RUNS_DIR
 from tau2_loop.serving.app import create_app, trace_events, trace_messages
 
@@ -33,9 +34,8 @@ def test_domains_and_tasks() -> None:
     c = client()
     ds = c.get("/api/domains").json()
     assert [d["domain"] for d in ds] == ["airline", "retail", "telecom", "banking_knowledge"]
-    # split v2: half of each base set on each side
-    # banking's test is capped at 25 (s09), the other 24 of its half held back in reserve
-    assert [(d["train"], d["test"]) for d in ds] == [(25, 25), (57, 57), (57, 57), (48, 25)]
+    # split v2: half of each base set on each side; banking at split v3, 60 train / 37 test
+    assert [(d["train"], d["test"]) for d in ds] == [(25, 25), (57, 57), (57, 57), (60, 37)]
     airline = c.get("/api/domains/airline").json()
     assert airline["policy_words"] > 1000 and len(airline["tasks"]) == 50
     first = airline["tasks"][0]
@@ -44,11 +44,28 @@ def test_domains_and_tasks() -> None:
     assert c.get("/api/domains/nope").status_code == 404
 
 
+def test_a_task_lists_its_conversation_in_every_run_that_played_it() -> None:
+    """The scope bar's task on Runs: one row per run and trial, newest run first."""
+    rows = client().get("/api/domains/airline/conversations", params={"task": "39"}).json()
+    runs = [r["run_id"] for r in rows]
+    assert runs == sorted(runs, reverse=True) and len(set(runs)) == len(runs)
+    v6 = next(r for r in rows if r["run_id"] == "20260928T101605Z_airline_v6_train")
+    assert (v6["agent"], v6["split"], v6["correct"], v6["db_check"]) == (
+        "v6",
+        "train",
+        False,
+        False,
+    )
+    # a train task is never in a test run
+    assert all(r["split"] != "test" for r in rows)
+    assert client().get("/api/domains/airline/conversations", params={"task": "nope"}).json() == []
+
+
 def test_agents_and_registry() -> None:
     c = client()
     body = c.get("/api/agents").json()
     refs = {v["ref"] for v in body["versions"]}
-    assert {"airline/v0", "retail/v0", "telecom/v0", "banking_knowledge/v0"} <= refs
+    assert {"airline/v0", "retail/v0", "telecom/v0", "banking_knowledge/v1"} <= refs
     assert set(body["registry"]) == {"airline", "retail", "telecom", "banking_knowledge"}
     v = c.get("/api/agents/airline/v0").json()
     assert "{policy}" in v["files"]["system.md"]
@@ -119,7 +136,7 @@ def test_stats_is_the_overview_in_one_object() -> None:
     ]
     # the four base splits are the benchmark: 50 + 114 + 114 + 97
     assert s["base_total"] == 375
-    # banking holds 24 of its test half back in reserve (s09's test cap)
+    # every base task is train or test (banking's reserve was dealt out at split v3)
     assert all(
         d["train"] + d["test"] + (d.get("reserve_n") or 0) == d["base_n"] for d in s["domains"]
     )
@@ -262,4 +279,15 @@ def test_the_prompt_shown_is_the_prompt_the_agent_builds() -> None:
     version = load_version("airline", "v2")
     assert version.fingerprint == shown["fingerprint"][:12]
     agent = LoopAgent(tools=[], domain_policy=shown["prompt"]["policy"], version=version)
-    assert agent.system_prompt() == shown["prompt"]["text"]
+    # the run was made before the clock note, so the tab shows the prompt it was sent, without one;
+    # the agent built today ends with it
+    assert shown["prompt"]["clock_note"] is None
+    assert agent.system_prompt() == f"{shown['prompt']['text']}\n\n{CLOCK_NOTE}"
+
+
+def test_the_agent_is_told_not_to_take_the_real_date() -> None:
+    """The CLI's date reaches every session; the composed prompt ends with the note against it,
+    unless it is composed for a run made before the note."""
+    assert compose("Be kind.\n{policy}", "P.", None).text == f"Be kind.\nP.\n\n{CLOCK_NOTE}"
+    old = compose("Be kind.\n{policy}", "P.", None, clock=False)
+    assert old.text == "Be kind.\nP." and old.clock_note is None

@@ -1,7 +1,8 @@
 # tau2-loop — every target is a thin wrapper over `uv run tau2loop …`.
 .DEFAULT_GOAL := help
 DOMAIN ?= airline
-AGENT ?= v0
+# AGENT unset: eval runs the domain's v0, or its oldest version where v0 was retired (banking: v1); smoke runs v0
+AGENT ?=
 SPLIT ?= train
 TRIALS ?= 1
 CONCURRENCY ?= 3
@@ -37,16 +38,19 @@ platform-status: ## preflight: the central MLflow must answer /health (runs befo
 	@curl -fsS $(MLFLOW_TRACKING_URI)/health >/dev/null || (echo "central MLflow down at $(MLFLOW_TRACKING_URI): run make platform-up"; exit 1)
 
 smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
-	uv run tau2loop smoke --agent $(AGENT) --concurrency $(CONCURRENCY)
+	uv run tau2loop smoke --agent $(or $(AGENT),v0) --concurrency $(CONCURRENCY)
 
 eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=)
-	uv run tau2loop eval --domain $(DOMAIN) --agent $(AGENT) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY)
+	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY)
 
-baselines: platform-status ## v0 on the train split of all four domains, one trial each
-	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --agent v0 --split train --concurrency $(CONCURRENCY) || exit 1; done
+baselines: platform-status ## each domain's base version on its train split, one trial each: v0, or the oldest version where v0 was retired (banking, v1)
+	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --split train --concurrency $(CONCURRENCY) || exit 1; done
 
 score: ## summarise RUN=<run id>
 	uv run tau2loop score $(RUN)
+
+extend: platform-status ## play only the tasks RUN=<run id>'s split has gained since, joined to it as one run of the split (a champion's train run stays its record)
+	uv run tau2loop extend $(RUN) --concurrency $(CONCURRENCY)
 
 rescore: ## replay RUN=<run id> through tau2's evaluators offline and compare verdicts
 	uv run tau2loop rescore $(RUN)

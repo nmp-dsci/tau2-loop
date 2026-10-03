@@ -4,6 +4,7 @@ imports, and that a request answers the same in-process and over HTTP."""
 from __future__ import annotations
 
 import ast
+import json
 import os
 import shutil
 import socket
@@ -296,6 +297,7 @@ def test_the_runner_routes_the_agent_to_the_service_without_the_token(
     assert cfg.llm_args_agent["reasoning_effort"] == "medium"
     assert "secret-token" not in repr(cfg.model_dump())  # tau2 writes this config to disk
     assert cfg.llm_args_user["reasoning_effort"] == runner.USER_EFFORT
+    assert cfg.user == "tau2_loop_user_airline"  # ours (eval.user), never tau2's own customer
     assert runner.agent_route() == ("service:127.0.0.1:8090", "http://127.0.0.1:8090")
     monkeypatch.delenv("AGENT_SERVICE_URL")
     cfg = runner._run_config("airline", load_version("airline", "v0"), ["0"], 1, 1, 300)
@@ -313,6 +315,133 @@ def test_a_dry_run_records_effort_split_version_and_route(
     assert (meta.agent_effort, meta.user_effort) == ("medium", "medium")
     assert meta.split_version == 2 and meta.n_tasks == 25
     assert meta.agent_route == "in-process"
+    assert meta.sim_rules is None  # a dry run plays no conversation
     monkeypatch.setenv("AGENT_SERVICE_URL", "http://127.0.0.1:8090")
     meta, _ = runner.run_eval("airline", "v0", "test", dry_run=True, track=False)
     assert meta.agent_route == "service:127.0.0.1:8090"
+
+
+# ── extending a run to its split's new tasks (3 Oct 2026, banking's split v3) ──────────────────
+
+
+def _fake_run(runs: Path, run_id: str, ids: list[str], passes: set[str], **over: Any) -> None:
+    from dataclasses import asdict
+
+    from tau2_loop.eval.results import TaskResult, summarise, write_results
+    from tau2_loop.eval.runner import SIM_RULES, RunMeta
+
+    d = runs / run_id
+    (d / "traces").mkdir(parents=True)
+    (d / "agent").mkdir()
+    (d / "agent" / "system.md").write_text("{policy}")
+    rows = [TaskResult(t, 1, float(t in passes), t in passes, trace=f"{t}.json") for t in ids]
+    for t in ids:
+        (d / "traces" / f"{t}.json").write_text(json.dumps({"task_id": t}))
+    (d / "tau2_results.json").write_text(
+        json.dumps(
+            {
+                "info": {"seed": 300},
+                "tasks": [{"id": t} for t in ids],
+                "simulations": [{"task_id": t} for t in ids],
+                "simulation_index": None,
+            }
+        )
+    )
+    write_results(d / "results.jsonl", rows)
+    fields: dict[str, Any] = {
+        "run_id": run_id,
+        "domain": "banking_knowledge",
+        "agent": "v1",
+        "fingerprint": "fp1",
+        "model": "sonnet",
+        "user_model": "haiku",
+        "judge_model": "haiku",
+        "split": "train",
+        "n_tasks": len(ids),
+        "trials": 1,
+        "concurrency": 3,
+        "seed": 300,
+        "started_at": "t0",
+        "finished_at": "t1",
+        "task_ids": ids,
+        "summary": asdict(summarise(rows)),
+        "sim_rules": SIM_RULES,
+    }
+    meta = RunMeta(**{**fields, **over})
+    (d / "run.json").write_text(json.dumps(asdict(meta)))
+
+
+def _extend_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, train: list[str]) -> Path:
+    import tau2_loop.eval.runner as runner
+
+    runs = tmp_path / "runs"
+    monkeypatch.setattr(runner, "RUNS_DIR", runs)
+    monkeypatch.setattr(runner, "split_ids", lambda d, s: train)
+    monkeypatch.setattr(runner, "split_version", lambda d: 3)
+    monkeypatch.setattr(
+        runner, "load_version", lambda d, n: type("V", (), {"name": n, "fingerprint": "fp1"})()
+    )
+    return runs
+
+
+def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of_the_split(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tau2_loop.eval.runner as runner
+    import tau2_loop.loop.run as loop_run
+
+    train = ["t1", "t2", "t3", "t4", "t5"]
+    runs = _extend_world(tmp_path, monkeypatch, train)
+    _fake_run(
+        runs,
+        "20261002T000000Z_banking_knowledge_v1_train",
+        ["t1", "t2", "t4"],
+        {"t1"},
+        split_version=2,
+    )
+    played: list[list[str]] = []
+
+    def fake_eval(
+        domain: str, agent: str, split: str, trials: int, concurrency: int, task_ids: Any, note: str
+    ) -> Any:
+        played.append(list(task_ids))
+        _fake_run(runs, "20261003T000000Z_banking_knowledge_v1_custom", task_ids, {"t5"})
+        return runner.load_run("20261003T000000Z_banking_knowledge_v1_custom")
+
+    monkeypatch.setattr(runner, "run_eval", fake_eval)
+    meta, rows = runner.extend_run("20261002T000000Z_banking_knowledge_v1_train")
+    assert played == [["t3", "t5"]]  # only what the split gained, in the split's order
+    assert meta.task_ids == train and [r.task_id for r in rows] == train
+    assert meta.split_version == 3 and meta.mlflow_run_id is None
+    assert meta.composed_of == [
+        "20261002T000000Z_banking_knowledge_v1_train",
+        "20261003T000000Z_banking_knowledge_v1_custom",
+    ]
+    assert (meta.summary or {})["passed"] == 2
+    d = runs / meta.run_id
+    assert sorted(p.name for p in (d / "traces").iterdir()) == [f"{t}.json" for t in train]
+    tau2 = json.loads((d / "tau2_results.json").read_text())
+    assert [s["task_id"] for s in tau2["simulations"]] == ["t1", "t2", "t4", "t3", "t5"]
+    # the loop takes it as a run of the whole split
+    assert loop_run._covers(meta, train, 1)
+
+
+@pytest.mark.parametrize(
+    ("over", "refusal"),
+    [
+        ({"fingerprint": "fp0"}, "bytes changed"),
+        ({"sim_rules": None}, "other simulation rules"),
+        ({"task_ids": ["t1", "t9"]}, "no longer on its train side"),
+    ],
+)
+def test_a_run_is_not_extended_across_versions_rules_or_a_moved_task(
+    over: dict[str, Any], refusal: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tau2_loop.eval.runner as runner
+
+    runs = _extend_world(tmp_path, monkeypatch, ["t1", "t2", "t3"])
+    ids = over.pop("task_ids", ["t1", "t2"])
+    _fake_run(runs, "r_base", ids, set(), **over)
+    monkeypatch.setattr(runner, "run_eval", lambda *a, **k: pytest.fail("nothing should be played"))
+    with pytest.raises(ValueError, match=refusal):
+        runner.extend_run("r_base")

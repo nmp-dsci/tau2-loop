@@ -6,9 +6,12 @@ gate's verdict except through that ledger on the next cycle, which is the
 point: the record of what worked is a file it reads, not a memory it keeps.
 The challenger then runs the test split once, promoted or held, and the
 champion's test run on the same tasks is compared with it (`test_compare`) —
-for the ledger and the tables. That comparison never decides anything: the
-test split is reported, never optimised on, and a gate that read it would be
-optimising on it one step removed.
+for the ledger and the tables. That comparison decides nothing: the test split
+is reported, never optimised on, and a gate that read it would be optimising on
+it one step removed. The exception is a domain in `GATE_ON_TEST` (banking, from
+3 Oct 2026, the person's call): its optimiser reads every failure of all of
+train, and its gate is that test comparison. No optimiser still sees a test
+conversation or a test task's id.
 
 `make challenge DOMAIN=… AGENT=vN` scores a version nobody's optimiser wrote — a
 model-swap fork, say — against the champion through the same code: everything a
@@ -16,7 +19,8 @@ cycle does once its challenger exists is `_score_challenger`, called by both.
 
 A domain whose train split is halved (s09 option B, `data/splits`) shows the
 optimiser only its read half's failures and gates on the gate half, which no
-optimiser sees; every version still runs all of train and test. `make ab` runs
+optimiser sees; every version still runs all of train and test. No domain is
+halved today: banking was, until its gate moved to test. `make ab` runs
 two optimisers from one champion on the same input — the classic one and the
 routing one — scores both, and crowns at most one (s09 §6).
 """
@@ -30,10 +34,11 @@ from typing import Any
 from rich.console import Console
 
 from tau2_loop.agent.versions import load_version, version_dir
+from tau2_loop.config import GATE_ON_TEST
 from tau2_loop.data.splits import halves, split_ids
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.results import TaskResult
-from tau2_loop.eval.runner import RunMeta, list_runs, load_run, run_eval
+from tau2_loop.eval.runner import SIM_RULES, RunMeta, list_runs, load_run, run_eval
 from tau2_loop.llm import model_label
 from tau2_loop.loop.ledger import append_entry, next_cycle_number, update_entry
 from tau2_loop.loop.optimiser import MODES, OptimiserOutput, build_context, run_optimiser
@@ -43,8 +48,14 @@ console = Console()
 
 
 def _covers(meta: RunMeta, ids: list[str], trials: int) -> bool:
-    """A run scored exactly these tasks at this many trials (a run on an older cut does not)."""
-    return set(meta.task_ids) == set(ids) and meta.trials == trials and not meta.dry_run
+    """A run scored exactly these tasks at this many trials, under today's simulation rules (a run
+    on an older cut does not, nor one with tau2's own customer and the real date: `runner.SIM_RULES`)."""
+    return (
+        set(meta.task_ids) == set(ids)
+        and meta.trials == trials
+        and not meta.dry_run
+        and meta.sim_rules == SIM_RULES
+    )
 
 
 def _read_failures(domain: str, results: list[TaskResult]) -> list[TaskResult]:
@@ -67,7 +78,17 @@ def _gate_rows(domain: str, results: list[TaskResult]) -> list[TaskResult]:
     return [r for r in results if r.task_id in gate]
 
 
+def _refuse_no_test(domain: str, run_test: bool) -> None:
+    """A domain whose gate decides on test cannot be scored without its test run."""
+    if domain in GATE_ON_TEST and not run_test:
+        raise ValueError(
+            f"{domain}'s gate decides on the test split: the test run cannot be skipped"
+        )
+
+
 def _gate_on(domain: str) -> str:
+    if domain in GATE_ON_TEST:
+        return f"test ({len(split_ids(domain, 'test'))} tasks)"
     h = halves(domain)
     return f"gate half ({len(h[1])} of {len(h[0]) + len(h[1])} train tasks)" if h else "train"
 
@@ -190,6 +211,9 @@ def _cycle_entry(
         "helper_diff_summary": opt.diagnosis.get("helper_diff_summary", "") or "",
         "expected_to_fix": opt.diagnosis.get("expected_to_fix", []),
         "risks": opt.diagnosis.get("risks", []),
+        # what it took from the champion's earlier challengers, and what it left out (`champion_record`)
+        "carried_forward": opt.diagnosis.get("carried_forward", []),
+        "dropped": opt.diagnosis.get("dropped", []),
         "optimiser": {
             "turns": opt.n_turns,
             "duration_ms": opt.duration_ms,
@@ -224,6 +248,7 @@ async def run_cycle(
     trials: int = 1,
     mode: str = "classic",
 ) -> dict[str, Any]:
+    _refuse_no_test(domain, run_test)
     cycle = next_cycle_number(domain)
     champion = load_version(domain, agent)
     champ_meta, champ_results = _champion_run(domain, agent, concurrency, trials)
@@ -278,6 +303,7 @@ async def run_ab(
     the first's folder. Each challenger is gated against the champion and run on test. At most
     one is crowned: of those that pass the gate, the one with more gate-half passes, then fewer
     breaks; the other is recorded as held, with the reason."""
+    _refuse_no_test(domain, run_test)
     agent = str((read_registry(domain).get("champion") or {}).get("agent") or "")
     if not agent:
         raise ValueError(f"{domain} has no champion: promote a run first (make promote RUN=…)")
@@ -355,6 +381,34 @@ async def run_ab(
     return scored
 
 
+def _test_pair(
+    entry: dict[str, Any], why: str, trials: int, concurrency: int, reuse: bool
+) -> tuple[RunMeta, list[TaskResult], RunMeta, list[TaskResult]]:
+    """The challenger's test run and the champion's on the same tasks (the champion's newest run
+    of its bytes on exactly those tasks, else a new one). `why` goes in the challenger run's note:
+    the verdict when test is reported after it, the train run when the gate is on test."""
+    domain, cycle = str(entry["domain"]), int(entry["cycle"])
+    challenger, agent = str(entry["challenger"]), str(entry["champion"])
+    note = f"test split, cycle {cycle} ({why})"
+    if reuse:
+        test_meta, test_results = _test_run(
+            domain, challenger, split_ids(domain, "test"), trials, concurrency, note
+        )
+    else:
+        test_meta, test_results = run_eval(
+            domain, challenger, split="test", trials=trials, concurrency=concurrency, note=note
+        )
+    champ_test_meta, champ_test = _test_run(
+        domain,
+        agent,
+        list(test_meta.task_ids),
+        trials,
+        concurrency,
+        note=f"champion's test run for cycle {cycle}'s comparison",
+    )
+    return test_meta, test_results, champ_test_meta, champ_test
+
+
 def _score_challenger(
     entry: dict[str, Any],
     champ_results: list[TaskResult],
@@ -375,14 +429,17 @@ def _score_challenger(
     newest scored run of the challenger's exact bytes on each split instead of a new one (a
     hand-made version may have been scored already); a loop's challenger is bytes nobody has
     run, so a cycle passes False and always evaluates it. The gate reads the gate half where
-    train is halved. `crown=False` records a passing verdict without promoting it (an A/B pair
-    crowns at most one, after both are scored).
+    train is halved, and the test comparison where the domain gates on test (`GATE_ON_TEST`),
+    which then runs before the verdict and cannot be skipped. `crown=False` records a passing
+    verdict without promoting it (an A/B pair crowns at most one, after both are scored).
     """
     domain = str(entry["domain"])
     cycle = int(entry["cycle"])
     agent = str(entry["champion"])
     challenger = str(entry["challenger"])
     failed_ids = list(entry["failed"])
+    on_test = domain in GATE_ON_TEST
+    _refuse_no_test(domain, run_test)
     note = f"loop cycle {cycle} challenger"
     if reuse:
         ids = split_ids(domain, "train")
@@ -393,17 +450,23 @@ def _score_challenger(
         chall_meta, chall_results = run_eval(
             domain, challenger, split="train", trials=trials, concurrency=concurrency, note=note
         )
-    verdict = compare(_gate_rows(domain, champ_results), _gate_rows(domain, chall_results))
+    test = _test_pair(entry, "the gate", trials, concurrency, reuse) if on_test else None
+    if test:
+        verdict = compare(test[3], test[1])
+    else:
+        verdict = compare(_gate_rows(domain, champ_results), _gate_rows(domain, chall_results))
     cs, hs = champ_meta.summary or {}, chall_meta.summary or {}
     h = halves(domain)
-    # where train is halved, the fixes and breaks an optimiser may later read are the read half's;
-    # the gate half's ids stay in `fixed` / `broken` for the gate and never reach a prompt
+    # the fixes and breaks an optimiser may later read: the read half's where train is halved, all
+    # of train's where the gate is on test. The gate's own ids stay in `fixed` / `broken` and
+    # never reach a prompt.
+    read = set(h[0]) if h else {r.task_id for r in champ_results} if on_test else None
     read_seen = (
         compare(
-            [r for r in champ_results if r.task_id in set(h[0])],
-            [r for r in chall_results if r.task_id in set(h[0])],
+            [r for r in champ_results if r.task_id in read],
+            [r for r in chall_results if r.task_id in read],
         )
-        if h
+        if read is not None
         else None
     )
     still_failed = sorted(
@@ -453,37 +516,19 @@ def _score_challenger(
     # recorded before the test runs, so a cycle that dies there still carries its verdict
     update_entry(domain, cycle, outcome=outcome, tokens=tokens)
     if run_test:
-        test_note = f"test split, cycle {cycle} ({outcome['verdict']})"
-        if reuse:
-            test_meta, test_results = _test_run(
-                domain, challenger, split_ids(domain, "test"), trials, concurrency, test_note
-            )
-        else:
-            test_meta, test_results = run_eval(
-                domain,
-                challenger,
-                split="test",
-                trials=trials,
-                concurrency=concurrency,
-                note=test_note,
-            )
+        test_meta, test_results, champ_test_meta, champ_test = test or _test_pair(
+            entry, outcome["verdict"], trials, concurrency, reuse
+        )
         ts = test_meta.summary or {}
         outcome["test_run"] = test_meta.run_id
         outcome["test_passes"] = f"{ts.get('passed')}/{ts.get('n_scored')}"
-        champ_test_meta, champ_test = _test_run(
-            domain,
-            agent,
-            list(test_meta.task_ids),
-            trials,
-            concurrency,
-            note=f"champion's test run for cycle {cycle}'s comparison",
-        )
         try:
             tv = compare(champ_test, test_results)
         except ValueError as e:  # a champion test run on other tasks: say so, keep the cycle
             outcome["test_compare"] = {"champion_run": champ_test_meta.run_id, "error": str(e)}
         else:
-            # reported beside the verdict, never used by it
+            # the gate's own comparison where the domain gates on test; else reported beside the
+            # verdict, never used by it
             outcome["test_compare"] = {
                 "champion_run": champ_test_meta.run_id,
                 "challenger_run": test_meta.run_id,
@@ -493,6 +538,7 @@ def _score_challenger(
                 "broken": tv.broken,
                 "p_value": tv.p_value,
                 "reason": tv.reason,
+                "gated": on_test,
             }
     update_entry(domain, cycle, outcome=outcome, tokens=tokens)
     try:
@@ -529,6 +575,7 @@ def run_challenge(
     train and test runs are the newest scored runs of its exact bytes when they exist, else
     new ones. Refuses the champion itself, or a version with the champion's bytes.
     """
+    _refuse_no_test(domain, run_test)
     champ_name = (read_registry(domain).get("champion") or {}).get("agent")
     if not champ_name:
         raise ValueError(f"{domain} has no champion: promote a run first (make promote RUN=…)")
