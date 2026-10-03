@@ -1,0 +1,58 @@
+{
+  "diagnoses": [
+    {"task_id": "44", "symptom": "Agent read two reservations, claimed schedule/duration data is unavailable from any tool, refused to proceed; user went out of scope.",
+      "graded_difference": "reservations.NM1VX1, KC18K6, H8Q05L cabin/flights/payment_history: gold upgrades them to business (expected actions 44_17-19); the agent never called update_reservation_flights",
+      "root_cause": "Agent did not know that search_direct_flight returns scheduled_departure/arrival times for the reservation's flight numbers; the generic v1/v2 'do not give up' block (in v6) was not concrete enough. v5's passing trace shows the right path: search each segment, compute durations, quote total upgrade cost, deny the change-of-plan cancellation.",
+      "surface": "system.md", "change": "Added a concrete procedure: get_reservation_details has no times; call search_direct_flight per segment, match flight_number, read scheduled_*_time_est, compute duration, for every relevant reservation.",
+      "verified_in_session": false, "verification": "Prompt-only change; read v5's passing trace 44 to confirm search-per-segment yields durations (HAT300 3h, HAT228 ~5.5h)."},
+    {"task_id": "24", "symptom": "Agent refused to search 'cheapest to anywhere West Coast', made the user pick LAX, then booked EWR-LAX instead of the cheaper JFK-SEA.",
+      "graded_difference": "reservations.HATHAT origin/destination/flights/payment: gold books JFK-SEA HAT069/HAT276; the agent booked EWR-LAX HAT041/HAT012",
+      "root_cause": "Agent treated a multi-airport cheapest comparison as a forbidden recommendation and never compared all origin/destination combinations.",
+      "surface": "system.md", "change": "Added a rule to search every origin/destination combination when the user asks for the cheapest across airports or a region and compare totals itself.",
+      "verified_in_session": false, "verification": "Prompt-only change."},
+    {"task_id": "6", "symptom": "After denying added insurance, the agent booked a duplicate new reservation with insurance on the same flights.",
+      "graded_difference": "reservations.HATHAT created, flights HAT176/HAT097 seats, certificate_6193508 consumed: the agent's book_reservation at message 38; gold makes no write",
+      "root_cause": "v3 has no rule against duplicate bookings as a workaround; v6's workaround rule still allowed alternatives the user suggested, and here the user suggested 'a new ticket purchase'.",
+      "surface": "system.md", "change": "Narrow rule: never book a new reservation duplicating an existing active one (same passenger, same flights) to get insurance or another denied benefit, even if the user suggests it.",
+      "verified_in_session": false, "verification": "Prompt-only change."},
+    {"task_id": "23", "symptom": "Agent listed individual balances but never stated the gift card and certificate totals; the user computed them.",
+      "graded_difference": "database matched: COMMUNICATE unmet '327' and '1000'",
+      "root_cause": "No rule requiring the agent to state the summed balances.",
+      "surface": "system.md", "change": "Kept the v4/v6 balance-totals rule and the split-reservation rule (real fix for 23 in both).",
+      "verified_in_session": false, "verification": "Carried over from v6's text unchanged."},
+    {"task_id": "39", "symptom": "Agent cancelled the two business reservations but refused the insured economy MSJ4OA because the reason (giving the seat away) is not health or weather.",
+      "graded_difference": "reservations.MSJ4OA status/payment_history: gold cancels it (39_10); the agent never called cancel_reservation on it",
+      "root_cause": "This gold conflicts with the policy's insurance clause and with tasks 44 (insured economy S61CZX, change of plans, not cancelled) and 47 (insured booking, birthday, not cancelled). v4's 'any reason' clause fixed 39 but broke 47.",
+      "surface": "system.md", "change": "No change: keep v6's literal health/weather rule, which keeps 44 and 47 correct.",
+      "verified_in_session": false, "verification": "Read MSJ4OA in v4's trace (economy, insurance yes, created 2024-05-05) and S61CZX in v5's trace 44 (economy, change of plan, gold keeps it)."},
+    {"task_id": "20", "symptom": "When asked, the user said they preferred LGA and chose a 21:00 one-stop; gold is JFK HAT136+HAT039.",
+      "graded_difference": "reservations.HATHAT origin/flights/payment: gold books JFK-ATL-SEA; the agent booked LGA-PHX-SEA on the itinerary the user picked",
+      "root_cause": "The simulated user picked LGA and the option. v3 passes this task in 2 of 3 runs, so this is mostly variance from the user simulator.",
+      "surface": "system.md", "change": "No dedicated change; the new metro-area rule may lead the agent to search all New York airports.",
+      "verified_in_session": false, "verification": "none"}
+  ],
+  "prompt_diff_summary": "v6's system.md plus a concrete search_direct_flight duration procedure, a search-every-combination rule for cheapest-across-region requests, metro-area airport matching, and a ban on duplicate bookings used as a workaround after a denial.",
+  "helper_diff_summary": "Same as v6/v4 (extra_context re-appends the policy's current-time line); only the docstring changed.",
+  "expected_to_fix": ["44", "24", "6", "23"],
+  "risks": [
+    "Task 22 was broken by v6 (the agent missed that EWR-ORD is New York to Chicago); the new metro-area line targets this, but v6's basic-economy block may still change the conversation.",
+    "Task 19 flips and was broken by v1 and v6; the extra duration searches add turns only when the user asks about durations.",
+    "Task 39 stays failed: its gold contradicts tasks 44 and 47."
+  ],
+  "carried_forward": [
+    {"from": "v6", "what": "Balance-totals and split-reservation rules (from v4), plus the basic economy cabin-change and price-difference × passengers rule", "evidence": "Real fix of task 23 by both v4 and v6"},
+    {"from": "v6", "what": "Literal cancellation eligibility (insurance covers only health or weather)", "evidence": "Undoes v4's real break of task 47; matches gold for S61CZX in task 44"},
+    {"from": "v4", "what": "extra_context current-time reminder and the date-grounding block", "evidence": "Held in v4 and v6; task 24 passes under both"}
+  ],
+  "dropped": [
+    {"from": "v4", "what": "Insurance satisfies cancel eligibility for any reason", "evidence": "Real break of task 47: v4's agent cancelled insured H8Q05L for a birthday conflict"},
+    {"from": "v4", "what": "(v4's implicit) blanket 'basic economy cannot be modified' statements", "evidence": "Real break of task 22 in v4 ('basic economy flights cannot be modified' led the user to end the call); v6's narrow basic-economy block is kept in its place"}
+  ],
+  "changes": [
+    {"file": "system.md", "anchor": "Concrete procedure: get_reservation_details does", "what": "Tells the agent to get durations from search_direct_flight per segment and compute them for every relevant reservation.", "why": "Task 44 transcript: 'the reservation details only include flight dates and prices ... not able to calculate flight durations'", "task_ids": ["44"]},
+    {"file": "system.md", "anchor": "Similarly, if the user asks", "what": "Search every origin/destination combination when the user asks for the cheapest across a region, and compare the totals.", "why": "Task 24 transcript: 'I don't have a way to search broadly for cheapest options across multiple destinations'", "task_ids": ["24", "20"]},
+    {"file": "system.md", "anchor": "Match locations by metro area:", "what": "Treats EWR/LGA/JFK as New York, ORD/MDW as Chicago, etc. when locating reservations.", "why": "v6 trace 22: 'None of these four reservations are for a New York to Chicago trip' after reading EWR->ORD FQ8APE", "task_ids": ["22"]},
+    {"file": "system.md", "anchor": "In particular, never book a", "what": "Forbids duplicate new bookings used to work around a denied insurance addition or other denied benefit.", "why": "Task 6: the agent booked HATHAT with insurance on the same flights as PEP4E0; policy: 'The user cannot add insurance after initial booking'", "task_ids": ["6"]},
+    {"file": "helper.py", "anchor": "extra_context", "what": "Unchanged from v6 except the docstring.", "why": "Keeps the current-time grounding", "task_ids": ["24"]}
+  ]
+}
