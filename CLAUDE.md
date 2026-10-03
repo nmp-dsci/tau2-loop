@@ -49,7 +49,10 @@
 - **The LLM judge learns from optimised answering agents only** (s11): never
   v0's traces. J0's labels skip them (`labels.UNOPTIMISED`), so the golden
   answers, replays and the judge loop never see them. Never add a v0 run to
-  the judge's data, and never re-deal its folds.
+  the judge's data, and never re-deal its folds. The data is closed at the runs
+  its committed labels hold (the person's call, 3 Oct 2026,
+  `labels.CLOSED_AT`): a run scored later, of any agent or domain, never joins
+  the labels, golden answers, replays, the judge loop, the pending queue or Evals.
 - **The LLM judge is called only at a write or a transfer, before it runs**
   (s11): never on a text reply. J0 marks those checkpoints `judged`
   (`labels.JUDGED_KINDS`); Evals, the review queue and the judge's bar show

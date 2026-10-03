@@ -560,3 +560,20 @@ def test_evals_on_the_judge_lists_its_whole_eval_set_and_none_where_it_has_none(
     # nothing in a pass waits in the review queue either
     items = c.get("/api/judge/airline/gold").json()["items"]
     assert items and not any(i["passed"] for i in items)
+
+
+def test_a_run_scored_after_the_judges_data_closed_never_joins_it_or_its_pending_queue(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    src = RUNS_DIR / "20260928T060029Z_airline_v3_train"
+    new = "20261003T000000Z_airline_v8_train"
+    assert labels.open_to_judge(src.name) and not labels.open_to_judge(new)
+    run = tmp_path / new
+    (run / "traces").mkdir(parents=True)
+    meta = json.loads((src / "run.json").read_text())
+    (run / "run.json").write_text(json.dumps({**meta, "agent": "v8"}))
+    for f in (src / "traces").iterdir():
+        (run / "traces" / f.name).write_text(f.read_text())
+    monkeypatch.setattr(labels, "RUNS_DIR", tmp_path)
+    assert [r for r, *_ in labels._scored_traces("airline")] == []
+    assert labels.unlabelled_runs("airline") == []

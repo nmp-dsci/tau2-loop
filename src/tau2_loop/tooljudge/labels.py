@@ -65,6 +65,17 @@ JUDGED_KINDS: frozenset[str] = frozenset({"write", "transfer"})
 #: Versions whose traces the judge never learns from: the baseline, before any loop cycle.
 UNOPTIMISED: frozenset[str] = frozenset({"v0"})
 
+#: The judge's data is closed (the person's call, 3 Oct 2026): a run id (its UTC start stamp) at or
+#: after this never joins the labels, golden answers, replays, the judge loop, the pending queue
+#: or Evals, whatever agent or domain it is. The last run the committed labels hold is 20260928.
+CLOSED_AT = "20261002T000000Z"
+
+
+def open_to_judge(run_id: str) -> bool:
+    """Whether a run was scored before the judge's data closed."""
+    return run_id < CLOSED_AT
+
+
 # Folds pinned as J3's cycle 1 dealt them (2026-10-01): its optimiser read F1–F3, so re-dealing
 # after v0 left could move a task it read into the gate half. A new domain is dealt by `task_folds`.
 PINNED_FOLDS: dict[str, dict[str, int]] = {
@@ -148,7 +159,7 @@ def _scored_traces(domain: str) -> Iterator[tuple[str, dict[str, Any], str, dict
     agent of the domain."""
     for run_dir in sorted(p for p in RUNS_DIR.iterdir() if p.is_dir()):
         meta_path, traces = run_dir / "run.json", run_dir / "traces"
-        if not meta_path.is_file() or not traces.is_dir():
+        if not open_to_judge(run_dir.name) or not meta_path.is_file() or not traces.is_dir():
             continue
         meta = json.loads(meta_path.read_text())
         if meta.get("domain") != domain or meta.get("dry_run") or not meta.get("finished_at"):
@@ -600,7 +611,9 @@ def unlabelled_runs(domain: str) -> list[dict[str, Any]]:
     out = []
     for run_dir in sorted(p for p in RUNS_DIR.iterdir() if p.is_dir()):
         meta_path, traces = run_dir / "run.json", run_dir / "traces"
-        if run_dir.name in have or not meta_path.is_file() or not traces.is_dir():
+        if run_dir.name in have or not open_to_judge(run_dir.name):
+            continue
+        if not meta_path.is_file() or not traces.is_dir():
             continue
         meta = json.loads(meta_path.read_text())
         if meta.get("domain") != domain or meta.get("dry_run") or not meta.get("finished_at"):
