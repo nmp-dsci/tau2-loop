@@ -13,7 +13,7 @@ import {
   when,
 } from '../lib/api';
 import { Kpi, Loading, Points } from '../lib/ui';
-import { useExp } from '../lib/scope';
+import { useExp, useTask } from '../lib/scope';
 import { reviewPath, runPath, trialId, trialPath, useLens } from '../lib/url';
 
 /**
@@ -69,12 +69,14 @@ export function Review() {
   // the scope bar: this dataset's runs, of its experiment when one is set
   const scopeDomain = lens.get('domain') ?? '';
   const exp = useExp();
+  const task = useTask();
   const scored = (runs ?? []).filter(
     (r) =>
       !r.dry_run &&
       r.summary?.n_scored &&
       (!scopeDomain || r.domain === scopeDomain) &&
-      (!exp || r.agent === exp),
+      (!exp || r.agent === exp) &&
+      (!task || (r.task_ids ?? []).includes(task)),
   );
   const run = lens.get('run') || openRun || scored[scored.length - 1]?.run_id || '';
   const { data: index, error } = useGet<ReviewIndex>(
@@ -88,9 +90,9 @@ export function Review() {
 
   if (!index) return <Loading error={error} />;
   const meta = detail?.meta;
-  const rows = (detail?.results ?? []).filter((r) =>
-    only === 'fail' ? r.correct === false : only === 'unreviewed' ? !index.current[trialId(r)] : true,
-  );
+  const rows = (detail?.results ?? [])
+    .filter((r) => !task || r.task_id === task)
+    .filter((r) => (only === 'fail' ? r.correct === false : only === 'unreviewed' ? !index.current[trialId(r)] : true));
   const reviewed = Object.keys(index.current).length;
   const disagreed = (index.tally.disagree ?? 0) + (index.tally.task_broken ?? 0);
 

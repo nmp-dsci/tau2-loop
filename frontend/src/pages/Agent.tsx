@@ -26,6 +26,7 @@ import {
   legacyNode,
   outcome,
 } from '../lib/agentgraph';
+import { useTask } from '../lib/scope';
 import { Loading } from '../lib/ui';
 import { agentPath, optimisePath, parseTrialId, trialId, trialPath, useLens } from '../lib/url';
 
@@ -65,11 +66,13 @@ function writeView(v: string): void {
 }
 
 /** The run a version opens on: the one the registry names for it, else its latest. */
-function defaultRun(runs: RunMeta[], reg: Registries, domain: string, name: string): string | null {
+function defaultRun(runs: RunMeta[], reg: Registries, domain: string, name: string, task = ''): string | null {
+  // the scope bar's task: a run that played it, so a test task opens the test run
+  const played = (id: string) => !task || (runs.find((m) => m.run_id === id)?.task_ids ?? []).includes(task);
   const r = reg[domain];
-  for (const e of [r?.champion, r?.challenger]) if (e?.agent === name && runs.some((m) => m.run_id === e.run_id)) return e.run_id;
+  for (const e of [r?.champion, r?.challenger]) if (e?.agent === name && runs.some((m) => m.run_id === e.run_id) && played(e.run_id)) return e.run_id;
   const mine = runs.filter((m) => m.agent === name && !m.dry_run && m.summary).sort((a, b) => b.started_at.localeCompare(a.started_at));
-  return mine[0]?.run_id ?? null;
+  return (mine.find((m) => played(m.run_id)) ?? mine[0])?.run_id ?? null;
 }
 
 /** Failures first, then the run's own task order. */
@@ -92,6 +95,7 @@ export function Agent() {
   const [pg, setPg] = useState<PgRequest | null>(null);
 
   const runId = lens.get('run');
+  const task = useTask();
   const trialLens = lens.get('trial');
   const rawNode = lens.get('node');
   const node: NodeKey | null = legacyNode(rawNode);
@@ -124,17 +128,17 @@ export function Agent() {
   useEffect(() => {
     if (!domain || !name || !agents || !runs) return;
     const patch: Record<string, string> = {};
-    const rid = runId ?? defaultRun(runs, agents.registry, domain, name);
+    const rid = runId ?? defaultRun(runs, agents.registry, domain, name, task);
     if (!runId && rid) patch.run = rid;
     if (rawNode && legacyNode(rawNode) !== rawNode) patch.node = legacyNode(rawNode) ?? '';
     if (!trialLens && run && run.meta.run_id === rid) {
-      const first = ordered(run.results, run.meta.task_ids)[0];
+      const first = run.results.find((x) => x.task_id === task) ?? ordered(run.results, run.meta.task_ids)[0];
       if (first) patch.trial = trialId(first);
       if (!rawNode) patch.node = 'agent';
     }
     if (Object.keys(patch).length) setLens(patch);
     // setLens is rebuilt every render, so it is not a dependency; these decide the patch
-  }, [domain, name, agents, runs, run, runId, trialLens, rawNode]);
+  }, [domain, name, agents, runs, run, runId, trialLens, rawNode, task]);
 
   // remember a complete view, so `/agent` reopens it
   useEffect(() => {

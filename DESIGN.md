@@ -86,6 +86,13 @@ ONE INSIGHT LINE    — what it means, once, in under 25 words
   two agents never read as one voice. It is this project's only purple, added
   2026-10-01 at the reviewer's request (plan `.lavish/s11_…`); it never marks
   a status, an action or a link.
+- **`--agent` and `--user` mean exactly one thing: who is speaking in a
+  conversation** — the answering agent's replies (a `--agent-soft` surface) and
+  its tool calls (its border on white), and the simulated customer's messages
+  (a `--user-soft` surface); the environment's tool results stay on white with
+  a `--line-3` border. Added 2026-10-02 at the reviewer's request, because an
+  all-white transcript did not say who said what. They never mark a status, an
+  action or a link, and the answering agent no longer borrows `--ok`.
 - **`--amber` means exactly one thing: partial** (a warning, a caveat, a
   provisional number). `--line-3` outlines mean **designed, not built**.
 - Status is never colour alone; every glyph is accompanied by the word.
@@ -167,17 +174,18 @@ bigger unverified one.
 | Surface | What it is | How the brief applies |
 |---|---|---|
 | `.lavish/sNN_*.html` | the review artifact written before each change | full system: tokens block copied verbatim, assertion headings, `.dia` figures, `form.q` decision controls |
-| `frontend/` | the React + Vite demo site (served from FastAPI, deployed to App Runner as read-only) | `frontend/src/tokens.css` is the token block below, including its three recorded divergences (`--accent` red, `--ok` and `--judge` added); `frontend/scripts/design_lint.mjs` hard-fails on hex outside it; three voices; status words with glyphs; tables per §2; every page led by an assertion headline; no metric strip without a baseline |
+| `frontend/` | the React + Vite demo site (served from FastAPI, deployed to App Runner as read-only) | `frontend/src/tokens.css` is the token block below, including its recorded divergences (`--accent` red; `--ok`, `--judge`, `--agent` and `--user` added); `frontend/scripts/design_lint.mjs` hard-fails on hex outside it; three voices; status words with glyphs; tables per §2; every page led by an assertion headline; no metric strip without a baseline |
 | `README.md`, `docs/` | the repo's public face | assertion headings; every number with its denominator; figures as committed SVG with a title and caption |
 | `nmp-dsci.github.io/_projects/tau2-loop.md` | the eventual case study | the site's own contract applies, run `scripts/lint_case_study.py` there |
 
 ## 5. The tokens
 
 The light palette below is the site's
-(`nmp-dsci.github.io/assets/css/tokens.css`), with this project's three recorded
+(`nmp-dsci.github.io/assets/css/tokens.css`), with this project's recorded
 divergences: `--accent` is red, not the site's green; `--ok` carries the
-"passed" meaning the site's green accent carried; and `--judge` is the LLM
-judge's voice (§2 Colour). Everything else
+"passed" meaning the site's green accent carried; `--judge` is the LLM
+judge's voice; and `--agent` and `--user` are the answering agent's and the
+simulated customer's (§2 Colour). Everything else
 is pasted into every artifact unchanged, with the dark override that follows
 it. Fonts load from Google Fonts in artifacts (the site self-hosts).
 
@@ -190,6 +198,8 @@ it. Fonts load from Google Fonts in artifacts (the site self-hosts).
   --amber:#8A5006; --amber-soft:#F6E6CF;
   --ok:#0A6552; --ok-soft:#DFEFE8; /* project extension: passed (§2 Colour) */
   --judge:#5B3A8C; --judge-soft:#EEE9F6; /* project extension: the LLM judge speaking (§2 Colour) */
+  --agent:#235A8C; --agent-soft:#E7EFF8; /* project extension: the answering agent speaking (§2 Colour) */
+  --user:#6E5A2E; --user-soft:#F5F0E1; /* project extension: the simulated customer speaking (§2 Colour) */
   --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
   --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
   --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -208,6 +218,8 @@ it. Fonts load from Google Fonts in artifacts (the site self-hosts).
   --amber:#D99A4E; --amber-soft:#3A2A14;
   --ok:#43C29A; --ok-soft:#17382C;
   --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
   --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
 }}
 :root[data-theme="dark"]{ /* same values as the dark block above */ }

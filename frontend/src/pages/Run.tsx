@@ -13,6 +13,7 @@ import {
   useGet,
   when,
 } from '../lib/api';
+import { useTask } from '../lib/scope';
 import { Loading, Points, Rate } from '../lib/ui';
 import { agentPath, runPath, runsPath, trialId, trialPath, useLens } from '../lib/url';
 
@@ -100,7 +101,9 @@ export function Run() {
   const { meta, results, profile } = data;
   const s = meta.summary;
 
+  const task = useTask();
   const rows = results
+    .filter((r) => !task || r.task_id === task)
     .filter((r) =>
       verdictFilter === 'pass'
         ? r.correct === true

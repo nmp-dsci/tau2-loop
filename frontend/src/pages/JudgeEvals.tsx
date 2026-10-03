@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { type Event, byTask, domainLabel, post, useGet } from '../lib/api';
+import { DbDiff } from '../lib/dbdiff';
 import { type Check, GoldCheck } from '../lib/goldcheck';
 import { GoldLine, type JudgeView, MODE, annotated, goldFirstWrong, golden, humanAt, runTag } from '../lib/judge';
 import { type Conv, WHOLE, firstBlock, itemId, stateOf, toTick, toUntick, verdictAt } from '../lib/judgeevals';
-import { useExp } from '../lib/scope';
+import { useExp, useTask } from '../lib/scope';
 import { Kpi, Loading, Points } from '../lib/ui';
 import { judgeConvPath, judgeEvalsPath, judgeLoopPath, trialPath, useLens } from '../lib/url';
 import { EventList } from './Trace';
@@ -24,7 +25,7 @@ type Synth = { id: string; key: string; msg: number; task: string; kind: string;
 type Pending = { runs: { run: string; agent: string; traces: number }[]; no_gold: { failed: number; passed: number } };
 type Evals = { domain: string; conversations: Conv[] | null; synthetic?: Synth[]; pending?: Pending };
 type GoldIndex = { items: { id: string }[]; current: Record<string, Check>; writable: boolean; reason: string };
-type TracePayload = { events: Event[]; judge?: JudgeView | null };
+type TracePayload = { events: Event[]; judge?: JudgeView | null; reward_info?: { db_check?: { db_match: boolean } | null } | null };
 type Record_ = (c: Conv, verdict: 'agree' | 'withdraw', msgs: number[]) => Promise<void>;
 
 const enc = encodeURIComponent;
@@ -36,6 +37,7 @@ export function JudgeEvals() {
   const nav = useNavigate();
   const [lens, setLens] = useLens();
   const exp = useExp();
+  const task = useTask();
   const { data, error } = useGet<Evals>(`/api/judge/${enc(domain)}/evals`);
   const { data: gold } = useGet<GoldIndex>(`/api/judge/${enc(domain)}/gold`);
   // checks made on this page, by case id, laid over the server's so the table follows at once;
@@ -83,6 +85,7 @@ export function JudgeEvals() {
   const q = (lens.get('q') ?? '').trim();
   const all = data.conversations
     .filter((c) => !exp || c.version === exp)
+    .filter((c) => !task || c.task === task)
     .sort((a, b) => byTask(a.task, b.task) || byTask(a.version, b.version) || a.key.localeCompare(b.key));
   const st = (c: Conv) => stateOf(c, current).state;
   const corrected = (c: Conv) => c.review.filter((m) => current[itemId(c, m)]?.verdict === 'correct').length;
@@ -127,7 +130,7 @@ export function JudgeEvals() {
           <>
             <b>The judge is called only when the agent issues a write or a transfer</b>, before it runs. A failure it can catch
             has a call the golden answer blocks; the first such call is where it must stop.
-            {exp ? ` Filtered to ${exp}’s conversations, the scope bar’s experiment.` : ''}
+            {exp || task ? ` Filtered by the scope bar to ${[exp && `${exp}’s conversations`, task && `task ${task}`].filter(Boolean).join(' on ')}.` : ''}
           </>,
           <>
             <b>A pass needs no one</b>: tau2 matched its database to gold’s, so every write and transfer in it was right.
@@ -568,6 +571,9 @@ function GoldConversation({
         <p className="small muted">
           It first went wrong at message {fw.msg}, a {fw.kind}, which the judge never sees: it is not a write or a transfer.
         </p>
+      )}
+      {data.reward_info?.db_check && !data.reward_info.db_check.db_match && (
+        <DbDiff url={`/api/runs/${enc(c.run)}/${enc(c.task)}/t${c.trial}/db`} />
       )}
       {actions}
       <div className="label fig-title gold-conv-title">

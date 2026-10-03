@@ -98,12 +98,13 @@ function handMade(e: LedgerEntry | undefined): string | null {
   return `${e.kind} ${e.forked_from ?? e.champion} → ${e.challenger ?? '—'}${model ? ` (${model})` : ''}`;
 }
 
-/** What the gate did with one task, by the ledger's own three lists. */
+/** What the challenger did with one train task, by the ledger's lists: the gate's, or the train
+ * moves beside them where the gate read another set (the gate half, or test). */
 function taskOutcome(e: LedgerEntry | undefined, taskId: string): string {
   const o = e?.outcome;
   if (!o) return 'pending';
-  if (o.fixed?.includes(taskId)) return 'fixed';
-  if (o.broken?.includes(taskId)) return 'broken';
+  if (o.fixed?.includes(taskId) || o.read_fixed?.includes(taskId)) return 'fixed';
+  if (o.broken?.includes(taskId) || o.read_broken?.includes(taskId)) return 'broken';
   if (o.still_failed?.includes(taskId)) return 'still failed';
   return o.verdict === 'pending' ? 'pending' : 'unchanged';
 }
@@ -142,9 +143,16 @@ function VersionsSection({ h, open }: { h: VersionHistory; open: string | null }
                   : the gate reads tasks fixed and broken, not the count.
                 </>
               ) : null,
-              <>
-                <b>Solid is train pass^1</b>, what the gate reads; dashed is test, run once per challenger and reported only.
-              </>,
+              // banking's gate decides on test from 3 Oct 2026 (config.GATE_ON_TEST)
+              h.domain === 'banking_knowledge' ? (
+                <>
+                  <b>Dashed is test pass^1, what the gate reads</b> from 3 Oct 2026; solid is train, all of which the optimiser reads.
+                </>
+              ) : (
+                <>
+                  <b>Solid is train pass^1</b>, what the gate reads; dashed is test, run once per challenger and reported only.
+                </>
+              ),
               <>
                 <b>The green tick is the champion it was gated against</b>; + is tasks fixed, − broken. A column opens its round.
               </>,
@@ -309,6 +317,7 @@ export function Optimise() {
                   <td className="num sub" title={e.outcome?.gate_on ? `the gate's passes on the ${e.outcome.gate_on}` : undefined}>
                     {e.outcome?.passes ?? '—'}
                     {e.outcome?.gate_on?.startsWith('gate half') && <span className="path">gate half</span>}
+                    {e.outcome?.gate_on?.startsWith('test') && <span className="path">test</span>}
                   </td>
                   <td className="num">{e.outcome?.test_passes ?? '—'}</td>
                   <td className="wrap small">

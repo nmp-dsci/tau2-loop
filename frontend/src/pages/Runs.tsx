@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { type Check, type Checks, DOMAINS, type RunMeta, type VersionHistory, type VersionNode, domainLabel, fmtK, fmtPct, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
 import { Loading, Points, Rate } from '../lib/ui';
-import { runPath, useLens } from '../lib/url';
-import { useExp } from '../lib/scope';
+import { runPath, trialPath, useLens } from '../lib/url';
+import { useExp, useScope, useTask } from '../lib/scope';
 import { JudgeRuns } from './JudgeRuns';
 import { DomainBars, VersionsFig, standing, versionsWidth } from '../lib/versions';
 
@@ -57,6 +57,88 @@ function PassK({ r, k }: { r: RunMeta; k: number }) {
     );
   }
   return <td className="num mono">{fmtPct(v)}</td>;
+}
+
+type TaskConv = {
+  run_id: string;
+  agent: string;
+  split: string;
+  model: string;
+  started_at: string;
+  trial: number;
+  correct: boolean | null;
+  reward: number;
+  db_check: boolean | null;
+  action_checks: string | null;
+  communicate_checks: string | null;
+  n_agent_turns: number;
+  n_tool_calls: number;
+  termination_reason: string;
+  duration_ms: number;
+};
+
+/** The scope bar's task in every run in scope: its conversation in each, one click from the trace. */
+function TaskRuns({ domain, task, runs }: { domain: string; task: string; runs: RunMeta[] }) {
+  const { data, error } = useGet<TaskConv[]>(`/api/domains/${encodeURIComponent(domain)}/conversations?task=${encodeURIComponent(task)}`);
+  if (!data) return <Loading error={error} />;
+  const inScope = new Set(runs.map((r) => r.run_id));
+  const rows = data.filter((c) => inScope.has(c.run_id));
+  const passed = rows.filter((c) => c.correct).length;
+  return (
+    <>
+      <h2>
+        Task {task} — passed in {passed} of {rows.length} conversations across the runs in scope
+      </h2>
+      <div className="tw fit">
+        <table>
+          <caption>Newest run first; a row opens that conversation’s trace.</caption>
+          <thead>
+            <tr>
+              <th>run</th>
+              <th>agent</th>
+              <th>verdict</th>
+              <th>DB</th>
+              <th className="num">actions</th>
+              <th className="num">agent turns</th>
+              <th>ended</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => (
+              <tr key={`${c.run_id}#${c.trial}`}>
+                <td className="sub mono small">
+                  <Link to={trialPath(c.run_id, `${task}/t${c.trial}`)}>{breakable(c.run_id.replace(/^\d{8}T\d{6}Z_/, ''))}</Link>
+                  <span className="path">
+                    {when(c.started_at)} · t{c.trial}
+                  </span>
+                </td>
+                <td className="small">
+                  {c.agent}
+                  <span className="path">{shortModel(c.model)}</span>
+                </td>
+                <td>
+                  <span className={`status ${c.correct ? 'ok' : c.correct === false ? 'err' : 'no'}`}>
+                    {c.correct ? 'pass' : c.correct === false ? 'fail' : 'unscored'}
+                  </span>
+                </td>
+                <td className="small">{c.db_check == null ? <span className="dim">—</span> : c.db_check ? 'matches gold' : 'differs'}</td>
+                <td className="num">{c.action_checks ?? '—'}</td>
+                <td className="num">{c.n_agent_turns}</td>
+                <td className="small">{c.termination_reason}</td>
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr>
+                <td colSpan={7} className="dim">
+                  no run in scope played task {task}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 }
 
 const names = (hs: VersionHistory[]) => hs.map((h) => domainLabel(h.domain)).join(', ');
@@ -151,6 +233,8 @@ export function Runs() {
   const { data: hist, error: histError } = useGet<Record<string, VersionHistory>>('/api/versions');
   const domain = lens.get('domain') ?? '';
   const exp = useExp();
+  const task = useTask();
+  const { scope } = useScope();
   // the scope bar's dataset narrows the figures to it; with no dataset in the address, all four
   const hs = DOMAINS.filter((d) => !domain || d === domain).flatMap((d) => (hist?.[d] ? [hist[d]] : []));
   const split = lens.get('split') ?? '';
@@ -160,6 +244,8 @@ export function Runs() {
     .filter((r) => (domain ? r.domain === domain : true))
     // the scope bar's experiment: that version's runs, train, test and custom
     .filter((r) => (exp ? r.agent === exp : true))
+    // the scope bar's task, which belongs to one dataset: the runs that played it
+    .filter((r) => !task || (r.domain === (domain || scope.dataset) && (r.task_ids ?? []).includes(task)))
     .filter((r) => (split ? r.split === split : true))
     .filter((r) => (q ? `${r.run_id} ${r.agent} ${r.note}`.toLowerCase().includes(q) : true));
   // the MLflow snapshot under the same scope: an eval by its agent, a loop cycle by either side of it
@@ -194,6 +280,8 @@ export function Runs() {
           </>,
         ]}
       />
+      {/* the scope bar's task first: its conversation in each run, one click from the trace */}
+      {task && <TaskRuns domain={domain || scope.dataset} task={task} runs={real} />}
       {hist ? <ChampionFigs hs={hs} /> : <Loading error={histError} />}
 
       <h2>

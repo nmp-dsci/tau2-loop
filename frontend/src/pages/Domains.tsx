@@ -131,7 +131,9 @@ export function Domain() {
 
   if (!data) return <Loading error={error} />;
 
+  // an open task is the scope bar's task: the table narrows to it; "close" shows them all again
   const rows = data.tasks
+    .filter((t) => !taskId || t.id === taskId)
     .filter((t) => (split ? t.split === split : true))
     .filter((t) =>
       q ? `${t.id} ${t.purpose ?? ''} ${t.relevant_policies ?? ''}`.toLowerCase().includes(q) : true,

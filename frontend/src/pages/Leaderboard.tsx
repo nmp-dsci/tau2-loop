@@ -262,7 +262,9 @@ export function Leaderboard() {
           <h3>The user simulator</h3>
           <p className="small">
             Ours is <code>{data.our_caveats.user_simulator}</code>; most entries use gpt-5.2. The
-            simulator is half the conversation, so this alone moves a pass rate.
+            simulator is half the conversation, so this alone moves a pass rate. Since 2 October 2026
+            it is our subclass of tau2’s: a stop sent with words waits for the agent’s turn, and
+            it is told the world’s time, not the real one.
           </p>
         </div>
         <div className="card">

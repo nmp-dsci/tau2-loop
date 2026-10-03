@@ -4,7 +4,8 @@
  * and the LLM judge, which reviews its writes and transfers. An experiment is a version of the
  * answering agent (`v0`, `v1`, … : the `<agent>` in every run id), so it filters whatever that
  * version produced: its runs, the round that made it, its conversations in Review and in the
- * judge's eval set. The bar at the top sets all three, and every tab honours them.
+ * judge's eval set. A task narrows each tab to that one task: its card in Evals, its conversation
+ * in every run, its rows in Review. The bar at the top sets all four, and every tab honours them.
  *
  * The scope is not new state with its own URL: each tab already names its dataset (a path segment
  * or a `?domain=` lens) and, where both agents have a view, which agent (`/optimise/<d>/judge`,
@@ -17,10 +18,11 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { type AgentInfo, DOMAINS, type Registries, byTask, domainLabel, useGet } from './api';
+import { type AgentInfo, DOMAINS, type DomainDetail, type Registries, byTask, domainLabel, shortTask, useGet } from './api';
+import { taskId, taskPath } from './url';
 
 export type AgentKind = 'answering' | 'judge';
-export type Scope = { dataset: string; agent: AgentKind; exp: string };
+export type Scope = { dataset: string; agent: AgentKind; exp: string; task: string };
 export type Tab = 'overview' | 'evals' | 'rubric' | 'leaderboard' | 'runs' | 'optimise' | 'agent' | 'review';
 
 export const AGENTS: [AgentKind, string, string][] = [
@@ -45,6 +47,13 @@ export function expApplies(tab: Tab, agent: AgentKind): boolean {
   return agent === 'answering' && (tab === 'runs' || tab === 'optimise' || tab === 'agent');
 }
 
+/** Where a task filters what is shown: the tabs whose rows are tasks or their conversations. The
+ *  loop's rounds and the judge's own replays, loop and versions are not per task. */
+export function taskApplies(tab: Tab, agent: AgentKind): boolean {
+  if (tab === 'evals' || tab === 'review') return true;
+  return agent === 'answering' && (tab === 'runs' || tab === 'agent');
+}
+
 /** A dataset's experiments: every version of its answering agent, made or run, in order. */
 export function experimentsOf(dataset: string, versions: AgentInfo[], runs: { domain: string; agent: string; dry_run?: boolean }[]): string[] {
   const names = new Set([
@@ -54,7 +63,7 @@ export function experimentsOf(dataset: string, versions: AgentInfo[], runs: { do
   return [...names].sort(byTask);
 }
 
-const DEFAULT: Scope = { dataset: 'airline', agent: 'answering', exp: '' };
+const DEFAULT: Scope = { dataset: 'airline', agent: 'answering', exp: '', task: '' };
 const STORE = 'tau2loop.scope';
 
 /** `claude-sdk/claude-haiku-4-5`, `claude-sonnet-5`, `opus` → `haiku`, `sonnet`, `opus`. */
@@ -98,6 +107,9 @@ export function scopeFromLocation(pathname: string, search: string): Partial<Sco
   if (tab === 'review') out.agent = parts[2] === 'golden' ? 'judge' : 'answering';
   if (tab === 'runs') out.agent = !parts[2] && q.get('agent') === 'judge' ? 'judge' : 'answering';
   if (AGENT_TABS.includes(tab) && q.has('exp')) out.exp = q.get('exp') ?? '';
+  // the answering agent's Evals names its task in the path: an open task is the scope's task
+  if (tab === 'evals' && parts[2] && parts[3] !== 'judge') out.task = parts[3] ?? '';
+  else if (AGENT_TABS.includes(tab) && q.has('task')) out.task = q.get('task') ?? '';
   return out;
 }
 
@@ -126,19 +138,20 @@ export function scopeHref(tab: Tab, s: Scope, agents?: { versions: AgentInfo[]; 
     case 'rubric':
       return '/rubric';
     case 'evals':
-      return judge ? `/evals/${d}/judge${qs({ exp: s.exp })}` : `/evals/${d}`;
+      if (judge) return `/evals/${d}/judge${qs({ exp: s.exp, task: s.task })}`;
+      return s.task ? taskPath(taskId(s.dataset, s.task)) : `/evals/${d}`;
     case 'leaderboard':
       return `/leaderboard${qs({ domain: s.dataset })}`;
     case 'runs':
-      return judge ? `/runs${qs({ domain: s.dataset, agent: 'judge' })}` : `/runs${qs({ domain: s.dataset, exp: s.exp })}`;
+      return judge ? `/runs${qs({ domain: s.dataset, agent: 'judge' })}` : `/runs${qs({ domain: s.dataset, exp: s.exp, task: s.task })}`;
     case 'optimise':
       return judge ? `/optimise/${d}/judge` : `/optimise/${d}${qs({ exp: s.exp })}`;
     case 'review':
-      return judge ? `/review/golden/${d}${qs({ exp: s.exp })}` : `/review${qs({ domain: s.dataset, exp: s.exp })}`;
+      return judge ? `/review/golden/${d}${qs({ exp: s.exp, task: s.task })}` : `/review${qs({ domain: s.dataset, exp: s.exp, task: s.task })}`;
     case 'agent': {
       if (judge) return `/agent/${d}/judge`;
       const v = agents ? agentVersion(s, agents.versions, agents.registry) : null;
-      return v ? `/agent/${d}/${encodeURIComponent(v)}` : '/agent';
+      return v ? `/agent/${d}/${encodeURIComponent(v)}${qs({ task: s.task })}` : '/agent';
     }
   }
 }
@@ -186,7 +199,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
   // remember what the address said, for the tabs that say nothing
   useEffect(() => {
     const next = { ...stored, ...fromLoc };
-    if (next.dataset !== stored.dataset || next.agent !== stored.agent || next.exp !== stored.exp) {
+    if (next.dataset !== stored.dataset || next.agent !== stored.agent || next.exp !== stored.exp || next.task !== stored.task) {
       setStored(next);
       try {
         window.localStorage.setItem(STORE, JSON.stringify(next));
@@ -207,6 +220,8 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
       const next = { ...scope, ...patch };
       // another dataset keeps the experiment only if it ran one of that name
       if (patch.dataset && patch.dataset !== scope.dataset && next.exp && !experiments(patch.dataset).includes(next.exp)) next.exp = '';
+      // a task id belongs to its dataset: airline's 39 is not retail's
+      if (patch.dataset && patch.dataset !== scope.dataset) next.task = '';
       setStored(next);
       try {
         window.localStorage.setItem(STORE, JSON.stringify(next));
@@ -231,6 +246,11 @@ export function useExp(): string {
   return useContext(ScopeCtx)?.scope.exp ?? '';
 }
 
+/** The task the scope bar has set, or '' for all, read the same way. */
+export function useTask(): string {
+  return useContext(ScopeCtx)?.scope.task ?? '';
+}
+
 /** The bar under the tabs: Dataset everywhere it applies; Agent where both agents have a view; the
  *  experiment where it filters what the tab shows. */
 export function ScopeBar() {
@@ -239,6 +259,7 @@ export function ScopeBar() {
   const withAgent = AGENT_TABS.includes(tab);
   const exps = experiments(scope.dataset);
   const champ = champion(scope.dataset);
+  const withTask = withAgent && taskApplies(tab, scope.agent);
   return (
     <div className="in scopebar" role="group" aria-label="scope">
       <label className="pick">
@@ -284,6 +305,27 @@ export function ScopeBar() {
           </select>
         </label>
       )}
+      {withTask && <TaskPick dataset={scope.dataset} task={scope.task} onPick={(task) => set({ task })} />}
     </div>
+  );
+}
+
+/** The bar's task: the dataset's tasks in order, each with its split. */
+function TaskPick({ dataset, task, onPick }: { dataset: string; task: string; onPick: (t: string) => void }) {
+  const { data } = useGet<DomainDetail>(`/api/domains/${encodeURIComponent(dataset)}`);
+  const tasks = (data?.tasks ?? []).slice().sort((a, b) => byTask(a.id, b.id));
+  return (
+    <label className="pick" title="one task: its card in Evals, its conversation in every run, its rows in Review">
+      <span className="label">task</span>
+      <select value={task} onChange={(e) => onPick(e.target.value)}>
+        <option value="">all</option>
+        {task && !tasks.some((t) => t.id === task) && <option value={task}>{shortTask(task, 32)}</option>}
+        {tasks.map((t) => (
+          <option key={t.id} value={t.id}>
+            {shortTask(t.id, 32)} · {t.split}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

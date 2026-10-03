@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { type Event, fmtS, shortRun, shortTask, useGet } from '../lib/api';
+import { DbDiff } from '../lib/dbdiff';
 import type { Check } from '../lib/goldcheck';
 import { JudgePanel, type JudgeView, judgeMarks } from '../lib/judge';
 import { runPath } from '../lib/url';
@@ -72,7 +73,15 @@ export function Trace() {
           {ri.db_check != null && (
             <div className="card">
               <h3>Database</h3>
-              <p className={ri.db_check.db_match ? 'v-ok' : 'v-warn'}>{ri.db_check.db_match ? 'final DB equals the gold DB' : 'final DB differs from the gold DB'}</p>
+              <p className={ri.db_check.db_match ? 'v-ok' : 'v-warn'}>
+                {ri.db_check.db_match ? (
+                  'final DB equals the gold DB'
+                ) : (
+                  <>
+                    final DB differs from the gold DB: <a href="#db-diff">every difference below</a>
+                  </>
+                )}
+              </p>
             </div>
           )}
           {ri.action_checks && ri.action_checks.length > 0 && (
@@ -121,6 +130,11 @@ export function Trace() {
               <p className="small v-warn">{ri.info.note}</p>
             </div>
           )}
+        </div>
+      )}
+      {ri?.db_check && !ri.db_check.db_match && (
+        <div id="db-diff">
+          <DbDiff url={`/api/runs/${encodeURIComponent(runId)}/${encodeURIComponent(taskId)}/${encodeURIComponent(trial)}/db`} />
         </div>
       )}
       {judge && <JudgePanel j={judge} domain={edit.domain} />}

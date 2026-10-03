@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useGet, when } from '../lib/api';
 import { type Check, GoldCheck } from '../lib/goldcheck';
 import { CHECKS, runTag, runVersion } from '../lib/judge';
-import { useExp } from '../lib/scope';
+import { useExp, useTask } from '../lib/scope';
 import { Kpi, Loading, Points } from '../lib/ui';
 import { goldReviewPath, trialPath, useLens } from '../lib/url';
 
@@ -85,6 +85,7 @@ export function GoldReview() {
   const nav = useNavigate();
   const [nonce, setNonce] = useState(0);
   const exp = useExp();
+  const task = useTask();
   const { data, error } = useGet<GoldIndex>(`/api/judge/${encodeURIComponent(domain)}/gold`, nonce);
   if (!data) return <Loading error={error} />;
   const s = data.summary;
@@ -93,6 +94,7 @@ export function GoldReview() {
   const agreed = checked.filter((i) => data.current[i.id].verdict === 'agree').length;
   const rows = data.items
     .filter((i) => !exp || runVersion(i.run) === exp)
+    .filter((i) => !task || i.task === task)
     .filter((i) =>
       show === 'todo' ? !data.current[i.id] : show === 'checked' ? !!data.current[i.id] : show === 'corrected' ? data.current[i.id]?.verdict === 'correct' : true,
     );
@@ -168,7 +170,7 @@ export function GoldReview() {
           </select>
         </label>
         <span className="count">
-          {rows.length} of {data.items.length} cases{exp ? ` · ${exp}’s conversations` : ''}
+          {rows.length} of {data.items.length} cases{exp ? ` · ${exp}’s conversations` : ''}{task ? ` · task ${task}` : ''}
         </span>
       </div>
       <div className="tw">
