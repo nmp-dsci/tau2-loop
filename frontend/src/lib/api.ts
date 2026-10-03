@@ -104,8 +104,9 @@ export type Diagnosis = {
   verified_in_session?: boolean;
   verification?: string;
 };
-/** Champion vs challenger on the test split: reported beside the verdict, never used by it. */
-export type TestCompare = { champion_run: string; challenger_run?: string; passes?: string; pass_1?: string; fixed?: string[]; broken?: string[]; p_value?: number; reason?: string; error?: string };
+/** Champion vs challenger on the test split: reported beside the verdict, never used by it, except
+ * where the domain's gate decides on test (`gated`: banking from 3 Oct 2026). */
+export type TestCompare = { champion_run: string; challenger_run?: string; passes?: string; pass_1?: string; fixed?: string[]; broken?: string[]; p_value?: number; reason?: string; error?: string; gated?: boolean };
 export type Outcome = {
   verdict: string;
   reason?: string;
@@ -121,10 +122,11 @@ export type Outcome = {
   test_run?: string;
   test_passes?: string;
   test_compare?: TestCompare;
-  /** s09: `train`, or the gate half where train is halved; the whole train split beside it */
+  /** `train`, the gate half where train is halved (s09), or `test (n tasks)` where the gate decides on test */
   gate_on?: string;
   gate_passes?: { champion: number; challenger: number; n: number };
   train_passes?: string;
+  /** the moves an optimiser may read: the read half's, or all of train's where the gate is on test */
   read_fixed?: string[];
   read_broken?: string[];
 };
@@ -353,6 +355,11 @@ export function when(iso: string | null | undefined): string {
   const d = new Date(iso);
   return d.toISOString().slice(0, 16).replace('T', ' ') + 'Z';
 }
+/** Task ids in task order: 2 before 10, and named ids (telecom's) alphabetically. */
+export function byTask(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
 export function shortTask(id: string, n = 36): string {
   return id.length > n ? id.slice(0, n - 1) + '…' : id;
 }

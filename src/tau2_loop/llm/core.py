@@ -191,6 +191,8 @@ class SdkResult:
     # the part of input_tokens read from the prompt cache, and the part written to it
     cache_read: int = 0
     cache_write: int = 0
+    # the reply as the SDK parsed it against `output_format`'s JSON schema, when one was asked for
+    structured: Any = None
 
 
 def cache_usage(res: SdkResult) -> dict[str, Any]:
@@ -237,7 +239,11 @@ async def _blocks(blocks: list[str]) -> AsyncIterator[dict[str, Any]]:
 
 
 async def _query(
-    system_prompt: str, user_prompt: str | list[str], model: str, effort: str
+    system_prompt: str,
+    user_prompt: str | list[str],
+    model: str,
+    effort: str,
+    output_format: dict[str, Any] | None = None,
 ) -> SdkResult:
     from claude_agent_sdk import (
         AssistantMessage,
@@ -259,6 +265,9 @@ async def _query(
         env=sealed_env(),
         setting_sources=[],
         effort=effort,
+        # a JSON schema the CLI enforces on the final reply (`--json-schema`); the tool judge's
+        # verdicts ask for one, the task agent never does
+        output_format=output_format,
     )
     texts: list[str] = []
     res = SdkResult("", 0, 0, None, 0, None)
@@ -285,7 +294,10 @@ async def _query(
             res.session_id = msg.session_id
             if msg.is_error:
                 res.error = f"{msg.subtype}: {(msg.errors or [''])[0]}"[:500]
-            if not texts and msg.result:
+            res.structured = getattr(msg, "structured_output", None)
+            if not texts and res.structured is not None:
+                texts.append(json.dumps(res.structured))
+            elif not texts and msg.result:
                 texts.append(str(msg.result))
     # The CLI names the account in every session; the address must not reach a conversation.
     res.text = redact("\n".join(t for t in texts if t).strip())
@@ -317,7 +329,12 @@ def seconds_until_reset(error: str, now: datetime | None = None) -> int | None:
 
 
 def run_query(
-    system_prompt: str, user_prompt: str | list[str], model: str, effort: str = EFFORT
+    system_prompt: str,
+    user_prompt: str | list[str],
+    model: str,
+    effort: str = EFFORT,
+    *,
+    output_format: dict[str, Any] | None = None,
 ) -> SdkResult:
     """One SDK query on a private event loop, so it works from worker threads.
 
@@ -329,7 +346,9 @@ def run_query(
     while attempt < RETRIES:
         loop = asyncio.new_event_loop()
         try:
-            last = loop.run_until_complete(_query(system_prompt, user_prompt, model, effort))
+            last = loop.run_until_complete(
+                _query(system_prompt, user_prompt, model, effort, output_format)
+            )
         except Exception as e:  # noqa: BLE001 - transport errors are retried like HTTP ones
             last = SdkResult("", 0, 0, None, 0, None, error=f"{type(e).__name__}: {e}"[:500])
         finally:

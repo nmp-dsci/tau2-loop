@@ -10,6 +10,7 @@ import pytest
 
 import tau2_loop.loop.run as loop_run
 from tau2_loop.agent.versions import load_version
+from tau2_loop.eval import replay
 from tau2_loop.eval.results import TaskResult, read_results
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
 from tau2_loop.loop.optimiser import OptimiserOutput, build_prompt, condense_trace, failure_details
@@ -47,6 +48,121 @@ def test_optimiser_prompt_reads_the_committed_mock_run() -> None:
     details = failure_details(trace)
     assert "reward 0.0" in details
     assert "termination_reason" in condense_trace(trace)
+
+
+V6_TRAIN = "20260928T101605Z_airline_v6_train"
+
+
+@pytest.mark.skipif(not replay.available(), reason="tau2 is not installed")
+def test_the_optimiser_reads_the_database_difference_and_the_actions_against_the_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each failure the optimiser reads carries what tau2 graded, rebuilt: every differing field
+    and why, and each expected action matched or missing beside the agent's calls."""
+    from tau2_loop.loop.optimiser import build_context, build_diagnose_prompt
+
+    meta, results = load_run(V6_TRAIN)
+    failures = [r for r in results if r.correct is False]
+    champion = load_version("airline", "v6")
+    ctx = build_context(champion, V6_TRAIN, failures)
+    block = {b.split("\n")[0]: b for b in ctx.blocks}
+    assert sorted(block) == [f"## Task {t} (trial 1)" for t in ("19", "22", "39", "44")]
+    for b in block.values():
+        assert "DATABASE DIFFERENCE" in b and "EXPECTED ACTIONS AGAINST THE AGENT'S CALLS" in b
+        assert "ACTION is not in this task's reward basis" in b
+        assert "expected action MISSING" not in b  # tau2's bare list, replaced
+    # 44: the agent paid the fare difference from the gift card; gold charges the credit card
+    b = block["## Task 44 (trial 1)"]
+    assert "reservations.H8Q05L — wrong arguments" in b
+    assert "users.sophia_silva_7557 — wrong write" in b
+    assert 'payment_id: the agent "gift_card_5094406", expected "credit_card_4196779"' in b
+    assert "MISSING 44_15 search_direct_flight (read, not graded)" in b
+    # 39: the third cancellation was never made
+    b = block["## Task 39 (trial 1)"]
+    assert "reservations.MSJ4OA — missed write: gold's 39_10 cancel_reservation changes it" in b
+    assert 'status: before not set · the agent left not set · gold expects "cancelled"' in b
+    # both modes read the guide and must name the graded difference in each diagnosis
+    for prompt in (
+        build_prompt(champion, "v7", V6_TRAIN, failures, ctx),
+        build_diagnose_prompt(champion, "v7", failures, ctx),
+    ):
+        assert "# Reading a failure" in prompt and '"graded_difference"' in prompt
+        assert "the writes count, a missed lookup does not" in prompt
+
+    # without tau2 the optimiser still reads tau2's own matched/missing list
+    monkeypatch.setattr(replay, "available", lambda: False)
+    b = build_context(champion, V6_TRAIN, failures).blocks[0]
+    assert "DATABASE DIFFERENCE" not in b and "expected action MISSING" in b
+
+
+V3_TRAIN = ("20260928T060029Z_airline_v3_train", "20260928T093954Z_airline_v3_train")
+
+
+@pytest.mark.skipif(not replay.available(), reason="tau2 is not installed")
+def test_the_optimiser_reads_every_run_of_the_champion_and_what_its_challengers_moved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record as it stood before cycle 6: v3's failures and, beside them, both runs of v3 and
+    the challengers v4, v5 and v6 task by task. v4's "6 fixed" against v3's first run is 2 against
+    both, since v3 itself flipped on the other four; what v4 and v6 broke comes graded."""
+    import tau2_loop.eval.runner as runner
+    import tau2_loop.loop.optimiser as opt
+    from tau2_loop.loop.ledger import read_ledger
+    from tau2_loop.loop.optimiser import build_context, build_diagnose_prompt
+    from tau2_loop.loop.run import _read_failures
+
+    # the runs and cycles there were then: every later one adds a column
+    every_run, ledger = runner.list_runs, read_ledger("airline")[:5]
+    monkeypatch.setattr(
+        runner, "list_runs", lambda d=None: [m for m in every_run(d) if m.run_id < "20261002"]
+    )
+    monkeypatch.setattr(opt, "read_ledger", lambda d: ledger)
+    champion = load_version("airline", "v3")
+    meta, results = load_run(V3_TRAIN[1])
+    failures = _read_failures("airline", results)
+    ctx = build_context(champion, meta.run_id, failures)
+    rec = ctx.record
+    assert f"- v3·1 = runs/{V3_TRAIN[0]}" in rec and f"- v3·2 = runs/{V3_TRAIN[1]}" in rec
+    assert "| task | v3·1 | v3·2 | v4 | v5 | v6 | reading |" in rec
+    row = {
+        ln.split(" | ")[0][2:]: ln for ln in rec.splitlines() if ln[:2] == "| " and ln[2].isdigit()
+    }
+    assert (
+        row["23"] == "| 23 | ✗ | ✗ | ✓ | ✗ | ✓ | v3 fails it in every run: a real fix by v4, v6 |"
+    )
+    assert row["22"].endswith("v3 passes it in every run: a real break by v4, v6 |")
+    assert row["19"].endswith(
+        "v3 itself passes and fails it: a move here is as likely luck as a change |"
+    )
+    assert "The other 12 tasks passed in every run." in rec
+    # every run here used tau2's own customer and the real date
+    assert rec.count(" trial) †") == 5 and "† ran before the simulation rules of 2 Oct 2026" in rec
+
+    v4 = rec.split("## v4 —")[1].split("## v5 —")[0]
+    assert "Real fixes (every run of `v3` fails them, v4 passes): 23, 39." in v4
+    assert "Real breaks (every run of `v3` passes them, v4 fails): 6, 20, 22, 47." in v4
+    assert "Where `v3` itself flips (19 ✓, 24 ✓, 25 ✓, 33 ✓, 35 ✓ here)" in v4
+    assert "CRITICAL — DO NOT OVERRIDE KNOWN PROFILE DATA" in v4  # its change log, edit by edit
+    broke = v4.split("### v4 broke task 22")[1]
+    assert "reservations.FQ8APE — missed write" in broke and "TRANSCRIPT:" in broke
+    # a model swap has no surface to copy: its breaks come graded, without the conversation
+    v5 = rec.split("## v5 —")[1].split("## v6 —")[0]
+    assert "A model swap (model: sonnet → opus)" in v5 and "TRANSCRIPT:" not in v5
+    assert "(task 6's scenario is above)" in v5
+    # the conversations it names are the ones the fence lets the session read
+    for rid, t in (("20260928T075613Z_airline_v4_train", "22"), (V3_TRAIN[0], "19")):
+        assert (Path("runs") / rid / "traces" / f"{t}.json").resolve() in ctx.read_traces
+    for prompt in (
+        build_prompt(champion, "v7", meta.run_id, failures, ctx),
+        build_diagnose_prompt(champion, "v7", failures, ctx),
+    ):
+        assert "# What the champion's challengers moved" in prompt
+        assert '"carried_forward"' in prompt and '"dropped"' in prompt
+        assert "are under # What the champion's challengers moved" in prompt  # the held block
+    # a champion with one run and no challenger of its own has nothing to add
+    v6 = load_version("airline", "v6")
+    _, r6 = load_run(V6_TRAIN)
+    assert build_context(v6, V6_TRAIN, [r for r in r6 if r.correct is False]).record == ""
 
 
 def _rows(passes: set[str], ids: list[str]) -> list[TaskResult]:
@@ -146,6 +262,101 @@ def test_one_cycle_promotes_and_records(tmp_path: Path, monkeypatch: pytest.Monk
     assert r["champion"]["agent"] == "v1" and r["champion"]["passed"] == 15
     assert led.next_cycle_number("airline") == 2
     assert read_results(tmp_path / "runs" / o["challenger_run"] / "results.jsonl")[0].task_id == "0"
+
+
+def test_a_domain_gated_on_test_reads_all_of_train_and_promotes_on_the_test_comparison(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Banking from 3 Oct 2026 (`GATE_ON_TEST`): the optimiser reads every train failure, the
+    challenger's test run is compared with the champion's before the verdict, and that comparison
+    decides. What the next optimiser reads is the moves on train; no test id reaches it. A run
+    that would skip test is refused before a ledger line is written."""
+    import asyncio
+
+    import tau2_loop.config as cfg
+    import tau2_loop.eval.runner as runner
+    from tau2_loop.loop import ledger as led
+    from tau2_loop.tracking import registry as reg
+
+    monkeypatch.setattr(cfg, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(runner, "RUNS_DIR", tmp_path / "runs")
+    monkeypatch.setattr(led, "ledger_path", lambda d: tmp_path / d / "ledger.jsonl")
+    monkeypatch.setattr(reg, "registry_path", lambda d: tmp_path / d / "registry.json")
+    train = [str(i) for i in range(20)]
+    test = [f"t{i}" for i in range(20)]
+    # v1 fixes 10–13 and breaks 0–1 on train: the old gate would hold it (two breaks, p ≈ 0.34);
+    # on test it fixes six and breaks none
+    passes = {
+        ("v0", "train"): set(train[:10]),
+        ("v1", "train"): set(train[2:14]),
+        ("v0", "test"): set(test[:10]),
+        ("v1", "test"): set(test[:16]),
+    }
+    calls: list[tuple[str, str]] = []
+
+    def fake_eval(
+        domain: str, agent: str, split: str = "train", **kw: Any
+    ) -> tuple[RunMeta, list[TaskResult]]:
+        calls.append((agent, split))
+        ids = train if split == "train" else test
+        rows = _rows(passes[(agent, split)], ids)
+        run_id = f"20260101T000000Z_{domain}_{agent}_{split}_{len(calls)}"
+        d = tmp_path / "runs" / run_id
+        d.mkdir(parents=True)
+        from tau2_loop.eval.results import summarise, write_results
+
+        write_results(d / "results.jsonl", rows)
+        meta = RunMeta(
+            run_id, domain, agent, "fp" + agent, "m", "u", "j", split, 20, 1, 3, 300, "t", "t"
+        )
+        meta.task_ids = ids
+        meta.summary = summarise(rows).__dict__
+        (d / "run.json").write_text(json.dumps(meta.__dict__))
+        return meta, rows
+
+    seen: list[list[str]] = []
+
+    async def fake_optimiser(
+        champion: Any, run_id: str, failures: list[TaskResult], **_: Any
+    ) -> OptimiserOutput:
+        seen.append([f.task_id for f in failures])
+        return OptimiserOutput("v1", {"diagnoses": [], "prompt_diff_summary": "x"}, n_turns=1)
+
+    monkeypatch.setattr(loop_run, "GATE_ON_TEST", ("airline",))
+    monkeypatch.setattr(loop_run, "halves", lambda d: None)
+    monkeypatch.setattr(loop_run, "split_ids", lambda d, split: train if split == "train" else test)
+    monkeypatch.setattr(loop_run, "run_eval", fake_eval)
+    monkeypatch.setattr(loop_run, "run_optimiser", fake_optimiser)
+    monkeypatch.setattr(
+        loop_run,
+        "load_version",
+        lambda d, n: type("V", (), {"domain": d, "name": n, "fingerprint": "fp" + n})(),
+    )
+
+    with pytest.raises(ValueError, match="test run cannot be skipped"):
+        asyncio.run(loop_run.run_cycle("airline", "v0", "sonnet", 3, run_test=False))
+    assert calls == [] and led.read_ledger("airline") == []
+
+    entry = asyncio.run(loop_run.run_cycle("airline", "v0", "sonnet", 3))
+    o = entry["outcome"]
+    # every train failure, not a half of them
+    assert seen == [train[10:]]
+    # the champion's train run, the challenger's, then both test runs, all before the verdict
+    assert calls == [("v0", "train"), ("v1", "train"), ("v1", "test"), ("v0", "test")]
+    assert o["gate_on"] == entry["gate_on"] == "test (20 tasks)"
+    assert o["verdict"] == "promote" and o["rule"] == "mcnemar" and o["passes"] == "10 → 16"
+    assert o["fixed"] == test[10:16] and o["broken"] == []
+    assert o["test_compare"]["gated"] is True and o["test_compare"]["fixed"] == o["fixed"]
+    assert o["train_passes"] == "10/20 → 12/20"
+    assert o["read_fixed"] == train[10:14] and o["read_broken"] == ["0", "1"]
+    champ = reg.read_registry("airline")["champion"]
+    assert champ["agent"] == "v1" and champ["split"] == "train"  # its failures are the next read
+    # the next optimiser reads the gate's counts and the train moves, never a test id
+    history = led.render_history("airline", ["0"])
+    assert "the gate's test passes 10 → 16 · on train 10/20 → 12/20" in history
+    assert "fixed ['10', '11', '12', '13'] · broken ['0', '1']" in history
+    assert "'t1" not in history and "reason" not in history
+    assert led.prior_attempts("airline", "0")[0]["task_outcome"] == "broken"
 
 
 def test_guard_writes_rejects_a_sibling_version_dir_with_colliding_prefix(
@@ -311,12 +522,20 @@ PASSES = {
 
 
 def _write_run(
-    runs: Path, run_id: str, agent: Any, split: str, scored: bool = True, started_at: str = ""
+    runs: Path,
+    run_id: str,
+    agent: Any,
+    split: str,
+    scored: bool = True,
+    started_at: str = "",
+    sim_rules: str | None = None,
 ) -> str:
-    """A run folder as `run_eval` leaves it; `scored=False` is one still running (or dead)."""
+    """A run folder as `run_eval` leaves it; `scored=False` is one still running (or dead), and
+    `sim_rules="tau2"` one made before our rules (run.json has no `sim_rules`)."""
     from dataclasses import asdict
 
     from tau2_loop.eval.results import summarise, write_results
+    from tau2_loop.eval.runner import SIM_RULES
 
     ids = TRAIN if split == "train" else TEST
     rows = _rows(PASSES[(agent.name, split)], ids)
@@ -339,6 +558,7 @@ def _write_run(
         tau2_sha="t",
         task_ids=ids,
         split_version=2,
+        sim_rules=None if sim_rules == "tau2" else SIM_RULES,
     )
     if scored:
         write_results(d / "results.jsonl", rows)
@@ -349,12 +569,16 @@ def _write_run(
 
 
 def _challenge_world(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, v5_train: str = "scored"
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    v5_train: str = "scored",
+    champion_rules: str | None = None,
 ) -> dict[str, Any]:
     """agents/, runs/ and loop/ under tmp_path, shaped like airline today: v3 (Sonnet) is the
     champion with a train and a test run, v4 a loop challenger, v5 = `fork` of v3 on Opus.
     `v5_train` is v5's train run: "scored", "running" (started now, no summary), "dead"
-    (no summary, two days old) or "none". run_eval is faked and records what it was asked."""
+    (no summary, two days old) or "none"; `champion_rules="tau2"` makes v3's runs before our
+    simulation rules. run_eval is faked and records what it was asked."""
     from datetime import UTC, datetime, timedelta
 
     import tau2_loop.agent.versions as versions
@@ -384,8 +608,13 @@ def _challenge_world(
     assert v5.name == "v5"
 
     world: dict[str, Any] = {"calls": []}
-    world["v3_train"] = _write_run(runs, "20260928T060029Z_airline_v3_train", v3, "train")
-    world["v3_test"] = _write_run(runs, "20260928T073602Z_airline_v3_test", v3, "test")
+    old = champion_rules
+    world["v3_train"] = _write_run(
+        runs, "20260928T060029Z_airline_v3_train", v3, "train", sim_rules=old
+    )
+    world["v3_test"] = _write_run(
+        runs, "20260928T073602Z_airline_v3_test", v3, "test", sim_rules=old
+    )
     reg.promote(world["v3_train"], kind="model swap")
     if v5_train != "none":
         started = datetime.now(UTC) - timedelta(days=2 if v5_train == "dead" else 0)
@@ -456,6 +685,26 @@ def test_a_model_swap_challenge_reuses_its_runs_and_records_a_cycle(
     # the history the next optimiser session reads says what this cycle was
     history = led.render_history("airline", [])
     assert "v3 → v5, a model swap (model: sonnet → opus), no optimiser · verdict promote" in history
+
+
+def test_the_gate_reruns_a_champion_run_made_before_our_simulation_rules(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runs under tau2's rules and ours never meet at the gate: the champion's train and test
+    runs, both made before our rules, are played again, and the new train run is its record."""
+    from tau2_loop.tracking import registry as reg
+
+    world = _challenge_world(tmp_path, monkeypatch, champion_rules="tau2")
+    entry = loop_run.run_challenge("airline", "v5")
+    assert sorted(world["calls"]) == [("v3", "test"), ("v3", "train"), ("v5", "test")]
+    assert entry["champion_run"] != world["v3_train"]
+    assert entry["outcome"]["test_compare"]["champion_run"] != world["v3_test"]
+    rebased = [
+        h["run_id"]
+        for h in reg.read_registry("airline")["history"]
+        if h.get("event") == "promote" and h["kind"] == "re-baseline"
+    ]
+    assert rebased == [entry["champion_run"]]
 
 
 def test_a_challenge_runs_train_only_when_no_run_of_those_bytes_exists(
@@ -543,6 +792,9 @@ def test_an_ab_pair_reads_the_same_half_gates_on_the_other_and_crowns_one(
         )
 
     monkeypatch.setattr(loop_run, "halves", lambda d: (read, gate))
+    monkeypatch.setattr(
+        loop_run, "GATE_ON_TEST", ()
+    )  # s09's halved gate, before banking's moved to test
     monkeypatch.setattr(loop_run, "build_context", lambda *a: "ctx")
     monkeypatch.setattr(loop_run, "read_registry", lambda d: {"champion": {"agent": "v0"}})
     monkeypatch.setattr(loop_run, "run_eval", fake_eval)
@@ -693,3 +945,185 @@ def test_a_routing_optimiser_writes_only_what_its_diagnosis_routed(
         guard_reads({"tool_input": {"file_path": "data/tasks/airline.json"}}, None, None)
     )
     assert fenced["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_checking_helper_by_importing_it_does_not_reject_the_cycle(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The prompt asks the optimiser to verify helper.py by importing it, which leaves
+    `__pycache__` in the version folder: airline cycle 6 (v7) was rejected for exactly that."""
+    import asyncio
+    import subprocess
+    import sys
+
+    import tau2_loop.agent.versions as versions
+    import tau2_loop.loop.optimiser as opt
+
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path)
+    monkeypatch.setattr(opt, "AGENTS_DIR", tmp_path)
+    champ_dir = tmp_path / "airline" / "v0"
+    champ_dir.mkdir(parents=True)
+    (champ_dir / "system.md").write_text("You are an agent.\n{policy}")
+    (champ_dir / "agent.yaml").write_text("model: haiku\n")
+    champion = versions.load_version("airline", "v0")
+    new_dir = tmp_path / "airline" / "v1"
+
+    class FakeClient:
+        def __init__(self, options: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> FakeClient:
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def query(self, prompt: str) -> None:
+            (new_dir / "helper.py").write_text("def on_reply(text):\n    return text\n")
+            subprocess.run(
+                [sys.executable, "-c", "import helper; assert helper.on_reply('x') == 'x'"],
+                cwd=new_dir,
+                check=True,
+            )
+            (new_dir / "diagnosis.json").write_text(json.dumps({"diagnoses": []}))
+
+        async def receive_response(self) -> Any:
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+    monkeypatch.setattr(opt, "ClaudeSDKClient", FakeClient)
+    monkeypatch.setattr(opt, "require_live", lambda: None)
+    monkeypatch.setattr(opt, "subscription_env", lambda: {})
+
+    out = asyncio.run(opt.run_optimiser(champion, "run0", [], mode="classic"))
+    assert not out.rejected and out.error is None, out.error
+    assert out.surfaces_changed == ["helper.py"] and not (new_dir / "__pycache__").exists()
+
+
+BANKING_V1 = (
+    "20261002T143917Z_banking_knowledge_v1_train",
+    "20261002T160930Z_banking_knowledge_v1_test",
+)
+# v1 extended to split v3 (`make extend`): each joins the run above with the run of the new tasks
+BANKING_V1_V3 = (
+    "20261002T235638Z_banking_knowledge_v1_train",
+    "20261003T003126Z_banking_knowledge_v1_test",
+)
+
+
+def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> None:
+    """Banking's v0 is retired (3 Oct 2026); v1 is champion. Split v3 (60 / 37) added 12 train and
+    12 test tasks, and v1's runs were extended rather than replayed: one run of each split, joined
+    from v1's split v2 run and a run of only the new tasks. A gate or a challenge reuses exactly
+    those, and none of v1's other runs reaches the optimiser or a comparison. Cycle 1's v2 was
+    promoted by s09's halved gate, then re-decided on test when the gate moved there: held, and
+    v1's title restored."""
+    from tau2_loop.agent.versions import base_version, lineage
+    from tau2_loop.data.splits import read_split, split_ids
+    from tau2_loop.loop.ledger import read_ledger
+    from tau2_loop.loop.optimiser import champion_record, held_challengers
+    from tau2_loop.tracking.registry import read_registry
+
+    d = "banking_knowledge"
+    reg = read_registry(d)
+    assert reg["champion"]["run_id"] == BANKING_V1_V3[0] and reg["challenger"]["agent"] == "v2"
+    assert [(h["agent"], h["kind"]) for h in reg["history"] if h["event"] == "promote"] == [
+        ("v1", "model swap"),
+        ("v1", "re-baseline"),
+        ("v2", "gate"),
+        ("v1", "re-decided"),
+    ]
+    [e] = read_ledger(d)
+    o = e["outcome"]
+    assert e["gate_on"] == o["gate_on"] == "test (37 tasks)" and o["verdict"] == "hold"
+    assert o["passes"] == "6 → 5" and o["test_compare"]["gated"] is True
+    assert o["test_compare"]["champion_run"] == BANKING_V1_V3[1]
+    assert o["superseded"]["verdict"] == "promote" and o["superseded"]["passes"] == "2 → 7"
+    assert o["train_passes"] == "2/60 → 17/60" and len(o["read_fixed"]) == 15
+    assert base_version(d) == "v1" and base_version("airline") == "v0"
+    # v1 says it was forked from v0; with v0's folder gone its lineage is its own
+    assert lineage(d, "v1") == ["v1"] and lineage("airline", "v3") == ["v3", "v0"]
+    s = read_split(d)
+    for split, old, run in zip(("train", "test"), BANKING_V1, BANKING_V1_V3, strict=True):
+        meta, rows = load_run(run)
+        assert meta.split_version == 3 and meta.task_ids == s[split]
+        assert [r.task_id for r in rows] == s[split]
+        added, _ = load_run(str((meta.composed_of or [])[-1]))
+        assert (
+            meta.composed_of == [old, added.run_id]
+            and added.task_ids == s[split][len(s["v2"][split]) :]
+        )
+        assert loop_run._runs_of(d, "v1", split, split_ids(d, split), 1)[0].run_id == run
+    meta, results = load_run(BANKING_V1_V3[0])
+    v1 = load_version(d, "v1")
+    # v1's one run of split v3 and v2's, over all 60 train tasks; v2's test ids stay out
+    record, _ = champion_record(v1, BANKING_V1_V3[0], loop_run._read_failures(d, results))
+    assert "over the 60 train tasks you may read" in record
+    assert "its gate compared its test run with v1's (test passes 6 → 5)" in record
+    assert not [t for t in o["fixed"] + o["broken"] if t in record]
+    [held] = held_challengers(d, "v1")
+    assert held["reason"] == "the gate's test passes 6 → 5"
+    assert held["passes"] == "2/60 → 17/60 on train" and held["fixed"] == o["read_fixed"]
+
+
+@pytest.mark.skipif(not replay.available(), reason="tau2 is not installed")
+def test_banking_s_sixty_train_tasks_fit_one_prompt_and_name_no_held_out_task() -> None:
+    """With the gate on test (3 Oct 2026) the optimiser reads every train failure: v1's 58. Each
+    failure's graded difference is cut to its share, and a test task a train task's notes name
+    ("Adversarial variant of task_026") is never named."""
+    import re
+
+    from tau2_loop.data.splits import split_ids
+    from tau2_loop.loop.optimiser import DIFF_BUDGET, _share, _unseen_ids, diff_block
+
+    d = "banking_knowledge"
+    test = split_ids(d, "test")
+    assert _unseen_ids(d) == set(test) and _unseen_ids("airline") == set()
+    meta, results = load_run(BANKING_V1_V3[0])
+    failures = loop_run._read_failures(d, results)
+    assert len(failures) == 58 and {r.task_id for r in failures} <= set(split_ids(d, "train"))
+    share = _share(DIFF_BUDGET, len(failures))
+    whole = diff_block(meta.run_id, next(r for r in failures if r.task_id == "task_041"), d)
+    cut = diff_block(meta.run_id, next(r for r in failures if r.task_id == "task_041"), d, share)
+    assert whole and cut and len(whole) > 20_000
+    assert len(cut) < share + 80 and cut.endswith(
+        "more lines cut, this failure's share of the prompt"
+    )
+    prompt = build_prompt(load_version(d, "v1"), "v9", meta.run_id, failures)
+    assert len(prompt) < 330_000
+    assert not [t for t in test if re.search(rf"\b{t}\b", prompt)]
+    assert "Adversarial variant of a held-out task" in prompt
+    assert "applies the gate there, against the champion's test run on the same tasks" in prompt
+    assert "gate half" not in prompt
+
+
+def test_a_banking_task_reads_as_prose_and_thirty_failures_share_one_budget() -> None:
+    """Banking's scenario is one block of prose beside a persona (airline's is a structure):
+    banking's first cycle crashed on it before any model call. Thirty failures split the
+    transcript and scenario budgets; a handful (airline) keep full lengths."""
+    from tau2_loop.loop.optimiser import (
+        MIN_SHARE,
+        SCENARIO_BUDGET,
+        TRACE_CHARS,
+        TRANSCRIPT_BUDGET,
+        _calls,
+        _share,
+        task_block,
+    )
+
+    full = task_block("banking_knowledge", "task_079")
+    assert "USER'S GOAL" in full and "You are Carlos Rodriguez" in full
+    cut = task_block("banking_knowledge", "task_079", goal_chars=2000, actions=False)
+    goal = next(ln for ln in cut.splitlines() if ln.startswith("USER'S GOAL"))
+    assert len(cut) < len(full) and "…" in cut
+    assert "EXPECTED ACTIONS: listed against the agent's calls under WHAT FAILED" in cut
+    assert goal  # the cut keeps the opening of the goal
+    assert _share(TRANSCRIPT_BUDGET, 6, TRACE_CHARS) == TRACE_CHARS  # airline: unchanged
+    assert _share(TRANSCRIPT_BUDGET, 30, TRACE_CHARS) == TRANSCRIPT_BUDGET // 30
+    assert _share(SCENARIO_BUDGET, 300) == MIN_SHARE
+    # a tool called sixteen times is one entry, not sixteen
+    pairs = [("call_discoverable_agent_tool", m) for m in range(40, 72, 2)]
+    assert _calls(pairs, "msg") == (
+        "call_discoverable_agent_tool at messages 40, 42, 44 … 70 (16 calls)"
+    )
+    assert _calls([("cancel_reservation", "39_10")], "id") == "39_10 cancel_reservation"

@@ -61,7 +61,7 @@ beside the verdict and never decides it.
 | M4 holdout · M4b findings page | done — `.lavish/s01_build-findings.html` |
 | s07 Sonnet agent through a sealed service, split v2, the gate with trials | built; airline done: v3 (Sonnet) champion 18/25 train · 21/25 test, v4 held. Retail, telecom, banking next (`.lavish/s07_next-challenger-plan.html`) |
 | s08 Opus 5.5 as agent and as optimiser; `make challenge` | done on airline: v3 re-baselined on claude-agent-sdk 0.2.160 at 21/25 train · 21/25 test; v5 (Opus 5.5 agent) and v6 (Opus 5.5 optimiser) held. Research against the board: `.lavish/s08_airline-agent-field-notes.html` |
-| s09 banking through the loop; routing mode and code surfaces | built; banking's test capped at 25 (24 in reserve); not yet run through a cycle — `.lavish/s09_banking-loop-and-surfaces-plan.html` |
+| s09 banking through the loop; routing mode and code surfaces | built; banking's test was capped at 25 (24 in reserve), dealt out at split v3 (60/37, 3 Oct 2026); cycle 1 run, v2 held on test, and banking's gate moved to test (below) — `.lavish/s09_banking-loop-and-surfaces-plan.html` |
 | s10 banking token audit: one cached block per turn | built; four banking runs committed as evidence, two unfinished on purpose — `.lavish/s10_banking-token-audit.html` |
 | M5 keyless demo image on App Runner | parked — bootstrap role, ECR repo and image (`5518ad7`) are in AWS; the service is blocked by the account's 2-per-region App Runner cap (both regions full). Resume: lift the quota or free a slot, then `terraform apply` in `infra/terraform/demo` |
 
@@ -81,7 +81,7 @@ under today's gate; its recorded verdict is kept as made.
 | airline | 12/20 `20260915T075151Z_airline_v0_train` | v1 15/20 `20260915T124751Z_airline_v1_train` · v2 16/20 `20260915T132148Z_airline_v2_train` | 4/1 · 4/0 | 0.188 · 0.062 | hold ×2, v0 champion | — |
 | retail | 14/20 `20260915T080153Z_retail_v0_train` | v1 16/20 `20260915T172708Z_retail_v1_train` | 3/1 | 0.312 | hold, v0 champion | — |
 | telecom | 14/20 `20260915T081700Z_telecom_v0_train` | v1 19/20 `20260915T174430Z_telecom_v1_train` | 5/0 | 0.031 | **promote**, v1 champion | **19/20** `20260915T181840Z_telecom_v1_test` |
-| banking_knowledge | 4/20 `20260915T121036Z_banking_knowledge_v0_train` | — | — | — | no cycle yet | — |
+| banking_knowledge | 4/20 (v0, retired 3 Oct 2026: its run and folder deleted; v1 is the base, below) | — | — | — | no cycle yet | — |
 
 ### Split v2 (25 / 25), airline — Sonnet 5 agent through the service
 
@@ -119,6 +119,51 @@ offering upgrades that led round a refusal. One trial cannot separate either
 challenger from noise; `.lavish/s08_airline-agent-field-notes.html` sets out why
 and what the published airline agents do instead.
 
+### Split v2, under our simulation rules (2 Oct 2026)
+
+Our customer holds a stop sent with words until the agent has taken its turn, and
+neither side takes the real date (`eval/user.py`, `compose.CLOCK_NOTE`); runs
+record `sim_rules`, and the loop compares only runs made under the same rules, so
+v3 was played again before the gate. v7 is loop cycle 6: its optimiser read v3's
+failures beside every run of v3 and of v4–v6, task by task
+(`optimiser.champion_record`). Held; v3 stays champion.
+
+| Version | Train | Test | Gate on train | Test, v3 → challenger |
+|---|---|---|---|---|
+| v3 · re-baseline | **19/25** `20261002T133432Z_airline_v3_train` | **21/25** `20261002T142530Z_airline_v3_test` | champion (`re-baseline`) | — |
+| v7 · cycle 6 | 23/25 `20261002T135254Z_airline_v7_train` | 21/25 `20261002T141014Z_airline_v7_test` | hold: fixed 5, broke 1, p = 0.109 | 21 → 21: fixed 2, broke 2 |
+
+### Banking: v1 is the base (3 Oct 2026)
+
+Banking's v0 (Haiku, split v1) is retired: its folder, its run and its champion
+record are deleted. v1, v0's prompt on Sonnet 5, is the champion on its own runs of
+split v2 (48 train, 25 test) under our simulation rules. 42 of its 46 train
+failures are database differences, most of them banking's discoverable tools
+never unlocked or called. Banking then moved to split v3: the 24 tasks its test
+cap held back, never played, are dealt 12 to train and 12 to test, 60 / 37, with
+no task changing side. v1 was extended rather than replayed (`make extend`):
+only the 24 new tasks were played, each part joined to v1's run into one run of
+the split, which tau2's evaluators re-score offline to the same verdicts. Every
+banking experiment is scored on these 60 / 37.
+
+Cycle 1 (Opus 5.5, classic) read v1's 30 read-half failures and wrote v2: an
+identity rule (the customer's identity comes from the conversation, never the
+session's redacted email; a failed lookup is not repeated), eleven working rules
+around the policy slot, and a helper that turns the redacted-email lookup v1 looped
+on into a note. On train it went 2 → 17 of 60 and broke nothing; s09's halved
+gate promoted it (gate half 2 → 7, p = 0.031). On test it went 6 → 5 of 37: three
+fixed, four broken. The person then moved banking's gate to test (3 Oct 2026,
+`GATE_ON_TEST`): the optimiser reads all 60 train tasks, and promotion compares
+the challenger's test run with the champion's. Re-read under that gate, cycle 1
+holds (fixed 3, broke 4, p = 0.773), and v1 is champion again (`re-decided`); the
+halved verdict is kept in the ledger under `superseded`.
+
+| Version | Train | Test | Gate |
+|---|---|---|---|
+| v1 · v0's prompt, Sonnet 5 (split v2) | 2/48 `20261002T143917Z_banking_knowledge_v1_train` | 3/25 `20261002T160930Z_banking_knowledge_v1_test` | champion by fiat (`model swap`) |
+| v1 · extended to split v3 | **2/60** `20261002T235638Z_banking_knowledge_v1_train` | **6/37** `20261003T003126Z_banking_knowledge_v1_test` | champion (`re-baseline`, then `re-decided`) |
+| v2 · cycle 1 | 17/60 `20261003T005018Z_banking_knowledge_v2_train` | 5/37 `20261003T051036Z_banking_knowledge_v2_test` | hold on test: fixed 3, broke 4, p = 0.773 |
+
 Every run folder under `runs/` holds `run.json`, `results.jsonl`, one trace per
 conversation and the agent version it ran; `tau2loop gate` replays them through
 tau2's evaluators. Per-domain ledgers are in `loop/<domain>/ledger.jsonl`.
@@ -127,7 +172,7 @@ Two harness findings worth knowing before reading the traces: the Claude CLI
 tells every session the real date and the account's email, and Haiku used both
 inside the simulation (airline v0 refused "already flown" 2024 flights; retail
 v0 looked customers up by the account address). Replies and run folders are now
-redacted (`tau2_loop.llm.redact`); the date is handled in the airline prompts.
+redacted (`tau2_loop.llm.redact`); since 2 Oct 2026 both sides are told to ignore the date (above).
 Details and next steps: `.lavish/s01_build-findings.html`.
 
 ## Setup

@@ -42,15 +42,18 @@ leaderboard submission in this build (that is M6, a separate decision).
 
 | Decision | Choice | Why |
 |---|---|---|
-| Split | our own, per domain, from tau2's public `base` set, seed 300, committed. v2 (now): half train, half test, no reserve (airline 25/25, retail 57/57, telecom 57/57, banking 48/49 before its test cap: 48/25, 24 in reserve), with v1's 20/20 kept inside it on the same sides | nothing is held out upstream; tau2's train/test are fixed lists and banking has none; keeping v1's sides means no task that was ever test has been trained on |
-| Test cap (s09) | banking's test is the first 25 of its split v2 test list (v1's 20, then 5 dealt), the other 24 held back in reserve (`TEST_CAP`, `test_cap` in the split file) | 49 test conversations cost ~50 minutes a version; nothing held back moves to train |
-| Halves (s09) | banking's train is dealt into a read half (24) and a gate half (24), seed 300, under `halves` in its split file (`HALVED_DOMAINS`); the optimiser reads only read-half failures, the gate decides on the gate half, test stays reported; train and test keep their members, so runs still read split v2 | a gate on the tasks the optimiser read grades its own homework; this makes it honest without spending the test or adding a conversation |
+| Split | our own, per domain, from tau2's public `base` set, seed 300, committed. v2: half train, half test, no reserve (airline 25/25, retail 57/57, telecom 57/57; banking 48/49, then 48/25 under its test cap), with v1's 20/20 kept inside it on the same sides. Banking is at v3 (3 Oct 2026): the 24 its cap held back are dealt, seed 300, 12 to train and 12 to test, so 60/37 with no reserve; no task changes side, and the v2 lists stay under `v2` (`TRAIN_FROM_RESERVE`, `splits.deal_reserve`) | nothing is held out upstream; tau2's train/test are fixed lists and banking has none; keeping v1's sides means no task that was ever test has been trained on |
+| Test cap (s09, superseded 3 Oct 2026) | banking's test was the first 25 of its split v2 test list (v1's 20, then 5 dealt), the other 24 held back (`TEST_CAP`); split v3 deals those 24 out, so the cap now only fixes which 25 stay test | 49 test conversations cost ~50 minutes a version; no run ever played a held-back task, so v3 could give 12 of them to train |
+| Halves (s09, retired for the loop 3 Oct 2026) | banking's train is dealt into a read half and a gate half, seed 300 (24/24 on split v2; 30/30 on v3, each keeping its 24 and taking 6 of the 12 new train tasks), under `halves` in its split file (`HALVED_DOMAINS`); the optimiser read only read-half failures, the gate decided on the gate half, test stayed reported. The file keeps them; `splits.halves` returns none for a domain gated on test, so no domain is halved today | a gate on the tasks the optimiser read grades its own homework; this made it honest without spending the test or adding a conversation |
+| Gate on test (3 Oct 2026) | banking (`GATE_ON_TEST`): the optimiser reads every failure of all 60 train tasks, the challenger runs train then test, and the gate compares its test run with the champion's on the same 37 tasks (`loop.run._score_challenger`); the test run cannot be skipped. The challenger's train run is still what a promotion records, so the next cycle reads its failures. What an optimiser later reads of a cycle is its moves on train (`read_fixed` / `read_broken`) and the gate's pass counts, never the gate's ids or reason; a test task a train task's notes name ("Adversarial variant of task_026") is written "a held-out task" (`optimiser._redact`). Sixty failures share the prompt's budgets (`TRANSCRIPT_BUDGET`, `SCENARIO_BUDGET`, `DIFF_BUDGET`, `MIN_SHARE` 1000): v1's 58 make a ~303K-character prompt | the person's call, after banking v2 went 2 → 17 of 60 on train with no task broken there, and 6 → 5 of 37 on test. Selecting on test spends it: across many cycles the champion's test score reads high, and nothing is held out behind it |
 | Retrieval (s09) | banking runs tau2's `bm25_grep` variant (BM25 `KB_search` plus `grep` over the 698 documents), recorded as `retrieval` in `run.json`; runs before it recorded nothing and ran `bm25`, which replay and rescore still use for them | both are local; the board's AllTools adds OpenAI embeddings, which the subscription cannot call |
 | Models | agent: `agent.yaml`'s model and effort (airline v3+: `claude-sonnet-5`, medium; elsewhere `claude-haiku-4-5`, medium); user simulator and NL judge: `claude-haiku-4-5`, medium; every effort is recorded in `run.json` | the only billing path is the subscription; a Claude judge makes retail's score `custom` relative to the board |
+| Simulation rules (2 Oct 2026) | beyond tau2's own, recorded as `sim_rules` in `run.json` (`runner.SIM_RULES`); a run without it was made before them, and the loop reuses only runs with today's (`loop.run._covers`), so the champion is played again before its next gate. **The customer** is our subclass of tau2's (`eval/user.py`, registered as `tau2_loop_user_<domain>`): a `###STOP###` sent with words passes the words on, lets the agent take its whole turn, then ends the call with a lone `###STOP###` and no model call (a stop alone, `###TRANSFER###` and `###OUT-OF-SCOPE###` still end it at once). **Neither side takes the real date**: the customer's prompt ends with the world's time as tau2 gives it to the agent (airline 2024-05-15, telecom 2025-02-25, banking 2025-11-14; retail has none) and a note to ignore any other date; the agent's composed prompt ends with `compose.CLOCK_NOTE` (the Agent tab shows an older run's prompt without it, as it was sent) | tau2 ended airline task 19 on "Yes, go ahead and cancel. ###STOP###" before the cancel gold expects (v1, v3, v6 train; 6 conversations in all); the Claude CLI tells every session the real date in a system reminder, and nothing switches it off but `--bare`, which drops the subscription login: v5's customer called its trip "today, September 28th", v0 agents told customers "it's currently September 2026", and a banking v1 agent ruled a promotion over because "today's date is September 30, 2026" |
+| Banking's base (3 Oct 2026) | v1 (v0's prompt on Sonnet 5) is banking's champion on its own runs of split v2 under today's simulation rules: train 2/48 `20261002T143917Z`, test 3/25 `20261002T160930Z`; v0 is retired, its folder, run and champion record deleted (git history keeps them). Split v3 (60/37) followed the same day, and v1's runs were extended to it rather than replayed (`make extend`, `runner.extend_run`): only the 12 train and 12 test tasks v3 added were played, each joined to v1's run into one run of the split that names both (`composed_of`), refused unless the version's bytes, the rules, the retrieval and every task's side are unchanged; offline rescore agrees on all 60 and 37. v1 is champion on train 2/60 `20261002T235638Z` (a re-baseline), test 6/37 `20261003T003126Z`; with no v0, a plain `make eval` and `make baselines` run the oldest version left, v1 (`versions.base_version`), and a fork's lineage stops at a source whose folder is gone | the person's call: one train/test set for every banking experiment (60/37 from v2 on), and v0's only run was Haiku on the 20-task cut |
 | Model swap | `tau2loop fork` copies a version's two surfaces with a new `agent.yaml`; it is evaluated once and promoted by hand (`KIND="model swap"`), or gated against the champion by `make challenge` (a ledger cycle with `kind: model swap` and no optimiser); its `diagnosis.json` names `forked_from`, and the optimiser follows that lineage to the held challengers | the optimiser may not change `agent.yaml`, so a model change is not a loop cycle |
 | Ringfence | `llm/core.py` imports the SDK, `prompting.py` and the standard library only; the SDK child runs with no tools, no MCP, no settings, a temp working directory and an allow-listed environment (the SDK merges `options.env` over the parent's, so every other name is passed blank); `llm/service.py` serves it as `POST /v1/chat/completions` with a bearer token; `Dockerfile.agent` ships those three files; `AGENT_SERVICE_URL` routes a run's agent to it | the agent must depend on nothing but its prompt, its tool schemas and the SDK, and run here or in the cloud unchanged |
 | Gate | pair by task; a task's score is its pass fraction over trials; promote on fixed ≥ 1 and broke 0 (dominance), or on a one-sided exact sign test p < 0.05 (McNemar at one trial); runs over different tasks or trials are refused | the rule the loop's owner set; pairing trial k with trial k would treat independent samples as pairs |
-| Optimiser | `claude-opus-5-5`, effort medium (`OPTIMISER=`; `claude-sonnet-5` to airline cycle 3). `MODE=classic`: one session per cycle, may write `system.md` and `helper.py`. `MODE=routing` (s09): a read-only diagnosis session names each failure's root cause and surfaces, then a writing session may change only those, among five. Both are fenced (`loop/guards.py`): they read the policy and tools from a copy in the version folder and never `runs/`, `data/`, `loop/` or `vendor/` | must read ~20 transcripts and the policy in one context; `data/tasks` holds the test split's expected actions, which the optimiser was pointed at before s09 |
+| Optimiser | `claude-opus-5-5`, effort medium (`OPTIMISER=`; `claude-sonnet-5` to airline cycle 3). `MODE=classic`: one session per cycle, may write `system.md` and `helper.py`. `MODE=routing` (s09): a read-only diagnosis session names each failure's root cause and surfaces, then a writing session may change only those, among five. Both are fenced (`loop/guards.py`): they read the policy and tools from a copy in the version folder and never `runs/`, `data/`, `loop/` or `vendor/`. Each failure they read carries what tau2 graded, rebuilt by the harness (`optimiser.diff_block`, `eval/replay.py`): the database difference (each record a missed write, a wrong write or wrong arguments, with before / the agent left / gold expects) and the expected actions against the agent's calls (a missing write's nearest call and the argument that differs, every unexpected write); each diagnosis names its `graded_difference`. Beside the failures they read the champion's record (`optimiser.champion_record`): every train run of the champion's bytes and of every challenger the ledger scored against it, task by task, so a fix or a break counts only against every run of the champion (one trial per task: v3 flipped on 5 of 25 between its own two runs), with each challenger's change log and the conversations it broke; the diagnosis names what it `carried_forward` and `dropped`, and the ledger keeps both | must read ~20 transcripts and the policy in one context; `data/tasks` holds the test split's expected actions, which the optimiser was pointed at before s09 |
 | Code surfaces (s09) | `checks.py` (a write is blocked once with a fix-it message, then its retry goes through), `memory.py` (facts from each tool result, one conversation only), `guidance.py` (a reminder on that call's system prompt, never in the transcript); standard-library imports only; no customer id, name or email from any task; a routing `system.md` grows at most 1,500 characters | write-time checks and per-turn guidance moved published airline agents more than prompt text (`.lavish/s08`); code is checked every turn, a prompt rule competes with every other |
 | Tool calls | a JSON reply contract in the prompt (`tool_mode: json`), parsed back into `tool_calls` | the SDK cannot return a native tool call without executing it; the contract is the same either-message-or-tools rule tau2 enforces |
 | Prompt cache (s10) | the history goes to the SDK as one text block per turn (`build_blocks`), with one `cache_control` mark (ttl 1h) on the last block only; nothing closes the transcript, so each call's blocks are the start of the next call's; cache read and write counts reach tau2's usage in-process and through the service | the Claude CLI already spends 3 of the API's 4 marks, and a second mark returned a 400; one text block changed every call and was written afresh (`.lavish/s10_banking-token-audit.html`) |
@@ -60,6 +63,10 @@ leaderboard submission in this build (that is M6, a separate decision).
 | Billing | `require_live()` refuses a key alongside `BILLING=subscription`, scrubs a key tau2's dotenv search injects from `~/.env`, blanks the key in the SDK child; the service image sets `BILLING=subscription` and logs in with `CLAUDE_CODE_OAUTH_TOKEN` | tau2's `utils.py` calls `load_dotenv()` with a directory search on import |
 | Deploy | DABStep-loop's pattern: ECR + App Runner, OIDC role, `workflow_run` after CI, `DEMO_MODE=1` in the Dockerfile | keyless by construction |
 | Frontend | React 18 + Vite + TS, plain CSS on `tokens.css` from DESIGN.md | the Field Guide brief; no Tailwind/DaisyUI |
+| Judge checkpoints (s11, 2026-10-02) | the judge is called only when the agent issues a write or a transfer, before it runs; never on a text reply. J0 keeps every checkpoint (golden answers are keyed by position) and marks writes and transfers `judged` (`labels.JUDGED_KINDS`): 181 calls in 174 messages, 118 of 165 conversations. `live` still marks what the retired plan judge (j1–j3) reviewed, so its replays score as they did | a call that changes something is where a wrong direction costs; a text reply can be rewritten. Every write and transfer already had a golden answer, so the set needed no new annotation |
+| Passed rule (s11, 2026-10-02) | a passed conversation is confirmed by the grader: every write and transfer in it is golden `allow` (`review.effective_verdicts`), it never enters the review queue, and `make judge-gold` writes its record by rule with no model call (`gold.passed_record`). A person confirms each failed one in Evals with a tick: an agree at every call, or one on the conversation as a whole (`#-1`) when it has no write or transfer; unticking writes `withdraw` and keeps any correction | tau2's database check is the authority on a pass, so a person reviewing 129 of them adds nothing. The annotator had blocked a write in 3 passing task-25 runs (a booking the API rejected); the grader overrules it. What needs a person is whether the judge could stop each failure at its first wrong call |
+| Judge data (s11, 2026-10-02) | the LLM judge learns from optimised answering agents only: v1 onwards, never v0 (`labels.UNOPTIMISED`). v0's runs stay in `runs/` and on the leaderboard, but never enter the J0 labels, the J1 golden answers, a J2 replay's score or the J3 loop. Folds stay as cycle 1 dealt them (`labels.PINNED_FOLDS`) | v0, the hand-written baseline, fails in ways no optimised agent does (it tells a user it cannot see their payment methods without calling `get_user_details`); a golden set built on it teaches the judge about hallucinations, not about the agent it will guard. Pinned folds keep every task the optimiser read out of the gate half |
+| Judge data closed (s11, 2026-10-03) | the judge's data is closed at the runs its committed labels hold (`labels.CLOSED_AT`): a run scored later, of any agent or domain, never joins the labels, golden answers, replays, the judge loop, the pending queue or Evals | the person's call: new runs (airline v3/v7 re-runs, banking) stay out rather than join the golden-answer queue; the committed counts stay what the golden answers were made on |
 
 **Platform migration (2026-09-21).** Tracking moved from this repo's own MLflow (`make mlflow-up`, sqlite
 under `.mlflow/`, `:5601`) to the portfolio's central server in `../nmp-central-ai` (experiment `tau2-loop`,
@@ -82,6 +89,10 @@ agents/<domain>/vN/       system.md ({policy} slot) · helper.py (hooks) · chec
                           (s09 code surfaces, each optional) · agent.yaml (frozen) · diagnosis.json
 runs/<ts>_<domain>_<vN>_<split>/  run.json · results.jsonl · traces/<task>.json · tau2_results.json · agent/
 loop/<domain>/            ledger.jsonl · registry.json;  loop/mlflow_snapshot.json for the demo
+data/judge/<domain>*      s11 tool judge: J0 labels (<domain>.json) · golden answers (_gold.jsonl) · probe.json
+judges/<domain>/plan/jN/  the plan judge: judge.md (rubric; J3 edits only its numbered lessons) · judge.yaml
+                          (model, effort, threshold) · changes.json (the optimiser's record);  ledger.jsonl · registry.json
+judge_runs/<ts>_<domain>_<jN>_train/  a judge replay: run.json · verdicts.jsonl · summary.json (immutable)
 src/tau2_loop/
   config.py               paths, Settings (boots keyless), DOMAINS, split seed
   llm/                    core (sealed: models, billing check, env allow-list, one SDK answer) · prompting (contract)
@@ -93,6 +104,9 @@ src/tau2_loop/
                           compare (the gate: pass fractions, sign test) · rescore (offline replay) · review
   loop/                   run (cycle, challenge) · optimiser (Opus session, hooks) · ledger
                           history (every version per domain: how made, the gate's runs, the reigns)
+  tooljudge/              s11: labels (J0) · gold, review (J1 golden answers, a person's checks) · prompt, core,
+                          replay (J2: a judge version on every train checkpoint, scored) · loop (J3: lessons
+                          from the read half, gated on the gate half) · view · tracking (experiment tau2-loop/judge)
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
@@ -126,6 +140,10 @@ make ab DOMAIN=banking_knowledge   two challengers from the champion on the same
                           routing optimiser; both gated and tested; at most one crowned (s09 §6)
 make ledger DOMAIN=…      make snapshot
 make gate                 CI gate: champions re-score offline to their registry entries
+make judge-labels · judge-gold · judge-gold-freeze   s11 J0–J1: label train checkpoints from gold; golden answers
+make judge-replay DOMAIN=airline JUDGE=j1   s11 J2: a judge version on every train checkpoint → judge_runs/
+make judge-loop DOMAIN=airline CYCLES=1     s11 J3: an Opus session adds lessons from the read half's
+                          disagreements; the challenger is replayed and gated, paired by conversation, on the gate half
 make leaderboard          ingest τ²-bench's published submissions → data/index/leaderboard.json
 make db-migrate           apply infra/roles.sql to the central Postgres (database `tau2`, idempotent)
 make db-smoke             zero-LLM proof this project can reach its database
@@ -140,13 +158,29 @@ make test · make lint
 | tab | address | what it answers |
 |---|---|---|
 | Overview | `/` | where each domain stands |
-| Domains & tasks | `/domains/<domain>/<task>` | what the benchmark is; a task's answer key |
+| Evals | `/evals/<domain>/<task>` · `/evals/<domain>/judge` | a dataset's eval set: for the answering agent, every task and its answer key; for the LLM judge, every conversation it is scored on, in task order, with the first call to block and a tick per failed one (passes are ticked by the grader); a row opens the whole conversation with the judge's bar after each write and transfer, to agree with or correct; newer runs not yet in the set are named with the commands that add them (s11) |
 | Rubric | `/rubric` | how τ² decides a conversation passed, and which check failed |
 | Leaderboard | `/leaderboard` | who else has tried, and why we are not comparable yet |
-| Runs | `/runs/<run>[?vs=<run>]` | who holds each domain and how the title moved; what we ran, what it cost, and the gate against another run |
+| Runs | `/runs/<run>[?vs=<run>]` · `/runs/<run>/<task>/t<n>` | who holds each domain and how the title moved; what we ran, what it cost, and the gate against another run; a conversation's trace, each voice in its own colour (the answering agent in `--agent` blue, the simulated customer in `--user` sand, tool results on white), and for a DB failure every field where the final database differs from gold's |
 | Optimise | `/optimise/<domain>/<version>` | every version of a domain, train and test; a round: diagnose → propose → outcome; every cycle across the domains |
 | Agent | `/agent/<domain>/<version>?run=&trial=&node=&step=` | one conversation drawn as the agent in its harness; each node's inputs and outputs; a tool playground (plan s05) |
 | Review | `/review/<run>/<task>/t<n>` | what a person thought of what the judge scored (writes) |
+
+Under the tabs, the scope bar (`frontend/src/lib/scope.tsx`, s11) sets the dataset, the agent and
+the experiment. The agent is either the answering agent, which talks to the customer and calls the
+tools, or the LLM judge (s11), which reviews its writes and transfers. Evals, Runs, Optimise,
+Agent and Review each have a view for both (`/evals/<d>/judge`, `/runs?agent=judge`,
+`/optimise/<d>/judge`, `/agent/<d>/judge`, `/review/golden/<d>`). The experiment is a version of
+the answering agent (`?exp=v6`, the `<agent>` in a run id), default all: it filters what that
+version produced (its runs and their MLflow rows, the rounds that made or defended it, the version
+the Agent tab opens, its conversations in Review and in the judge's Evals and golden answers), and
+is hidden where it filters nothing (the answering agent's tasks, the judge's replays, loop and
+versions). The task (`?task=39`; the path on the answering agent's Evals) narrows each tab to
+one task: its card in Evals, its conversation in every run in scope on Runs
+(`GET /api/domains/<d>/conversations?task=`), a run's rows, Review, the run the Agent tab
+opens, and the judge's Evals and golden answers. The bar reads its values back from those
+addresses and remembers them, so the experiment and the task carry from tab to tab until set
+back to all; a new dataset clears the task.
 
 The grammar is `frontend/src/lib/url.ts`: one id per thing, the path names the
 subject, the query holds the lens, and a detail opens inside its list. Every
@@ -171,6 +205,10 @@ tau2's own `tool_type`, and telecom's and banking's customer-side tools). `GET
 /api/runs/<run>/<task>/t<n>/tool` is the playground: `eval/replay.py` rebuilds tau2's
 environment at a message (`set_state`, as the evaluator does) and runs one call in it.
 It writes nothing and calls no model; it needs tau2, so the demo image answers 503.
+`GET /api/runs/<run>/<task>/t<n>/db` rebuilds both sides of the DB check the same way
+(`replay.db_diff`): every field where the final database differs from gold's, with its value
+before the conversation, and the agent's calls and the expected actions that changed each
+record, so a missed write, a wrong write and a wrong argument read apart.
 `/agent` alone reopens the last view in the browser tab, else a champion's first failure.
 
 ## 5 · The loop, precisely
@@ -180,8 +218,8 @@ It writes nothing and calls no model; it needs tau2, so the demo image answers 5
    ids at the cycle's trials, else evaluates it (and promotes that run: as the
    first champion when the registry was empty, as a `re-baseline` when the
    same bytes had a run on an older cut).
-2. Failures = `correct is False or error`, on the read half where train is
-   halved. None → ledger `nothing to fix`.
+2. Failures = `correct is False or error`, on all of train (on the read half
+   where train is halved; none is today). None → ledger `nothing to fix`.
 3. `run_optimiser` copies the champion to `agents/<domain>/v(N+1)/`, writes
    the policy and tools to its `.context/`, builds the prompt (the surfaces; per
    failure the scenario, relevant policy clauses, expected actions, which
@@ -201,7 +239,9 @@ It writes nothing and calls no model; it needs tau2, so the demo image answers 5
    challenger then runs the test split once, and the champion's test run on
    the same tasks (reused, or run once) is compared with it: `test_compare`
    in the outcome — passes, fixed, broke, p — reported, never used by the
-   gate. The version folder and its runs stay in the repo.
+   gate. Where the domain gates on test (banking), both test runs come before
+   step 4's `compare()`, which is that comparison (`test_compare.gated`).
+   The version folder and its runs stay in the repo.
 
 ## 6 · The helper contract, and the code surfaces
 

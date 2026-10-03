@@ -49,11 +49,17 @@ export function parseTrialId(id: string): { task: string; trial: number } | null
 }
 
 // ── paths ─────────────────────────────────────────────────────────────────
-export const domainsPath = (lens?: Lens): string => `/domains${search(lens)}`;
+/** Evals (renamed from Domains & tasks): a dataset's eval set, under the answering agent or the LLM judge. */
+export const domainsPath = (lens?: Lens): string => `/evals${search(lens)}`;
 export const domainPath = (domain: string, lens?: Lens): string =>
-  `/domains/${enc(domain)}${search(lens)}`;
-/** A task lives under its domain: `/domains/airline/0`. */
-export const taskPath = (id: string, lens?: Lens): string => `/domains/${encPath(id)}${search(lens)}`;
+  `/evals/${enc(domain)}${search(lens)}`;
+/** A task lives under its dataset: `/evals/airline/0`. */
+export const taskPath = (id: string, lens?: Lens): string => `/evals/${encPath(id)}${search(lens)}`;
+/** The LLM judge's eval set on a dataset (s11): `/evals/airline/judge`. */
+export const judgeEvalsPath = (domain: string, lens?: Lens): string => `/evals/${enc(domain)}/judge${search(lens)}`;
+/** One golden conversation open in that eval set: `/evals/airline/judge/<run>/<task>/t<n>`. */
+export const judgeConvPath = (domain: string, key: string, lens?: Lens): string =>
+  `/evals/${enc(domain)}/judge/${encPath(key)}${search(lens)}`;
 export const runsPath = (lens?: Lens): string => `/runs${search(lens)}`;
 export const runPath = (runId: string, lens?: Lens): string => `/runs/${enc(runId)}${search(lens)}`;
 /** One conversation of one run: `/runs/<run>/0/t1`. */
@@ -63,6 +69,8 @@ export const agentsPath = (lens?: Lens): string => `/agent${search(lens)}`;
 /** A round is named for the version it wrote: `/optimise/airline/v2`. */
 export const optimisePath = (domain?: string, version?: string, lens?: Lens): string =>
   (domain ? `/optimise/${enc(domain)}${version ? `/${enc(version)}` : ''}` : '/optimise') + search(lens);
+/** The tool judge's loop beside the agent's (s11): `/optimise/airline/judge`. */
+export const judgeLoopPath = (domain: string, lens?: Lens): string => `/optimise/${enc(domain)}/judge${search(lens)}`;
 export const leaderboardPath = (lens?: Lens): string => `/leaderboard${search(lens)}`;
 export const rubricPath = (lens?: Lens): string => `/rubric${search(lens)}`;
 /** The review list, or one conversation's review: `/review/<run>/<task>/t1`.
@@ -70,6 +78,13 @@ export const rubricPath = (lens?: Lens): string => `/rubric${search(lens)}`;
  *  how `%5B` becomes `%255B`. */
 export const reviewPath = (runId?: string, tid?: string, lens?: Lens): string =>
   (runId && tid ? `/review/${enc(runId)}/${encPath(tid)}` : '/review') + search(lens);
+/** Review › golden answers (s11), or one case in it. A case id is `<run>/<task>/t<n>#<message>`;
+ *  in the path it is `/review/golden/<domain>/<run>/<task>/t<n>/<message>`. */
+export const goldReviewPath = (domain: string, itemId?: string, lens?: Lens): string => {
+  if (!itemId) return `/review/golden/${enc(domain)}${search(lens)}`;
+  const [key, msg] = itemId.split('#');
+  return `/review/golden/${enc(domain)}/${encPath(key)}/${enc(msg)}${search(lens)}`;
+};
 export const agentPath = (domain: string, version: string, lens?: Lens): string =>
   `/agent/${enc(domain)}/${enc(version)}${search(lens)}`;
 

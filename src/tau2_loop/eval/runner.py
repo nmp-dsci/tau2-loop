@@ -46,6 +46,11 @@ console = Console()
 
 USER_MODEL = "haiku"
 USER_EFFORT = EFFORT
+# The simulation's rules beyond tau2's own: our customer (`eval.user`) holds a stop sent with words
+# until the agent's turn, and neither side may take the real date the Claude CLI tells every
+# session (the customer is told the world's time, the agent `compose.CLOCK_NOTE`). Bump it when
+# they change; the loop compares only runs that share it.
+SIM_RULES = "tau2_loop/1"
 JUDGE_MODEL = "haiku"
 JUDGE_EFFORT = EFFORT
 
@@ -102,11 +107,19 @@ class RunMeta:
     # Added with split v2; older run.json files read these defaults.
     agent_effort: str | None = None
     user_effort: str | None = None
-    split_version: int | None = None  # 1 = the 20 / 20 cut, 2 = half of base each
+    split_version: int | None = (
+        None  # 1 = the 20 / 20 cut, 2 = half of base each, 3 = banking's 60 / 37
+    )
     agent_route: str = "in-process"  # or service:<host:port>, the agent's calls over HTTP
     # banking only: tau2's retrieval variant (s09); None on other domains and on older runs,
     # which all ran `bm25`
     retrieval: str | None = None
+    # the simulation's rules beyond tau2's (`SIM_RULES`); None = every run before 2 October 2026:
+    # tau2's own customer, which ended a conversation on any stop, and both sides shown the real date
+    sim_rules: str | None = None
+    # a run joined from two (`extend_run`): the scored run and the run of the tasks its split had
+    # gained since, same bytes and rules; None for a run played whole
+    composed_of: list[str] | None = None
 
 
 def agent_route() -> tuple[str, str | None]:
@@ -129,6 +142,7 @@ def _run_config(
     from tau2.data_model.simulation import TextRunConfig
 
     from tau2_loop.agent.factory import AGENT_NAME, SERVICE_PREFIX, VERSION_KEY, with_effort
+    from tau2_loop.eval import user
 
     # tau2 writes these into tau2_results.json: provenance only, never a secret
     # (the service's bearer token is added by the factory at run time).
@@ -146,7 +160,7 @@ def _run_config(
         "agent": AGENT_NAME,
         "llm_agent": llm_agent,
         "llm_args_agent": llm_args_agent,
-        "user": "user_simulator",
+        "user": user.register(domain),
         "llm_user": sdk_model(USER_MODEL),
         "llm_args_user": with_effort({}, USER_EFFORT),
         "num_trials": trials,
@@ -220,6 +234,7 @@ def run_eval(
         split_version=None if task_ids else split_version(domain),
         agent_route=agent_route()[0],
         retrieval=BANKING_RETRIEVAL if domain == "banking_knowledge" else None,
+        sim_rules=None if dry_run else SIM_RULES,
     )
     _write_meta(run_dir, meta)
     (run_dir / "agent").mkdir(exist_ok=True)
@@ -303,6 +318,123 @@ def _finish(
         except Exception as e:  # noqa: BLE001 - tracking down never fails an eval
             console.print(f"[yellow]mlflow: not logged ({type(e).__name__}: {e})[/]")
     return meta, results
+
+
+def extend_run(base_run_id: str, concurrency: int = 3) -> tuple[RunMeta, list[TaskResult]]:
+    """Bring a scored run up to its split's current tasks without replaying what it scored: play
+    only the tasks the split has gained (a custom run of them), then join the two into one run of
+    the whole split (`compose_runs`). Refused unless the version's bytes, the simulation rules
+    and the retrieval are the run's, and every task it scored is still on its side."""
+    base, _ = load_run(base_run_id)
+    if base.dry_run or not base.summary:
+        raise ValueError(f"{base_run_id} is not a scored run")
+    version = load_version(base.domain, base.agent)
+    if version.fingerprint != base.fingerprint:
+        raise ValueError(
+            f"{base.agent}'s bytes changed since {base_run_id} ({base.fingerprint} → "
+            f"{version.fingerprint}): extending it would join two versions"
+        )
+    if base.sim_rules != SIM_RULES:
+        raise ValueError(f"{base_run_id} ran under other simulation rules ({base.sim_rules})")
+    ids = split_ids(base.domain, base.split)
+    moved = sorted(set(base.task_ids) - set(ids))
+    if moved:
+        raise ValueError(f"{base_run_id} scored tasks no longer on its {base.split} side: {moved}")
+    missing = [t for t in ids if t not in set(base.task_ids)]
+    if not missing:
+        raise ValueError(f"{base_run_id} already covers {base.domain}'s {base.split} split")
+    ext, _ = run_eval(
+        base.domain,
+        base.agent,
+        base.split,
+        base.trials,
+        concurrency,
+        task_ids=missing,
+        note=f"the {len(missing)} {base.split} tasks split v{split_version(base.domain)} added "
+        f"to {base_run_id}",
+    )
+    return compose_runs(base_run_id, ext.run_id)
+
+
+def compose_runs(base_run_id: str, ext_run_id: str) -> tuple[RunMeta, list[TaskResult]]:
+    """One run of a split joined from two of the same version: their conversations, results and
+    tau2 results side by side in a new folder that names both (`composed_of`). The two must be
+    the same bytes, model, customer, rules, retrieval and trials, on disjoint tasks that together
+    are exactly the split. Neither source folder changes."""
+    base, base_rows = load_run(base_run_id)
+    ext, ext_rows = load_run(ext_run_id)
+    same = (
+        "domain",
+        "agent",
+        "fingerprint",
+        "model",
+        "user_model",
+        "split",
+        "trials",
+        "agent_effort",
+        "user_effort",
+        "retrieval",
+        "sim_rules",
+    )
+    differ = [k for k in same if getattr(base, k) != getattr(ext, k)]
+    if differ:
+        raise ValueError(f"{base_run_id} and {ext_run_id} differ in {differ}")
+    if not (base.summary and ext.summary) or base.dry_run or ext.dry_run:
+        raise ValueError("both runs must be scored")
+    ids = split_ids(base.domain, base.split)
+    both = set(base.task_ids) & set(ext.task_ids)
+    if both or set(base.task_ids) | set(ext.task_ids) != set(ids):
+        raise ValueError(
+            f"the two runs must split {base.domain}'s {base.split} tasks between them "
+            f"(shared {sorted(both)})"
+        )
+    version = load_version(base.domain, base.agent)
+    run_id = new_run_id(base.domain, version, base.split)
+    run_dir = RUNS_DIR / run_id
+    (run_dir / "traces").mkdir(parents=True)
+    for src in (base_run_id, ext_run_id):
+        for f in sorted((RUNS_DIR / src / "traces").iterdir()):
+            (run_dir / "traces" / f.name).write_bytes(f.read_bytes())
+    (run_dir / "agent").mkdir()
+    for f in sorted((RUNS_DIR / base_run_id / "agent").iterdir()):
+        (run_dir / "agent" / f.name).write_bytes(f.read_bytes())
+    tau2 = [
+        json.loads((RUNS_DIR / r / "tau2_results.json").read_text())
+        for r in (base_run_id, ext_run_id)
+    ]
+    joined = {
+        **tau2[0],
+        "tasks": tau2[0]["tasks"] + tau2[1]["tasks"],
+        "simulations": tau2[0]["simulations"] + tau2[1]["simulations"],
+        "simulation_index": None,
+    }
+    (run_dir / "tau2_results.json").write_text(json.dumps(joined, ensure_ascii=False))
+    order = {t: i for i, t in enumerate(ids)}
+    rows = sorted(base_rows + ext_rows, key=lambda r: (order[r.task_id], r.trial))
+    write_results(run_dir / "results.jsonl", rows)
+    summary = summarise(rows)
+    meta = RunMeta(
+        **{
+            **asdict(base),
+            "run_id": run_id,
+            "n_tasks": len(ids),
+            "task_ids": ids,
+            "split_version": split_version(base.domain),
+            "finished_at": ext.finished_at,
+            "code_sha": base.code_sha
+            if base.code_sha == ext.code_sha
+            else f"{base.code_sha}+{ext.code_sha}",
+            "summary": asdict(summary),
+            "mlflow_run_id": None,  # each part is logged as it was played
+            "note": f"{base_run_id} ({len(base.task_ids)} tasks) joined with {ext_run_id} "
+            f"({len(ext.task_ids)} tasks): split v{split_version(base.domain)}",
+            "composed_of": [base_run_id, ext_run_id],
+        }
+    )
+    _write_meta(run_dir, meta)
+    console.rule(f"[bold]{run_id}[/] · {meta.note}")
+    _print_summary(summary)
+    return meta, rows
 
 
 def _print_summary(s: Summary) -> None:

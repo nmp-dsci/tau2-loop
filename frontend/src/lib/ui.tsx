@@ -3,10 +3,24 @@
  * instead of in eleven. Ported from DataAgentBench's `lib/ui.tsx` (s04 M0).
  */
 
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DOMAINS, type DomainSummary, domainLabel, fmtPct, useGet } from './api';
 import { domainPath, taskPath } from './url';
+
+/** A paragraph as its points (DESIGN.md rule 8): the most important first, at most three, each a
+ *  bold lead and a short clause. `lead` sizes it as the page's lead; in a caption it takes the
+ *  caption's size. An empty item is dropped, so a conditional point needs no wrapper. */
+export function Points({ items, lead = false, className = '' }: { items: ReactNode[]; lead?: boolean; className?: string }) {
+  const shown = items.filter((x) => x != null && x !== false && x !== '');
+  return (
+    <ul className={['points', lead ? 'lead' : '', className].filter(Boolean).join(' ')}>
+      {shown.map((x, i) => (
+        <li key={i}>{x}</li>
+      ))}
+    </ul>
+  );
+}
 
 /** A pass rate with its denominator in the same cell, per DESIGN.md: never a bare
  *  percentage. `--ok` fills the track, `--amber` when almost nothing passes. */

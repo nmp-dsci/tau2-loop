@@ -39,6 +39,10 @@ COPY data/tasks/ data/tasks/
 COPY agents/ agents/
 COPY runs/ runs/
 COPY loop/ loop/
+# s11: the tool judge's labels, golden answers, rubric and replays, for Trace, Review and Optimise
+COPY data/judge/ data/judge/
+COPY judges/ judges/
+COPY judge_runs/ judge_runs/
 
 # The build's git SHA, passed in by the deploy workflow.
 ARG CODE_SHA=unknown

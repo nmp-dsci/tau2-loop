@@ -2,13 +2,17 @@ import { type LoaderFunctionArgs, type RouteObject, redirect } from 'react-route
 import { Shell } from './Shell';
 import { Overview } from './pages/Overview';
 import { Domain, Domains } from './pages/Domains';
+import { JudgeEvals } from './pages/JudgeEvals';
 import { Rubric } from './pages/Rubric';
 import { Agent } from './pages/Agent';
 import { Runs } from './pages/Runs';
 import { Run } from './pages/Run';
 import { Trace } from './pages/Trace';
 import { Optimise, OptimiseRound } from './pages/Optimise';
+import { JudgeLoop } from './pages/JudgeLoop';
+import { JudgeAgent } from './pages/JudgeAgent';
 import { Review } from './pages/Review';
+import { GoldReview } from './pages/GoldReview';
 import { Leaderboard } from './pages/Leaderboard';
 import { search } from './lib/url';
 
@@ -47,9 +51,13 @@ export const routes: RouteObject[] = [
       { id: 'overview', path: '/', element: <Overview /> },
 
       // the benchmark: a domain, then one task inside it
-      { id: 'domains', path: '/domains', element: <Domains /> },
-      { id: 'domain', path: '/domains/:domain', element: <Domain /> },
-      { id: 'task', path: '/domains/:domain/:taskId', element: <Domain /> },
+      // the evals (renamed from Domains & tasks): a dataset's eval set, for either agent
+      { id: 'evals', path: '/evals', element: <Domains /> },
+      { id: 'evals-domain', path: '/evals/:domain', element: <Domain /> },
+      // the LLM judge's eval set (s11); `judge` outranks a task id
+      { id: 'evals-judge', path: '/evals/:domain/judge', element: <JudgeEvals /> },
+      { id: 'evals-judge-conv', path: '/evals/:domain/judge/:runId/:taskId/:trial', element: <JudgeEvals /> },
+      { id: 'evals-task', path: '/evals/:domain/:taskId', element: <Domain /> },
 
       // how a conversation is judged
       { id: 'rubric', path: '/rubric', element: <Rubric /> },
@@ -71,6 +79,8 @@ export const routes: RouteObject[] = [
           return redirect(`/optimise/${encodeURIComponent(d ?? 'airline')}`);
         },
       },
+      // the tool judge's own loop beside the agent's (s11); `judge` outranks a `:version`
+      { id: 'optimise-judge', path: '/optimise/:domain/judge', element: <JudgeLoop /> },
       {
         id: 'optimise',
         path: '/optimise/:domain',
@@ -81,25 +91,50 @@ export const routes: RouteObject[] = [
       // what a person thought of what the judge scored — the one write path
       { id: 'review', path: '/review', element: <Review /> },
       { id: 'review-one', path: '/review/:runId/:taskId/:trial', element: <Review /> },
+      // the tool judge's answer key (s11 J1): a person checks what structure could not pin
+      { id: 'review-golden', path: '/review/golden/:domain', element: <GoldReview /> },
+      { id: 'review-golden-one', path: '/review/golden/:domain/:runId/:taskId/:trial/:msg', element: <GoldReview /> },
 
       // what the agent is
       { id: 'agents', path: '/agent', element: <Agent /> },
+      // the LLM judge as an agent of its own (s11); `judge` outranks a version name
+      { id: 'agent-judge', path: '/agent/:domain/judge', element: <JudgeAgent /> },
       { id: 'agent', path: '/agent/:domain/:name', element: <Agent /> },
 
       // ── addresses from before the grammar ──
-      { id: 'old-data', path: '/data', loader: () => redirect('/domains') },
-      { id: 'old-tasks', path: '/tasks', loader: () => redirect('/domains') },
+      { id: 'old-data', path: '/data', loader: () => redirect('/evals') },
+      { id: 'old-tasks', path: '/tasks', loader: () => redirect('/evals') },
       {
         id: 'old-tasks-domain',
         path: '/tasks/:domain',
-        loader: ({ params }) => redirect(`/domains/${encodeURIComponent(params.domain!)}`),
+        loader: ({ params }) => redirect(`/evals/${encodeURIComponent(params.domain!)}`),
       },
       {
         id: 'old-task',
         path: '/tasks/:domain/:taskId',
         loader: ({ params }) =>
           redirect(
-            `/domains/${encodeURIComponent(params.domain!)}/${encodeURIComponent(params.taskId!)}`,
+            `/evals/${encodeURIComponent(params.domain!)}/${encodeURIComponent(params.taskId!)}`,
+          ),
+      },
+      // Domains & tasks became Evals (s11 review): its addresses keep landing, lens and all
+      {
+        id: 'old-domains',
+        path: '/domains',
+        loader: ({ request }: LoaderFunctionArgs) => redirect(`/evals${new URL(request.url).search}`),
+      },
+      {
+        id: 'old-domains-domain',
+        path: '/domains/:domain',
+        loader: ({ params, request }) =>
+          redirect(`/evals/${encodeURIComponent(params.domain!)}${new URL(request.url).search}`),
+      },
+      {
+        id: 'old-domains-task',
+        path: '/domains/:domain/:taskId',
+        loader: ({ params, request }) =>
+          redirect(
+            `/evals/${encodeURIComponent(params.domain!)}/${encodeURIComponent(params.taskId!)}${new URL(request.url).search}`,
           ),
       },
       { id: 'old-agents', path: '/agents', loader: () => redirect('/agent') },

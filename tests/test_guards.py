@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tau2_loop.config import ROOT
-from tau2_loop.data.splits import cut_halves, halves, read_split
+from tau2_loop.data.splits import cut_halves, halves, read_split, read_task_extract
 from tau2_loop.loop.guards import (
     bash_fence_reason,
     fence_reason,
@@ -61,23 +61,18 @@ def test_customer_data_is_found_and_generic_words_are_not() -> None:
     assert leaks({"system.md": "Confirm the reservation before any write."}, vals) == []
 
 
-def test_banking_is_halved_into_disjoint_read_and_gate_halves_of_train() -> None:
-    h = halves("banking_knowledge")
-    assert h is not None
-    read, gate = h
-    train = read_split("banking_knowledge")["train"]
-    assert len(read) == len(gate) == 24 and not set(read) & set(gate)
-    assert sorted(read + gate) == sorted(train)
-    assert cut_halves(train) == read_split("banking_knowledge")["halves"]  # reproducible
-    assert halves("airline") is None
-
-
-def test_banking_test_is_capped_at_25_and_nothing_held_back_reaches_train() -> None:
+def test_banking_keeps_its_halves_on_file_but_the_loop_reads_all_of_train() -> None:
+    """s09 dealt banking's train into read and gate halves; since its gate moved to test (3 Oct
+    2026) the loop uses neither, and the split keeps them as the record."""
     s = read_split("banking_knowledge")
-    held = s["test_cap"]["held_back"]
-    assert len(s["test"]) == 25 and len(held) == 24 and s["reserve_n"] == 24
-    assert set(s["v1"]["test"]) <= set(s["test"])  # every task that was test on split v1 still is
-    assert not set(held) & (set(s["train"]) | set(s["test"]))
+    read, gate = s["halves"]["read"], s["halves"]["gate"]
+    assert halves("banking_knowledge") is None
+    assert len(read) == len(gate) == 30 and not set(read) & set(gate)
+    assert sorted(read + gate) == sorted(s["train"])
+    # split v2's halves, reproducible from its train list, are kept whole inside v3's
+    v2 = cut_halves(s["v2"]["train"])
+    assert read[:24] == v2["read"] and gate[:24] == v2["gate"]
+    assert halves("airline") is None
 
 
 def test_committed_versions_pass_the_leak_guard() -> None:
@@ -91,3 +86,33 @@ def test_committed_versions_pass_the_leak_guard() -> None:
 
 def test_paths_resolve_from_the_repo_root(tmp_path: Path) -> None:
     assert fence_reason(str(tmp_path / "anything"), set(), []) is None
+
+
+def test_a_discoverable_tool_is_named_freely_and_the_ids_in_its_arguments_are_guarded() -> None:
+    """Banking's first cycle was rejected for naming `open_bank_account_4821`, a tool the knowledge
+    base documents for every customer (expected in train and test tasks alike), not a customer's
+    value. Its arguments travel as JSON text, whose ids the guard used to miss whole."""
+    from tau2_loop.loop.guards import _strings
+
+    vals = leak_values("banking_knowledge")
+    for tool in (
+        "open_bank_account_4821",
+        "close_bank_account_7392",
+        "get_user_dispute_history_7291",
+    ):
+        assert tool not in vals
+        assert leaks({"system.md": f"Unlock {tool} before you call it."}, vals) == []
+    # an id that appears only inside a discoverable call's JSON arguments is a customer's
+    assert ("account_id", "chk_1") in _strings(
+        {"agent_tool_name": "close_bank_account_7392", "arguments": '{"account_id": "chk_1"}'}
+    )
+    assert _strings({"ids": ["a1b2c", "d3e4f"]}) == [("ids", "a1b2c"), ("ids", "d3e4f")]
+    inner = {
+        v
+        for t in read_task_extract("banking_knowledge")["tasks"]
+        for a in t["evaluation_criteria"]["actions"]
+        if a["name"] == "call_discoverable_agent_tool"
+        for k, v in _strings(a.get("arguments") or {})
+        if k.endswith("_id") and any(c.isdigit() for c in v) and len(v) >= 5
+    }
+    assert inner and inner <= vals

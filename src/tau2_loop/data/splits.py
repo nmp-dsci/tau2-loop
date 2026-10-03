@@ -11,6 +11,14 @@ the version-1 lists under `v1`, so a run on the old cut can be told apart. The
 files are committed so every run, every cycle and every table reads the same
 ids; `make splits` rewrites them only when the seed or the version changes.
 
+Banking alone is at version 3 (`TRAIN_FROM_RESERVE`): s09 capped its test at 25 and
+held 24 back; version 3 deals those 24, shuffled with the same seed, to train
+until it holds 60 and the rest to test (37). No task changes side, the new train
+tasks are dealt evenly into the read and gate halves, and the v2 lists stay in
+the file under `v2`. The halves stay in the file as s09's record, but the loop no
+longer uses them: since 3 Oct 2026 banking's gate decides on test (`GATE_ON_TEST`)
+and its optimiser reads all of train.
+
 Alongside each split the selected tasks themselves are extracted to
 `data/tasks/<domain>.json` (the task spec as tau2 dumps it, plus the policy),
 so the viewer and the demo image can show a task without the 140 MB submodule.
@@ -26,12 +34,14 @@ from typing import Any
 from tau2_loop.config import (
     BANKING_RETRIEVAL,
     DOMAINS,
+    GATE_ON_TEST,
     HALVED_DOMAINS,
     SPLIT_SEED,
     SPLIT_VERSION,
     SPLITS_DIR,
     TASKS_DIR,
     TEST_CAP,
+    TRAIN_FROM_RESERVE,
     V1_SIZE,
     quiet_tau2,
 )
@@ -85,7 +95,48 @@ def cut(domain: str, seed: int = SPLIT_SEED) -> dict[str, Any]:
         "v1": c["v1"],
         **({"halves": cut_halves(c["train"], seed)} if domain in HALVED_DOMAINS else {}),
     }
-    return cap_test(split, TEST_CAP[domain]) if domain in TEST_CAP else split
+    if domain in TEST_CAP:
+        split = cap_test(split, TEST_CAP[domain])
+    if domain in TRAIN_FROM_RESERVE:
+        split = deal_reserve(split, TRAIN_FROM_RESERVE[domain], seed)
+    return split
+
+
+def deal_reserve(split: dict[str, Any], train_n: int, seed: int = SPLIT_SEED) -> dict[str, Any]:
+    """Version 3: the tasks a test cap held back, shuffled with the seed, dealt to train until it
+    holds `train_n` and the rest to test. Every v2 member keeps its side, and the tasks added to
+    train are dealt evenly into the read and gate halves, which keep theirs."""
+    held = list((split.get("test_cap") or {}).get("held_back") or [])
+    k = train_n - len(split["train"])
+    if not 0 <= k <= len(held):
+        raise ValueError(
+            f"train {len(split['train'])} + {len(held)} held back cannot make {train_n}"
+        )
+    dealt = random.Random(seed).sample(held, len(held))
+    to_train, to_test = dealt[:k], dealt[k:]
+    out = {key: v for key, v in split.items() if key != "test_cap"}
+    out["version"] = 3
+    out["method"] = (
+        f"{split['method']}; s09 capped test at its first {len(split['test'])} and held "
+        f"{len(held)} back; v3 deals those with random.Random({seed}).sample(held_back, "
+        f"{len(held)}), the first {k} to train, the rest to test"
+    )
+    out["v2"] = {"train": list(split["train"]), "test": list(split["test"])}
+    out["train"] = list(split["train"]) + to_train
+    out["test"] = list(split["test"]) + to_test
+    out["reserve_n"] = int(split.get("base_n") or 0) - len(out["train"]) - len(out["test"])
+    if "halves" in split:
+        h = split["halves"]
+        new = random.Random(seed).sample(to_train, len(to_train))
+        half = len(new) // 2
+        out["halves"] = {
+            **h,
+            "method": f"{h['method']}; v3's {len(new)} new train tasks: "
+            f"random.Random({seed}).sample(added, {len(new)}), first {half} read, the rest gate",
+            "read": list(h["read"]) + new[:half],
+            "gate": list(h["gate"]) + new[half:],
+        }
+    return out
 
 
 def cap_test(split: dict[str, Any], n: int) -> dict[str, Any]:
@@ -127,8 +178,9 @@ def add_halves(domain: str, seed: int = SPLIT_SEED) -> Path:
 
 
 def halves(domain: str) -> tuple[list[str], list[str]] | None:
-    """(read, gate): the halves of a domain's train split, or None where train is not halved."""
-    if domain == "mock":
+    """(read, gate): the halves of a domain's train split the loop uses, or None where train is not
+    halved or its gate decides on test (`GATE_ON_TEST`): there the optimiser reads all of train."""
+    if domain == "mock" or domain in GATE_ON_TEST:
         return None
     h = read_split(domain).get("halves")
     return (list(h["read"]), list(h["gate"])) if h else None

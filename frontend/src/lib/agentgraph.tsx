@@ -9,7 +9,7 @@
  * that the trace, the task spec or the run's agent snapshot does not say.
  */
 
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   type DiffRecord,
@@ -28,6 +28,7 @@ import {
   post,
   shortModel,
 } from './api';
+import { Points } from './ui';
 import { optimisePath } from './url';
 
 // ── nodes ─────────────────────────────────────────────────────────────────
@@ -533,7 +534,7 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
       <>
         <h3>Nothing selected</h3>
         <p className="small">
-          Click a node in the graph, or a row in the replay. Every panel shows what that part received and what it produced in{' '}
+          Click a node or a replay row to see what it received and produced in{' '}
           <b>
             {t.domain}/{t.task_id}
           </b>
@@ -639,13 +640,27 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
       <>
         <Crumbs where={`${src} · messages[role=user]`} onClose={onClose} />
         <h3>User simulator: {plural(st.length, 'turn')}, played from the task's scenario</h3>
-        <p className="small">
-          τ²'s own simulator, on <span className="mono">{shortModel(meta.user_model)}</span>. It gets the scenario as instructions (see{' '}
-          <button type="button" className="linkish" onClick={() => onGo('task')}>
-            task
-          </button>
-          ) and answers each agent message. It ends the conversation with <code>###STOP###</code>. This conversation used {fmtInt(r.user_input_tokens)} input and {fmtInt(r.user_output_tokens)} output tokens.
-        </p>
+        <Points
+          className="small"
+          items={[
+            <>
+              <b>τ²'s own simulator</b> on <span className="mono">{shortModel(meta.user_model)}</span>, playing the{' '}
+              <button type="button" className="linkish" onClick={() => onGo('task')}>
+                task
+              </button>
+              's scenario.
+            </>,
+            <>
+              <b>It answers each agent message</b> and ends the conversation with <code>###STOP###</code>.
+            </>,
+            <>
+              <b>
+                {fmtInt(r.user_input_tokens)} in, {fmtInt(r.user_output_tokens)} out
+              </b>{' '}
+              tokens in this conversation.
+            </>,
+          ]}
+        />
         {st.map((s, k) => (
           <div key={s.i} id={`step-${s.i}`} className={`step ${step === s.i ? 'cur' : ''}`}>
             <StepHead what="turn" k={k + 1} m={s.m} />
@@ -672,9 +687,20 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
         <h3>
           Orchestrator: {t.messages.length} messages, ended by <span className="mono">{t.termination_reason}</span>
         </h3>
-        <p className="small">
-          τ²'s turn loop, unmodified. Half-duplex: one party speaks per step. It passes each message to the other side, runs every tool call against the environment and returns the results. It stops on <code>###STOP###</code>, a transfer to a human, or the step cap.
-        </p>
+        <Points
+          className="small"
+          items={[
+            <>
+              <b>τ²'s turn loop, unmodified</b>: half-duplex, one party speaks per step.
+            </>,
+            <>
+              <b>It relays every message</b> and runs every tool call against the environment.
+            </>,
+            <>
+              <b>It stops on</b> <code>###STOP###</code>, a transfer to a human, or the step cap.
+            </>,
+          ]}
+        />
         <dl className="diff-sum">
           <dt>messages</dt>
           <dd>
@@ -705,10 +731,21 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
       <>
         <Crumbs where={`${src} · messages[role=assistant]`} onClose={onClose} />
         <h3>Agent: {plural(st.length, 'model call')}, each answering with one message or tool calls</h3>
-        <p className="small">
-          Each call is <code>LoopAgent.generate_next_message</code>: the composed system prompt ({agent ? fmtK(agent.prompt.text.length) : '…'} chars) plus the whole history. That is why input grows every turn
-          {withUsage.length > 1 ? `, from ${fmtInt(withUsage[0].m.usage?.prompt_tokens)} to ${fmtInt(withUsage[withUsage.length - 1].m.usage?.prompt_tokens)} tokens here` : ''}. Below, <b>input</b> is only what is new since the agent last spoke. In total: {fmtInt(r.agent_input_tokens)} in, {fmtInt(r.agent_output_tokens)} out, {secs.toFixed(0)} s of generation.
-        </p>
+        <Points
+          className="small"
+          items={[
+            <>
+              <b>Each call sends the system prompt plus the whole history</b>, so input grows
+              {withUsage.length > 1 ? `: ${fmtInt(withUsage[0].m.usage?.prompt_tokens)} to ${fmtInt(withUsage[withUsage.length - 1].m.usage?.prompt_tokens)} tokens here` : ' every turn'}.
+            </>,
+            <>
+              <b>Below, input is only what is new</b> since the agent last spoke.
+            </>,
+            <>
+              <b>In total</b>: {fmtInt(r.agent_input_tokens)} in, {fmtInt(r.agent_output_tokens)} out, {secs.toFixed(0)} s of generation.
+            </>,
+          ]}
+        />
         {st.map((s, k) => (
           <div key={s.i} id={`step-${s.i}`} className={`step ${step === s.i ? 'cur' : ''}`}>
             <StepHead what="call" k={k + 1} m={s.m} />
@@ -735,17 +772,31 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
       <>
         <Crumbs where={`runs/${meta.run_id}/agent/system.md · trace.policy`} onClose={onClose} />
         <h3>System prompt: {fmtInt(p.text.length)} characters, sent unchanged on every call</h3>
-        <p className="small">
-          <code>system.md</code> ({fmtInt(p.system_md_chars)} chars) with the domain policy ({fmtInt(p.policy_words)} words) {p.slotted ? <>in its <code>{'{policy}'}</code> slot</> : 'appended, since it has no slot'}
-          {p.extra_context ? (
+        <Points
+          className="small"
+          items={[
             <>
-              , then <code>extra_context()</code>'s output ({fmtInt(p.extra_context.length)} chars)
-            </>
-          ) : (
-            ''
-          )}
-          . Composed by the same function the agent uses, from the run's own snapshot. Only the optimiser edits <code>system.md</code>.
-        </p>
+              <b>
+                <code>system.md</code> ({fmtInt(p.system_md_chars)} chars) plus the policy ({fmtInt(p.policy_words)} words)
+              </b>{' '}
+              {p.slotted ? <>in its <code>{'{policy}'}</code> slot</> : 'appended, as it has no slot'}
+              {p.extra_context ? (
+                <>
+                  , then <code>extra_context()</code> ({fmtInt(p.extra_context.length)} chars)
+                </>
+              ) : (
+                ''
+              )}
+              .
+            </>,
+            <>
+              <b>Composed as the agent composes it</b>, from the run's own snapshot.
+            </>,
+            <>
+              <b>Only the optimiser edits</b> <code>system.md</code>.
+            </>,
+          ]}
+        />
         <details className="part" open>
           <summary>
             system.md <span className="muted">· {fmtInt(p.system_md_chars)} chars · written by the optimiser</span>
@@ -789,9 +840,23 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
           <h3>
             No helper.py: {meta.domain}/{meta.agent} is <code>system.md</code> alone
           </h3>
-          <p className="small">
-            A version may define three hooks in <code>helper.py</code>: <code>extra_context(policy)</code>, <code>on_tool_call(name, args)</code> and <code>on_reply(text)</code>; and, since s09, one each in <code>checks.py</code>, <code>memory.py</code> and <code>guidance.py</code>. This one defines none, so every model output reaches the orchestrator unchanged.
-          </p>
+          <Points
+            className="small"
+            items={[
+              <>
+                <b>This version defines no hooks</b>, so every model output reaches the orchestrator unchanged.
+              </>,
+              <>
+                <b>
+                  <code>helper.py</code> may define three
+                </b>
+                : <code>extra_context(policy)</code>, <code>on_tool_call(name, args)</code>, <code>on_reply(text)</code>.
+              </>,
+              <>
+                <b>Since s09</b>, <code>checks.py</code>, <code>memory.py</code> and <code>guidance.py</code> add one each.
+              </>,
+            ]}
+          />
         </>
       );
     }
@@ -886,18 +951,29 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
             one Agent SDK <code>query()</code> on the subscription; <code>require_live()</code> refuses a per-token key
           </li>
         </ol>
-        <p className="small">
-          One CLI process per model call, so a twenty-turn conversation is about twenty agent calls and twenty simulator calls. The demo image sets <code>DEMO_MODE=1</code> and cannot reach a model. The run folder is the record; MLflow indexes it
-          {meta.mlflow_url ? (
+        <Points
+          className="small"
+          items={[
             <>
-              {' '}
-              (<a href={meta.mlflow_url}>this run in MLflow</a>)
-            </>
-          ) : (
-            ''
-          )}
-          .
-        </p>
+              <b>One CLI process per model call</b>: twenty turns is about twenty agent and twenty simulator calls.
+            </>,
+            <>
+              <b>The run folder is the record</b>; MLflow indexes it
+              {meta.mlflow_url ? (
+                <>
+                  {' '}
+                  (<a href={meta.mlflow_url}>this run in MLflow</a>)
+                </>
+              ) : (
+                ''
+              )}
+              .
+            </>,
+            <>
+              <b>The demo image cannot reach a model</b>: it sets <code>DEMO_MODE=1</code>.
+            </>,
+          ]}
+        />
       </>
     );
   }
@@ -988,9 +1064,17 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
       return (
         <>
           {head}
-          <p className="small">
-            τ² replays the task's expected actions on a fresh copy of the database and compares that state's hash with the one this conversation left behind. The agent made {plural(writes, 'write')}; the task expects {plural(want, 'write')}.
-          </p>
+          <Points
+            className="small"
+            items={[
+              <>
+                <b>τ² replays the expected actions</b> on a fresh database and compares its hash with this conversation's.
+              </>,
+              <>
+                <b>The agent made {plural(writes, 'write')}</b>; the task expects {plural(want, 'write')}.
+              </>,
+            ]}
+          />
           <dl className="diff-sum">
             <dt>db_match</dt>
             <dd>{ri?.db_check ? String(ri.db_check.db_match) : '—'}</dd>
@@ -1008,16 +1092,40 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
           : node === 'check:nl'
             ? (ri?.nl_assertions ?? []).map((x) => ({ ok: x.met, label: x.met ? '✓ met' : '✕ not met', body: x.nl_assertion, sub: x.justification }))
             : (ri?.env_assertions ?? []).map((x) => ({ ok: x.met, label: `${x.met ? '✓' : '✕'} ${x.env_assertion.func_name ?? 'assertion'}`, body: JSON.stringify(x.env_assertion.arguments ?? {}, null, 1), mono: true }));
-    const why: Record<string, string> = {
-      'check:action': 'Each expected call is matched on name and arguments. When ACTION is not in the basis it does not change the reward, but it is the quickest way to read a failure.',
-      'check:communicate': 'Things the agent must tell the customer, matched as strings in its messages.',
-      'check:nl': `The only check with a model in it: ${shortModel(meta.judge_model)} reads the transcript and decides whether each assertion holds. A judge can be wrong; the Review tab records a person's verdict.`,
-      'check:env': "Assertions about the environment's state after the conversation, run as Python functions.",
+    const why: Record<string, ReactNode> = {
+      'check:action': (
+        <Points
+          className="small"
+          items={[
+            <>
+              <b>Each expected call is matched</b> on name and arguments.
+            </>,
+            <>
+              <b>Outside the basis it leaves the reward alone</b>, but it is the quickest read of a failure.
+            </>,
+          ]}
+        />
+      ),
+      'check:communicate': <p className="small">Facts the agent must tell the customer, matched as strings in its messages.</p>,
+      'check:nl': (
+        <Points
+          className="small"
+          items={[
+            <>
+              <b>The only check with a model in it</b>: {shortModel(meta.judge_model)} reads the transcript and rules on each assertion.
+            </>,
+            <>
+              <b>A judge can be wrong</b>; the Review tab records a person's verdict.
+            </>,
+          ]}
+        />
+      ),
+      'check:env': <p className="small">Python assertions on the environment's state after the conversation.</p>,
     };
     return (
       <>
         {head}
-        <p className="small">{why[node]}</p>
+        {why[node]}
         <div className="io">
           {items.length ? (
             items.map((x, i) => (
@@ -1044,9 +1152,20 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
         <h3>
           Reward {r.reward}: {basis.map((b) => `${b} ${bd[b] ?? '—'}`).join(' × ') || 'no basis'}
         </h3>
-        <p className="small">
-          τ² multiplies the components named in the task's <code>reward_basis</code>, so one zero fails the conversation. A reward of 1 is a pass, and that is what <code>pass^k</code> and the gate count.
-        </p>
+        <Points
+          className="small"
+          items={[
+            <>
+              <b>
+                τ² multiplies the components in <code>reward_basis</code>
+              </b>
+              , so one zero fails the conversation.
+            </>,
+            <>
+              <b>A reward of 1 is a pass</b>, which is what <code>pass^k</code> and the gate count.
+            </>,
+          ]}
+        />
         <dl className="diff-sum">
           {basis.map((b) => [<dt key={`${b}t`}>{b}</dt>, <dd key={`${b}d`}>{bd[b] ?? '—'}</dd>])}
           <dt>verdict</dt>
@@ -1130,12 +1249,23 @@ function Playground({ t, runId, name, by, available, req }: PgProps) {
       <h4>
         Playground <span className="label">run {name} yourself</span>
       </h4>
-      <p className="small">
-        One call against the database as it stood at the chosen message: the task's initial state, then every earlier write replayed through τ²'s own <code>set_state</code>. No model is called and nothing is saved.
-      </p>
+      <Points
+        className="small"
+        items={[
+          <>
+            <b>One call against the database as it stood</b> at the chosen message.
+          </>,
+          <>
+            <b>Rebuilt from the task's initial state</b>, every earlier write replayed through τ²'s <code>set_state</code>.
+          </>,
+          <>
+            <b>No model is called</b> and nothing is saved.
+          </>,
+        ]}
+      />
       {!available && (
         <p className="small warn-note">
-          The playground needs τ², which the demo image does not ship. Run the viewer from a checkout (<code>make dev</code>) to use it.
+          The playground needs τ², which the demo image lacks: run <code>make dev</code> from a checkout.
         </p>
       )}
       <fieldset disabled={!available || busy}>
@@ -1154,7 +1284,7 @@ function Playground({ t, runId, name, by, available, req }: PgProps) {
         </div>
         {held > 0 && (
           <p className="small warn-note">
-            This database already holds {plural(held, 'write')} the conversation made, the first at message {fw}. τ²'s grader runs the task's expected calls before any of them, so a call can fail here on state the conversation changed.
+            This database already holds {plural(held, 'write')} from the conversation, the first at message {fw}; τ²'s grader runs before them, so a call can fail here.
           </p>
         )}
         <textarea id="pg-args" className="mono" spellCheck={false} aria-label="arguments, as JSON" value={form.args} onChange={(e) => setForm({ ...form, args: e.target.value })} />
@@ -1215,9 +1345,17 @@ function PgResult({ res, t }: { res: PlaygroundResult; t: TrialPayload }) {
           {db}
         </>
       )}
-      <p className="sub">
-        Replayed {plural(res.replayed_writes, 'earlier write')} to reach message {res.at}. A tool enforces only what its own code checks, never the policy, so an accepted call does not mean the agent was allowed to make it.
-      </p>
+      <Points
+        className="small muted"
+        items={[
+          <>
+            <b>Replayed {plural(res.replayed_writes, 'earlier write')}</b> to reach message {res.at}.
+          </>,
+          <>
+            <b>A tool checks its own code, never the policy</b>, so accepted does not mean allowed.
+          </>,
+        ]}
+      />
     </div>
   );
 }

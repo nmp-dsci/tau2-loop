@@ -39,11 +39,21 @@ SPLIT_VERSION = 2
 # The board's AllTools adds OpenAI embeddings, which the subscription cannot call.
 BANKING_RETRIEVAL = "bm25_grep"
 # Domains whose train split is dealt into a read half (the optimiser's) and a gate half
-# (the gate's, never shown to an optimiser): s09 option B.
+# (the gate's, never shown to an optimiser): s09 option B. The split keeps the halves; the loop
+# uses them only where the gate is not on test (`GATE_ON_TEST`).
 HALVED_DOMAINS: tuple[str, ...] = ("banking_knowledge",)
+# Domains whose gate decides on the test split (3 Oct 2026, the person's call for banking): the
+# optimiser reads every failure of all of train, and promotion compares the challenger's test run
+# with the champion's on the same tasks. No test conversation or test task id reaches an
+# optimiser; the ledger shows it the gate's pass counts and the moves on train.
+GATE_ON_TEST: tuple[str, ...] = ("banking_knowledge",)
 # A test split capped to its first n tasks (v1's test first, then the dealt ones), the rest held
-# back in reserve, never moved to train: banking's 49 cost ~50 minutes a version (s09).
+# back in reserve: banking's 49 cost ~50 minutes a version (s09).
 TEST_CAP: dict[str, int] = {"banking_knowledge": 25}
+# Split version 3 (3 Oct 2026, the person's call): the cap's reserve dealt out until train holds
+# n tasks, the rest to test. Every v2 member keeps its side (banking: train 48, the 25 test tasks
+# run since s09), so banking is 60 train / 37 test with nothing in reserve.
+TRAIN_FROM_RESERVE: dict[str, int] = {"banking_knowledge": 60}
 V1_SIZE = 20
 
 # tau2 reads its data dir from this variable; the submodule's own `data/` is the

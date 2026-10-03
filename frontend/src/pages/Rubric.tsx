@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { domainLabel, fmtPct, useGet } from '../lib/api';
-import { Kpi, Loading } from '../lib/ui';
+import { Kpi, Loading, Points } from '../lib/ui';
 import { domainPath } from '../lib/url';
 
 /**
@@ -20,31 +21,69 @@ type Rubric = {
   failures: { failed: number; by_check: Record<string, number>; hit_turn_cap: number };
 };
 
-const CHECKS: [string, string, string][] = [
+const CHECKS: [string, string, ReactNode[]][] = [
   [
     'db_check',
     'the database',
-    'the environment database after the conversation, hashed and compared with the one the annotator recorded. It cannot be argued with, and it is the only check that sees what the agent did rather than what it said.',
+    [
+      <>
+        <b>The final database, hashed</b> and compared with the annotator's; it cannot be argued
+        with.
+      </>,
+      <>
+        <b>The only check that sees what the agent did</b>, not what it said.
+      </>,
+    ],
   ],
   [
     'actions',
     'expected actions',
-    'the write calls the annotator expected, matched by name and arguments. A read-only conversation has none, so the check is vacuous there.',
+    [
+      <>
+        <b>The write calls the annotator expected</b>, matched by name and arguments.
+      </>,
+      <>
+        <b>Vacuous on a read-only conversation</b>, which expects none.
+      </>,
+    ],
   ],
   [
     'communicate_info',
     'things that must be said',
-    'literal strings that have to appear in what the agent told the user — a refund amount, a confirmation code. Substring matching, so phrasing is free but the value is not.',
+    [
+      <>
+        <b>Literal strings the agent must tell the user</b>: a refund amount, a confirmation code.
+      </>,
+      <>
+        <b>A substring match</b>: the phrasing is free, the value is not.
+      </>,
+    ],
   ],
   [
     'nl_assertions',
     'NL assertions',
-    'a model judges whether a sentence is true of the transcript. This is the only check with an LLM inside it, and the only one that can be wrong twice — once by missing a real failure, once by inventing one.',
+    [
+      <>
+        <b>A model judges whether a sentence is true</b> of the transcript: the only check with an
+        LLM inside.
+      </>,
+      <>
+        <b>It can be wrong twice</b>: by missing a real failure, or by inventing one.
+      </>,
+    ],
   ],
   [
     'env_assertions',
     'environment assertions',
-    'a function run against the final environment. Telecom is judged almost entirely this way — it has no database check at all — which is why its failures look different from the other three.',
+    [
+      <>
+        <b>A function run against the final environment.</b>
+      </>,
+      <>
+        <b>Telecom is judged almost entirely this way</b>, with no database check, so its failures
+        look different.
+      </>,
+    ],
   ],
 ];
 
@@ -62,17 +101,26 @@ export function Rubric() {
         A conversation's reward is a <em>product</em>: every check the task names must pass, so one
         miss is a zero
       </h1>
-      <p className="lead">
-        τ² scores a simulation with <code>evaluate_simulation()</code>. The task's{' '}
-        <code>reward_basis</code> names which of the checks below count for it, and the reward is
-        their product — which is why a reward is almost always 1.0 or 0.0, and why the interesting
-        question is never "what was the score" but "which check failed".
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>The question is which check failed</b>, never what the score was: a reward is almost
+            always 1.0 or 0.0.
+          </>,
+          <>
+            <b>
+              The task's <code>reward_basis</code> names the checks that count
+            </b>
+            ; τ²'s <code>evaluate_simulation()</code> multiplies them.
+          </>,
+        ]}
+      />
 
       <div className="kpis">
         <Kpi
           n={String(total)}
-          b="split tasks across the four domains (40 each, train + test), every one naming its own basis"
+          b="split tasks across the four domains, train + test, each naming its own basis"
         />
         <Kpi n={String(f.failed)} b="failed conversations across every scored run" />
         <Kpi
@@ -90,9 +138,8 @@ export function Rubric() {
       <div className="tw">
         <table>
           <caption>
-            How many tasks per domain carry each check. A task with no expected actions is not judged
-            on actions at all — and telecom, alone, is judged on environment assertions rather than a
-            database hash.
+            Tasks per domain that carry each check; telecom alone is judged on environment assertions,
+            not a database hash.
           </caption>
           <thead>
             <tr>
@@ -145,15 +192,15 @@ export function Rubric() {
         {CHECKS.map(([key, label, what]) => (
           <div className="card" key={key}>
             <h3>{label}</h3>
-            <p className="small">{what}</p>
+            <Points className="small" items={what} />
           </div>
         ))}
       </div>
 
       <h2>2 · What the reward is a product of, per domain</h2>
       <p>
-        The basis is the task's, not the domain's: within one domain some tasks are judged on the
-        database and the conversation, others on the conversation alone.
+        The basis is the task's, not the domain's: in one domain, some tasks count the database and
+        the conversation, others the conversation alone.
       </p>
       <div className="tw">
         <table>
@@ -184,19 +231,30 @@ export function Rubric() {
       </div>
 
       <h2>3 · A conversation can miss more than one check</h2>
-      <p>
-        The counts above do not sum to {f.failed}: a conversation that never made the booking both
-        leaves the database wrong and fails to say the confirmation code. What the mix does say is
-        which check is worth reading first — and here it is the database, on {fmtPct(db / (f.failed || 1))} of
-        failures.{' '}
-        {f.hit_turn_cap > 0 ? (
+      <Points
+        items={[
           <>
-            {f.hit_turn_cap} conversations never got to answer at all: they ran out of turns.
-          </>
-        ) : (
-          <>No conversation ran out of turns, so no failure here is the turn cap's fault.</>
-        )}
-      </p>
+            <b>Read the database first</b>: it is wrong in {db} of {f.failed} failures
+            ({fmtPct(db / (f.failed || 1))}).
+          </>,
+          <>
+            <b>The counts above do not sum to {f.failed}</b>: a missed booking leaves the database
+            wrong and the confirmation code unsaid.
+          </>,
+          f.hit_turn_cap > 0 ? (
+            <>
+              <b>
+                {f.hit_turn_cap} of {f.failed} failures ran out of turns
+              </b>{' '}
+              before answering at all.
+            </>
+          ) : (
+            <>
+              <b>No conversation ran out of turns</b>, so no failure here is the turn cap's fault.
+            </>
+          ),
+        ]}
+      />
     </>
   );
 }

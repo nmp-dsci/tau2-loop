@@ -42,6 +42,11 @@ from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
 from tau2_loop.loop.history import version_history
 from tau2_loop.loop.ledger import read_ledger
+from tau2_loop.tooljudge import gold as judge_gold_mod
+from tau2_loop.tooljudge import labels as judge_labels
+from tau2_loop.tooljudge import replay as judge_replay_mod
+from tau2_loop.tooljudge import review as judge_review
+from tau2_loop.tooljudge import view as judge_view
 from tau2_loop.tracking.registry import read_all, read_registry
 from tau2_loop.tracking.snapshot import read_snapshot
 
@@ -54,6 +59,16 @@ class ToolIn(BaseModel):
     at: int
     after_calls: int = 0
     requestor: str = "assistant"
+
+
+class GoldReviewIn(BaseModel):
+    """A person's check of one golden answer (s11 J1): agree, or correct with what it should be."""
+
+    item_id: str
+    verdict: str
+    correction: dict[str, Any] = {}
+    note: str = ""
+    author: str = ""
 
 
 class ReviewIn(BaseModel):
@@ -207,6 +222,42 @@ def create_app() -> FastAPI:
             "tools": ext.get("tools"),
             "tasks": [_task_row(t, split) for t in ext.get("tasks", [])],
         }
+
+    @app.get("/api/domains/{domain}/conversations")
+    def task_conversations(domain: str, task: str) -> list[dict[str, Any]]:
+        """Every conversation of one task across the domain's runs, newest run first: the task's
+        trace in each experiment, which the scope bar's task opens on Runs."""
+        _check_domain(domain)
+        out: list[dict[str, Any]] = []
+        for m in reversed(list_runs(domain)):
+            if m.dry_run or task not in (m.task_ids or [task]):
+                continue
+            try:
+                _, results = load_run(m.run_id)
+            except FileNotFoundError:
+                continue
+            out += [
+                {
+                    "run_id": m.run_id,
+                    "agent": m.agent,
+                    "split": m.split,
+                    "model": m.model,
+                    "started_at": m.started_at,
+                    "trial": r.trial,
+                    "correct": r.correct,
+                    "reward": r.reward,
+                    "db_check": r.db_check,
+                    "action_checks": r.action_checks,
+                    "communicate_checks": r.communicate_checks,
+                    "n_agent_turns": r.n_agent_turns,
+                    "n_tool_calls": r.n_tool_calls,
+                    "termination_reason": r.termination_reason,
+                    "duration_ms": r.duration_ms,
+                }
+                for r in results
+                if r.task_id == task
+            ]
+        return out
 
     @app.get("/api/domains/{domain}/tasks/{task_id:path}")
     def task(domain: str, task_id: str) -> dict[str, Any]:
@@ -385,7 +436,8 @@ def create_app() -> FastAPI:
         helper = load_helper_file(
             snap / "helper.py" if "helper.py" in files else None, f"tau2_loop_run_helper_{run_id}"
         )
-        c = compose(files["system.md"], policy, helper)
+        # a run before the clock note (no `sim_rules`) was sent no note: show what it was sent
+        c = compose(files["system.md"], policy, helper, clock=meta.sim_rules is not None)
         return {
             "run_id": run_id,
             "domain": meta.domain,
@@ -402,6 +454,7 @@ def create_app() -> FastAPI:
                 "policy": c.policy,
                 "policy_words": len(c.policy.split()),
                 "extra_context": c.extra_context,
+                "clock_note": c.clock_note,
                 "slotted": c.slotted,
             },
         }
@@ -426,7 +479,25 @@ def create_app() -> FastAPI:
             "task": spec,
             "tools": ext.get("tools") or [],
             "user_tools": ext.get("user_tools") or [],
+            # s11: the tool judge's labels, golden answer and verdicts, on a labelled train conversation
+            "judge": _judge_with_checks(meta.domain, run_id, row.task_id, row.trial),
         }
+
+    def _judge_with_checks(
+        domain: str, run_id: str, task_id: str, trial: int
+    ) -> dict[str, Any] | None:
+        """The judge's view of a conversation plus a person's checks not yet frozen into the gold
+        file, so a correction made on the conversation shows there at once."""
+        j = judge_view.conversation(domain, run_id, task_id, trial)
+        if j is None or j.get("gold") is None:
+            return j
+        db = pg.reachable()
+        j["checks"] = judge_review.current_conversation(domain, j["labels"]["key"]) if db else {}
+        j["writable"] = db and not s.demo_mode
+        j["reason"] = (
+            "" if j["writable"] else ("the demo image is read only" if s.demo_mode else _no_db())
+        )
+        return j
 
     @app.post("/api/runs/{run_id}/{task_id}/{trial}/tool")
     def playground(run_id: str, task_id: str, trial: str, body: ToolIn) -> dict[str, Any]:
@@ -453,6 +524,27 @@ def create_app() -> FastAPI:
             )
         except replay.ReplayError as e:
             raise HTTPException(422, str(e)) from e
+
+    @app.get("/api/runs/{run_id}/{task_id}/{trial}/db")
+    def db_check(run_id: str, task_id: str, trial: str) -> dict[str, Any]:
+        """Where the conversation's final database differs from gold's: both sides of tau2's DB
+        check rebuilt in memory, each differing field with its value before the conversation,
+        and the agent's calls and the expected actions that changed each record.
+
+        Writes nothing, calls no model. Answers 503 where tau2 is not installed (the demo image)."""
+        if not replay.available():
+            raise HTTPException(
+                503,
+                "the database diff needs tau2, which the demo image does not ship: "
+                "run the viewer from a checkout (`make dev`)",
+            )
+        meta, row = _conversation(run_id, task_id, trial)
+        try:
+            out = _db_diff(run_id, row.trace, meta.domain, row.task_id)
+        except replay.ReplayError as e:
+            raise HTTPException(422, str(e)) from e
+        # what the run was graded: a rebuild that disagrees with it says so rather than hides it
+        return {**out, "graded": row.db_check}
 
     @app.get("/api/leaderboard")
     def leaderboard() -> dict[str, Any]:
@@ -640,6 +732,91 @@ def create_app() -> FastAPI:
     def experiments() -> dict[str, Any]:
         return read_snapshot()
 
+    # ── the tool judge (s11): labels, golden answers, replays — committed files ──
+    @app.get("/api/judge/{domain}")
+    def judge_overview(domain: str) -> dict[str, Any]:
+        """Optimise's judge view: J0's labels, J1's golden answers, every J2 replay scored on them."""
+        _check_domain(domain)
+        return judge_view.overview(domain)
+
+    @app.get("/api/judge/{domain}/evals")
+    def judge_evals(domain: str) -> dict[str, Any]:
+        """The LLM judge's eval set: labelled train conversations, golden answers, folds, synthetics."""
+        _check_domain(domain)
+        return judge_view.evals(domain) or {"domain": domain, "conversations": None}
+
+    @app.get("/api/judge/{domain}/versions")
+    def judge_versions(domain: str) -> dict[str, Any]:
+        """The judge agent itself: each version's rubric and config, and the SDK probe."""
+        _check_domain(domain)
+        return {
+            "versions": judge_view.versions(domain),
+            "probe": judge_labels.read_json(judge_labels.JUDGE_DATA_DIR / "probe.json"),
+        }
+
+    @app.get("/api/judge/{domain}/replays")
+    def judge_replays(domain: str) -> list[dict[str, Any]]:
+        """Every replay folder's run.json, newest first, unscored: cheap enough for a filter."""
+        _check_domain(domain)
+        return judge_replay_mod.list_replays(domain)
+
+    @app.get("/api/judge/{domain}/gold")
+    def judge_gold(domain: str) -> dict[str, Any]:
+        """The golden answers' summary and Review's queue, with each item's current check."""
+        _check_domain(domain)
+        items = judge_review.queue(domain)
+        db = pg.reachable()
+        return {
+            # computed from the committed gold file, so a run still writing it shows its progress
+            "summary": judge_gold_mod.summarise(domain)
+            if judge_gold_mod.read_gold(domain)
+            else None,
+            "labels": (judge_labels.read_labels(domain) or {}).get("summary"),
+            "items": items,
+            "current": judge_review.current(domain) if db else {},
+            "writable": db and not s.demo_mode,
+            "reason": ""
+            if db and not s.demo_mode
+            else ("the demo image is read only" if s.demo_mode else _no_db()),
+        }
+
+    @app.get("/api/judge/{domain}/gold/item")
+    def judge_gold_item(domain: str, id: str) -> dict[str, Any]:  # noqa: A002 - the query's own name
+        """One review item: the annotator's answer, the messages it cites, and every check of it."""
+        _check_domain(domain)
+        item = judge_review.item(domain, id)
+        if item is None:
+            raise HTTPException(404, "no golden answer at that message")
+        return {
+            **item,
+            "messages": judge_review.item_messages(domain, item),
+            "history": judge_review.history(domain, id) if pg.reachable() else [],
+        }
+
+    @app.post("/api/review/golden/{domain}")
+    def judge_gold_review(domain: str, body: GoldReviewIn) -> dict[str, Any]:
+        """Record a person's check of one golden answer. Refused in the demo image and with no database."""
+        _check_domain(domain)
+        if s.demo_mode:
+            raise HTTPException(403, "the demo image is read only")
+        if not pg.reachable():
+            raise HTTPException(503, _no_db())
+        item = judge_review.item(domain, body.item_id)
+        if item is None:
+            raise HTTPException(404, "no golden answer at that message")
+        try:
+            return judge_review.add(
+                domain,
+                body.item_id,
+                body.verdict,
+                correction=body.correction,
+                note=body.note[:4000],
+                author=body.author[:120],
+                annotator_sha=item["annotator_sha"],
+            )
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+
     _mount_frontend(app)
     return app
 
@@ -661,6 +838,13 @@ def _conversation(run_id: str, task_id: str, trial: str) -> tuple[Any, Any]:
     if row is None or not row.trace:
         raise HTTPException(404, "no such conversation")
     return meta, row
+
+
+@lru_cache(maxsize=64)
+def _db_diff(run_id: str, trace_name: str, domain: str, task_id: str) -> dict[str, Any]:
+    """A conversation's database diff against gold. Run folders never change once scored, so
+    it is computed once per conversation (about a second: a replay per write)."""
+    return replay.db_diff(_loaded_conversation(run_id, trace_name, domain, task_id))
 
 
 @lru_cache(maxsize=32)
@@ -840,13 +1024,14 @@ def _basis_counts(ext: dict[str, Any]) -> dict[str, int]:
 def trace_events(t: dict[str, Any]) -> list[dict[str, Any]]:
     """The conversation as a flat event list for the viewer."""
     events: list[dict[str, Any]] = []
-    for m in t.get("messages") or []:
+    for i, m in enumerate(t.get("messages") or []):
         role = m.get("role")
         if role in {"user", "assistant"} and m.get("tool_calls"):
             for c in m["tool_calls"]:
                 events.append(
                     {
                         "type": "tool_call",
+                        "i": i,
                         "by": role,
                         "name": c.get("name"),
                         "arguments": c.get("arguments"),
@@ -856,12 +1041,13 @@ def trace_events(t: dict[str, Any]) -> list[dict[str, Any]]:
             events.append(
                 {
                     "type": "tool_result",
+                    "i": i,
                     "error": bool(m.get("error")),
                     "text": str(m.get("content") or ""),
                 }
             )
         elif role in {"user", "assistant"}:
-            events.append({"type": role, "text": str(m.get("content") or "")})
+            events.append({"type": role, "i": i, "text": str(m.get("content") or "")})
     return events
 
 

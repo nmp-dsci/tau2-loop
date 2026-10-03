@@ -35,7 +35,7 @@ def test_migrate_leaves_every_table_owned_by_tau2_owner_and_visible_to_it() -> N
             "select tablename, tableowner from pg_tables where schemaname = %s",
             (pg.SCHEMA,),
         ).fetchall()
-        assert {name for name, _ in owners} == {"review", "submission"}
+        assert {name for name, _ in owners} == {"review", "submission", "gold_review"}
         assert all(owner == "tau2_owner" for _, owner in owners)
 
         visible = {
@@ -45,7 +45,7 @@ def test_migrate_leaves_every_table_owned_by_tau2_owner_and_visible_to_it() -> N
                 (pg.SCHEMA,),
             ).fetchall()
         }
-        assert visible == {"review", "submission"}
+        assert visible == {"review", "submission", "gold_review"}
 
     # idempotent: a second migrate() used to fail with "must be owner of table
     # review" on CREATE INDEX IF NOT EXISTS once the superuser owned the tables
@@ -56,7 +56,7 @@ def test_migrate_leaves_every_table_owned_by_tau2_owner_and_visible_to_it() -> N
 def test_both_tables_exist_and_the_read_only_role_cannot_write() -> None:
     import psycopg
 
-    assert {name for name, _ in pg.tables()} == {"review", "submission"}
+    assert {name for name, _ in pg.tables()} == {"review", "submission", "gold_review"}
     with pg.connect_ro() as con:
         con.execute("select count(*) from tau2_loop.review")
         with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):

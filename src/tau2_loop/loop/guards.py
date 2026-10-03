@@ -51,6 +51,9 @@ ALLOWED_IMPORTS = frozenset(
 BANNED_CALLS = frozenset({"open", "exec", "eval", "compile", "__import__", "input", "breakpoint"})
 PROMPT_GROWTH = 1500
 NAME_KEYS = ("first_name", "last_name", "full_name", "name")
+# banking's discoverable tools are named in arguments (`open_bank_account_4821`): a tool the
+# knowledge base documents for every customer, train and test, not a customer's value
+TOOL_NAME_KEYS = ("agent_tool_name", "discoverable_tool_name")
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 
 
@@ -122,19 +125,23 @@ def import_violations(source: str) -> list[str]:
     return out
 
 
-def _strings(value: Any) -> list[tuple[str, str]]:
-    """(key, string) for every string in a nested argument dict."""
-    out: list[tuple[str, str]] = []
+def _strings(value: Any, key: str = "") -> list[tuple[str, str]]:
+    """(key, string) for every string in nested arguments, a list's items under the list's key. A
+    string holding a JSON object or list is read as one: banking passes a discoverable tool's
+    arguments as JSON text, and the customer ids are inside it."""
+    if isinstance(value, str):
+        text = value.strip()
+        if text[:1] in ("{", "["):
+            try:
+                return _strings(json.loads(text), key)
+            except ValueError:
+                pass
+        return [(key, value)]
     if isinstance(value, dict):
-        for k, v in value.items():
-            if isinstance(v, str):
-                out.append((str(k), v))
-            else:
-                out += _strings(v)
-    elif isinstance(value, list):
-        for v in value:
-            out += _strings(v)
-    return out
+        return [p for k, v in value.items() for p in _strings(v, str(k))]
+    if isinstance(value, list):
+        return [p for v in value for p in _strings(v, key)]
+    return []
 
 
 def leak_values(domain: str) -> set[str]:
@@ -147,6 +154,8 @@ def leak_values(domain: str) -> set[str]:
     for t in ext.get("tasks") or []:
         for a in (t.get("evaluation_criteria") or {}).get("actions") or []:
             for k, v in _strings(a.get("arguments") or {}):
+                if k in TOOL_NAME_KEYS:
+                    continue
                 v = v.strip()
                 is_id = len(v) >= 5 and re.search(r"[A-Za-z]", v) and re.search(r"\d", v)
                 is_name = k in NAME_KEYS and len(v) >= 3

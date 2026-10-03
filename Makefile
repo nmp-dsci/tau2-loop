@@ -1,7 +1,8 @@
 # tau2-loop — every target is a thin wrapper over `uv run tau2loop …`.
 .DEFAULT_GOAL := help
 DOMAIN ?= airline
-AGENT ?= v0
+# AGENT unset: eval runs the domain's v0, or its oldest version where v0 was retired (banking: v1); smoke runs v0
+AGENT ?=
 SPLIT ?= train
 TRIALS ?= 1
 CONCURRENCY ?= 3
@@ -37,16 +38,19 @@ platform-status: ## preflight: the central MLflow must answer /health (runs befo
 	@curl -fsS $(MLFLOW_TRACKING_URI)/health >/dev/null || (echo "central MLflow down at $(MLFLOW_TRACKING_URI): run make platform-up"; exit 1)
 
 smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
-	uv run tau2loop smoke --agent $(AGENT) --concurrency $(CONCURRENCY)
+	uv run tau2loop smoke --agent $(or $(AGENT),v0) --concurrency $(CONCURRENCY)
 
 eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=)
-	uv run tau2loop eval --domain $(DOMAIN) --agent $(AGENT) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY)
+	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY)
 
-baselines: platform-status ## v0 on the train split of all four domains, one trial each
-	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --agent v0 --split train --concurrency $(CONCURRENCY) || exit 1; done
+baselines: platform-status ## each domain's base version on its train split, one trial each: v0, or the oldest version where v0 was retired (banking, v1)
+	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --split train --concurrency $(CONCURRENCY) || exit 1; done
 
 score: ## summarise RUN=<run id>
 	uv run tau2loop score $(RUN)
+
+extend: platform-status ## play only the tasks RUN=<run id>'s split has gained since, joined to it as one run of the split (a champion's train run stays its record)
+	uv run tau2loop extend $(RUN) --concurrency $(CONCURRENCY)
 
 rescore: ## replay RUN=<run id> through tau2's evaluators offline and compare verdicts
 	uv run tau2loop rescore $(RUN)
@@ -68,6 +72,28 @@ ab: platform-status ## two challengers from DOMAIN's champion on the same failur
 challenge: platform-status ## score AGENT= (a fork) against DOMAIN's champion through the loop's gate, ledger and test report; no optimiser (TRIALS=1, NO_TEST=1)
 	@if [ "$(origin AGENT)" = "file" ]; then echo "make challenge needs AGENT=vN: the version to score against the champion"; exit 1; fi
 	uv run tau2loop challenge --domain $(DOMAIN) --agent $(AGENT) --concurrency $(CONCURRENCY) --trials $(TRIALS) $(if $(NO_TEST),--no-test)
+
+judge-labels: ## J0 (s11): label every checkpoint of DOMAIN's scored train conversations from gold → data/judge/DOMAIN.json (no model)
+	uv run tau2loop judge-labels --domain $(DOMAIN)
+
+judge-gold: platform-status ## J1 (s11): a golden answer per DOMAIN train conversation, Opus 5.5 high, sees gold → data/judge/DOMAIN_gold.jsonl (resumable; CONCURRENCY=)
+	uv run tau2loop judge-gold --domain $(DOMAIN) --concurrency $(CONCURRENCY)
+
+judge-gold-freeze: ## J1 (s11): copy the person's golden-answer checks (Review › golden answers, Postgres) into data/judge/DOMAIN_gold.jsonl
+	uv run tau2loop judge-gold-freeze --domain $(DOMAIN)
+
+judge-probe: ## J2 (s11): one call proving the SDK's output_format holds under the sealed core → data/judge/probe.json
+	uv run tau2loop judge-probe
+
+JUDGE ?= j1
+judge-replay: platform-status ## J2 (s11): replay JUDGE= on every DOMAIN train checkpoint, scored on the golden answers → judge_runs/ (CONCURRENCY=)
+	uv run tau2loop judge-replay --domain $(DOMAIN) --judge $(JUDGE) --split $(SPLIT) --concurrency $(CONCURRENCY)
+
+judge-loop: platform-status ## J3 (s11): CYCLES= of the plan judge's loop on DOMAIN: an optimiser adds lessons from the read half, the gate half decides → judges/DOMAIN/plan/ (CONCURRENCY=)
+	uv run tau2loop judge-loop --domain $(DOMAIN) --cycles $(CYCLES) --concurrency $(CONCURRENCY)
+
+judge-score: ## J2 (s11): rewrite REPLAY=<judge_runs id>'s summary with today's scorer and gold (WHY="…"); verdicts never change
+	uv run tau2loop judge-score $(REPLAY) $(if $(WHY),--why "$(WHY)")
 
 ledger: ## print DOMAIN's loop ledger
 	uv run tau2loop ledger --domain $(DOMAIN)
@@ -107,4 +133,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

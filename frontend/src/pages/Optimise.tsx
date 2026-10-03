@@ -15,9 +15,10 @@ import {
   shortTask,
   useGet,
 } from '../lib/api';
-import { Loading } from '../lib/ui';
+import { Loading, Points } from '../lib/ui';
 import { agentPath, optimisePath, runPath, useLens } from '../lib/url';
 import { CycleDumbbell, VersionsFig, frac, standing } from '../lib/versions';
+import { useExp } from '../lib/scope';
 
 /**
  * The loop, as rounds. s04 M3 merged the old Loop tab (the ledger) and the old
@@ -97,12 +98,13 @@ function handMade(e: LedgerEntry | undefined): string | null {
   return `${e.kind} ${e.forked_from ?? e.champion} → ${e.challenger ?? '—'}${model ? ` (${model})` : ''}`;
 }
 
-/** What the gate did with one task, by the ledger's own three lists. */
+/** What the challenger did with one train task, by the ledger's lists: the gate's, or the train
+ * moves beside them where the gate read another set (the gate half, or test). */
 function taskOutcome(e: LedgerEntry | undefined, taskId: string): string {
   const o = e?.outcome;
   if (!o) return 'pending';
-  if (o.fixed?.includes(taskId)) return 'fixed';
-  if (o.broken?.includes(taskId)) return 'broken';
+  if (o.fixed?.includes(taskId) || o.read_fixed?.includes(taskId)) return 'fixed';
+  if (o.broken?.includes(taskId) || o.read_broken?.includes(taskId)) return 'broken';
   if (o.still_failed?.includes(taskId)) return 'still failed';
   return o.verdict === 'pending' ? 'pending' : 'unchanged';
 }
@@ -131,10 +133,31 @@ function VersionsSection({ h, open }: { h: VersionHistory; open: string | null }
           onPick={(v) => nav(v.made.kind === 'base' ? agentPath(h.domain, v.version) : optimisePath(h.domain, v.version))}
         />
         <figcaption>
-          {aboveHeld
-            ? `${aboveHeld} of ${cyc.length} challengers beat the champion's train count and were still held: the gate reads the tasks fixed and broken, not the count. `
-            : ''}
-          The solid line is train pass^1, what the gate reads; the dashed one is test, run once per challenger and reported only. Neither line crosses from one split to the next. The green tick is the champion's train score each challenger was gated against; + is tasks fixed and − tasks broken against it. A column opens its round.
+          <Points
+            items={[
+              aboveHeld ? (
+                <>
+                  <b>
+                    {aboveHeld} of {cyc.length} challengers beat the champion's train count yet were held
+                  </b>
+                  : the gate reads tasks fixed and broken, not the count.
+                </>
+              ) : null,
+              // banking's gate decides on test from 3 Oct 2026 (config.GATE_ON_TEST)
+              h.domain === 'banking_knowledge' ? (
+                <>
+                  <b>Dashed is test pass^1, what the gate reads</b> from 3 Oct 2026; solid is train, all of which the optimiser reads.
+                </>
+              ) : (
+                <>
+                  <b>Solid is train pass^1</b>, what the gate reads; dashed is test, run once per challenger and reported only.
+                </>
+              ),
+              <>
+                <b>The green tick is the champion it was gated against</b>; + is tasks fixed, − broken. A column opens its round.
+              </>,
+            ]}
+          />
           <span className="path">agents/{h.domain}/v*/ · loop/{h.domain}/ledger.jsonl · loop/{h.domain}/registry.json · runs/*/run.json → /api/versions</span>
         </figcaption>
       </figure>
@@ -147,8 +170,7 @@ function DiagnosisTable({ rows, cycle }: { rows: Diagnosis[]; cycle?: LedgerEntr
     <div className="tw">
       <table>
         <caption>
-          One row per failed conversation the optimiser read. `outcome` is what the gate found
-          afterwards — the only column the optimiser did not write.
+          One row per failed conversation the optimiser read; it wrote every column but <code>outcome</code>.
         </caption>
         <thead>
           <tr>
@@ -204,9 +226,11 @@ export function Optimise() {
   const nav = useNavigate();
   const { data: ledger, error } = useGet<Record<string, LedgerEntry[]>>('/api/ledger');
   const { data: hist } = useGet<Record<string, VersionHistory>>('/api/versions');
+  const exp = useExp();
   if (!ledger) return <Loading error={error} />;
-  const entries = ledger[domain] ?? [];
-  const counts = Object.fromEntries(DOMAINS.map((d) => [d, (ledger[d] ?? []).length]));
+  // the scope bar's experiment: the round that made that version, and the rounds it defended or was copied in
+  const allEntries = ledger[domain] ?? [];
+  const entries = exp ? allEntries.filter((e) => [e.challenger, e.champion, e.forked_from].includes(exp)) : allEntries;
   const hs = DOMAINS.flatMap((d) => (hist?.[d] ? [hist[d]] : []));
   const gated = hs.flatMap((h) => h.versions.filter((v) => v.made.cycle != null));
   const promoted = gated.filter((v) => v.verdict === 'promote').length;
@@ -214,38 +238,41 @@ export function Optimise() {
   const mixed = gated.filter((v) => v.verdict === 'hold' && (v.fixed ?? 0) > 0 && (v.broke ?? 0) > 0).length;
   return (
     <>
-      <nav className="chips domainbar" aria-label="domains">
-        {DOMAINS.map((d) => (
-          <Link
-            key={d}
-            to={optimisePath(d)}
-            className={`chip nav ${d === domain ? 'on' : ''}`}
-            aria-current={d === domain ? 'page' : undefined}
-          >
-            {domainLabel(d)}
-            <span className="n">{counts[d] ?? 0}</span>
-          </Link>
-        ))}
-      </nav>
-      <p className="label">The loop</p>
+      <p className="label">The loop · the answering agent</p>
       <h1>
         A failed conversation becomes a diagnosis, a diff, and a <em>verdict</em> — and the ledger
         keeps all three
       </h1>
-      <p className="lead">
-        This is <code>loop/{domain}/ledger.jsonl</code>, rendered as rounds. The optimiser writes the
-        diagnoses and the change; the harness writes the outcome after the gate. The next cycle's
-        optimiser is shown this page's contents before it proposes anything, which is what stops the
-        loop repeating a fix that already failed.
-      </p>
+      <Points
+        lead
+        items={[
+          <>
+            <b>
+              This is <code>loop/{domain}/ledger.jsonl</code>
+            </b>
+            , rendered as rounds.
+          </>,
+          <>
+            <b>The optimiser writes the diagnoses and the change</b>; the harness writes the outcome after the gate.
+          </>,
+          <>
+            <b>The next optimiser reads this first</b>, so the loop does not repeat a fix that already failed.
+          </>,
+        ]}
+      />
 
       {hist?.[domain] && hist[domain].versions.length > 1 && <VersionsSection h={hist[domain]} open={version ?? null} />}
 
-      {entries.length === 0 && (
+      {allEntries.length === 0 && (
         <div className="empty">
           No cycle has run on {domainLabel(domain)}. <code>make loop DOMAIN={domain}</code> starts
           one.
         </div>
+      )}
+      {exp && allEntries.length > 0 && (
+        <p className="small muted">
+          {entries.length} of {allEntries.length} rounds made {exp}, the scope bar’s experiment, or put it up against a challenger.
+        </p>
       )}
 
       <Outlet />
@@ -290,6 +317,7 @@ export function Optimise() {
                   <td className="num sub" title={e.outcome?.gate_on ? `the gate's passes on the ${e.outcome.gate_on}` : undefined}>
                     {e.outcome?.passes ?? '—'}
                     {e.outcome?.gate_on?.startsWith('gate half') && <span className="path">gate half</span>}
+                    {e.outcome?.gate_on?.startsWith('test') && <span className="path">test</span>}
                   </td>
                   <td className="num">{e.outcome?.test_passes ?? '—'}</td>
                   <td className="wrap small">
@@ -332,8 +360,22 @@ export function Optimise() {
             </div>
             <CycleDumbbell hs={hs} open={version ? { domain, version } : null} onPick={(d, v) => nav(optimisePath(d, v.version))} />
             <figcaption>
-              {promoted} of {gated.length} cycles promoted
-              {mixed ? `; ${mixed} of the ${heldN} held challengers fixed some of the champion's failures and broke others of its passes` : ''}. Each row is one cycle: the open dot is the champion it faced, the filled dot the challenger, green where it was promoted and amber where it was held. The thin dashed pair under it is the same two versions on test, drawn only when both ran it. A row opens its round.
+              <Points
+                items={[
+                  <>
+                    <b>
+                      {promoted} of {gated.length} cycles promoted
+                    </b>
+                    {mixed ? `; ${mixed} of the ${heldN} held challengers fixed some failures but broke some passes` : ''}.
+                  </>,
+                  <>
+                    <b>Open dot: the champion faced; filled: the challenger</b>, green if promoted, amber if held.
+                  </>,
+                  <>
+                    <b>The dashed pair is test</b>, drawn only when both ran it. A row opens its round.
+                  </>,
+                ]}
+              />
               <span className="path">loop/&lt;domain&gt;/ledger.jsonl · runs/*/run.json → /api/versions</span>
             </figcaption>
           </figure>
@@ -486,16 +528,12 @@ export function OptimiseRound() {
               <div className="empty">
                 {data.b.name} is a {data.diagnosis.kind} of {data.diagnosis.forked_from ?? parent}
                 {data.diagnosis.agent_yaml?.length ? ` (${data.diagnosis.agent_yaml.join('; ')})` : ''}:
-                no optimiser read the failures, so nothing was diagnosed.{' '}
+                no optimiser read the failures, so nothing was diagnosed;{' '}
                 {cycle ? (
-                  <>
-                    The gate scored it against {cycle.champion} on the same train tasks, as it
-                    scores a loop challenger.
-                  </>
+                  <>the gate scored it against {cycle.champion} as it scores a loop challenger.</>
                 ) : (
                   <>
-                    No gate has scored it; <code>make challenge</code> scores a fork against the
-                    champion with the loop's own gate.
+                    no gate has scored it yet (<code>make challenge</code> would).
                   </>
                 )}
               </div>
@@ -718,15 +756,16 @@ export function OptimiseRound() {
             {cycle.expected_to_fix?.length ? (
               <p className="small">
                 <b>expected to fix</b>{' '}
-                {cycle.expected_to_fix.map((t) => shortTask(t, 24)).join(', ')} — of which{' '}
-                {cycle.expected_to_fix.filter((t) => taskOutcome(cycle, t) === 'fixed').length} did.
+                {cycle.expected_to_fix.map((t) => shortTask(t, 24)).join(', ')} —{' '}
+                {cycle.expected_to_fix.filter((t) => taskOutcome(cycle, t) === 'fixed').length} of{' '}
+                {cycle.expected_to_fix.length} did.
               </p>
             ) : null}
           </>
         ) : (
           <div className="empty">
-            {version} has no ledger entry: it was registered by hand rather than produced by a loop
-            cycle, so no gate ran on it.
+            {version} has no ledger entry: it was registered by hand, not by a loop cycle, so no gate
+            ran on it.
           </div>
         ))}
     </section>

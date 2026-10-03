@@ -1,5 +1,9 @@
+import { Fragment, type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { type Event, fmtS, shortRun, shortTask, useGet } from '../lib/api';
+import { DbDiff } from '../lib/dbdiff';
+import type { Check } from '../lib/goldcheck';
+import { JudgePanel, type JudgeView, judgeMarks } from '../lib/judge';
 import { runPath } from '../lib/url';
 
 type RewardInfo = {
@@ -13,20 +17,30 @@ type RewardInfo = {
   env_assertions?: { env_assertion: { func_name?: string; arguments?: unknown }; met: boolean }[] | null;
   info?: Record<string, unknown> | null;
 };
-type TracePayload = { task_id: string; trial: number | null; termination_reason: string; duration: number; agent_cost: number | null; user_cost: number | null; reward_info: RewardInfo | null; events: Event[]; policy_words: number };
+type TracePayload = { task_id: string; trial: number | null; termination_reason: string; duration: number; agent_cost: number | null; user_cost: number | null; reward_info: RewardInfo | null; events: Event[]; policy_words: number; domain?: string; judge?: JudgeView | null };
 
-export function EventList({ events }: { events: Event[] }) {
+/** The conversation as events. `marks` are keyed by message index (the LLM judge's bar, s11) and
+ *  drawn after the last event of that message, as a message of their own. */
+export function EventList({ events, marks = {} }: { events: Event[]; marks?: Record<number, ReactNode> }) {
   return (
     <>
-      {events.map((e, i) => (
-        <div key={i} className={`ev ${e.type === 'assistant' ? 'text' : e.type === 'user' ? 'user' : e.type === 'tool_call' ? 'tool_use' : e.type === 'tool_result' ? (e.error ? 'error' : 'tool_result') : e.type}`}>
-          <div className="label">
-            {e.type === 'assistant' ? 'agent' : e.type === 'user' ? 'user (simulated)' : e.type === 'tool_call' ? `${e.by === 'user' ? 'user' : 'agent'} → ${String(e.name)}` : e.type === 'tool_result' ? (e.error ? 'tool result · error' : 'tool result') : e.type}
-          </div>
-          {e.type === 'tool_call' && <pre>{JSON.stringify(e.arguments, null, 1)}</pre>}
-          {(e.type === 'tool_result' || e.type === 'assistant' || e.type === 'user') && <pre>{String(e.text)}</pre>}
-        </div>
-      ))}
+      {events.map((e, i) => {
+        const msg = typeof e.i === 'number' ? e.i : null;
+        const last = msg != null && events[i + 1]?.i !== msg;
+        return (
+          <Fragment key={i}>
+            <div className={`ev ${e.type === 'assistant' ? 'text' : e.type === 'user' ? 'user' : e.type === 'tool_call' ? 'tool_use' : e.type === 'tool_result' ? (e.error ? 'error' : 'tool_result') : e.type}`}>
+              <div className="label">
+                {e.type === 'assistant' ? 'answering agent' : e.type === 'user' ? 'user (simulated)' : e.type === 'tool_call' ? `${e.by === 'user' ? 'user' : 'answering agent'} → ${String(e.name)}` : e.type === 'tool_result' ? (e.error ? 'tool result · error' : 'tool result') : e.type}
+                {msg != null && <span className="muted"> · message {msg}</span>}
+              </div>
+              {e.type === 'tool_call' && <pre>{JSON.stringify(e.arguments, null, 1)}</pre>}
+              {(e.type === 'tool_result' || e.type === 'assistant' || e.type === 'user') && <pre>{String(e.text)}</pre>}
+            </div>
+            {last && msg != null && marks[msg]}
+          </Fragment>
+        );
+      })}
     </>
   );
 }
@@ -36,9 +50,13 @@ export function Trace() {
   const { data, error } = useGet<TracePayload>(
     `/api/runs/${encodeURIComponent(runId)}/${encodeURIComponent(taskId)}/${encodeURIComponent(trial)}`,
   );
+  // a person's checks made on this page, by case id, so a correction shows without a reload
+  const [mine, setMine] = useState<Record<string, Check>>({});
   if (error) return <div className="empty">{error}</div>;
   if (!data) return <p className="muted">loading…</p>;
   const ri = data.reward_info;
+  const judge = withChecks(data.judge, mine);
+  const edit = { domain: data.domain ?? 'airline', onSaved: (c: Check) => setMine((m) => ({ ...m, [c.item_id]: c })) };
   return (
     <>
       <p className="label crumbs">
@@ -55,7 +73,15 @@ export function Trace() {
           {ri.db_check != null && (
             <div className="card">
               <h3>Database</h3>
-              <p className={ri.db_check.db_match ? 'v-ok' : 'v-warn'}>{ri.db_check.db_match ? 'final DB equals the gold DB' : 'final DB differs from the gold DB'}</p>
+              <p className={ri.db_check.db_match ? 'v-ok' : 'v-warn'}>
+                {ri.db_check.db_match ? (
+                  'final DB equals the gold DB'
+                ) : (
+                  <>
+                    final DB differs from the gold DB: <a href="#db-diff">every difference below</a>
+                  </>
+                )}
+              </p>
             </div>
           )}
           {ri.action_checks && ri.action_checks.length > 0 && (
@@ -106,8 +132,22 @@ export function Trace() {
           )}
         </div>
       )}
+      {ri?.db_check && !ri.db_check.db_match && (
+        <div id="db-diff">
+          <DbDiff url={`/api/runs/${encodeURIComponent(runId)}/${encodeURIComponent(taskId)}/${encodeURIComponent(trial)}/db`} />
+        </div>
+      )}
+      {judge && <JudgePanel j={judge} domain={edit.domain} />}
       <h2>The conversation, in order</h2>
-      <EventList events={data.events} />
+      <EventList events={data.events} marks={judgeMarks(judge, judge?.gold ? edit : undefined)} />
     </>
   );
+}
+
+/** The judge's view with this page's own checks laid over the ones the server sent. */
+function withChecks(j: JudgeView | null | undefined, mine: Record<string, Check>): JudgeView | null {
+  if (!j) return null;
+  const here = Object.values(mine).filter((c) => c.conv_key === j.labels.key);
+  if (!here.length) return j;
+  return { ...j, checks: { ...j.checks, ...Object.fromEntries(here.map((c) => [String(c.msg), c])) } };
 }

@@ -9,6 +9,9 @@ import { describe, expect, it } from 'vitest';
 import {
   agentPath,
   domainPath,
+  goldReviewPath,
+  judgeEvalsPath,
+  judgeLoopPath,
   leaderboardPath,
   optimisePath,
   parseTaskId,
@@ -52,10 +55,15 @@ async function land(url: string): Promise<{ path: string; route: string | undefi
 
 describe('addresses from before the grammar still land', () => {
   it.each([
-    ['/data', '/domains', 'domains'],
-    ['/tasks', '/domains', 'domains'],
-    ['/tasks/airline', '/domains/airline', 'domain'],
-    ['/tasks/airline/0', '/domains/airline/0', 'task'],
+    ['/data', '/evals', 'evals'],
+    ['/tasks', '/evals', 'evals'],
+    ['/tasks/airline', '/evals/airline', 'evals-domain'],
+    ['/tasks/airline/0', '/evals/airline/0', 'evals-task'],
+    // Domains & tasks became Evals (s11 review)
+    ['/domains', '/evals', 'evals'],
+    ['/domains/airline', '/evals/airline', 'evals-domain'],
+    ['/domains/airline/0', '/evals/airline/0', 'evals-task'],
+    ['/domains/airline?split=test', '/evals/airline?split=test', 'evals-domain'],
     ['/agents', '/agent', 'agents'],
     ['/agents/airline/v2', '/agent/airline/v2', 'agent'],
     // the three tabs that merged at M3
@@ -109,10 +117,10 @@ describe('every address the viewer builds lands on the page it names', () => {
   });
 
   it.each(TASKS)('a %s task address lands on the task page', async (domain, id) => {
-    expect((await land(domainPath(domain))).route).toBe('domain');
+    expect((await land(domainPath(domain))).route).toBe('evals-domain');
     const got = await land(taskPath(taskId(domain, id)));
-    expect(got.route).toBe('task');
-    expect(got.path).toBe(`/domains/${domain}/${id}`);
+    expect(got.route).toBe('evals-task');
+    expect(got.path).toBe(`/evals/${domain}/${id}`);
   });
 
   it.each(TASKS)('a %s review address encodes its task id exactly once', async (_domain, id) => {
@@ -146,8 +154,22 @@ describe('every address the viewer builds lands on the page it names', () => {
     [optimisePath('telecom'), 'optimise'],
     [optimisePath('airline', 'v2'), 'optimise-round'],
     [optimisePath('airline', 'v2', { step: 'outcome' }), 'optimise-round'],
+    // s11: the tool judge's loop is a page of its own, never mistaken for a version called `judge`
+    [judgeLoopPath('airline'), 'optimise-judge'],
+    ['/agent/airline/judge', 'agent-judge'],
+    [judgeEvalsPath('airline'), 'evals-judge'],
+    [goldReviewPath('airline'), 'review-golden'],
+    [goldReviewPath('airline', undefined, { show: 'all' }), 'review-golden'],
   ])('%s → %s', async (url, route) => {
     expect((await land(url)).route).toBe(route);
+  });
+});
+
+describe('Review › golden answers (s11)', () => {
+  it('a case id `<run>/<task>/t<n>#<message>` becomes a path, and lands on its case', async () => {
+    const url = goldReviewPath('airline', '20260928T075613Z_airline_v4_train/44/t1#34');
+    expect(url).toBe('/review/golden/airline/20260928T075613Z_airline_v4_train/44/t1/34');
+    expect(await land(url)).toEqual({ path: url, route: 'review-golden-one' });
   });
 });
 
