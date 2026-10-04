@@ -20,6 +20,7 @@ make eval DOMAIN=airline       # a version on its domain's train half → runs/<
 make loop DOMAIN=airline       # champion → failures → one Opus 5.5 optimiser session → challenger → gate → test → ledger
 make fork DOMAIN=airline MODEL=sonnet   # the champion's prompt on another model: a model swap, promoted by hand
 make challenge DOMAIN=airline AGENT=v5  # a fork vs the champion through the loop's own gate, ledger and test report; no optimiser
+make optimise DOMAIN=banking_knowledge  # one optimiser session on a version's train failures: writes the next version, scores nothing
 make agent-service             # the agent's model call as a container on :8091; AGENT_SERVICE_URL routes a run to it
 make viewer                    # the run viewer on :8081 — eight tabs, see AGENTS.md §4b
 ```
@@ -163,6 +164,8 @@ halved verdict is kept in the ledger under `superseded`.
 | v1 · v0's prompt, Sonnet 5 (split v2) | 2/48 `20261002T143917Z_banking_knowledge_v1_train` | 3/25 `20261002T160930Z_banking_knowledge_v1_test` | champion by fiat (`model swap`) |
 | v1 · extended to split v3 | **2/60** `20261002T235638Z_banking_knowledge_v1_train` | **6/37** `20261003T003126Z_banking_knowledge_v1_test` | champion (`re-baseline`, then `re-decided`) |
 | v2 · cycle 1 | 17/60 `20261003T005018Z_banking_knowledge_v2_train` | 5/37 `20261003T051036Z_banking_knowledge_v2_test` | hold on test: fixed 3, broke 4, p = 0.773 |
+| v3 · v1's prompt, AllTools retrieval, native calls (4 Oct 2026) | 12/60 `20261004T023602Z_banking_knowledge_v3_train` | 6/37 `20261004T023605Z_banking_knowledge_v3_test` | champion by the person's call (`tool change`); held on test 6 → 6, p = 0.688 |
+| v4 · `make optimise` from v3, Sonnet at high effort, parallel calls (5 Oct 2026) | **29/60** `20261004T222002Z_banking_knowledge_v4_train` | **14/37** `20261004T113341Z_banking_knowledge_v4_test` | **champion**: fixed 8, broke 0, p = 0.004 |
 
 Every run folder under `runs/` holds `run.json`, `results.jsonl`, one trace per
 conversation and the agent version it ran; `tau2loop gate` replays them through
