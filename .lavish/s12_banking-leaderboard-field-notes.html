@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>s12 · tau2-loop — how the leaders build τ-banking agents, against yours</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* DESIGN.md §5, verbatim (with the dark block repeated for the explicit dark theme) */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7; /* divergence: red, not the site's #0A6552 */
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8; /* project extension: passed (§2 Colour) */
+  --judge:#5B3A8C; --judge-soft:#EEE9F6; /* project extension: the LLM judge speaking (§2 Colour) */
+  --agent:#235A8C; --agent-soft:#E7EFF8; /* project extension: the answering agent speaking (§2 Colour) */
+  --user:#6E5A2E; --user-soft:#F5F0E1; /* project extension: the simulated customer speaking (§2 Colour) */
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--t0)/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
+code,pre,.mono{font-family:var(--mono);font-size:var(--t-1)}
+p code,li code,td code,dd code,figcaption code{overflow-wrap:anywhere}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font:400 var(--t4)/1.15 var(--serif);overflow-wrap:anywhere}
+h1 em{font-style:italic;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);margin-top:var(--s8)}
+h3{font:600 var(--t1)/1.3 var(--sans);margin-top:var(--s5)}
+h4{font:600 var(--t0)/1.3 var(--sans)}
+p{margin:var(--s3) 0 0;max-width:var(--measure);text-wrap:pretty;color:var(--ink-2)}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure)}
+.label{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.muted{color:var(--muted)} .small{font-size:var(--t-1)}
+main{max-width:var(--w);margin:0 auto;padding-block:var(--s6) var(--s9);padding-inline:var(--s4)}
+header.top{position:sticky;top:0;z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top .in b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top .in .label{margin-left:auto}
+section{scroll-margin-top:72px}
+.toc{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.toc a{font:500 var(--t-2)/1 var(--mono);text-decoration:none;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.chip{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);background:var(--panel);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap;display:inline-block}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.chip.no{border-color:var(--line-3);color:var(--muted)}
+.chip.acc{border-color:var(--accent);color:var(--accent)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{font:500 var(--t-2)/1.3 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);white-space:nowrap}
+td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sub{color:var(--ink);font-weight:500}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+td.wrap{min-width:22ch;max-width:60ch;white-space:normal}
+td.dim{color:var(--faint)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+.v-ok{color:var(--ok);font-weight:500} .v-warn{color:var(--amber);font-weight:500} .v-no{color:var(--accent);font-weight:500}
+.fig-title{display:block;margin-top:var(--s5)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch}
+p.cap .path,.note .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+.note{background:var(--band);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:var(--measure)}
+.note .label{display:block;margin-bottom:var(--s1)}
+.note p{margin-top:var(--s2)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.card{background:var(--panel);border-radius:var(--r);padding:var(--s5);box-shadow:var(--shadow);min-width:0}
+.card h3{margin-top:0}
+.card p{max-width:none}
+.card .n{font:400 var(--t3)/1.1 var(--serif);color:var(--ink);display:block;margin-top:var(--s2)}
+ul.bl{list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s3);max-width:84ch}
+ul.bl li{position:relative;padding-left:1.4rem;color:var(--ink-2)}
+ul.bl li::before{content:'◐';position:absolute;left:0;color:var(--amber)}
+ul.bl.done li::before{content:'●';color:var(--ok)}
+ul.bl.x li::before{content:'✕';color:var(--accent)}
+ol.steps{margin:var(--s4) 0 0;padding-left:1.4rem;max-width:84ch;display:grid;gap:var(--s2);color:var(--ink-2)}
+ol.steps li::marker{font-family:var(--mono);color:var(--accent)}
+pre.cmd{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:pre;max-width:84ch;font-size:var(--t-1);color:var(--ink)}
+pre.cmd .c{color:var(--faint)}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);margin-top:var(--s4);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);max-width:84ch}
+.rule .k{font:500 var(--t-2)/1.6 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:var(--track-label);white-space:nowrap}
+.rule .v{color:var(--ink-2);min-width:0}
+footer{max-width:var(--w);margin:0 auto;padding:var(--s6) var(--s4);color:var(--faint);font-size:var(--t-1);border-top:1px solid var(--line)}
+footer code{overflow-wrap:anywhere}
+
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+button.btn.alt{background:var(--panel);color:var(--ink);border:1px solid var(--line-2)}
+textarea.free{width:100%;margin-top:var(--s3);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3);min-height:64px;resize:vertical}
+.copyall{margin-top:var(--s5);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.copyall textarea{width:100%;font:400 var(--t-1)/1.5 var(--mono);margin-top:var(--s2)}
+@media (max-width:640px){ h1{font-size:var(--t3)} .rule{grid-template-columns:minmax(0,1fr)} }
+
+/* s08 additions: the ideas table's controls, source lists */
+select.disp{font:500 var(--t-1)/1.2 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s2);min-height:34px}
+td.id{font:600 var(--t-1)/1.3 var(--mono);color:var(--accent);white-space:nowrap}
+.tag{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap;display:inline-block;margin:0 var(--s1) var(--s1) 0}
+ul.src{margin:var(--s3) 0 0;padding-left:1.2rem;max-width:96ch;display:grid;gap:var(--s1);color:var(--ink-2);font-size:var(--t-1)}
+ul.src li{overflow-wrap:anywhere}
+h3.grp{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s5)}
+tr.pro td{background:var(--ok-soft)}
+tr.grp td{background:var(--band);font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+
+/* s09: figures (the frontend's .dia vocabulary, frontend/src/styles.css) and the decision form */
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.ext{fill:none;stroke:var(--line-3);stroke-dasharray:4 3}
+.dia .nd.warn{fill:var(--amber-soft);stroke:var(--amber)}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.hi{stroke:var(--accent)}
+.dia .ed.dash{stroke-dasharray:4 3}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 13px var(--sans);fill:var(--muted)}
+.dia .tx.k{font:500 13px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia .bar{fill:var(--line-2)}
+.dia .bar.hi{fill:var(--accent)}
+.dia .bar.pro{fill:var(--amber)}
+.dia .ax{stroke:var(--line-2);stroke-width:1}
+.dia .gl{stroke:var(--line);stroke-width:1}
+.dia .cap{font:400 13px var(--mono);fill:var(--faint)}
+.dia .bar.ok{fill:var(--ok)}
+.dia .trk{fill:var(--band)}
+.dia .tx.ok{fill:var(--ok)}
+.dia .tx.warn{fill:var(--amber)}
+.dia .pick{cursor:pointer}
+.dia .pick .hit{fill:transparent}
+.dia .pick:hover .hit,.dia .pick.on .hit{fill:var(--band)}
+.dia .pick:focus{outline:none}
+.dia .pick:focus-visible .hit{stroke:var(--focus);stroke-width:2}
+.dia{margin-top:var(--s3)}
+.dia .ed{marker-end:url(#arr)}
+fieldset{border:0;padding:0;margin:var(--s5) 0 0;min-width:0}
+fieldset:first-of-type{margin-top:0}
+.card .n{overflow-wrap:anywhere}
+td.num.v-no{color:var(--accent)}
+
+/* s10: figures wider than a phone scroll inside their own frame; SVG text at 15 in a 1000 box never renders under 12.8px */
+.figw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r)}
+.figw .dia{min-width:860px;margin-top:0}
+.dia .tx,.dia .tx.s{font-size:15px} .dia .tx.k,.dia .cap{font-size:14px}
+.dia .tx.ok{fill:var(--ok)}
+tr.rec td{background:var(--accent-soft)}
+td.num.wrap{white-space:normal;min-width:14ch}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:var(--s4);margin-top:var(--s5)}
+
+/* s12: the chart is taller than s10's; the lessons list reads as prose */
+ol.steps li b{color:var(--ink)}
+td .mono,td.mono{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span class="muted small">s12 · how the leaders build τ-banking agents, against yours</span><span class="label">research · 2026-10-03 · branch tool-judge</span></div></header>
+<main>
+<p class="label">Field notes · banking_knowledge · the leaderboard, its transcripts, your v1 and v2</p>
+<h1>Banking's leaders run the stock agent: they <em>read</em> before they act</h1>
+<p class="lead">The top of τ-banking's board is not custom engineering. 27 of its 28 text entries are Sierra running tau2's unmodified agent, with the strongest model at its highest effort and AllTools retrieval: BM25, dense search and a read-only shell over the knowledge base. Qwen 3.8 Max leads at 55.2% pass^1 and Claude Opus 5 follows at 48.7%, on 97 tasks × 4 trials. Your v2 scores 22.7% on one trial of the same 97 tasks, and v1 8.2%. Their 776 published conversations show what the stock agent does with those tools that yours does not.</p>
+<div class="note" id="outcome"><span class="label">the short version</span><p>Before their first action, the leaders make 9 to 13 look-ups to your 2 to 3. They open 10 to 14 documents by name through the shell. They have more of the needed documents in hand. With every needed document read, they still pass 62–66% against your 38–40%. So the gap is half retrieval and half acting on what was read. Your harness adds two defects they don't have. A third of v2's replies are tool calls written as text, which never run. In 20 of 97 conversations it calls a discoverable tool by its bare name, which the grader never sees. §6 lists twelve changes, harness first.</p></div>
+<nav class="toc" aria-label="sections">
+<a href="#s0">0 · the board</a><a href="#s1">1 · your setup</a><a href="#s2">2 · how they work</a><a href="#s3">3 · retrieval or reasoning</a><a href="#s4">4 · where you lose</a><a href="#s5">5 · what moves banking</a><a href="#s6">6 · ideas</a><a href="#src">sources</a>
+</nav>
+
+<section id="s0">
+<h2>0 · The board — the stock agent leads at 55.2%</h2>
+<span class="label fig-title">Fig 1 · banking_knowledge pass^1, 97 tasks × 4 trials, GPT-5.2 (low reasoning) as the customer</span>
+<div class="figw"><svg class="dia" viewBox="0 0 1000 656" role="img" aria-label="Banking_knowledge pass^1 for fifteen leaderboard entries and your two versions. Qwen 3.8 Max leads at 55.2% and Claude Opus 5 follows at 48.7%, both with the stock agent and AllTools retrieval. Distyl&#39;s custom agent scores 31.2%. Your v2 scores 22.7% and v1 8.2%, on one trial with a different customer.">
+<text class="tx k" x="345" y="26">pass^1 · % of 97 tasks</text>
+<line class="gl" x1="345.0" x2="345.0" y1="42" y2="598"/><text class="cap" x="345.0" y="620" text-anchor="middle">0</text>
+<line class="gl" x1="431.7" x2="431.7" y1="42" y2="598"/><text class="cap" x="431.7" y="620" text-anchor="middle">10</text>
+<line class="gl" x1="518.3" x2="518.3" y1="42" y2="598"/><text class="cap" x="518.3" y="620" text-anchor="middle">20</text>
+<line class="gl" x1="605.0" x2="605.0" y1="42" y2="598"/><text class="cap" x="605.0" y="620" text-anchor="middle">30</text>
+<line class="gl" x1="691.7" x2="691.7" y1="42" y2="598"/><text class="cap" x="691.7" y="620" text-anchor="middle">40</text>
+<line class="gl" x1="778.3" x2="778.3" y1="42" y2="598"/><text class="cap" x="778.3" y="620" text-anchor="middle">50</text>
+<line class="gl" x1="865.0" x2="865.0" y1="42" y2="598"/><text class="cap" x="865.0" y="620" text-anchor="middle">60</text>
+<g id="f1-qwen-38-max"><title>Qwen 3.8 Max · xhigh: 55.2% pass^1, alltools</title><text class="tx" x="333" y="75" text-anchor="end">Qwen 3.8 Max · xhigh</text><rect class="bar" x="345" y="61" width="478.4" height="20" rx="2"/><text class="tx" x="831.4" y="75">55.2</text><text class="tx s" x="875.4" y="75">alltools</text></g>
+<g id="f1-claude-opus-5"><title>Claude Opus 5 · max: 48.7% pass^1, alltools</title><text class="tx" x="333" y="105" text-anchor="end">Claude Opus 5 · max</text><rect class="bar" x="345" y="91" width="422.1" height="20" rx="2"/><text class="tx" x="775.1" y="105">48.7</text><text class="tx s" x="819.1" y="105">alltools</text></g>
+<g id="f1-grok-45"><title>Grok 4.5 · high: 47.9% pass^1, alltools</title><text class="tx" x="333" y="135" text-anchor="end">Grok 4.5 · high</text><rect class="bar" x="345" y="121" width="415.1" height="20" rx="2"/><text class="tx" x="768.1" y="135">47.9</text><text class="tx s" x="812.1" y="135">alltools</text></g>
+<g id="f1-gpt-56-sol"><title>GPT-5.6-sol · xhigh: 46.9% pass^1, alltools</title><text class="tx" x="333" y="165" text-anchor="end">GPT-5.6-sol · xhigh</text><rect class="bar" x="345" y="151" width="406.5" height="20" rx="2"/><text class="tx" x="759.5" y="165">46.9</text><text class="tx s" x="803.5" y="165">alltools</text></g>
+<g id="f1-gpt-55"><title>GPT-5.5 · xhigh: 44.6% pass^1, alltools</title><text class="tx" x="333" y="195" text-anchor="end">GPT-5.5 · xhigh</text><rect class="bar" x="345" y="181" width="386.5" height="20" rx="2"/><text class="tx" x="739.5" y="195">44.6</text><text class="tx s" x="783.5" y="195">alltools</text></g>
+<g id="f1-muse-spark-11"><title>Muse Spark 1.1 · xhigh: 40.5% pass^1, alltools</title><text class="tx" x="333" y="225" text-anchor="end">Muse Spark 1.1 · xhigh</text><rect class="bar" x="345" y="211" width="351.0" height="20" rx="2"/><text class="tx" x="704.0" y="225">40.5</text><text class="tx s" x="748.0" y="225">alltools</text></g>
+<g id="f1-claude-opus-47"><title>Claude Opus 4.7 · max: 40.2% pass^1, alltools</title><text class="tx" x="333" y="255" text-anchor="end">Claude Opus 4.7 · max</text><rect class="bar" x="345" y="241" width="348.4" height="20" rx="2"/><text class="tx" x="701.4" y="255">40.2</text><text class="tx s" x="745.4" y="255">alltools</text></g>
+<g id="f1-claude-fable-5"><title>Claude Fable 5 · max: 39.7% pass^1, alltools</title><text class="tx" x="333" y="285" text-anchor="end">Claude Fable 5 · max</text><rect class="bar" x="345" y="271" width="344.1" height="20" rx="2"/><text class="tx" x="697.1" y="285">39.7</text><text class="tx s" x="741.1" y="285">alltools</text></g>
+<g id="f1-claude-opus-48"><title>Claude Opus 4.8 · max: 39.7% pass^1, alltools</title><text class="tx" x="333" y="315" text-anchor="end">Claude Opus 4.8 · max</text><rect class="bar" x="345" y="301" width="344.1" height="20" rx="2"/><text class="tx" x="697.1" y="315">39.7</text><text class="tx s" x="741.1" y="315">alltools</text></g>
+<g id="f1-gpt-54"><title>GPT-5.4 · xhigh: 39.4% pass^1, alltools</title><text class="tx" x="333" y="345" text-anchor="end">GPT-5.4 · xhigh</text><rect class="bar" x="345" y="331" width="341.5" height="20" rx="2"/><text class="tx" x="694.5" y="345">39.4</text><text class="tx s" x="738.5" y="345">alltools</text></g>
+<g id="f1-gpt-52"><title>GPT-5.2 · high: 32.2% pass^1, alltools</title><text class="tx" x="333" y="375" text-anchor="end">GPT-5.2 · high</text><rect class="bar" x="345" y="361" width="279.1" height="20" rx="2"/><text class="tx" x="632.1" y="375">32.2</text><text class="tx s" x="676.1" y="375">alltools</text></g>
+<g id="f1-distyl-buttonagent"><title>Distyl ButtonAgent · GPT-5.4 high: 31.2% pass^1, custom retrieval</title><text class="tx" x="333" y="405" text-anchor="end">Distyl ButtonAgent · GPT-5.4 high</text><rect x="345" y="391" width="270.4" height="20" rx="2" fill="none" stroke="var(--line-3)" stroke-dasharray="4 3"/><text class="tx" x="623.4" y="405">31.2</text><text class="tx s" x="667.4" y="405">custom retrieval</text></g>
+<g id="f1-claude-opus-46"><title>Claude Opus 4.6 · max: 27.3% pass^1, alltools</title><text class="tx" x="333" y="435" text-anchor="end">Claude Opus 4.6 · max</text><rect class="bar" x="345" y="421" width="236.6" height="20" rx="2"/><text class="tx" x="589.6" y="435">27.3</text><text class="tx s" x="633.6" y="435">alltools</text></g>
+<g id="f1-claude-sonnet-45"><title>Claude Sonnet 4.5 · thinking: 25.3% pass^1, terminal</title><text class="tx" x="333" y="465" text-anchor="end">Claude Sonnet 4.5 · thinking</text><rect class="bar" x="345" y="451" width="219.3" height="20" rx="2"/><text class="tx" x="572.3" y="465">25.3</text><text class="tx s" x="616.3" y="465">terminal</text></g>
+<g id="f1-gpt-52-none"><title>GPT-5.2 · effort none: 12.6% pass^1, dense only</title><text class="tx" x="333" y="495" text-anchor="end">GPT-5.2 · effort none</text><rect class="bar" x="345" y="481" width="109.2" height="20" rx="2"/><text class="tx" x="462.2" y="495">12.6</text><text class="tx s" x="506.2" y="495">dense only</text></g>
+<line class="ax" x1="20" x2="980" y1="504" y2="504"/><text class="tx k" x="20" y="526">yours · not comparable: 1 trial, Haiku 4.5 as the customer</text>
+<g id="f1-yours-v2"><title>yours v2 · Sonnet 5 medium: 22.7% pass^1, BM25 + grep · 1 trial</title><text class="tx" x="333" y="555" text-anchor="end">yours v2 · Sonnet 5 medium</text><rect class="bar pro" x="345" y="541" width="196.7" height="20" rx="2"/><text class="tx" x="549.7" y="555">22.7</text><text class="tx s" x="593.7" y="555">BM25 + grep · 1 trial</text></g>
+<g id="f1-yours-v1"><title>yours v1 · Sonnet 5 medium: 8.2% pass^1, BM25 + grep · 1 trial</title><text class="tx" x="333" y="585" text-anchor="end">yours v1 · Sonnet 5 medium</text><rect class="bar pro" x="345" y="571" width="71.1" height="20" rx="2"/><text class="tx" x="424.1" y="585">8.2</text><text class="tx s" x="468.1" y="585">BM25 + grep · 1 trial</text></g>
+</svg></div>
+<p class="cap">The top ten text entries, then four for contrast. Every board row is a "standard" submission (the unmodified tau2 agent and prompts) except Distyl's (dashed). Distyl ran GPT-5.4 at high effort, not xhigh, on tau2 0.2.1-dev, before the v1.0.1 regrade, so its 8-point gap to stock GPT-5.4 is not a clean comparison. Your bars are amber because they are not on the board's terms: one trial, Haiku 4.5 as the customer, and BM25 + grep retrieval.<span class="path">vendor/tau2-bench/web/leaderboard/public/submissions/*/submission.json (pinned 2174a60) · runs/20261002T235638Z… · 20261003T003126Z… · 20261003T005018Z… · 20261003T051036Z…</span></p>
+<div class="tw"><table>
+<thead><tr><th>what "building" means on this board</th><th>the leaders</th><th>the evidence</th></tr></thead>
+<tbody>
+<tr><td class="sub">agent code</td><td class="wrap">tau2's stock LLM agent, unchanged. <code>modified_prompts: false</code> on every top-ten entry</td><td class="wrap small">27 of 28 text entries are Sierra's standard runs; the only custom text agent is 14th of 28</td></tr>
+<tr><td class="sub">system prompt</td><td class="wrap">The Rho-Bank policy plus the AllTools template: three search tools described, a "Recommended Workflow" for the shell (<code>ls</code> → <code>cat INDEX.md</code> → <code>grep -ri</code> → <code>cat</code> the matches), discoverable-tool rules and the verification rule</td><td class="wrap small"><code>data/tau2/domains/banking_knowledge/prompts/all_tools.md</code> + <code>components/</code></td></tr>
+<tr><td class="sub">retrieval</td><td class="wrap">AllTools: <code>KB_search_bm25</code>, <code>KB_search_dense</code> (OpenAI text-embedding-3-large), and a read-only <code>shell</code> over the 698 documents as files with an <code>INDEX.md</code>. Each search tool takes a <code>k</code></td><td class="wrap small"><code>retrieval.py</code>: <code>DEFAULT_RETRIEVAL_VARIANT = "alltools"</code></td></tr>
+<tr><td class="sub">model and effort</td><td class="wrap">The newest frontier model at its highest effort: <code>max</code> for Claude, <code>xhigh</code> for GPT and Qwen</td><td class="wrap small">nine of the ten entries above 39% ran max or xhigh; Grok 4.5 ran high</td></tr>
+<tr><td class="sub">reliability</td><td class="wrap">pass^4 falls to 35.1% for Qwen 3.8 Max and 32.0% for Claude Opus 5</td><td class="wrap small">same files, <code>pass_4</code></td></tr>
+</tbody></table></div>
+<p class="insight">On this board, "how they build it" comes down to three settings: model, effort and retrieval. The agent and its prompt are tau2's own.</p>
+</section>
+
+<section id="s1">
+<h2>1 · Your setup — same 97 tasks, seven differences</h2>
+<div class="tw"><table>
+<thead><tr><th>dimension</th><th>board leaders</th><th>yours</th><th>likely effect</th></tr></thead>
+<tbody>
+<tr><td class="sub">model · effort</td><td>Qwen 3.8 Max xhigh · Claude Opus 5 max</td><td>Claude Sonnet 5 · <code>effort: medium</code></td><td class="wrap small">large: Claude Opus 4.6 → Opus 5, both at max, is 27.3 → 48.7</td></tr>
+<tr><td class="sub">retrieval</td><td>BM25 + dense + read-only shell</td><td><code>bm25_grep</code>: BM25 and a regex <code>grep</code>, each returning up to 10 whole documents per search<span class="path">config.BANKING_RETRIEVAL: s09 dropped dense because the subscription cannot call OpenAI embeddings, and the shell went with them. Neither needs OpenAI (see §2)</span></td><td class="wrap small">medium: see §2 and §3</td></tr>
+<tr><td class="sub">prompt</td><td>tau2's policy + AllTools template, nothing else</td><td>your <code>system.md</code> with the policy in its slot, <code>CLOCK_NOTE</code>, and v2's rules and helper</td><td class="wrap small">yours is tuned; theirs is stock</td></tr>
+<tr><td class="sub">tool calls</td><td>native; 1.6–2.1 calls per agent turn</td><td>the JSON reply contract: 1.0 call per turn, and 31% of v2's replies were calls written as plain text that never ran</td><td class="wrap small">large: see §2's note</td></tr>
+<tr><td class="sub">customer</td><td>GPT-5.2, low reasoning</td><td>Haiku 4.5 with your rules (<code>eval/user.py</code>)</td><td class="wrap small">small here; in §4 it shares the blame for 2 of 15 tasks</td></tr>
+<tr><td class="sub">trials · tasks</td><td>4 trials × 97</td><td>1 trial; train 60 + test 37 = the same 97</td><td class="wrap small">your 37-task test gate can only see large effects</td></tr>
+<tr><td class="sub">harness quirk</td><td>none</td><td>the Claude CLI tells every session its account email; you redact it to <code>account-email@redacted.invalid</code>, and v1 looped on it in several train tasks</td><td class="wrap small">v2's identity rule and helper fixed most of these (15 train fixes)</td></tr>
+</tbody></table></div>
+<p class="insight">One difference is a defect, not a setting: the JSON tool-call contract. Effort and retrieval are one-line settings, and the model is a fork.</p>
+</section>
+
+<section id="s2">
+<h2>2 · How they work — about 9–13 look-ups before acting</h2>
+<span class="label fig-title">Fig 2 · behaviour per conversation, mean, from the published transcripts and your runs</span>
+<div class="tw"><table>
+<thead><tr><th>per conversation</th><th class="num">Qwen 3.8 Max</th><th class="num">Claude Opus 5</th><th class="num">yours v2</th><th class="num">yours v1</th></tr></thead>
+<tbody>
+<tr><td class="sub">passed</td><td class="num">214 / 388</td><td class="num">189 / 388</td><td class="num">22 / 97</td><td class="num">8 / 97</td></tr>
+<tr><td class="sub">knowledge-base look-ups<span class="path">every BM25, dense, grep and shell call</span></td><td class="num">22.8</td><td class="num">24.1</td><td class="num">10.6</td><td class="num">6.9</td></tr>
+<tr><td class="sub">look-ups before the first action<span class="path">before the first verification, unlock or tool call</span></td><td class="num">9.0</td><td class="num">13.1</td><td class="num v-no">1.9</td><td class="num v-no">3.0</td></tr>
+<tr><td class="sub">shell commands</td><td class="num">13.2</td><td class="num">17.9</td><td class="num dim">no shell</td><td class="num dim">no shell</td></tr>
+<tr><td class="sub">conversations that read <code>INDEX.md</code></td><td class="num">63.4%</td><td class="num">67.0%</td><td class="num dim">no index</td><td class="num dim">no index</td></tr>
+<tr><td class="sub">documents opened by name<span class="path">distinct doc_*.md read with cat / head / sed</span></td><td class="num">10.5</td><td class="num">14.5</td><td class="num dim">0</td><td class="num dim">0</td></tr>
+<tr><td class="sub">tool calls · per agent turn</td><td class="num">36.2 · 2.06</td><td class="num">37.5 · 1.58</td><td class="num">20.7 · 1.01</td><td class="num">27.5 · 1.00</td></tr>
+<tr><td class="sub">unlocked a tool, never called it</td><td class="num">0.04</td><td class="num">0.01</td><td class="num">0.05</td><td class="num">0.06</td></tr>
+<tr><td class="sub">called <code>get_current_time</code></td><td class="num">90.7%</td><td class="num">95.1%</td><td class="num">82.5%</td><td class="num">67.0%</td></tr>
+<tr><td class="sub">customer messages · agent text replies</td><td class="num">7.1 · 6.7</td><td class="num">6.6 · 10.0</td><td class="num v-warn">18.0 · 17.4</td><td class="num">11.0 · 10.5</td></tr>
+<tr><td class="sub">minutes · ended at <code>max_steps</code></td><td class="num">7.0 · 0</td><td class="num">7.9 · 0</td><td class="num">10.5 · 0</td><td class="num">10.0 · 10</td></tr>
+</tbody></table></div>
+<p class="cap">Within each leader, failed conversations search more than passed ones (25.2 against 20.9 for Qwen), because hard tasks need more documents. More searching is not a lever on its own. What separates the leaders from you is searching <b>before</b> acting, and opening whole documents they choose by name.<span class="path">scratchpad analysis of submissions/{qwen3-8-max,claude-opus-5}_sierra_2026-08-04/trajectories/banking_knowledge_results.json (public bucket) and your four runs' tau2_results.json</span></p>
+<p class="insight">The stock agent reads the procedure before it touches the account. Yours verifies the customer and starts calling tools after two or three searches.</p>
+<div class="note" id="noshell"><span class="label">why yours has no shell and no INDEX.md</span><p>Neither was ruled out on its merits. s09's plan dropped AllTools because its dense search calls OpenAI embeddings, which the subscription can't call. Its retrieval question (Q1) then offered only <code>bm25_grep</code> or <code>bm25</code>, so the read-only shell went too, though it needs no key: tau2 runs it locally through Anthropic's sandbox-runtime (<code>srt</code>) and ripgrep. Neither is installed on this machine yet. <code>INDEX.md</code> isn't one of the 698 documents. tau2's sandbox writes it when it exports the documents as files for the shell, so an agent without a shell has no file to read. Your <code>grep</code> tool regex-searches the same documents and returns up to 10 whole documents ranked by match count, never a list of titles. tau2 also has no stock variant with BM25 and the shell but no embeddings: <code>alltools</code> requires dense search and <code>terminal_use</code> is the shell alone. That's why K1 registers one from your runner.<span class="path">.lavish/s09_banking-loop-and-surfaces-plan.html Q1 · vendor/tau2-bench/src/tau2/knowledge/sandbox_manager.py: export_documents, _create_index_file · src/tau2/domains/banking_knowledge/retrieval.py: RETRIEVAL_VARIANTS · retrieval_mixins.py: grep</span></p></div>
+<div class="note" id="embeddings"><span class="label">dense search · it needn't be OpenAI's</span><p>AllTools uses OpenAI's <code>text-embedding-3-large</code> because that's tau2's default. tau2 ships two embedding backends, OpenAI and OpenRouter (Qwen3-Embedding 4B or 8B, Gemini's embedding model), and both are paid web services that need a key. Anthropic has no embeddings API, so the subscription can't make embeddings by any route. A model running on your machine needs neither, so s09's step from "the subscription can't call OpenAI" to "no dense search" didn't follow.</p><p>The closest open-source choice is Qwen3-Embedding (Apache 2.0), the family tau2's own <code>alltools-qwen</code> variant calls through OpenRouter. The 0.6B size runs comfortably on this M1 Pro with 32 GB; try 4B if search quality falls short. tau2 embeds the 698 documents once and caches them, then each search embeds one query locally, with no key and no bill. It does add a model that isn't Claude to the setup, which the billing rule ("every model call runs on the subscription") doesn't foresee: that's your call.</p><p>Wiring it in leaves tau2 untouched. Our runner adds an embedder class that follows tau2's <code>BaseEmbedder</code> (<code>embed</code>, <code>get_name</code>), puts it in the two lookup tables tau2 builds embedding pipelines from (both can be extended from outside), and registers a variant from tau2's own <code>all_tools_variant</code> pointed at it. That is AllTools exactly: BM25, dense and the read-only shell. It needs sentence-transformers (which brings PyTorch) or the lighter fastembed, plus <code>srt</code> and ripgrep for the shell.</p><p>Expect the least from it of the three. In the paper, dense alone averaged 16.88–17.11 against BM25's 17.04 and the terminal's 19.20. In the leaders' conversations the shell does most of the work: Opus 5 makes 17.9 shell calls a conversation to 3.4 BM25 and 2.8 dense, and Qwen 3.8 Max 13.2 to 4.9 and 4.7. Add the shell first. Dense can join the same v1 re-score, which is cheap since you're re-scoring anyway.<span class="path">vendor/tau2-bench/src/tau2/knowledge/embedders/ (openai_embedder.py, openrouter_embedder.py, base.py) · document_preprocessors/embedding_indexer.py and input_preprocessors/embedding_encoder.py: EMBEDDER_REGISTRY · src/tau2/domains/banking_knowledge/retrieval.py: all_tools_variant · arxiv.org/html/2603.04370v1 Table 2 · board transcripts, scratchpad summary.json</span></p></div>
+<div class="note" id="slips"><span class="label">your harness · a third of v2's replies are failed tool calls</span><p>Your agent sends tool calls as JSON in its reply text. In v2, <b>517 of 1,690 agent replies (31%)</b> were tool calls written as plain text instead, in 79 of 97 conversations. A slipped call never runs. v2's helper swaps each one for "One moment please…", the customer answers it, and a turn is gone. That's why v2 carries 18.0 customer messages against the leaders' 7. v1 slipped in 147 of 1,017 replies (14%, 55 of 97 conversations). Failed conversations slip more than passed ones (5.7 against 3.9 a conversation in v2). The leaders call tools natively, so they can't slip.</p></div>
+</section>
+
+<section id="s3">
+<h2>3 · Retrieval or reasoning — both; documents alone reach 40%</h2>
+<span class="label fig-title">Fig 3 · each task's required documents (tau2's <code>required_documents</code>, 9.9 a task on average): how many the agent read</span>
+<div class="tw"><table>
+<thead><tr><th>per conversation</th><th class="num">Qwen 3.8 Max</th><th class="num">Claude Opus 5</th><th class="num">yours v2</th><th class="num">yours v1</th></tr></thead>
+<tbody>
+<tr><td class="sub">required documents read in full, mean<span class="path">a search result's whole text, or a cat of the file</span></td><td class="num">79.2%</td><td class="num">69.4%</td><td class="num">66.2%</td><td class="num">60.4%</td></tr>
+<tr><td class="sub">required documents seen at all<span class="path">also counting grep lines and file listings</span></td><td class="num">88.1%</td><td class="num">82.9%</td><td class="num">67.9%</td><td class="num">60.4%</td></tr>
+<tr><td class="sub">conversations that read every required document</td><td class="num">136 / 388</td><td class="num">98 / 388</td><td class="num">16 / 97</td><td class="num">15 / 97</td></tr>
+<tr class="pro"><td class="sub">pass rate when every required document was read</td><td class="num">84 / 136 · 61.8%</td><td class="num">65 / 98 · 66.3%</td><td class="num v-no">6 / 16 · 37.5%</td><td class="num v-no">6 / 15 · 40.0%</td></tr>
+<tr><td class="sub">pass rate otherwise</td><td class="num">130 / 252 · 51.6%</td><td class="num">124 / 290 · 42.8%</td><td class="num">16 / 81 · 19.8%</td><td class="num">2 / 82 · 2.4%</td></tr>
+</tbody></table></div>
+<p class="cap">Your BM25 search returns ten whole documents per query, so yours reads plenty of text. What it misses is the specific document a procedure depends on. Sierra found the same ceiling another way: with the required documents placed straight in context, the best model then (Claude 4.5 Opus, high) reached 39.69% pass^1.<span class="path">recall.py over the same five files · taubench.com/blog/tau-knowledge.html</span></p>
+<p class="insight">Closing the retrieval gap gets you part of the way. The rest is acting correctly on what was read: dependencies, order and verification. That is model, effort and rules.</p>
+</section>
+
+<section id="s4">
+<h2>4 · Where you lose — eight of fifteen are documents never found</h2>
+<p>These are the 15 train tasks where both leaders pass at least 3 of 4 trials and both your versions fail. A further 8 such tasks sit in test. They are counted here but not named, so nothing on this page can steer a hand edit toward the gate's tasks. Each row compares v2's transcript with a passing Claude Opus 5 transcript of the same task. Opus 5 is the closest model on the board to yours.</p>
+<span class="label fig-title">Fig 4a · the first decisive difference, by kind</span>
+<div class="tw"><table>
+<thead><tr><th>what went wrong in yours</th><th class="num">tasks</th><th>which</th><th>what the leader did instead</th></tr></thead>
+<tbody>
+<tr><td class="sub">a needed document was never found</td><td class="num">8 / 15</td><td class="mono small">019 021 025 033 064 073 096 100</td><td class="wrap small">Listed the product's files by name (<code>ls</code>, <code>grep -ril</code>, <code>head -3</code> over a family) and read them all</td></tr>
+<tr><td class="sub">a discoverable tool called by its bare name</td><td class="num">4 / 15</td><td class="mono small">044 047 048 051</td><td class="wrap small">Unlocked, then <code>call_discoverable_agent_tool</code>, every time</td></tr>
+<tr><td class="sub">a step of the procedure skipped</td><td class="num">1 / 15</td><td class="mono small">079</td><td class="wrap small">Did what was asked first, then every pre-check in the document</td></tr>
+<tr><td class="sub">eligibility not re-checked per item</td><td class="num">1 / 15</td><td class="mono small">089</td><td class="wrap small">Refused the ineligible card, citing the record</td></tr>
+<tr><td class="sub">one wrong argument (a date)</td><td class="num">1 / 15</td><td class="mono small">031</td><td class="wrap small">Asked a neutral question and used <code>get_current_time</code></td></tr>
+</tbody></table></div>
+<p class="cap">Your customer shares the blame in 2 of the 15 (031: answered both "at check-in" and "today"; 033: invented a phone number). Across all 97 conversations, v2 called a discoverable tool by its bare name 86 times in 20 conversations, and 1 of those passed. v1 did so 30 times in 10. Opus 5 did it 0 times in 388.<span class="path">runs/20261003T005018Z_banking_knowledge_v2_train/tau2_results.json against opus5.json, read per conversation</span></p>
+
+<span class="label fig-title">Fig 4b · the 15 tasks, v2's failing conversation against a passing Claude Opus 5 conversation</span>
+<div class="tw"><table>
+<thead><tr><th>task</th><th>yours (v2)</th><th>Claude Opus 5 (passed)</th><th class="num">look-ups before acting · Opus 5 · yours</th></tr></thead>
+<tbody>
+<tr><td class="sub">019<span class="path">cash-back audit</span></td><td class="wrap small">Found the 4 under-credited transactions, but 12 searches never surfaced "Submitting a Cash Back Dispute". It rewrote rewards itself with a correction tool whose precondition it ignored</td><td class="wrap small"><code>grep -ril "cash back"</code>, <code>head -3</code> over the general card docs, read general_003/004; gave <code>submit_cash_back_dispute_0589</code> per transaction</td><td class="num">18 · 12</td></tr>
+<tr><td class="sub">021<span class="path">cash-back audit</span></td><td class="wrap small">Found both errors. Searched "adjustment/correction", never "dispute", and credited them with the generic <code>apply_statement_credit_8472</code></td><td class="wrap small">Dense "cash back calculation errors" hit the right page; <code>grep -ril "cash back dispute"</code>; gave the dispute tool for both</td><td class="num">13 · 8</td></tr>
+<tr><td class="sub">025<span class="path">best business card</span></td><td class="wrap small">20 searches; the Business Platinum docs never ranked. About 10 turns of "One moment please" (slipped calls); never recommended a card</td><td class="wrap small">Read every <code>doc_business_credit_cards_*_001.md</code>, then Business Platinum's family; <code>grep -rin apple</code> for exclusions; recommended with the arithmetic</td><td class="num">24 · 20</td></tr>
+<tr><td class="sub">031<span class="path">hotel charge dispute</span></td><td class="wrap small">Every argument right except <code>issue_noticed_date</code>: a leading question, a two-answer customer, the purchase date filed</td><td class="wrap small">Asked an open question; the customer said "today"; used <code>get_current_time</code></td><td class="num">5 · 3</td></tr>
+<tr><td class="sub">033<span class="path">backend incident, wants a human</span></td><td class="wrap small">No search; demanded verification first. The customer, who has no ID in the scenario, invented one and left</td><td class="wrap small">Searched the symptom before verifying; read "Backend Incident 11/13", which waives verification; ran the two-step transfer protocol</td><td class="num">5 · 0</td></tr>
+<tr><td class="sub">044<span class="path">card closure, retention</span></td><td class="wrap small">Called <code>get_user_dispute_history_7291</code> bare, as v2's rule 7 names it: no record. Never logged the closure reason</td><td class="wrap small">Found the Retention Protocol before verifying; unlock then call for every check; logged the reason before any offer</td><td class="num">4 · 1</td></tr>
+<tr><td class="sub">047<span class="path">two card closures</span></td><td class="wrap small">Bare check calls; never found Business Platinum's first-year fee waiver; transferred mid-task</td><td class="wrap small">Unlock then call throughout; a <code>head -3</code> loop over the product's files found the waiver document</td><td class="num">5 · 1</td></tr>
+<tr><td class="sub">048<span class="path">four card closures</span></td><td class="wrap small">Bare check calls; told the customer there was "no tool to pay from checking" without searching</td><td class="wrap small">Read "Paying Off from Checking"; unlocked and called the pay tool; then the retention steps</td><td class="num">4 · 1</td></tr>
+<tr><td class="sub">051<span class="path">credit-limit increase</span></td><td class="wrap small">Right sequence, but submit, deny and approve all called bare: the database check failed. 3 slipped calls</td><td class="wrap small">Read the workflow documents for the exact order; every gated tool through unlock then call</td><td class="num">5 · 2</td></tr>
+<tr><td class="sub">064<span class="path">best savings + card</span></td><td class="wrap small">24 searches kept returning Gold Account; never found Gold Plus's 6.0% APY; opened the account with a bare call. 15 slipped calls</td><td class="wrap small">28 look-ups before verifying: <code>grep APY doc_savings_accounts_*.md</code>, read every savings spec, built a net-return table</td><td class="num">28 · 0</td></tr>
+<tr><td class="sub">073<span class="path">ATM fee audit</span></td><td class="wrap small">19 searches returned near-namesakes; never found the Blue Account's fee rule; pulled one account's transactions of three. 12 slipped calls</td><td class="wrap small"><code>ls</code>, <code>grep -ril ATM</code>, read <code>INDEX.md</code>, listed each account family's titles and read the fee pages; one credit per account</td><td class="num">18 · 0</td></tr>
+<tr><td class="sub">079<span class="path">stolen wallet</span></td><td class="wrap small">Had the right documents in full, but talked the customer out of freezing and closed all three cards directly, skipping the pre-checks</td><td class="wrap small">Froze as asked; ran the cross-product and pending-refund checks; unfroze, then closed</td><td class="num">6 · 0</td></tr>
+<tr><td class="sub">089<span class="path">ATM limit increases</span></td><td class="wrap small">Had the eligibility rule and the overdraft fee on record, yet raised the ineligible card's limit too. Every expected action matched; the extra write broke the database</td><td class="wrap small">Raised the eligible card to its cap; refused the other, citing the 11/01 overdraft fee</td><td class="num">8 · 0</td></tr>
+<tr><td class="sub">096<span class="path">interest underpaid</span></td><td class="wrap small">23 searches for one base APY, never found; transferred before any credit. 12 slipped calls</td><td class="wrap small">Two <code>cat</code> commands over the two accounts' files gave every rate; then the boost and credit procedures</td><td class="num">9 · 0</td></tr>
+<tr><td class="sub">100<span class="path">best referral bonus</span></td><td class="wrap small">Compared only the 5 programmes BM25 returned; the best one never appeared</td><td class="wrap small"><code>grep -rni referral doc_business_checking_accounts_*.md</code> listed all eight; read each; checked tenure</td><td class="num">18 · 1</td></tr>
+</tbody></table></div>
+<p class="cap">"Look-ups before acting" counts searches and shell commands before the first verification, unlock or tool call. Yours verifies first and searches after, so a 0 can still precede twenty searches.<span class="path">two read-only comparison passes over the same five files; task ids are train-split only (data/splits/banking_knowledge.json, v3)</span></p>
+<h3>Five lessons, generic enough to give an optimiser</h3>
+<ol class="steps">
+<li><b>Search the customer's stated problem first,</b> before generic gates like verification and before picking a remedy (033, 019, 021).</li>
+<li><b>Search hits are a sample, not the catalogue.</b> For "best", "compare" and "audit" requests, list the whole product family and read each member (025, 064, 073, 096, 100). BM25 + grep can't list by filename, and the shell can.</li>
+<li><b>Every discoverable tool goes through unlock, then call,</b> even when its name is already known (044, 047, 048, 051).</li>
+<li><b>Do what was asked, then every step of the retrieved procedure,</b> and re-check eligibility per item before each write (079, 089).</li>
+<li><b>Ask neutral questions for argument values,</b> and confirm an ambiguous answer before writing (031).</li>
+</ol>
+<p class="insight">Eight of the fifteen need a document BM25 never ranked. Each time, the leader found it by listing a product's files and reading them.</p>
+</section>
+
+<section id="s5">
+<h2>5 · What moves banking — model, effort, then the shell</h2>
+<span class="label fig-title">Fig 5 · what has been measured on τ-banking, largest effect first</span>
+<div class="tw"><table>
+<thead><tr><th>lever</th><th>measured effect, pass^1</th><th>conditions</th><th>source</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">settings</td></tr>
+<tr><td class="sub">model generation</td><td class="num wrap">27.3 → 40.2 → 48.7</td><td class="wrap small">Claude Opus 4.6 → 4.7 → 5, all at max effort with AllTools, 97 × 4</td><td class="small">board</td></tr>
+<tr><td class="sub">reasoning effort</td><td class="num wrap">11.60 → 25.52 (terminal)<br>9.54 → 24.48 (BM25)</td><td class="wrap small">GPT-5.2, no reasoning against high, same retrieval. The terminal's edge appears only in recent high-reasoning models</td><td class="small">τ-Knowledge paper, Table 2</td></tr>
+<tr><td class="sub">retrieval: terminal</td><td class="num wrap">19.20 vs 17.04 BM25, 16.88–17.11 dense</td><td class="wrap small">mean over models. Claude 4.5 Sonnet (high): terminal 22.42 vs BM25 16.75</td><td class="small">τ-Knowledge paper, Table 2</td></tr>
+<tr><td class="sub">documents in hand</td><td class="num wrap">32.18 mean, 39.69 best</td><td class="wrap small">required documents placed in context, so retrieval is removed. The whole knowledge base in the prompt does worse: about 12% at best</td><td class="small">τ-Knowledge paper</td></tr>
+<tr class="grp"><td colspan="4">behaviour and memory</td></tr>
+<tr><td class="sub">learned rules</td><td class="num wrap">24.8 → 39.7</td><td class="wrap small"><b>Claude Sonnet 5, medium effort, stock agent, BM25: your setup.</b> After each failure the agent writes one WHEN–THEN rule from the verified actions and a diff, and reads its store before acting. The rules were learned on the same tasks they were scored on, so this is not held out</td><td class="small">Memco, arXiv 2607.22157</td></tr>
+<tr><td class="sub">declarative skills</td><td class="num wrap">small gains with documents in hand; none with weak retrieval</td><td class="wrap small">Markdown skill files for procedures and preconditions, interaction and knowledge discovery. An imperative state machine was worse everywhere (0.462 → 0.200)</td><td class="small">arXiv 2606.06923</td></tr>
+<tr><td class="sub">custom retrieval</td><td class="num wrap">31.19 = 31.19</td><td class="wrap small">Distyl's Mixedbread pipeline tied Sierra's same-day stock GPT-5.4 terminal run on pass^1, and was less reliable at pass^4 (13.40 vs 16.49)</td><td class="small">tau2-bench PR #194</td></tr>
+<tr class="grp"><td colspan="4">measured and not significant</td></tr>
+<tr><td class="sub">tuning knobs</td><td class="num wrap">no significant change</td><td class="wrap small">an LLM reranker; grep beside BM25 or dense; <code>k</code> = 5, 10 or 20; a writable terminal for notes (agents never re-read their notes)</td><td class="small">τ-Knowledge paper, App. F</td></tr>
+</tbody></table></div>
+<p class="cap">Your tau2 pin is 1.0.1 (<code>2174a60</code>), so your grading matches the board's. v1.0.1 stopped zeroing a task for an extra read through <code>call_discoverable_agent_tool</code>, which moved banking scores by up to about 9 points. The paper's error taxonomy, clustered from an LLM's failure explanations, puts search inefficiency and assumptions at about 23%, product interdependencies at 14.5%, subtask ordering at 5% and over-trusted claims at 4%.<span class="path">arxiv.org/html/2603.04370v1 · arxiv.org/abs/2607.22157 · arxiv.org/abs/2606.06923 · github.com/sierra-research/tau2-bench/pull/194 · vendor/tau2-bench/CHANGELOG.md</span></p>
+<p class="insight">Settings move banking by 10–20 points; rules add a few, and only once the right documents are in front of the model.</p>
+<div class="note"><span class="label">your closest reference point</span><p>Memco's stock Sonnet 5 at medium effort with BM25 scored 24.8% pass^1 over 97 × 4 (the paper doesn't state its tau2 version). On your held-out test, v1 passes 6 / 37 (16%) and v2 5 / 37 (14%). Both are below that reference. v2's 17 / 60 on train was learned on those same tasks. One trial of 37 tasks can't say by how much. Your agent is not yet above the stock agent on your own model. The leaders' gap is mostly settings.</p></div>
+</section>
+
+<section id="s6">
+<h2>6 · Ideas — twelve changes, harness first</h2>
+<p>Each row names the surface it touches and its cost in conversations. One rule applies to all of them: a change to retrieval, effort or the harness moves the baseline. v1 must then be re-scored under the same setting before a challenger is compared with it, as the loop already requires. Set a disposition per row, then queue the set once. <b>next</b> means I plan it on a Lavish page before building anything. <b>later</b> records it in the README's status section. <b>skip</b> drops it.</p>
+<form data-lavish-question="s12-ideas" onsubmit="event.preventDefault(); const f=event.currentTarget; const items=[...f.querySelectorAll('select.disp')].filter(s=>s.value).map(s=>({id:s.name,label:s.dataset.label,disposition:s.value})); const n=(f.querySelector('textarea')?.value||'').trim(); const ack=f.querySelector('.ack'); if(!items.length&&!n){ack.textContent='Pick a disposition for at least one row.';return;} if(!window.lavish){ack.textContent='Not opened through Lavish: use Copy all answers below.';return;} window.lavish.queuePrompt('s12 banking ideas: act on every selected ID by its disposition (next = plan it on a Lavish page before building; later = record it in the README status section; skip = drop it) and return an item-by-item receipt. Account for every submitted ID before reporting completion. Start no run without asking.'+(n?' Note: '+n:''),{tag:'tracked-batch',text:'s12: '+items.length+' ideas dispositioned',element:f,queueKey:'s12-ideas',data:{items,note:n}}); ack.textContent='Queued '+items.length+' — now press Send to Agent.';">
+<div class="tw"><table>
+<thead><tr><th>id</th><th>idea</th><th>surface</th><th>cost</th><th>evidence</th><th>your call</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="6">your harness: defects the leaders don't have</td></tr>
+<tr><td class="id">T1</td><td class="wrap"><b>Native tool calls</b> (s08's T1). SDK tool stubs whose <code>ToolUseBlock</code> goes back to tau2 without running, in place of the JSON reply contract. That ends the slipped calls and allows several calls per turn</td><td><span class="tag">llm/core.py</span></td><td class="small">a change to the sealed core; re-baseline every domain</td><td class="small">31% of v2's replies were calls written as plain text (§2); the leaders batch 1.6–2.1 calls a turn</td><td><select class="disp" name="T1" data-label="Native tool calls (end the JSON contract)"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">H1</td><td class="wrap"><b>An identity note beside the clock note.</b> The agent's prompt would end by saying the session's account email is not the customer's. That fixes, at the source, the leak v2's helper patches one tool call at a time</td><td><span class="tag">compose.py</span><span class="tag">SIM_RULES</span></td><td class="small">a <code>SIM_RULES</code> bump → re-score v1 (97)</td><td class="small">most of v2's 15 train fixes were this loop</td><td><select class="disp" name="H1" data-label="IDENTITY_NOTE in the composed prompt"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">P4</td><td class="wrap"><b>Unlock, then call — enforced.</b> In 20 of v2's 97 conversations the agent called a discoverable tool by its bare name: 86 calls, and v1 made 30 in 10 conversations. A bare call runs but logs nothing the grader counts. Opus 5 did it 0 times in 388 conversations. A helper guard would turn a bare call into a note to unlock and call it. T1's native tools would refuse it outright. The optimiser should never name a tool without that pattern, as v2's rule 7 does</td><td><span class="tag">helper.py</span><span class="tag">optimiser rules</span></td><td class="small">one challenge</td><td class="small">§4: 4 of the 15 tasks (044, 047, 048, 051)</td><td><select class="disp" name="P4" data-label="Guard bare calls to discoverable tools"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr class="grp"><td colspan="6">settings the leaders all share</td></tr>
+<tr><td class="id">E1</td><td class="wrap"><b>Effort high, then max.</b> A hand fork of v1 with only <code>effort</code> changed, scored by <code>make challenge</code>. Nine of the ten entries above 39% ran max or xhigh</td><td><span class="tag">agent.yaml</span></td><td class="small">one train + test run: 97 conversations, slower each</td><td class="small">GPT-5.2 none → high: 9.5 → 24.5 (BM25) in Sierra's paper</td><td><select class="disp" name="E1" data-label="Effort high/max fork of v1"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">K1</td><td class="wrap"><b>A read-only shell over the knowledge base, beside BM25.</b> tau2's <code>terminal_use</code> shell runs locally through Anthropic's sandbox-runtime (<code>srt</code>) and ripgrep, with no API key. BM25 + shell is AllTools minus dense. It would be a variant registered from your own runner, with tau2 untouched. Reading two documents by name is also far smaller than BM25's ten whole documents a search (s10)</td><td><span class="tag">config.BANKING_RETRIEVAL</span><span class="tag">runner</span></td><td class="small">install <code>srt@0.0.23</code> + ripgrep; re-score v1 under it (97 conversations), then challengers</td><td class="small">leaders use it in 97–100% of conversations (§2); terminal 22.42 vs BM25 16.75 for Claude 4.5 Sonnet</td><td><select class="disp" name="K1" data-label="Read-only shell (BM25 + shell retrieval)"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">M1</td><td class="wrap"><b>Opus 5 as the answering model.</b> A model-swap fork, as v1 was from v0. This is the ceiling probe: Opus 5 at max is the board's second entry</td><td><span class="tag">agent.yaml</span></td><td class="small">97 conversations at Opus speed; subscription limits</td><td class="small">Opus 5 max 48.7% on the board; stock Sonnet 5 medium 24.8% (Memco)</td><td><select class="disp" name="M1" data-label="Opus 5 model-swap fork"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">K2</td><td class="wrap"><b>Local dense search</b>, to complete AllTools without OpenAI: Qwen3-Embedding 0.6B (Apache 2.0, 4B if it falls short) on this machine behind <code>KB_search_dense</code>, registered with tau2's <code>all_tools_variant</code> from your runner. No key, no bill, documents embedded once and cached. With K1 or right after it, because dense alone scored no better than BM25 (see <a href="#embeddings">§2</a>). s13 replays transcript-rag-agent's <code>all-MiniLM-L6-v2</code>, already on this machine, against Qwen3-0.6B and keeps MiniLM if both clear the bar</td><td><span class="tag">runner</span></td><td class="small">install sentence-transformers or fastembed; join K1's v1 re-score</td><td class="small">dense 16.88–17.11 vs BM25 17.04 mean pass^1; leaders 2.8–4.7 dense calls a conversation to 13–18 shell</td><td><select class="disp" name="K2" data-label="Local dense search"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr class="grp"><td colspan="6">behaviour: what the leaders do with the same tools</td></tr>
+<tr><td class="id">P1</td><td class="wrap"><b>Research before the first write.</b> List every product and operation in the request. Search the customer's stated problem before generic gates such as verification. Read each operation's procedure, eligibility and fee documents, and the documents they point to, before unlocking anything. When a product's documents don't surface, list its family by filename and read them all</td><td><span class="tag">system.md</span></td><td class="small">one challenge</td><td class="small">9.0–13.1 look-ups before the first action vs your 1.9–3.0 (§2); §4's retrieval rows</td><td><select class="disp" name="P1" data-label="Research-first rule"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">P2</td><td class="wrap"><b>Sierra's four failure modes as rules.</b> Check a customer's claim ("it was approved", "it arrived") with a read tool before acting on it. Before running several requests, check each one's preconditions against the others. Ask a neutral question rather than assume a product type or a date</td><td><span class="tag">system.md</span></td><td class="small">one challenge (with P1)</td><td class="small">declarative skills: gains only with documents in hand (§5)</td><td><select class="disp" name="P2" data-label="Verify claims, order by dependencies, ask don't assume"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr class="grp"><td colspan="6">the optimiser</td></tr>
+<tr><td class="id">O1</td><td class="wrap"><b>A leader's passing conversation beside each train failure.</b> The board publishes 776 graded conversations. For each failed train task, the optimiser would also read a passing Opus 5 conversation of the same task: which documents it read, which tool it unlocked, in what order. Train tasks only. A test task's conversation never reaches a prompt</td><td><span class="tag">optimiser input</span></td><td class="small">no conversations; a larger prompt (budgeted like the diffs)</td><td class="small">§4 was written exactly this way; s08's O2</td><td><select class="disp" name="O1" data-label="Leader's passing transcript as optimiser contrast (train only)"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr><td class="id">H3</td><td class="wrap"><b>The write-time judge for banking</b> (s11, built for airline). Overtrust, ordering and wrong-argument failures all show at the write call, where the judge sits</td><td><span class="tag">tooljudge</span></td><td class="small">labels and golden answers for banking; one call per write</td><td class="small">no banking evidence; Pickle's checker took retail 0.623 → 0.7632</td><td><select class="disp" name="H3" data-label="Write-time judge on banking"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+<tr class="grp"><td colspan="6">measurement</td></tr>
+<tr><td class="id">R1</td><td class="wrap"><b>Gate on more than one trial.</b> v2 was held at 6 → 5 of 37, where noise is a few tasks either way. Four trials of the test gate, as the board runs, would separate a real gain from luck</td><td><span class="tag">loop</span></td><td class="small">4× the test run: 148 conversations per challenger</td><td class="small">board: 4 trials; s08 §3</td><td><select class="disp" name="R1" data-label="Multi-trial test gate for banking"><option value="">—</option><option>next</option><option>later</option><option>skip</option></select></td></tr>
+</tbody></table></div>
+<textarea class="free" placeholder="Anything else: an order, a budget, an idea that isn't here"></textarea>
+<div class="actions" style="margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap"><button class="btn" type="submit">Queue these dispositions</button><span class="ack small" style="color:var(--ok)"></span></div>
+</form>
+<div class="note"><span class="label">your dispositions · 4 Oct</span><p>Next: T1, H1, P4, K1, K2, P1, P2, H3. Skip: E1, M1, O1, R1, with one trial throughout. Each is planned or dropped in <code>.lavish/s13_banking-v3-plan.html</code> §8, as milestones 0–4 with a check in the UI for each.</p></div>
+<div class="rule">
+  <span class="k">My order</span><span class="v">T1, H1 and K1 first, as one harness change and one new baseline: v1 re-scored under native calls, the identity note and the shell. Each moves the baseline, so doing them one by one would mean three re-baselines. K2 can join that re-score at little extra cost. Then E1, and P1 + P2, as challengers against that baseline, with P4 and O1 in the next optimiser cycle. M1 is the ceiling probe.</span>
+  <span class="k">If T1 is too big now</span><span class="v">E1 is the one-line probe that can run today on the current harness. Expect its gain to be partly eaten by the slipped calls.</span>
+  <span class="k">Why</span><span class="v">The leaders' edge is mostly settings and tools (§5). Your largest gap is a harness defect they don't have (§2). R1 decides whether you can see a 2–3 task gain at all.</span>
+</div>
+<span class="label fig-title" id="gaps">Fig 6 · §1's seven differences, after the plan: which change closes each</span>
+<div class="tw"><table>
+<thead><tr><th>difference</th><th>closed by</th><th>after the plan</th></tr></thead>
+<tbody>
+<tr><td class="sub">retrieval</td><td class="wrap">K1 the read-only shell, with its <code>INDEX.md</code>; K2 local dense search. Together they are AllTools</td><td class="wrap small"><span class="v-ok">closed in kind.</span> The embedding model differs (Qwen3-Embedding 0.6B on your machine, not OpenAI's <code>text-embedding-3-large</code>)</td></tr>
+<tr><td class="sub">prompt</td><td class="wrap">comes with K1: changing the retrieval variant swaps tau2's policy template in your <code>system.md</code>'s slot to AllTools', with its shell workflow (<code>ls</code> → <code>cat INDEX.md</code> → <code>grep</code> → <code>cat</code>)</td><td class="wrap small"><span class="v-ok">the stock tool instructions arrive.</span> Your wrapper, <code>CLOCK_NOTE</code> and v2's rules stay, by design</td></tr>
+<tr><td class="sub">tool calls</td><td class="wrap">T1 native tool calls</td><td class="wrap small"><span class="v-ok">closed</span> once T1 works through the SDK provider: no slipped calls, several calls a turn</td></tr>
+<tr><td class="sub">harness quirk</td><td class="wrap">H1 the identity note; P4 the unlock-then-call guard</td><td class="wrap small"><span class="v-ok">closed.</span> The leaders have neither problem</td></tr>
+<tr><td class="sub">behaviour<span class="path">§2, §3: not one of §1's settings</span></td><td class="wrap">P1 research first; P2 the four failure modes as rules; O1 a leader's passing train conversations for the optimiser</td><td class="wrap small"><span class="v-warn">partly.</span> Tools make reading possible but don't make the agent read before acting. With every required document read, yours passes 38–40% to their 62–66% (§3)</td></tr>
+<tr><td class="sub">model · effort</td><td class="wrap">E1 effort high, then max; M1 Opus 5</td><td class="wrap small"><span class="v-no">open until E1 and M1 run.</span> The largest gap on the board: Opus 4.6 → Opus 5, both at max, is 27.3 → 48.7. Qwen 3.8 Max can't be called on the subscription, so Opus 5 at max (48.7% on the board) is the nearest entry you can reproduce</td></tr>
+<tr><td class="sub">customer</td><td class="wrap">none of the twelve</td><td class="wrap small"><span class="v-no">open, not in the plan.</span> GPT-5.2 can't be called on the subscription. A Sonnet 5 customer is the nearest stronger one, and could join the same v1 re-score</td></tr>
+<tr><td class="sub">trials · tasks</td><td class="wrap">R1 a multi-trial test gate</td><td class="wrap small"><span class="v-warn">measurement only.</span> Four trials make small gains visible; they don't raise the score</td></tr>
+</tbody></table></div>
+<p class="insight">The new tools close the retrieval gap, not the score gap. The model, the customer and the agent's habits stay open until E1, M1 and P1–P2 run.</p>
+<div class="copyall">
+  <button type="button" class="btn alt" onclick="(async (btn) => {
+    const qs = [...document.querySelectorAll('[data-lavish-question]')];
+    const status = btn.parentElement.querySelector('[data-lavish-copy-all-status]');
+    btn.parentElement.querySelector('[data-lavish-copy-all-manual]')?.remove();
+    const out = [];
+    for (const q of qs) {
+      const key = q.getAttribute('data-lavish-question');
+      const lines = [];
+      for (const el of q.querySelectorAll('select, textarea')) {
+        const v = (el.value || '').trim(); if (!v) continue;
+        lines.push('  ' + (el.name || 'note') + ': ' + v);
+      }
+      if (lines.length) out.push(key + ':\n' + lines.join('\n'));
+    }
+    const text = out.join('\n\n');
+    if (!text) { status.textContent = 'No answers to copy yet.'; return; }
+    try { await navigator.clipboard.writeText(text); status.textContent = 'Answers copied — paste them into the chat.'; return; } catch {}
+    const man = document.createElement('textarea'); man.value = text; man.readOnly = true; man.rows = Math.min(18, text.split('\n').length + 1);
+    man.setAttribute('aria-label', 'Answers to copy manually'); man.dataset.lavishCopyAllManual = '';
+    btn.parentElement.append(man); man.focus(); man.select(); status.textContent = 'Clipboard unavailable: copy the text below.';
+  })(this)">Copy all answers</button>
+  <span data-lavish-copy-all-status role="status" aria-live="polite" class="small muted"></span>
+</div>
+</section>
+
+<section id="src">
+<h2>Sources — every number traced to a file or a page</h2>
+<h3 class="grp">the board and its transcripts</h3>
+<ul class="src">
+<li>Leaderboard submissions, pinned in the submodule at <code>2174a60</code> (10 Sep 2026): <code>vendor/tau2-bench/web/leaderboard/public/submissions/*/submission.json</code>. 33 entries carry a banking score; one is the template example. The live manifest (28 Sep 2026) adds only one voice entry.</li>
+<li>Published trajectories, Sierra's public bucket: <code>sierra-tau-bench-public.s3.us-west-2.amazonaws.com/submissions/{qwen3-8-max,claude-opus-5}_sierra_2026-08-04/trajectories/banking_knowledge_results.json</code>, 388 conversations each (97 × 4), downloaded to the session scratchpad only.</li>
+<li>Stock prompts and retrieval variants: <code>vendor/tau2-bench/data/tau2/domains/banking_knowledge/prompts/</code> (<code>all_tools.md</code>, <code>classic_rag_bm25.md</code>, <code>components/</code>) and <code>vendor/tau2-bench/src/tau2/domains/banking_knowledge/retrieval.py</code>. Sandbox requirements: <code>src/tau2/knowledge/sandbox_manager.py</code>.</li>
+<li>Your runs: <code>runs/20261002T235638Z_banking_knowledge_v1_train</code>, <code>20261003T003126Z_…_v1_test</code>, <code>20261003T005018Z_…_v2_train</code>, <code>20261003T051036Z_…_v2_test</code> (<code>tau2_results.json</code>). Split v3: <code>data/splits/banking_knowledge.json</code>.</li>
+<li>Analysis scripts, scratchpad only: <code>board/analyse.py</code> (behaviour, Fig 2) and <code>board/recall.py</code> (required documents, Fig 3). §4's comparisons were read conversation by conversation from the same files.</li>
+</ul>
+<h3 class="grp">research</h3>
+<ul class="src">
+<li>Sierra, "τ-knowledge" (Feb 2026): <a href="https://taubench.com/blog/tau-knowledge.html" target="_blank" rel="noopener">taubench.com/blog/tau-knowledge.html</a>, and the copy in the submodule at <code>web/leaderboard/public/blog/tau-knowledge.html</code>.</li>
+<li>Shi, Zytek, Razavi, Narasimhan, Barres, "τ-Knowledge" (4 Mar 2026): <a href="https://arxiv.org/html/2603.04370v1" target="_blank" rel="noopener">arXiv 2603.04370</a>, Table 2, Appendix F and the error taxonomy.</li>
+<li>Memco, "Learning on the Job" (24 Jul 2026): <a href="https://arxiv.org/abs/2607.22157" target="_blank" rel="noopener">arXiv 2607.22157</a>, stock Sonnet 5 medium + BM25 at 24.8%, learned rules at 39.7% (in-sample).</li>
+<li>"Declarative Skills" (5 Jun 2026): <a href="https://arxiv.org/abs/2606.06923" target="_blank" rel="noopener">arXiv 2606.06923</a>.</li>
+<li>Distyl ButtonAgent submission: <a href="https://github.com/sierra-research/tau2-bench/pull/194" target="_blank" rel="noopener">tau2-bench PR #194</a>. No architecture write-up was found.</li>
+<li>tau2-bench v1.0.1 grading change (15 Jul 2026): <code>vendor/tau2-bench/CHANGELOG.md</code>.</li>
+<li>Not banking but related: Pickle's tool-mentor (a write-time checker model, retail 0.7632 vs 0.623), <a href="https://github.com/pickle-com/tau2-bench/blob/tool-mentor-v1.0/docs/tool-mentor-methodology.md" target="_blank" rel="noopener">methodology</a>. Hive swarm on gpt-4.1-mini: retrieval was not the bottleneck at that model size, <a href="https://github.com/hive-swarm-hub/task--tau3" target="_blank" rel="noopener">repo</a>.</li>
+<li>Not found: any write-up from a model lab explaining its banking gains, and any GEPA, DSPy or ACE result on banking.</li>
+</ul>
+</section>
+</main>
+<footer>s12 · tau2-loop · written 2026-10-03 from the pinned leaderboard (tau2-bench 2174a60), the public trajectory bucket, Sierra's τ-knowledge post, and runs/ on branch tool-judge. Nothing was run and nothing was changed to write it.</footer>
+
+</body>
+</html>
