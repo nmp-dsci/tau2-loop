@@ -15,6 +15,9 @@ Four guards, all deterministic:
   answer copied from a train task.
 - **budget**: a routing optimiser's `system.md` may grow by at most
   `PROMPT_GROWTH` characters over its champion's.
+
+Beside them, a dataset's own (s13 §5): `optimisers/<domain>/guards.py`, when it
+exists, checks what that dataset's optimiser wrote (`profile_violations`).
 """
 
 from __future__ import annotations
@@ -22,13 +25,16 @@ from __future__ import annotations
 import ast
 import json
 import re
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
 from tau2_loop.config import ROOT
 from tau2_loop.data.splits import read_task_extract
 
-FENCED = ("runs", "data", "loop", "vendor")
+# `.lavish/`: the review pages, which can quote test results (s14 P8c)
+FENCED = ("runs", "data", "loop", "vendor", ".lavish")
 ALLOWED_IMPORTS = frozenset(
     {
         "__future__",
@@ -94,7 +100,7 @@ def bash_fence_reason(cmd: str, hidden: list[Path]) -> str | None:
         if str(h.relative_to(ROOT)) in cmd or str(h) in cmd:
             return "that folder is another challenger of this cycle"
     for f in FENCED:
-        if re.search(rf"(^|[\s'\"=(/.]){f}/", cmd):
+        if re.search(rf"(^|[\s'\"=(/.]){re.escape(f)}/", cmd):
             return (
                 f"{f}/ is closed to the optimiser; read .context/ and the traces your prompt names"
             )
@@ -174,3 +180,39 @@ def leaks(files: dict[str, str], values: set[str]) -> list[str]:
             if re.search(rf"(?<![\w@.-]){re.escape(v)}(?![\w@-])", text):
                 out.append(f"{name}: {v}")
     return out
+
+
+def profile_violations(
+    source: str | None,
+    files: dict[str, str],
+    champion: dict[str, str],
+    where: str = "guards.py",
+) -> list[str]:
+    """A dataset's own guards (`optimisers/<domain>/guards.py`, s13 §5), run beside the shared
+    ones on what its optimiser wrote. `source` is the file as its profile read it when the cycle
+    began, so a session cannot weaken the check it is about to face (None: no file, nothing to
+    check). It defines `check(files, champion)`: both map a file name to its text (the new
+    version's files and the champion's, as `AgentVersion.files()` gives them), and it returns one
+    sentence per violation, or nothing. A guard that will not compile, has no `check`, or raises
+    is a violation itself: a guard that cannot run vouches for nothing."""
+    if source is None:
+        return []
+    name = "tau2_loop_profile_guards"
+    module = types.ModuleType(name)
+    module.__file__ = where
+    sys.modules[name] = module  # a dataclass in the guard looks its module up by name
+    try:
+        exec(compile(source, where, "exec"), module.__dict__)
+        check = getattr(module, "check", None)
+        if not callable(check):
+            return [f"{where} defines no check(files, champion)"]
+        found = check(dict(files), dict(champion))
+    except Exception as e:  # noqa: BLE001 - a dataset's guard never crashes the cycle; it refuses it
+        return [f"{where} could not run: {type(e).__name__}: {e}"]
+    finally:
+        sys.modules.pop(name, None)
+    if not found:
+        return []
+    if isinstance(found, str):
+        return [found]
+    return [str(x) for x in found]

@@ -7,8 +7,9 @@ SPLIT ?= train
 TRIALS ?= 1
 CONCURRENCY ?= 3
 CYCLES ?= 1
-OPTIMISER ?= opus
-MODE ?= classic
+# OPTIMISER and MODE unset: loop and ab take the domain's optimiser profile (optimisers/DOMAIN/profile.yaml)
+OPTIMISER ?=
+MODE ?=
 MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
 AGENT_PORT ?= 8091
@@ -25,8 +26,11 @@ setup: ## submodule at the pin, python deps (uv) and frontend deps (npm)
 splits: ## cut each domain's base set in half, train / test (seed 300) → data/splits, data/tasks
 	uv run tau2loop splits
 
-fork: ## a new DOMAIN version with the champion's prompt on MODEL= (and/or EFFORT=): a model swap, by hand
-	uv run tau2loop fork --domain $(DOMAIN) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT))
+documents: ## index banking's knowledge base (title and size per document) → data/tasks, for Evals
+	uv run tau2loop documents
+
+fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true or PARALLEL_CALLS=true, by hand
+	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls)
 
 agent-service: ## the agent's model call as a container on 127.0.0.1:$(AGENT_PORT); runs reach it with AGENT_SERVICE_URL
 	uv run tau2loop agent-service --docker --port $(AGENT_PORT)
@@ -40,8 +44,8 @@ platform-status: ## preflight: the central MLflow must answer /health (runs befo
 smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
 	uv run tau2loop smoke --agent $(or $(AGENT),v0) --concurrency $(CONCURRENCY)
 
-eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=)
-	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY)
+eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks)
+	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t))
 
 baselines: platform-status ## each domain's base version on its train split, one trial each: v0, or the oldest version where v0 was retired (banking, v1)
 	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --split train --concurrency $(CONCURRENCY) || exit 1; done
@@ -64,10 +68,12 @@ register: ## register RUN=<run id> as challenger
 promote: ## promote RUN=<run id> to champion of its domain (KIND="model swap" for a fork by fiat)
 	uv run tau2loop promote $(RUN) --kind "$(KIND)"
 
-loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate → test (OPTIMISER=opus, TRIALS=1, MODE=classic|routing)
-	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY) --trials $(TRIALS) --mode $(MODE)
-ab: platform-status ## two challengers from DOMAIN's champion on the same failures, the classic and the routing optimiser; both gated and tested, at most one crowned
-	uv run tau2loop ab --domain $(DOMAIN) --optimiser $(OPTIMISER) --concurrency $(CONCURRENCY) --trials $(TRIALS)
+loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate → test under DOMAIN's optimiser profile (AGENT= to start from a held version; OPTIMISER=, MODE=classic|routing override the profile for this run; TRIALS=1)
+	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) $(if $(AGENT),--agent $(AGENT)) $(if $(OPTIMISER),--optimiser $(OPTIMISER)) --concurrency $(CONCURRENCY) --trials $(TRIALS) $(if $(MODE),--mode $(MODE))
+optimise: ## one optimiser session from FROM= (default the champion) on DOMAIN's train failures, writing the next version and scoring nothing; MODEL=, EFFORT=, PARALLEL_CALLS=true set the new version's agent.yaml; OPTIMISER=, MODE= override the profile
+	uv run tau2loop optimise --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(OPTIMISER),--optimiser $(OPTIMISER)) $(if $(MODE),--mode $(MODE)) $(if $(MODEL),--agent-model $(MODEL)) $(if $(EFFORT),--agent-effort $(EFFORT)) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls)
+ab: platform-status ## two challengers from DOMAIN's champion on the same failures, the classic and the routing optimiser, under DOMAIN's optimiser profile (OPTIMISER= overrides its model); both gated and tested, at most one crowned
+	uv run tau2loop ab --domain $(DOMAIN) $(if $(OPTIMISER),--optimiser $(OPTIMISER)) --concurrency $(CONCURRENCY) --trials $(TRIALS)
 
 challenge: platform-status ## score AGENT= (a fork) against DOMAIN's champion through the loop's gate, ledger and test report; no optimiser (TRIALS=1, NO_TEST=1)
 	@if [ "$(origin AGENT)" = "file" ]; then echo "make challenge needs AGENT=vN: the version to score against the champion"; exit 1; fi
@@ -133,4 +139,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

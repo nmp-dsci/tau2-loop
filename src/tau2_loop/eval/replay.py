@@ -55,12 +55,16 @@ LEGACY_RETRIEVAL = "bm25"
 def env_kwargs_for(domain: str, task: Any, retrieval: str | None = None) -> dict[str, Any]:
     """The environment the live evaluation built. Banking's retrieval must be the run's own
     variant (`RunMeta.retrieval`; `bm25` before the field existed), never tau2's default:
-    the dense variants call an embedding API."""
+    its dense search calls an embedding API. The local variants (`eval.retrieval`) need the
+    sandbox and the embedding model installed, as their live runs did."""
     if domain != "banking_knowledge":
         return {}
     from tau2.data_model.simulation import TextRunConfig
     from tau2.runner.build import _build_env_kwargs
 
+    from tau2_loop.eval.retrieval import register
+
+    register()  # a run on a local AllTools variant rebuilds the same tools
     cfg = TextRunConfig(domain=domain, retrieval_config=retrieval or LEGACY_RETRIEVAL)
     return dict(_build_env_kwargs(cfg, task))
 

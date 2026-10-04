@@ -26,6 +26,13 @@
   with `compose.CLOCK_NOTE`. The customer also holds a stop sent with words until
   the agent's turn. Runs record `sim_rules`; the loop never compares runs across
   it, so bump `runner.SIM_RULES` when these rules change.
+- **Banking's champion is v4** (5 Oct 2026, promoted by the gate): written by `make optimise`
+  from v3 under banking's s14 guide (routing: all five surfaces), Sonnet at high effort with
+  `parallel_calls: true`. Test 6 → 14 (fixed 8, broke 0, p = 0.004); train 12 → 29 of 60
+  (`20261004T222002Z`, test `20261004T113341Z`). v3 before it (4 Oct, the person's call): v1's
+  prompt with AllTools (`alltools_minilm`), native calls and the identity note, a `tool change`
+  that removed v1's harness defects. Loop cycles start from v4; CI's gate needs the sandbox and
+  MiniLM to re-score it (`.github/workflows/ci.yml`).
 - **Banking's base is v1, its split is v3** (3 Oct 2026): v0 is retired and
   deleted; every banking experiment is scored on split v3's 60 train / 37 test
   tasks. v1's runs were extended to it (`make extend RUN=`: only the new tasks
@@ -33,6 +40,24 @@
   `20261003T003126Z`. Never re-create banking v0 or score banking on another
   task set. A plain `make eval` runs v1, the oldest version left, never a later
   champion (`versions.base_version`).
+- **Retrieval, tool mode and the identity note are version settings** (s13, 4 Oct 2026),
+  frozen in `agent.yaml` like the model: `retrieval:` (banking's variant; absent = today's
+  `bm25_grep`), `tool_mode: json|native` (native: the model calls the tools and each call
+  returns to tau2 unrun, `llm/core.py`), `identity_note: true` (`compose.IDENTITY_NOTE`, the
+  CLI's account email is not the customer's), `parallel_calls: true` (s14, native only: every
+  tool call of a reply kept; before it the core kept the first, so v1–v3 made one call a turn).
+  Change them with `make fork … RETRIEVAL= TOOL_MODE= IDENTITY_NOTE=true PARALLEL_CALLS=true`,
+  or on `make optimise`, never a loop edit. The local AllTools variants
+  (`eval/retrieval.py`: `alltools_minilm`, `alltools_qwen3_0_6b`) need sandbox-runtime,
+  ripgrep and sentence-transformers wherever their runs are played or re-scored.
+- **`make optimise` writes a version and scores nothing** (s14, 4 Oct 2026): one optimiser
+  session on the source's train failures (default the champion). `EFFORT=`, `MODEL=`,
+  `PARALLEL_CALLS=true` set the new version's `agent.yaml`, written and frozen by the harness
+  before the session, never by the optimiser. Play it with `make eval`, gate it with `make
+  challenge` (its ledger entry carries the diagnosis, kind `optimised`). Every optimiser reads
+  the policy its source's run had, banking's documents in `.context/kb/`, and never `.lavish/`
+  (fenced: the pages quote test results). `checks.py` may also define `check_reply(text,
+  state)`, which sends a text reply back once, as `check_write` does a write.
 - **The optimiser may edit the version's surfaces only**: `system.md` and
   `helper.py` (`MODE=classic`), plus `checks.py`, `memory.py`, `guidance.py`
   when a routing diagnosis names them (`MODE=routing`, s09). It never reads

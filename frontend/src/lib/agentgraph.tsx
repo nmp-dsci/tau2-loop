@@ -28,6 +28,7 @@ import {
   post,
   shortModel,
 } from './api';
+import { toolModeLong } from './architecture';
 import { Points } from './ui';
 import { optimisePath } from './url';
 
@@ -825,6 +826,26 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
         ) : (
           <p className="small muted">No helper output, so nothing is appended.</p>
         )}
+        {p.clock_note && (
+          <details className="part">
+            <summary>
+              CLOCK_NOTE <span className="muted">· {fmtInt(p.clock_note.length)} chars · the harness's, after the policy</span>
+            </summary>
+            <div className="blk">
+              <pre>{p.clock_note}</pre>
+            </div>
+          </details>
+        )}
+        {p.identity_note && (
+          <details className="part">
+            <summary>
+              identity note <span className="muted">· {fmtInt(p.identity_note.length)} chars · agent.yaml's identity_note: true</span>
+            </summary>
+            <div className="blk">
+              <pre>{p.identity_note}</pre>
+            </div>
+          </details>
+        )}
       </>
     );
   }
@@ -928,7 +949,7 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
             {meta.sampling}: the SDK exposes no temperature, so trials vary and <code>pass^k</code> is reported
           </dd>
           <dt>tool mode</dt>
-          <dd>{meta.tool_mode}: tools travel as a JSON contract in the prompt, not as native tool calls</dd>
+          <dd>{toolModeLong(meta.tool_mode)}</dd>
           <dt>cost est.</dt>
           <dd>${(r.cost_usd_est ?? 0).toFixed(3)} for this conversation had it been billed per token; paid $0</dd>
         </dl>
@@ -946,7 +967,11 @@ function PanelBody({ node, step, t, agent, meta, playground, pg, onGo, onRun, on
           <li>
             the <code>claude-sdk/</code> provider · src/tau2_loop/llm/sdk_provider.py
           </li>
-          <li>history → one prompt; the reply parsed back into a message or tool_calls · prompting.py</li>
+          {meta.tool_mode === 'native' ? (
+            <li>history → one prompt, the tools given to the SDK; the first tool call comes back to τ² unrun · prompting.py</li>
+          ) : (
+            <li>history → one prompt; the reply parsed back into a message or tool_calls · prompting.py</li>
+          )}
           <li>
             one Agent SDK <code>query()</code> on the subscription; <code>require_live()</code> refuses a per-token key
           </li>

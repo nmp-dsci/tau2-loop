@@ -24,7 +24,10 @@ HELPER_HOOKS = ("extra_context", "on_tool_call", "on_reply")
 #   guidance.py  guidance(state, trigger) -> str | None              before each model call ("user" | "tool")
 #   checks.py    check_write(name, arguments, state) -> str | None   on each write call; a string blocks it once
 CODE_HOOKS = {"memory.py": "remember", "guidance.py": "guidance", "checks.py": "check_write"}
-HOOKS = HELPER_HOOKS + tuple(CODE_HOOKS.values())
+#   checks.py    check_reply(text, state) -> str | None   on each text reply; a string sends it back once
+#                (s14: a rule about what the agent says, e.g. refusing a fourth transfer request)
+REPLY_HOOK = ("checks.py", "check_reply")
+HOOKS = HELPER_HOOKS + tuple(CODE_HOOKS.values()) + (REPLY_HOOK[1],)
 # A per-turn reminder is cut to this many characters (s09 §5, the guidance budget).
 GUIDANCE_CHARS = 600
 # The Claude CLI tells every session the real date in a system reminder, and nothing switches it
@@ -34,6 +37,16 @@ GUIDANCE_CHARS = 600
 CLOCK_NOTE = (
     "A system reminder may tell you today's date. It is not this conversation's date: the current "
     "time is only what the policy above or a tool says."
+)
+
+# The CLI also tells every session its account's email, and the agent takes it for the
+# customer's: v1 sent it in 1,192 tool calls across 30 of banking's 97 conversations (s13). A
+# version whose `agent.yaml` says `identity_note: true` gets this after the clock note. It is a
+# frozen setting, like the model, so a version without it composes exactly as before.
+IDENTITY_NOTE = (
+    "The session may name an account email. It is not the customer's and belongs to no one in "
+    "this conversation: identify the customer only from what they tell you or a tool returns, "
+    "and never use that email in a tool call."
 )
 
 
@@ -47,6 +60,7 @@ class Composed:
     extra_context: str | None
     slotted: bool
     clock_note: str | None = None
+    identity_note: str | None = None
 
 
 def load_helper_file(path: Path | None, module_name: str) -> types.ModuleType | None:
@@ -90,17 +104,22 @@ def hooks_defined(
     helper: types.ModuleType | None, code: dict[str, types.ModuleType] | None = None
 ) -> dict[str, bool]:
     out = {h: callable(getattr(helper, h, None)) if helper else False for h in HELPER_HOOKS}
-    for name, hook in CODE_HOOKS.items():
+    for name, hook in [*CODE_HOOKS.items(), REPLY_HOOK]:
         mod = (code or {}).get(name)
         out[hook] = callable(getattr(mod, hook, None)) if mod else False
     return out
 
 
 def compose(
-    system_md: str, policy: str, helper: types.ModuleType | None, clock: bool = True
+    system_md: str,
+    policy: str,
+    helper: types.ModuleType | None,
+    clock: bool = True,
+    identity: bool = False,
 ) -> Composed:
     """`system.md` with the policy in its slot (or appended), then `extra_context(policy)`, then
-    `CLOCK_NOTE` (`clock=False` for a run made before it)."""
+    `CLOCK_NOTE` (`clock=False` for a run made before it), then `IDENTITY_NOTE` for a version
+    whose `agent.yaml` asks for it."""
     slotted = POLICY_SLOT in system_md
     text = (
         system_md.replace(POLICY_SLOT, policy)
@@ -113,6 +132,8 @@ def compose(
         text = f"{text}\n\n{extra}"
     if clock:
         text = f"{text}\n\n{CLOCK_NOTE}"
+    if identity:
+        text = f"{text}\n\n{IDENTITY_NOTE}"
     return Composed(
         text=text,
         system_md=system_md,
@@ -120,4 +141,5 @@ def compose(
         extra_context=extra,
         slotted=slotted,
         clock_note=CLOCK_NOTE if clock else None,
+        identity_note=IDENTITY_NOTE if identity else None,
     )

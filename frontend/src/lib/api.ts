@@ -63,6 +63,74 @@ export type RunMeta = {
   agent_route?: string;
   /** `/api/runs` only: the summary's checks, or aggregated from the rows for older runs */
   checks?: Checks;
+  /** `llm.HARNESS` at run time: `baseline`, or `lean` */
+  harness?: string;
+  /** banking only: tau2's retrieval variant; null on other domains and on older runs (all `bm25`) */
+  retrieval?: string | null;
+  /** the simulation's rules beyond tau2's; null on every run before 2 October 2026 */
+  sim_rules?: string | null;
+  /** a run joined from two (`make extend`): the scored run and the run of the tasks added since */
+  composed_of?: string[] | null;
+};
+/** How a run's agent used its harness (`eval/health.py`, s13): every count over the run's
+ * conversations, with the conversation counts and denominators it is read against. */
+export type RunHealth = {
+  conversations: number;
+  passed: number;
+  replies: number;
+  slipped: number;
+  slipped_rate: number;
+  slipped_conversations: number;
+  tool_calls: number;
+  calls_per_turn: number;
+  shell_calls: number;
+  shell_conversations: number;
+  index_read_conversations: number;
+  bm25_calls: number;
+  dense_calls: number;
+  grep_calls: number;
+  lookups_before_first_action: number;
+  bare_discoverable_calls: number;
+  bare_discoverable_conversations: number;
+  account_email_calls: number;
+  account_email_conversations: number;
+  tool_errors: number;
+  sandbox_failures: number;
+  shell_blocked: number;
+  dense_errors: number;
+  /** of the documents tau2 lists for a task, the mean share read in full; null when none lists any */
+  required_docs_read_share: number | null;
+  /** of the same, the mean share only seen (named in a result, never shown whole); absent from an older API */
+  required_docs_seen_share?: number | null;
+};
+/** One conversation's row of the same (`GET /api/runs/{id}/{task}/t<n>`). */
+export type ConversationHealth = {
+  task_id: string;
+  trial: number;
+  passed: boolean;
+  replies: number;
+  slipped: number;
+  tool_calls: number;
+  calls_per_turn: number;
+  shell_calls: number;
+  index_reads: number;
+  bm25_calls: number;
+  dense_calls: number;
+  grep_calls: number;
+  lookups_before_first_action: number;
+  bare_discoverable_calls: number;
+  account_email_calls: number;
+  tool_errors: number;
+  sandbox_failures: number;
+  shell_blocked: number;
+  dense_errors: number;
+  required_docs: number;
+  required_docs_read: number;
+  /** the required documents shown whole (a search result, a file the shell printed) */
+  required_docs_read_ids?: string[];
+  /** the ones never shown whole whose id or file name came back in a knowledge tool's result */
+  required_docs_seen?: number;
+  required_docs_seen_ids?: string[];
 };
 export type TaskResult = {
   task_id: string;
@@ -187,10 +255,38 @@ export type VersionNode = {
   vs: { version: string; train: HRun | null; test: HRun | null } | null;
   held_title: boolean;
 };
-/** One `promote` in the registry, in order: `first`, `gate`, `model swap`, `re-baseline`. */
+/** One `promote` in the registry, in order: `first`, `gate`, `model swap`, `tool change`, `re-baseline`. */
 export type Reign = { version: string; run_id: string | null; passed: number | null; n: number | null; cut: number | null; kind: string; at: string | null };
 export type VersionHistory = { domain: string; champion: string | null; versions: VersionNode[]; reigns: Reign[] };
-export type AgentInfo = { domain: string; name: string; ref: string; fingerprint: string; config: Record<string, unknown>; has_helper: boolean; helper_functions: string[]; diagnosis: Record<string, unknown> | null; runs: string[] };
+/** A retrieval variant as tau2's spec gives it: its knowledge tools, dense model and policy template. */
+export type RetrievalInfo = { variant: string; tools: string[]; dense_model: string | null; template: string | null };
+/** How a version was made: a loop cycle (from the champion it faced), a hand-made fork's kind, or `base`. */
+export type MadeBy = { kind: string; from: string | null; cycle: number | null; detail: string };
+export type AgentInfo = {
+  domain: string;
+  name: string;
+  ref: string;
+  fingerprint: string;
+  config: Record<string, unknown>;
+  has_helper: boolean;
+  helper_functions: string[];
+  diagnosis: Record<string, unknown> | null;
+  runs: string[];
+  // s13 §2: the version's architecture, read from its own folder (absent from an older API)
+  /** the variant its runs use: its own `agent.yaml`'s, else banking's default; null elsewhere */
+  retrieval?: string | null;
+  retrieval_info?: RetrievalInfo | null;
+  /** `json`: tool calls as the JSON contract in the reply; `native`: the model calls the tools */
+  tool_mode?: string;
+  surfaces_present?: string[];
+  /** each surface present, hashed, so a byte-for-byte copy reads as one */
+  surfaces?: Record<string, { sha: string; chars: number }>;
+  /** the system prompt's parts in the order `compose()` joins them */
+  prompt_layers?: string[];
+  made_by?: MadeBy;
+  /** the version it is compared with: the one it was made from, else the one before; null when gone */
+  parent?: string | null;
+};
 export type DomainSummary = {
   domain: string;
   base_n: number | null;
@@ -208,8 +304,66 @@ export type DomainSummary = {
   runs: number;
   cycles: number;
 };
-export type TaskRow = { id: string; split: string; purpose: string | null; relevant_policies: string | null; reason_for_call: string | null; n_actions: number; n_communicate: number; n_nl_assertions: number; n_env_assertions: number; reward_basis: string[] | null };
-export type DomainDetail = { domain: string; split: { seed: number; version?: number; base_n: number; method: string; train: string[]; test: string[]; reserve_n: number }; policy: string; policy_words: number; tools: { name: string; description: string | null }[]; tasks: TaskRow[] };
+export type TaskRow = {
+  id: string;
+  split: string;
+  purpose: string | null;
+  relevant_policies: string | null;
+  reason_for_call: string | null;
+  /** banking: the customer's goal in one sentence, derived from the scenario where tau2's purpose is
+   *  its placeholder (`Task: task_001`); null where the purpose is real. Absent from an older API. */
+  goal?: string | null;
+  n_actions: number;
+  n_communicate: number;
+  n_nl_assertions: number;
+  n_env_assertions: number;
+  /** how many documents tau2 lists as `required_documents` (banking); 0 elsewhere */
+  n_documents?: number;
+  reward_basis: string[] | null;
+};
+/** The tools the domain's champion is given: the extract's, with banking's knowledge tools swapped for
+ *  the champion's retrieval variant's (`replaced` names the extract's ones it stands in for). `known`
+ *  is false where tau2 is absent (the demo image) and the variant's tools could not be read. */
+export type HarnessTools = {
+  version: string | null;
+  retrieval: string | null;
+  retrieval_info: RetrievalInfo | null;
+  extract_retrieval: string | null;
+  replaced: string[];
+  known: boolean;
+  tools: { name: string; description: string | null; type?: string; mutates?: boolean }[];
+};
+export type DomainDetail = {
+  domain: string;
+  split: { seed: number; version?: number; base_n: number; method: string; train: string[]; test: string[]; reserve_n: number };
+  policy: string;
+  policy_words: number;
+  tools: { name: string; description: string | null }[];
+  /** absent from an older API: fall back to `tools` */
+  harness_tools?: HarnessTools;
+  tasks: TaskRow[];
+};
+/** A knowledge-base document as the committed index names it (`data/tasks/<domain>_documents.json`). */
+export type KbDocument = { id: string; title: string | null; chars: number | null };
+/** `GET /api/domains/<d>/documents/<id>`: the full text, read from tau2's files (404 in the demo image). */
+export type KbDocumentText = KbDocument & { content: string };
+/** One version's newest scored conversation of a task: which required documents it read whole, and
+ *  which it only saw named in a result (`GET /api/domains/<d>/tasks/<id>/reads`). */
+export type VersionReads = {
+  version: string;
+  run_id: string;
+  split: string;
+  retrieval: string | null;
+  /** the run's trial, counted from 1, as the trace address `t<n>` has it */
+  trial: number;
+  trials: number;
+  passed: boolean;
+  read: string[];
+  seen: string[];
+  /** false when the run kept no tau2 results to count from */
+  health: boolean;
+};
+export type TaskReads = { domain: string; task_id: string; required: string[]; versions: VersionReads[] };
 export type Event = { type: string; [k: string]: unknown };
 
 // ── one conversation, whole (the Agent tab) ──────────────────────────────
@@ -272,6 +426,8 @@ export type TrialPayload = {
   task: TaskSpec | null;
   tools: ToolSpec[];
   user_tools: ToolSpec[];
+  /** s13: this conversation's harness health, when the run kept tau2's results */
+  health?: ConversationHealth | null;
 };
 /** The agent a run ran with: its snapshot, and the prompt composed exactly as the agent did. */
 export type RunAgent = {
@@ -282,7 +438,7 @@ export type RunAgent = {
   config: Record<string, unknown>;
   files: Record<string, string>;
   hooks: Record<string, boolean>;
-  prompt: { text: string; system_md_chars: number; policy: string; policy_words: number; extra_context: string | null; slotted: boolean };
+  prompt: { text: string; system_md_chars: number; policy: string; policy_words: number; extra_context: string | null; slotted: boolean; clock_note?: string | null; identity_note?: string | null };
 };
 export type DiffRecord = { record: string; fields: { field: string; before: string | null; after: string | null }[] };
 export type PlaygroundResult = {

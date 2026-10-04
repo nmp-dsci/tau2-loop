@@ -265,6 +265,7 @@ def test_a_run_serves_the_agent_it_ran_with() -> None:
         "remember": False,
         "guidance": False,
         "check_write": False,
+        "check_reply": False,
     }
     assert "helper.py" not in v0["files"] and v0["prompt"]["extra_context"] is None
     assert c.get("/api/runs/nope/agent").status_code == 404
@@ -291,3 +292,119 @@ def test_the_agent_is_told_not_to_take_the_real_date() -> None:
     assert compose("Be kind.\n{policy}", "P.", None).text == f"Be kind.\nP.\n\n{CLOCK_NOTE}"
     old = compose("Be kind.\n{policy}", "P.", None, clock=False)
     assert old.text == "Be kind.\nP." and old.clock_note is None
+
+
+BANKING_V1_TRAIN = "20261002T235638Z_banking_knowledge_v1_train"
+
+
+def test_a_version_carries_its_architecture_without_a_run() -> None:
+    """The Agent tab draws a version from its own folder (s13 §2): retrieval and the tools it
+    gives (read from tau2's spec, no environment), tool mode, surfaces, prompt layers, how it
+    was made and the parent it is compared with."""
+    c = client()
+    body = c.get("/api/agents", params={"domain": "banking_knowledge"}).json()
+    by = {v["name"]: v for v in body["versions"]}
+    v1, v2 = by["v1"], by["v2"]
+    assert v1["retrieval"] == "bm25_grep" and v1["config"]["retrieval"] is None
+    assert v1["retrieval_info"]["tools"] == ["KB_search", "grep"]
+    assert v1["retrieval_info"]["dense_model"] is None
+    assert v1["retrieval_info"]["template"].endswith(".md")
+    assert v1["tool_mode"] == "json" == v1["config"]["tool_mode"]
+    assert v1["surfaces_present"] == ["system.md"]
+    assert v1["prompt_layers"] == [
+        "system.md",
+        f"policy: {v1['retrieval_info']['template']}",
+        "CLOCK_NOTE",
+    ]
+    # v1 was forked from v0, whose folder was retired: nothing to compare it with
+    assert (v1["made_by"]["kind"], v1["made_by"]["from"], v1["parent"]) == (
+        "model swap",
+        "v0",
+        None,
+    )
+    # v2 was written by banking's first loop cycle from v1, and adds helper.py
+    assert (v2["made_by"]["kind"], v2["made_by"]["from"], v2["made_by"]["cycle"]) == (
+        "loop cycle",
+        "v1",
+        1,
+    )
+    assert v2["parent"] == "v1"
+    assert v2["surfaces_present"] == ["system.md", "helper.py"]
+    assert v2["surfaces"]["system.md"]["sha"] != v1["surfaces"]["system.md"]["sha"]
+    assert v2["surfaces"]["helper.py"]["chars"] > 0
+    assert v2["diagnosis"] is not None  # the Optimise link still reads it
+    # the single-version route says the same
+    one = c.get("/api/agents/banking_knowledge/v2").json()
+    for k in ("retrieval", "retrieval_info", "tool_mode", "surfaces", "prompt_layers", "parent"):
+        assert one[k] == v2[k], k
+
+
+def test_a_domain_without_retrieval_takes_tau2s_policy() -> None:
+    v0 = client().get("/api/agents/airline/v0").json()
+    assert v0["retrieval"] is None and v0["retrieval_info"] is None
+    assert v0["prompt_layers"] == ["system.md", "policy: tau2 domain policy", "CLOCK_NOTE"]
+    assert v0["made_by"]["kind"] == "base" and v0["parent"] is None
+    # a helper with extra_context() adds its layer between the policy and the clock note
+    v2 = client().get("/api/agents/airline/v2").json()
+    if "extra_context" in v2["files"].get("helper.py", ""):
+        assert v2["prompt_layers"][2] == "extra_context(): helper.py"
+
+
+def test_a_run_carries_its_harness_health() -> None:
+    """s12's hand-measured numbers, now in the run profile Runs reads (s13 milestone 0)."""
+    c = client()
+    h = c.get(f"/api/runs/{BANKING_V1_TRAIN}").json()["health"]
+    assert h["conversations"] == 60 and 0 < h["slipped"] < h["replies"]
+    assert h["slipped_rate"] == round(h["slipped"] / h["replies"], 4)
+    assert h["shell_calls"] == 0 and h["dense_calls"] == 0 and h["bm25_calls"] > 0
+    assert 0 < h["bare_discoverable_conversations"] <= h["conversations"]
+    assert 0 <= h["required_docs_read_share"] <= 1
+    # one conversation's row rides on the trial route, matched by task and trial
+    row = c.get(f"/api/runs/{BANKING_V1_TRAIN}").json()["results"][0]
+    t = c.get(f"/api/runs/{BANKING_V1_TRAIN}/{row['task_id']}/t{row['trial']}").json()
+    assert t["health"]["task_id"] == row["task_id"] and t["health"]["trial"] == row["trial"] - 1
+
+
+def test_a_run_without_tau2s_results_has_no_health() -> None:
+    c = client()
+    missing = [
+        r["run_id"]
+        for r in c.get("/api/runs").json()
+        if not (RUNS_DIR / r["run_id"] / "tau2_results.json").exists()
+    ]
+    if missing:
+        assert c.get(f"/api/runs/{missing[0]}").json()["health"] is None
+
+
+def test_the_run_agent_shows_the_identity_note_only_when_the_version_asks() -> None:
+    p = client().get(f"/api/runs/{BANKING_V1_TRAIN}/agent").json()["prompt"]
+    assert p["identity_note"] is None and p["clock_note"] == CLOCK_NOTE
+
+
+def test_a_v3_with_alltools_native_calls_and_the_identity_note(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The shape milestone 1 and 2's v3 will have, drawn from a folder, with no environment."""
+    from tau2_loop.agent.versions import AgentConfig, AgentVersion
+    from tau2_loop.serving.app import _architecture
+
+    (tmp_path / "system.md").write_text("Be careful.\n{policy}\n")
+    (tmp_path / "diagnosis.json").write_text(
+        json.dumps({"kind": "tool change", "forked_from": "v1", "agent_yaml": ["retrieval: …"]})
+    )
+    v3 = AgentVersion(
+        domain="banking_knowledge",
+        name="v3",
+        path=tmp_path,
+        system_prompt="Be careful.\n{policy}\n",
+        config=AgentConfig(
+            model="sonnet", retrieval="alltools_minilm", tool_mode="native", identity_note=True
+        ),
+        helper=None,
+        fingerprint="x",
+    )
+    a = _architecture(v3, ["v1", "v2", "v3"], {})
+    assert a["retrieval"] == "alltools_minilm" and a["tool_mode"] == "native"
+    assert a["retrieval_info"]["tools"] == ["KB_search_bm25", "KB_search_dense", "shell"]
+    assert a["retrieval_info"]["dense_model"].endswith("all-MiniLM-L6-v2")
+    tpl = a["retrieval_info"]["template"]
+    assert a["prompt_layers"] == ["system.md", f"policy: {tpl}", "CLOCK_NOTE", "identity note"]
+    assert (a["made_by"]["kind"], a["parent"]) == ("tool change", "v1")

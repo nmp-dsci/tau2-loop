@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom';
 import {
+  type RunHealth,
   type RunMeta,
   type TaskResult,
   byTask,
@@ -13,6 +14,7 @@ import {
   useGet,
   when,
 } from '../lib/api';
+import { HarnessHealth, healthClaim } from '../lib/health';
 import { useTask } from '../lib/scope';
 import { Loading, Points, Rate } from '../lib/ui';
 import { agentPath, runPath, runsPath, trialId, trialPath, useLens } from '../lib/url';
@@ -34,7 +36,8 @@ type Profile = {
   hit_turn_cap: number;
   hit_turn_cap_rate: number | null;
 };
-type RunPayload = { meta: RunMeta; results: TaskResult[]; profile: Profile };
+/** `health` (s13) is null when the run kept no tau2 results, and absent from an older API. */
+type RunPayload = { meta: RunMeta; results: TaskResult[]; profile: Profile; health?: RunHealth | null };
 type Verdict = {
   promote: boolean;
   champion_passed: number;
@@ -97,11 +100,12 @@ export function Run() {
   const { data: cmp } = useGet<ComparePayload>(
     vs ? `/api/compare?a=${encodeURIComponent(vs)}&b=${encodeURIComponent(runId)}` : null,
   );
+  // every hook before the first return: a hook after it changes the order between renders
+  const task = useTask();
   if (!data) return <Loading error={error} />;
-  const { meta, results, profile } = data;
+  const { meta, results, profile, health } = data;
   const s = meta.summary;
 
-  const task = useTask();
   const rows = results
     .filter((r) => !task || r.task_id === task)
     .filter((r) =>
@@ -128,10 +132,12 @@ export function Run() {
         {meta.agent} on {domainLabel(meta.domain)} {meta.split}:{' '}
         <em>{s?.n_scored ? `${s.passed} of ${s.n_scored}` : `${meta.n_tasks} run`}</em>
       </h1>
-      <p className="lead">
+      {/* a joined run's note names two run ids, one long word each: break inside them */}
+      <p className="lead" style={{ overflowWrap: 'anywhere' }}>
         {shortModel(meta.model)} agent · {shortModel(meta.user_model)} user · {meta.trials} trial
         {meta.trials > 1 ? 's' : ''} · concurrency {meta.concurrency} · seed {meta.seed} · started{' '}
-        {when(meta.started_at)} · {fmtS(s?.duration_ms)} of conversation · fingerprint{' '}
+        {when(meta.started_at)} · {fmtS(s?.duration_ms)} of conversation
+        {meta.retrieval ? ` · ${meta.retrieval} retrieval` : ''} · {meta.tool_mode} tool calls · fingerprint{' '}
         <code>{meta.fingerprint}</code>
         {meta.note ? ` · ${meta.note}` : ''}
       </p>
@@ -242,7 +248,14 @@ export function Run() {
         ]}
       />
 
-      <h2>2 · Every conversation</h2>
+      {health && health.conversations > 0 && (
+        <>
+          <h2>2 · Harness health — {healthClaim(health)}</h2>
+          <HarnessHealth h={health} retrieval={meta.retrieval} runId={runId} />
+        </>
+      )}
+
+      <h2>{health && health.conversations > 0 ? 3 : 2} · Every conversation</h2>
       <div className="filters">
         <label className="pick">
           <span className="label">verdict</span>
@@ -323,13 +336,13 @@ export function Run() {
         </table>
       </div>
 
-      {vs && cmp && cmp.verdict && <Gate cmp={cmp} v={cmp.verdict} focus={runId} />}
+      {vs && cmp && cmp.verdict && <Gate cmp={cmp} v={cmp.verdict} focus={runId} n={health && health.conversations > 0 ? 4 : 3} />}
       {vs && cmp && !cmp.verdict && <p className="warn-note v-warn">No comparison: {cmp.note}</p>}
 
       <details>
         <summary>the agent files this run used</summary>
         <p className="small muted">
-          Copied into <code>runs/{runId}/agent/</code> at run time; see{' '}
+          Copied into <code style={{ overflowWrap: 'anywhere' }}>runs/{runId}/agent/</code> at run time; see{' '}
           <Link to={agentPath(meta.domain, meta.agent)}>
             {domainLabel(meta.domain)}/{meta.agent}
           </Link>{' '}
@@ -340,14 +353,14 @@ export function Run() {
   );
 }
 
-function Gate({ cmp, v, focus }: { cmp: ComparePayload; v: Verdict; focus: string }) {
+function Gate({ cmp, v, focus, n }: { cmp: ComparePayload; v: Verdict; focus: string; n: number }) {
   const sameShape = cmp.a.domain === cmp.b.domain && cmp.a.split === cmp.b.split;
   const discordant = v.fixed.length + v.broken.length;
   const conversations = v.n * (v.trials ?? 1);
   return (
     <>
       <h2>
-        3 · The gate — {shortRun(cmp.a.run_id)} vs {shortRun(cmp.b.run_id)}:{' '}
+        {n} · The gate — {shortRun(cmp.a.run_id)} vs {shortRun(cmp.b.run_id)}:{' '}
         <span className={v.promote ? 'v-ok' : 'v-warn'}>{v.promote ? 'promote' : 'hold'}</span>
       </h2>
       <Points

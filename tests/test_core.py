@@ -143,9 +143,15 @@ class Stub:
         self.calls: list[tuple[str, str | list[str], str, str]] = []
 
     def __call__(
-        self, system: str, user: str | list[str], model: str, effort: str = "medium"
+        self,
+        system: str,
+        user: str | list[str],
+        model: str,
+        effort: str = "medium",
+        **kw: Any,
     ) -> core.SdkResult:
         self.calls.append((system, user, model, effort))
+        self.native_tools = kw.get("native_tools")
         return core.SdkResult(REPLY, 1234, 56, None, 7, "sess-1", cache_read=1100, cache_write=120)
 
 

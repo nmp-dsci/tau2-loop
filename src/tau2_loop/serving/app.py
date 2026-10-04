@@ -15,6 +15,7 @@ It needs tau2, which the demo image does not ship, so there it answers 503.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import re
 from functools import lru_cache
@@ -29,14 +30,32 @@ from pydantic import BaseModel
 
 from tau2_loop import __version__
 from tau2_loop.agent.compose import compose, hooks_defined, load_code_surfaces, load_helper_file
-from tau2_loop.agent.versions import CODE_SURFACES, FROZEN, SURFACES, list_versions, load_version
-from tau2_loop.config import DOMAINS, FRONTEND_DIST, RUNS_DIR, SMOKE_DOMAIN, settings
+from tau2_loop.agent.versions import (
+    CODE_SURFACES,
+    FROZEN,
+    SURFACES,
+    AgentVersion,
+    list_versions,
+    load_version,
+)
+from tau2_loop.config import (
+    BANKING_RETRIEVAL,
+    DOMAINS,
+    FRONTEND_DIST,
+    RUNS_DIR,
+    SMOKE_DOMAIN,
+    settings,
+)
+from tau2_loop.data import documents as kb_docs
 from tau2_loop.data import leaderboard as board
 from tau2_loop.data import pg
+from tau2_loop.data.goals import customer_goal, is_placeholder
 from tau2_loop.data.splits import read_split, read_task_extract
 from tau2_loop.eval import replay
+from tau2_loop.eval import retrieval as retrieval_mod
 from tau2_loop.eval import review as review_store
 from tau2_loop.eval.compare import compare
+from tau2_loop.eval.health import run_health
 from tau2_loop.eval.profile import profile
 from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
@@ -220,6 +239,9 @@ def create_app() -> FastAPI:
             "policy": ext.get("policy"),
             "policy_words": ext.get("policy_words"),
             "tools": ext.get("tools"),
+            # the tools as the domain's champion is given them: banking's retrieval is a version
+            # setting, and the extract lists the default variant's (s13)
+            "harness_tools": _harness_tools(domain, ext.get("tools") or []),
             "tasks": [_task_row(t, split) for t in ext.get("tasks", [])],
         }
 
@@ -259,22 +281,91 @@ def create_app() -> FastAPI:
             ]
         return out
 
+    @app.get("/api/domains/{domain}/documents/{doc_id}")
+    def kb_document(domain: str, doc_id: str) -> dict[str, Any]:
+        """One knowledge-base document's full text, read from tau2's files; the demo image ships
+        without tau2, so there only the committed index (title, size) is known."""
+        _check_domain(domain)
+        known = kb_docs.read_index(domain)
+        if doc_id not in known:
+            raise HTTPException(404, "no such document")
+        doc = kb_docs.document(domain, doc_id)
+        if doc is None:
+            raise HTTPException(404, "the document's text is not in this image (it ships no tau2)")
+        return doc
+
+    @app.get("/api/domains/{domain}/tasks/{task_id:path}/reads")
+    def task_reads(domain: str, task_id: str) -> dict[str, Any]:
+        """Which of a task's required documents each version reached, in its newest scored run
+        that played the task: `read` (shown whole), `seen` (named in a result only), from the
+        run's harness health (`eval/health.py`). A version with no such run is left out."""
+        _check_domain(domain)
+        spec = _task_spec(domain, task_id)
+        required = list(spec.get("required_documents") or [])
+        out: list[dict[str, Any]] = []
+        metas = list_runs(domain)
+        for v in list_versions(domain):
+            m = next(
+                (
+                    m
+                    for m in reversed(metas)
+                    if m.agent == v.name
+                    and not m.dry_run
+                    and (m.summary or {}).get("n_scored")
+                    and task_id in (m.task_ids or [])
+                    and (RUNS_DIR / m.run_id / "tau2_results.json").is_file()
+                ),
+                None,
+            )
+            if m is None:
+                continue
+            try:
+                _, results = load_run(m.run_id)
+            except FileNotFoundError:
+                continue
+            row = next((r for r in results if r.task_id == task_id), None)
+            if row is None:
+                continue
+            h = _conversation_health(m.run_id, task_id, row.trial) or {}
+            out.append(
+                {
+                    "version": v.name,
+                    "run_id": m.run_id,
+                    "split": m.split,
+                    "retrieval": m.retrieval,
+                    "trial": row.trial,
+                    "trials": m.trials,
+                    "passed": bool(row.correct),
+                    "read": list(h.get("required_docs_read_ids") or []),
+                    "seen": list(h.get("required_docs_seen_ids") or []),
+                    "health": bool(h),
+                }
+            )
+        return {"domain": domain, "task_id": task_id, "required": required, "versions": out}
+
     @app.get("/api/domains/{domain}/tasks/{task_id:path}")
     def task(domain: str, task_id: str) -> dict[str, Any]:
         _check_domain(domain)
-        ext = read_task_extract(domain)
-        for t in ext.get("tasks", []):
-            if t.get("id") == task_id:
-                return {**t, "split": _which_split(task_id, read_split(domain))}
-        raise HTTPException(404, "no such task")
+        t = _task_spec(domain, task_id)
+        return {
+            **t,
+            "split": _which_split(task_id, read_split(domain)),
+            # banking: each required document's title and size, from the committed index
+            "documents": kb_docs.described(domain, list(t.get("required_documents") or [])),
+        }
 
     # ── agents and runs ──────────────────────────────────────────────────
     @app.get("/api/agents")
     def agents(domain: str | None = None) -> dict[str, Any]:
+        """Every version with its architecture read from its own folder, so the Agent tab can
+        draw a version that has no run, beside its parent (s13 §2)."""
         out = []
         for d in DOMAINS if domain is None else (domain,):
-            for v in list_versions(d):
-                diag = v.path / "diagnosis.json"
+            versions = list_versions(d)
+            names = [v.name for v in versions]
+            cycles = _cycles(d)
+            metas = list_runs(d)
+            for v in versions:
                 out.append(
                     {
                         "domain": d,
@@ -284,8 +375,8 @@ def create_app() -> FastAPI:
                         "config": v.config.__dict__,
                         "has_helper": v.helper is not None,
                         "helper_functions": re.findall(r"^def (\w+)", v.helper or "", re.M),
-                        "diagnosis": json.loads(diag.read_text()) if diag.exists() else None,
-                        "runs": [m.run_id for m in list_runs(d) if m.agent == v.name],
+                        "runs": [m.run_id for m in metas if m.agent == v.name],
+                        **_architecture(v, names, cycles),
                     }
                 )
         return {"versions": out, "registry": read_all()}
@@ -367,6 +458,7 @@ def create_app() -> FastAPI:
             "fingerprint": v.fingerprint,
             "config": v.config.__dict__,
             "files": v.files(),
+            **_architecture(v, [x.name for x in list_versions(domain)], _cycles(domain)),
         }
 
     @app.get("/api/runs")
@@ -393,10 +485,13 @@ def create_app() -> FastAPI:
             meta, results = load_run(run_id)
         except FileNotFoundError as e:
             raise HTTPException(404, "no such run") from e
+        h = _health(run_id)
         return {
             "meta": {**meta.__dict__, "mlflow_url": _mlflow_run_url(meta.mlflow_run_id)},
             "results": [r.__dict__ for r in results],
             "profile": profile(results),
+            # s13: how the agent used its harness (eval/health.py); None without tau2's results
+            "health": h["summary"] if h else None,
         }
 
     @app.get("/api/runs/{run_id}/traces/{name}")
@@ -436,14 +531,22 @@ def create_app() -> FastAPI:
         helper = load_helper_file(
             snap / "helper.py" if "helper.py" in files else None, f"tau2_loop_run_helper_{run_id}"
         )
-        # a run before the clock note (no `sim_rules`) was sent no note: show what it was sent
-        c = compose(files["system.md"], policy, helper, clock=meta.sim_rules is not None)
+        config = yaml.safe_load(files.get("agent.yaml") or "") or {}
+        # a run before the clock note (no `sim_rules`) was sent no note, and a version without
+        # `identity_note: true` no identity note: show what it was sent
+        c = compose(
+            files["system.md"],
+            policy,
+            helper,
+            clock=meta.sim_rules is not None,
+            identity=config.get("identity_note") is True,
+        )
         return {
             "run_id": run_id,
             "domain": meta.domain,
             "agent": meta.agent,
             "fingerprint": meta.fingerprint,
-            "config": yaml.safe_load(files.get("agent.yaml") or "") or {},
+            "config": config,
             "files": files,
             "hooks": hooks_defined(
                 helper, load_code_surfaces(snap, f"tau2_loop_run_code_{run_id}")
@@ -455,6 +558,7 @@ def create_app() -> FastAPI:
                 "policy_words": len(c.policy.split()),
                 "extra_context": c.extra_context,
                 "clock_note": c.clock_note,
+                "identity_note": c.identity_note,
                 "slotted": c.slotted,
             },
         }
@@ -479,6 +583,9 @@ def create_app() -> FastAPI:
             "task": spec,
             "tools": ext.get("tools") or [],
             "user_tools": ext.get("user_tools") or [],
+            # s13: this conversation's harness-health row (eval/health.py), when the run kept
+            # tau2's results; tau2 counts trials from 0, the run's rows from 1
+            "health": _conversation_health(run_id, row.task_id, row.trial),
             # s11: the tool judge's labels, golden answer and verdicts, on a labelled train conversation
             "judge": _judge_with_checks(meta.domain, run_id, row.task_id, row.trial),
         }
@@ -896,6 +1003,141 @@ def _json_or_none(path: Path) -> Any:
         return None
 
 
+# ── a version's architecture, from its own folder (s13 §2) ─────────────────
+@lru_cache(maxsize=32)
+def _retrieval_info(variant: str) -> dict[str, Any]:
+    """A retrieval variant's knowledge tools, dense model and policy template, read from tau2's
+    variant spec once per process: no environment, sandbox or embedding model. Without tau2 (the
+    demo image), or for a spec that will not load, only the name is known."""
+    unknown: dict[str, Any] = {
+        "variant": variant,
+        "tools": [],
+        "dense_model": None,
+        "template": None,
+    }
+    if not replay.available():
+        return unknown
+    try:
+        return retrieval_mod.variant_summary(variant)
+    except Exception:  # noqa: BLE001 - the tab draws what it knows; a broken spec never 500s
+        return unknown
+
+
+def _cycles(domain: str) -> dict[str, dict[str, Any]]:
+    """The ledger entry that made each challenger, by version name."""
+    return {e["challenger"]: e for e in read_ledger(domain) if e.get("challenger")}
+
+
+def _made_by(
+    name: str, diag: dict[str, Any] | None, cycle: dict[str, Any] | None
+) -> dict[str, Any]:
+    """How a version was made and from what: the ledger's cycle, else its `diagnosis.json`."""
+    if cycle and cycle.get("kind"):  # `make challenge`: a hand-made fork, gated like a challenger
+        return {
+            "kind": cycle["kind"],
+            "from": cycle.get("forked_from") or cycle.get("champion"),
+            "cycle": cycle.get("cycle"),
+            "detail": "; ".join(cycle.get("agent_yaml") or []),
+        }
+    if cycle:
+        opt = cycle.get("optimiser_model")
+        mode = cycle.get("optimiser_mode")
+        return {
+            "kind": "loop cycle",
+            "from": cycle.get("champion"),
+            "cycle": cycle.get("cycle"),
+            "detail": " ".join(x for x in (mode, opt, "optimiser") if x),
+        }
+    if diag and diag.get("kind"):
+        return {
+            "kind": diag["kind"],
+            "from": diag.get("forked_from"),
+            "cycle": None,
+            "detail": "; ".join(diag.get("agent_yaml") or []),
+        }
+    if diag:
+        return {"kind": "loop cycle", "from": None, "cycle": None, "detail": "no ledger entry"}
+    return {
+        "kind": "base",
+        "from": None,
+        "cycle": None,
+        "detail": "tau2's instruction" if name == "v0" else "hand-built",
+    }
+
+
+def _architecture(
+    v: AgentVersion, names: list[str], cycles: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """What the Agent tab draws a version from without a run: its retrieval and the tools it
+    gives, its surfaces (hashed, so a byte-for-byte copy reads as one), the layers of its system
+    prompt in the order `compose()` joins them, how it was made, and the parent it is compared
+    with: the version it was made from, else the one before it; none when its source is gone."""
+    diag = _json_or_none(v.path / "diagnosis.json")
+    made = _made_by(v.name, diag, cycles.get(v.name))
+    if made["from"]:
+        parent = made["from"] if made["from"] in names and made["from"] != v.name else None
+    else:
+        i = names.index(v.name) if v.name in names else 0
+        parent = names[i - 1] if i > 0 else None
+    info = _retrieval_info(v.retrieval) if v.retrieval else None
+    files = {n: v.path / n for n in SURFACES if (v.path / n).is_file()}
+    template = (info or {}).get("template")
+    policy = (
+        f"policy: {template}"
+        if template
+        else f"policy: {v.retrieval}'s template"
+        if v.retrieval
+        else "policy: tau2 domain policy"
+    )
+    layers = ["system.md", policy]
+    if re.search(r"^def extra_context\b", v.helper or "", re.M):
+        layers.append("extra_context(): helper.py")
+    layers.append("CLOCK_NOTE")
+    if v.config.identity_note:
+        layers.append("identity note")
+    return {
+        "diagnosis": diag,
+        "retrieval": v.retrieval,
+        "retrieval_info": dict(info) if info else None,
+        "tool_mode": v.config.tool_mode,
+        "parallel_calls": v.config.parallel_calls,
+        "surfaces_present": list(files),
+        "surfaces": {
+            n: {"sha": hashlib.sha256(p.read_bytes()).hexdigest()[:12], "chars": len(p.read_text())}
+            for n, p in files.items()
+        },
+        "prompt_layers": layers,
+        "made_by": made,
+        "parent": parent,
+    }
+
+
+def _health(run_id: str) -> dict[str, Any] | None:
+    """A run's harness health, computed once per version of its `tau2_results.json`."""
+    try:
+        mtime = (RUNS_DIR / run_id / "tau2_results.json").stat().st_mtime_ns
+    except OSError:
+        return None
+    return _health_at(run_id, mtime)
+
+
+@lru_cache(maxsize=16)
+def _health_at(run_id: str, mtime_ns: int) -> dict[str, Any] | None:
+    try:
+        return run_health(run_id, RUNS_DIR)
+    except Exception:  # noqa: BLE001 - a results file the arithmetic cannot read shows no health
+        return None
+
+
+def _conversation_health(run_id: str, task_id: str, trial: int) -> dict[str, Any] | None:
+    h = _health(run_id)
+    rows = (h or {}).get("conversations") or []
+    return next(
+        (r for r in rows if str(r.get("task_id")) == task_id and r.get("trial") == trial - 1),
+        None,
+    )
+
+
 def _cut_of(m: RunMeta) -> int | None:
     """Which cut an older run's tasks are (its run.json predates `split_version`): 1 or 2, or None."""
     if m.split not in ("train", "test") or m.domain not in DOMAINS:
@@ -952,6 +1194,13 @@ def _which_split(task_id: str, split: dict[str, Any]) -> str:
     return "reserve"
 
 
+def _task_spec(domain: str, task_id: str) -> dict[str, Any]:
+    for t in read_task_extract(domain).get("tasks", []):
+        if t.get("id") == task_id:
+            return dict(t)
+    raise HTTPException(404, "no such task")
+
+
 def _task_row(t: dict[str, Any], split: dict[str, Any]) -> dict[str, Any]:
     desc = t.get("description") or {}
     ev = t.get("evaluation_criteria") or {}
@@ -962,12 +1211,68 @@ def _task_row(t: dict[str, Any], split: dict[str, Any]) -> dict[str, Any]:
         "purpose": desc.get("purpose"),
         "relevant_policies": desc.get("relevant_policies"),
         "reason_for_call": sc.get("reason_for_call") if isinstance(sc, dict) else None,
+        # banking's purposes are tau2's placeholder (`Task: task_001`): the customer's goal in
+        # one sentence, derived from the scenario (data/goals.py); None where the purpose is real
+        "goal": customer_goal(sc) if is_placeholder(desc.get("purpose")) else None,
         "n_actions": len(ev.get("actions") or []),
         "n_communicate": len(ev.get("communicate_info") or []),
         "n_nl_assertions": len(ev.get("nl_assertions") or []),
         "n_env_assertions": len(ev.get("env_assertions") or []),
+        "n_documents": len(t.get("required_documents") or []),
         "reward_basis": ev.get("reward_basis"),
     }
+
+
+def _harness_tools(domain: str, extract_tools: list[dict[str, Any]]) -> dict[str, Any]:
+    """The tools the domain's champion is given. The extract lists the tools of banking's default
+    retrieval (`bm25_grep`: `KB_search`, `grep`); a champion on another variant gets that
+    variant's knowledge tools in their place, read from tau2's spec. Without tau2 (the demo
+    image) the variant's tools cannot be read, so the extract's are shown and `known` is false."""
+    champ = (read_registry(domain).get("champion") or {}).get("agent")
+    out: dict[str, Any] = {
+        "version": champ,
+        "retrieval": None,
+        "retrieval_info": None,
+        "extract_retrieval": BANKING_RETRIEVAL if domain == "banking_knowledge" else None,
+        "replaced": [],
+        "known": True,
+        "tools": extract_tools,
+    }
+    try:
+        v = load_version(domain, champ) if champ else None
+    except FileNotFoundError:
+        v = None
+    if v is None or not v.retrieval:
+        return out
+    info = _retrieval_info(v.retrieval)
+    out["retrieval"] = v.retrieval
+    out["retrieval_info"] = dict(info)
+    if v.retrieval == BANKING_RETRIEVAL:
+        return out
+    rows = _variant_tool_rows(v.retrieval)
+    if not rows:
+        out["known"] = False
+        return out
+    default = set(_retrieval_info(BANKING_RETRIEVAL).get("tools") or [])
+    out["replaced"] = [t["name"] for t in extract_tools if t.get("name") in default]
+    out["tools"] = [*rows, *(t for t in extract_tools if t.get("name") not in default)]
+    return out
+
+
+@lru_cache(maxsize=8)
+def _variant_tool_rows_cached(variant: str) -> tuple[dict[str, Any], ...]:
+    return tuple(retrieval_mod.variant_tool_rows(variant))
+
+
+def _variant_tool_rows(variant: str) -> list[dict[str, Any]]:
+    """A variant's knowledge tools with tau2's descriptions; [] without tau2 or for a spec that
+    will not load, so the page shows what it knows rather than a 500."""
+    if not replay.available():
+        return []
+    try:
+        return [dict(r) for r in _variant_tool_rows_cached(variant)]
+    except Exception:  # noqa: BLE001 - a broken spec never 500s the domain page
+        return []
 
 
 def _short(fraction: str | None) -> bool:

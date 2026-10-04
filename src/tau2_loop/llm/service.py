@@ -2,7 +2,7 @@
 
 An OpenAI-shaped endpoint, so the harness reaches it through litellm's own
 `openai/` provider with an `api_base` and tau2 stays unmodified. A request
-carries `{model, messages, tools?, reasoning_effort?}`; the reply carries
+carries `{model, messages, tools?, reasoning_effort?, tau2_loop_tool_mode?}`; the reply carries
 `choices[0].message.{content, tool_calls}` and `usage`, a tool call as
 `{id, type: "function", function: {name, arguments}}`. Everything between is
 `core.answer()`, the same call the in-process shim makes, so a conversation
@@ -96,6 +96,7 @@ def create_app(token: str | None = None) -> FastAPI:
                 body.get("tools") or None,
                 model,
                 str(effort) if effort else None,
+                str(body.get(core.TOOL_MODE_PARAM) or "json"),
             )
         except core.BillingError as e:
             raise HTTPException(status_code=403, detail=str(e)) from e

@@ -8,8 +8,10 @@ three optional hooks — `on_tool_call`, `on_reply`, `extra_context` — the
 deterministic guards an optimiser can put around the model without touching
 the harness.
 
-`agent.yaml` (frozen) picks the model, effort and tool mode; the effort
-reaches the provider as `reasoning_effort`. The version to run is passed by the
+`agent.yaml` (frozen) picks the model, effort, tool mode and (banking) retrieval;
+the effort reaches the provider as `reasoning_effort`, and `tool_mode: native` as
+the core's `tau2_loop_tool_mode`, so the model calls the tools natively instead of
+writing the JSON contract (s13, milestone 2). The version to run is passed by the
 runner through `llm_args["tau2_loop_version"]`, so it lands in tau2's own
 results file as provenance. When the runner routes the agent to the service
 (`openai/<model>` with an `api_base`), the bearer token is added here, at run
@@ -56,6 +58,7 @@ from tau2_loop.agent.versions import AgentVersion, load_version, parse_ref
 from tau2_loop.config import settings
 from tau2_loop.data.splits import tool_kinds
 from tau2_loop.llm import sdk_model
+from tau2_loop.llm.core import NATIVE_PARALLEL, TOOL_MODE_PARAM
 
 AGENT_NAME = "tau2_loop"
 VERSION_KEY = "tau2_loop_version"
@@ -69,6 +72,25 @@ def with_effort(llm_args: dict[str, Any], effort: str) -> dict[str, Any]:
     allowed = list(out.get("allowed_openai_params") or [])
     if "reasoning_effort" not in allowed:
         allowed.append("reasoning_effort")
+    out["allowed_openai_params"] = allowed
+    return out
+
+
+def with_tool_mode(
+    llm_args: dict[str, Any], service: bool = False, parallel: bool = False
+) -> dict[str, Any]:
+    """Native tool calls for this agent's calls only (the customer and the judge stay on the
+    contract): the core's parameter, passed the way `reasoning_effort` is, or in the request
+    body when the agent is the service. `parallel` keeps every call of a reply (s14 P0a)."""
+    out = dict(llm_args)
+    mode = NATIVE_PARALLEL if parallel else "native"
+    if service:
+        out["extra_body"] = {**(out.get("extra_body") or {}), TOOL_MODE_PARAM: mode}
+        return out
+    out[TOOL_MODE_PARAM] = mode
+    allowed = list(out.get("allowed_openai_params") or [])
+    if TOOL_MODE_PARAM not in allowed:
+        allowed.append(TOOL_MODE_PARAM)
     out["allowed_openai_params"] = allowed
     return out
 
@@ -89,6 +111,11 @@ BLOCKED = "NOT EXECUTED. A check on this call failed: {msg} Fix the call and sen
 HELD_BACK = (
     "NOT EXECUTED: another call in this reply failed a check. Send it again if it is still needed."
 )
+# A text reply checks.py's check_reply refused (s14); the model sees it and writes again.
+REPLY_BLOCKED = (
+    "NOT SENT: your last message did not reach the customer. A check on it failed: {msg} "
+    "Write your reply again, or make the tool call it calls for."
+)
 
 
 class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
@@ -105,6 +132,12 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
         self.llm = llm or sdk_model(version.config.model)
         args = {k: v for k, v in (llm_args or {}).items() if k != VERSION_KEY}
         self.llm_args = with_effort(args, version.config.effort)
+        if version.config.tool_mode == "native":
+            self.llm_args = with_tool_mode(
+                self.llm_args,
+                service=self.llm.startswith(SERVICE_PREFIX),
+                parallel=version.config.parallel_calls,
+            )
         if self.llm.startswith(SERVICE_PREFIX):
             token = settings().agent_service_token.get_secret_value()
             if not token:
@@ -120,7 +153,12 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
 
     def system_prompt(self) -> str:
         # the one composition, shared with the viewer's `GET /api/runs/{id}/agent`
-        return compose(self.version.system_prompt, self.domain_policy, self.helper).text
+        return compose(
+            self.version.system_prompt,
+            self.domain_policy,
+            self.helper,
+            identity=self.version.config.identity_note,
+        ).text
 
     def get_init_state(self, message_history: list[Message] | None = None) -> LoopAgentState:
         return LoopAgentState(
@@ -182,6 +220,19 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
             ]
             response = ask(call + [response, *results])
             note["retried"] = True
+        elif not response.tool_calls and response.content:
+            refused = call_hook(
+                self.code.get("checks.py"), "check_reply", response.content, state.memory
+            )
+            if isinstance(refused, str) and refused.strip():
+                # once per turn, as for writes: the model sees why, and its next reply goes through
+                state.n_blocked += 1
+                note["blocked_reply"] = {"content": response.content, "check": refused.strip()}
+                why = SystemMessage(
+                    role="system", content=REPLY_BLOCKED.format(msg=refused.strip())
+                )
+                response = ask(call + [response, why])
+                note["retried"] = True
         if note:
             response.raw_data = {**(response.raw_data or {}), "tau2_loop": note}
         state.messages.append(response)

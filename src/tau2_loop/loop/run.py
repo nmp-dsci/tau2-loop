@@ -23,6 +23,12 @@ optimiser sees; every version still runs all of train and test. No domain is
 halved today: banking was, until its gate moved to test. `make ab` runs
 two optimisers from one champion on the same input — the classic one and the
 routing one — scores both, and crowns at most one (s09 §6).
+
+Every cycle reads its domain's optimiser profile first (s13 §5,
+`optimisers/<domain>/`, `loop/profiles.py`), so a profile edited between cycles
+applies from the next one. `--optimiser` and `--mode` override its model and
+mode for one run; the ledger entry keeps the profile's fingerprint and what was
+overridden (`optimiser_profile`).
 """
 
 from __future__ import annotations
@@ -42,6 +48,7 @@ from tau2_loop.eval.runner import SIM_RULES, RunMeta, list_runs, load_run, run_e
 from tau2_loop.llm import model_label
 from tau2_loop.loop.ledger import append_entry, next_cycle_number, update_entry
 from tau2_loop.loop.optimiser import MODES, OptimiserOutput, build_context, run_optimiser
+from tau2_loop.loop.profiles import OptimiserProfile, load_profile
 from tau2_loop.tracking.registry import promote, read_registry, register
 
 console = Console()
@@ -190,8 +197,11 @@ def _cycle_entry(
     optimiser_model: str,
     trials: int,
     failures: list[TaskResult],
+    profile: OptimiserProfile,
+    mode: str,
 ) -> dict[str, Any]:
-    """A loop cycle's ledger line as it stands when its optimiser has finished."""
+    """A loop cycle's ledger line as it stands when its optimiser has finished. `optimiser_model`
+    and `mode` are what it ran with; `optimiser_profile` the dataset's profile it ran under."""
     return {
         "cycle": cycle,
         "domain": domain,
@@ -200,6 +210,7 @@ def _cycle_entry(
         "challenger": opt.new_version,
         "optimiser_model": optimiser_model,
         "optimiser_mode": opt.mode,
+        "optimiser_profile": profile.ledger_record(optimiser_model, mode),
         "routed": opt.routed,
         "surfaces_changed": opt.surfaces_changed,
         "trials": trials,
@@ -239,23 +250,40 @@ def _reject(domain: str, entry: dict[str, Any], opt: OptimiserOutput) -> dict[st
     return entry
 
 
+def _settings(
+    domain: str, optimiser_model: str | None, mode: str | None
+) -> tuple[OptimiserProfile, str, str]:
+    """The domain's profile, read now, and the model and mode a cycle runs: a flag's when given,
+    else the profile's. A mode neither knows is refused before anything is evaluated."""
+    profile = load_profile(domain)
+    model = optimiser_model or profile.model
+    mode = mode or profile.mode
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
+    return profile, model, mode
+
+
 async def run_cycle(
     domain: str,
     agent: str,
-    optimiser_model: str,
-    concurrency: int,
+    optimiser_model: str | None = None,
+    concurrency: int = 3,
     run_test: bool = True,
     trials: int = 1,
-    mode: str = "classic",
+    mode: str | None = None,
 ) -> dict[str, Any]:
+    """One cycle under the domain's optimiser profile, read afresh; `optimiser_model` and `mode`
+    left None are the profile's."""
     _refuse_no_test(domain, run_test)
+    profile, optimiser_model, mode = _settings(domain, optimiser_model, mode)
     cycle = next_cycle_number(domain)
     champion = load_version(domain, agent)
     champ_meta, champ_results = _champion_run(domain, agent, concurrency, trials)
     failures = _read_failures(domain, champ_results)
     console.rule(
         f"[bold]{domain} · cycle {cycle}[/] · champion {agent} · {len(failures)} failures to read"
-        f" · {mode} optimiser · gate on {_gate_on(domain)}"
+        f" · {mode} optimiser ({optimiser_model}, profile {profile.fingerprint}"
+        f"{'' if profile.is_default() else ', tuned'}) · gate on {_gate_on(domain)}"
     )
     if not failures:
         clean: dict[str, Any] = {
@@ -265,15 +293,18 @@ async def run_cycle(
             "champion_run": champ_meta.run_id,
             "challenger": None,
             "failed": [],
+            "optimiser_profile": profile.ledger_record(optimiser_model, mode),
             "outcome": {"verdict": "nothing to fix"},
         }
         append_entry(domain, clean)
         return clean
 
     opt = await run_optimiser(
-        champion, champ_meta.run_id, failures, model=optimiser_model, mode=mode
+        champion, champ_meta.run_id, failures, model=optimiser_model, mode=mode, profile=profile
     )
-    entry = _cycle_entry(cycle, domain, agent, champ_meta, opt, optimiser_model, trials, failures)
+    entry = _cycle_entry(
+        cycle, domain, agent, champ_meta, opt, optimiser_model, trials, failures, profile, mode
+    )
     append_entry(domain, entry)
     if _rejected(opt):
         return _reject(domain, entry, opt)
@@ -291,7 +322,7 @@ async def run_cycle(
 
 async def run_ab(
     domain: str,
-    optimiser_model: str = "opus",
+    optimiser_model: str | None = None,
     concurrency: int = 3,
     trials: int = 1,
     run_test: bool = True,
@@ -302,8 +333,11 @@ async def run_ab(
     before either result reaches the ledger, so neither sees the other; the second cannot read
     the first's folder. Each challenger is gated against the champion and run on test. At most
     one is crowned: of those that pass the gate, the one with more gate-half passes, then fewer
-    breaks; the other is recorded as held, with the reason."""
+    breaks; the other is recorded as held, with the reason. Both run under the domain's
+    optimiser profile (its model unless `optimiser_model` is given); the pair is one per mode
+    whatever mode the profile names."""
     _refuse_no_test(domain, run_test)
+    profile, optimiser_model, _ = _settings(domain, optimiser_model, None)
     agent = str((read_registry(domain).get("champion") or {}).get("agent") or "")
     if not agent:
         raise ValueError(f"{domain} has no champion: promote a run first (make promote RUN=…)")
@@ -317,7 +351,7 @@ async def run_ab(
     )
     if not failures:
         raise ValueError(f"{agent} has no failures to read on {domain}")
-    ctx = build_context(champion, champ_meta.run_id, failures)
+    ctx = build_context(champion, champ_meta.run_id, failures, profile)
     outs: list[OptimiserOutput] = []
     for mode in MODES:
         hidden = [version_dir(domain, o.new_version) for o in outs]
@@ -331,12 +365,22 @@ async def run_ab(
                 mode=mode,
                 hidden=hidden,
                 ctx=ctx,
+                profile=profile,
             )
         )
     entries = []
-    for i, opt in enumerate(outs):
+    for i, (opt, mode) in enumerate(zip(outs, MODES, strict=True)):
         entry = _cycle_entry(
-            first + i, domain, agent, champ_meta, opt, optimiser_model, trials, failures
+            first + i,
+            domain,
+            agent,
+            champ_meta,
+            opt,
+            optimiser_model,
+            trials,
+            failures,
+            profile,
+            mode,
         )
         entry["experiment"] = {"name": "s09 A/B", "pair": [first, first + 1]}
         append_entry(domain, entry)
@@ -551,6 +595,87 @@ def _score_challenger(
     return entry
 
 
+async def run_optimise(
+    domain: str,
+    source: str | None = None,
+    optimiser_model: str | None = None,
+    mode: str | None = None,
+    settings: dict[str, Any] | None = None,
+) -> OptimiserOutput:
+    """One optimiser session on `source`'s train failures (default the champion), writing the
+    next version and scoring nothing (s14): play it with `make eval`, gate it with `make
+    challenge`, whose ledger entry then carries this diagnosis. `settings` gives the new version
+    agent settings that differ from the source's (effort, model, parallel calls): the harness
+    writes and freezes them before the session, so the optimiser still edits only surfaces.
+
+    The source's failures come from the registry's train run when the source is the champion,
+    else from the newest scored train run of its exact bytes; a source with neither is refused,
+    because this step plays nothing."""
+    profile, optimiser_model, mode = _settings(domain, optimiser_model, mode)
+    champ_name = (read_registry(domain).get("champion") or {}).get("agent")
+    source = source or (str(champ_name) if champ_name else None)
+    if not source:
+        raise ValueError(f"{domain} has no champion: name a source version (--from)")
+    version = load_version(domain, source)
+    meta: RunMeta | None = None
+    results: list[TaskResult] = []
+    reg = (read_registry(domain).get("champion") or {}) if source == champ_name else {}
+    if reg.get("fingerprint") == version.fingerprint and reg.get("split") == "train":
+        meta, results = load_run(str(reg["run_id"]))
+    else:
+        runs = _runs_of(domain, source, "train", split_ids(domain, "train"), 1)
+        scored = [m for m in runs if m.summary]
+        if scored:
+            meta, results = load_run(scored[-1].run_id)
+    if meta is None:
+        raise ValueError(
+            f"{domain}/{source} has no scored train run of its exact bytes: play one first "
+            f"(make eval DOMAIN={domain} AGENT={source} SPLIT=train)"
+        )
+    failures = _read_failures(domain, results)
+    if not failures:
+        raise ValueError(f"{source} has no failures to read on {domain}'s train split")
+    console.rule(
+        f"[bold]{domain} · optimise[/] · from {source} (runs/{meta.run_id}) · {len(failures)} "
+        f"failures to read · {mode} optimiser ({optimiser_model}, profile {profile.fingerprint}"
+        f"{'' if profile.is_default() else ', tuned'})"
+        + (f" · new agent settings {settings}" if settings else "")
+    )
+    opt = await run_optimiser(
+        version,
+        meta.run_id,
+        failures,
+        model=optimiser_model,
+        mode=mode,
+        profile=profile,
+        settings=settings,
+    )
+    diag_file = version_dir(domain, opt.new_version) / "diagnosis.json"
+    try:
+        d = json.loads(diag_file.read_text())
+    except (OSError, ValueError):
+        d = None
+    if isinstance(d, dict):  # what `make challenge` writes into the ledger for this version
+        d["optimised_from"] = source
+        d["source_run"] = meta.run_id
+        d["optimiser"] = {
+            "model": model_label(optimiser_model),
+            "mode": mode,
+            "profile": profile.ledger_record(optimiser_model, mode),
+            "routed": opt.routed,
+            "surfaces_changed": opt.surfaces_changed,
+            "turns": opt.n_turns,
+            "input_tokens": opt.input_tokens,
+            "output_tokens": opt.output_tokens,
+            "cost_usd_notional": opt.cost_usd,
+            "duration_ms": opt.duration_ms,
+            "error": opt.error,
+            "rejected": opt.rejected,
+        }
+        diag_file.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+    return opt
+
+
 def _diagnosis(domain: str, agent: str) -> dict[str, Any]:
     """The version's own `diagnosis.json` (a fork's says `kind`, `forked_from`, `agent_yaml`)."""
     p = load_version(domain, agent).path / "diagnosis.json"
@@ -597,7 +722,8 @@ def run_challenge(
     champ_meta, champ_results = _champion_run(domain, champ_name, concurrency, trials)
     failures = _read_failures(domain, champ_results)
     diag = _diagnosis(domain, challenger)
-    kind = str(diag.get("kind") or "challenge")
+    optimised = isinstance(diag.get("optimiser"), dict)  # written by `make optimise` (s14)
+    kind = str(diag.get("kind") or ("optimised" if optimised else "challenge"))
     console.rule(
         f"[bold]{domain} · cycle {cycle}[/] · {kind} · {champ_name} → {challenger} "
         f"({model_label(version.config.model)}, {version.config.effort}) · no optimiser"
@@ -625,18 +751,20 @@ def run_challenge(
         "agent_yaml": diag.get("agent_yaml", []),
         "challenger_model": model_label(version.config.model),
         "challenger_effort": version.config.effort,
-        "optimiser_model": None,
+        "optimiser_model": (diag.get("optimiser") or {}).get("model") if optimised else None,
+        "optimised_from": diag.get("optimised_from"),
         "trials": trials,
         "split_version": champ_meta.split_version,
         "gate_on": _gate_on(domain),
         "failed": [r.task_id for r in failures],
-        # nobody diagnosed anything: the ledger's history reads these as strings and lists
-        "diagnoses": [],
+        # a fork: nobody diagnosed anything (the ledger's history reads these as strings and
+        # lists); a `make optimise` version: its session's diagnosis
+        "diagnoses": diag.get("diagnoses", []) if optimised else [],
         "prompt_diff_summary": str(diag.get("prompt_diff_summary") or ""),
         "helper_diff_summary": str(diag.get("helper_diff_summary") or ""),
-        "expected_to_fix": [],
+        "expected_to_fix": diag.get("expected_to_fix", []) if optimised else [],
         "risks": diag.get("risks", []),
-        "optimiser": None,
+        "optimiser": diag.get("optimiser") if optimised else None,
         "tokens": {},
         "outcome": {"verdict": "pending"},
     }
@@ -657,11 +785,14 @@ async def run_loop(
     domain: str,
     cycles: int = 1,
     agent: str | None = None,
-    optimiser_model: str = "opus",
+    optimiser_model: str | None = None,
     concurrency: int = 3,
     trials: int = 1,
-    mode: str = "classic",
+    mode: str | None = None,
 ) -> None:
+    """`cycles` cycles from `agent` (default the champion), each under the domain's optimiser
+    profile as it stands when the cycle starts; `optimiser_model` and `mode` override it for
+    every cycle of this run."""
     current = agent or (read_registry(domain).get("champion") or {}).get("agent") or "v0"
     for _ in range(cycles):
         entry = await run_cycle(

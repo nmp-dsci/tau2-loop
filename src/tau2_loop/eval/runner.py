@@ -21,7 +21,6 @@ from rich.console import Console
 
 from tau2_loop.agent.versions import AgentVersion, load_version
 from tau2_loop.config import (
-    BANKING_RETRIEVAL,
     DOMAINS,
     ROOT,
     RUNS_DIR,
@@ -120,6 +119,8 @@ class RunMeta:
     # a run joined from two (`extend_run`): the scored run and the run of the tasks its split had
     # gained since, same bytes and rules; None for a run played whole
     composed_of: list[str] | None = None
+    # native only: every tool call of a reply kept (s14 P0a); False on every run before it
+    parallel_calls: bool = False
 
 
 def agent_route() -> tuple[str, str | None]:
@@ -171,7 +172,10 @@ def _run_config(
         "max_retries": 1,
     }
     if domain == "banking_knowledge":
-        kwargs["retrieval_config"] = BANKING_RETRIEVAL
+        from tau2_loop.eval.retrieval import register as register_retrieval
+
+        register_retrieval()  # the local AllTools variants a version may name
+        kwargs["retrieval_config"] = version.retrieval
     return TextRunConfig(**kwargs)
 
 
@@ -233,8 +237,9 @@ def run_eval(
         user_effort=USER_EFFORT,
         split_version=None if task_ids else split_version(domain),
         agent_route=agent_route()[0],
-        retrieval=BANKING_RETRIEVAL if domain == "banking_knowledge" else None,
+        retrieval=version.retrieval,
         sim_rules=None if dry_run else SIM_RULES,
+        parallel_calls=version.config.parallel_calls,
     )
     _write_meta(run_dir, meta)
     (run_dir / "agent").mkdir(exist_ok=True)

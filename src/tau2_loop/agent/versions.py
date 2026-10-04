@@ -22,21 +22,46 @@ from typing import Any
 
 import yaml
 
-from tau2_loop.config import AGENTS_DIR
+from tau2_loop.config import AGENTS_DIR, BANKING_RETRIEVAL
 
 # The classic optimiser's two surfaces, and the three code surfaces a routing optimiser may add (s09).
 PROMPT_SURFACES = ("system.md", "helper.py")
 CODE_SURFACES = ("checks.py", "memory.py", "guidance.py")
 SURFACES = PROMPT_SURFACES + CODE_SURFACES
 FROZEN = ("agent.yaml",)
+# json: tool calls as the JSON contract in the reply text (every version before v3's milestone 2);
+# native: the model is given the tools and calls them, and each call comes back to tau2 unrun.
+TOOL_MODES = ("json", "native")
 
 
 @dataclass(frozen=True)
 class AgentConfig:
     model: str = "haiku"
     effort: str = "medium"
-    tool_mode: str = "json"  # json: tool calls as the JSON contract in text (the only mode in v0)
+    tool_mode: str = "json"
     max_steps: int = 200  # tau2's own default; the orchestrator's cap, not ours
+    # banking's retrieval variant; None is the domain's default (`config.BANKING_RETRIEVAL`), so a
+    # version written before the field keeps its bytes and its runs (s13, milestone 0)
+    retrieval: str | None = None
+    # the harness's identity note after the clock note (`compose.IDENTITY_NOTE`); off unless set
+    identity_note: bool = False
+    # native only: keep every tool call of a reply, as tau2's stock agent does (s14 P0a); off
+    # unless set, so v1–v3 keep their bytes and the one-call-a-turn harness their runs had
+    parallel_calls: bool = False
+
+    def __post_init__(self) -> None:
+        if self.tool_mode not in TOOL_MODES:
+            raise ValueError(f"tool_mode must be one of {TOOL_MODES}, got {self.tool_mode!r}")
+        if self.parallel_calls and self.tool_mode != "native":
+            raise ValueError("parallel_calls needs tool_mode: native")
+
+    def yaml(self) -> str:
+        """The fields as `agent.yaml` lines, a field left at None omitted."""
+        return "".join(
+            f"{k}: {str(v).lower() if isinstance(v, bool) else v}\n"
+            for k, v in self.__dict__.items()
+            if v is not None and v is not False
+        )
 
 
 @dataclass(frozen=True)
@@ -54,6 +79,13 @@ class AgentVersion:
     @property
     def ref(self) -> str:
         return f"{self.domain}/{self.name}"
+
+    @property
+    def retrieval(self) -> str | None:
+        """The retrieval variant its runs use: its own `agent.yaml`'s, else banking's default."""
+        if self.config.retrieval:
+            return self.config.retrieval
+        return BANKING_RETRIEVAL if self.domain == "banking_knowledge" else None
 
     @property
     def helper_path(self) -> Path | None:
@@ -188,41 +220,54 @@ AGENT_YAML_HEADER = (
 
 
 def fork_version(
-    domain: str, source: str, model: str | None = None, effort: str | None = None
+    domain: str,
+    source: str,
+    model: str | None = None,
+    effort: str | None = None,
+    retrieval: str | None = None,
+    tool_mode: str | None = None,
+    identity_note: bool | None = None,
+    parallel_calls: bool | None = None,
 ) -> AgentVersion:
     """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`.
 
-    The optimiser may not touch `agent.yaml`, so a model or effort change is a
-    fork, not a loop cycle. Its `diagnosis.json` says so (`kind: model swap`,
-    `forked_from`), so the ledger, the Optimise tab and the next optimiser
-    session can tell why the version exists and which held challengers it inherits.
+    The optimiser may not touch `agent.yaml`, so a model, effort, retrieval or
+    tool-mode change is a fork, not a loop cycle. Its `diagnosis.json` says so
+    (`kind: model swap`, or `tool change` when only the tools changed; `forked_from`),
+    so the ledger, the Optimise tab and the next optimiser session can tell why the
+    version exists and which held challengers it inherits.
     """
     src = load_version(domain, source)
     cfg = src.config
     new = AgentConfig(
         model=model or cfg.model,
         effort=effort or cfg.effort,
-        tool_mode=cfg.tool_mode,
+        tool_mode=tool_mode or cfg.tool_mode,
         max_steps=cfg.max_steps,
+        retrieval=retrieval or cfg.retrieval,
+        identity_note=cfg.identity_note if identity_note is None else identity_note,
+        parallel_calls=cfg.parallel_calls if parallel_calls is None else parallel_calls,
     )
     if new == cfg:
-        raise ValueError(f"a fork of {domain}/{source} needs a different model or effort")
+        raise ValueError(
+            f"a fork of {domain}/{source} needs a different model, effort, retrieval, tool mode, "
+            "identity note or parallel calls"
+        )
     name = next_version_name(domain)
     dest = version_dir(domain, name)
     dest.mkdir(parents=True)
     for surface in SURFACES:
         if (src.path / surface).exists():
             shutil.copyfile(src.path / surface, dest / surface)
-    (dest / "agent.yaml").write_text(
-        AGENT_YAML_HEADER + "".join(f"{k}: {v}\n" for k, v in new.__dict__.items())
-    )
+    (dest / "agent.yaml").write_text(AGENT_YAML_HEADER + new.yaml())
     changed = [
         f"{k}: {getattr(cfg, k)} → {getattr(new, k)}"
-        for k in ("model", "effort")
+        for k in ("model", "effort", "retrieval", "tool_mode", "identity_note", "parallel_calls")
         if getattr(cfg, k) != getattr(new, k)
     ]
+    tools_only = cfg.model == new.model and cfg.effort == new.effort
     diagnosis: dict[str, Any] = {
-        "kind": "model swap",
+        "kind": "tool change" if tools_only else "model swap",
         "forked_from": source,
         "agent_yaml": changed,
         "prompt_diff_summary": f"none: {source}'s system.md, unchanged",
@@ -232,13 +277,16 @@ def fork_version(
         "diagnoses": [],
         "expected_to_fix": [],
         "risks": [
-            "a prompt tuned on one model's failures can over-steer another; the version's own "
+            "a prompt tuned under one harness can over-steer another; the version's own "
             "train run is its baseline"
+            if tools_only
+            else "a prompt tuned on one model's failures can over-steer another; the version's "
+            "own train run is its baseline"
         ],
         "changes": [
             {
                 "file": "agent.yaml",
-                "anchor": "model",
+                "anchor": "tools" if tools_only else "model",
                 "what": "; ".join(changed),
                 "why": "a hand-made fork: the optimiser may not change agent.yaml",
                 "task_ids": [],
