@@ -258,6 +258,13 @@ def test_one_cycle_promotes_and_records(tmp_path: Path, monkeypatch: pytest.Monk
     ledger = led.read_ledger("airline")
     assert len(ledger) == 1 and ledger[0]["outcome"]["verdict"] == "promote"
     assert ledger[0]["diagnoses"][0]["task_id"] == "10"
+    # the cycle names the dataset profile it ran under, and that "sonnet" overrode its model
+    from tau2_loop.loop.profiles import load_profile
+
+    rec = ledger[0]["optimiser_profile"]
+    assert rec["domain"] == "airline" and rec["fingerprint"] == load_profile("airline").fingerprint
+    assert (rec["model"], rec["mode"], rec["tuned"]) == ("opus", "classic", False)
+    assert rec["overrides"] == {"model": "sonnet"} and ledger[0]["optimiser_model"] == "sonnet"
     r = reg.read_registry("airline")
     assert r["champion"]["agent"] == "v1" and r["champion"]["passed"] == 15
     assert led.next_cycle_number("airline") == 2
@@ -357,6 +364,76 @@ def test_a_domain_gated_on_test_reads_all_of_train_and_promotes_on_the_test_comp
     assert "fixed ['10', '11', '12', '13'] · broken ['0', '1']" in history
     assert "'t1" not in history and "reason" not in history
     assert led.prior_attempts("airline", "0")[0]["task_outcome"] == "broken"
+
+
+def test_each_cycle_reads_its_dataset_profile_and_a_flag_overrides_it_for_one_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """s13 §5: the loop reads `optimisers/<domain>/` before every cycle, so a profile tuned after
+    cycle 1 is cycle 2's; `--optimiser` / `--mode` replace its model and mode for one run,
+    and each ledger entry names the profile's fingerprint and what was overridden. A mode
+    neither knows is refused before the champion is evaluated."""
+    import asyncio
+
+    import tau2_loop.loop.profiles as profiles
+    from tau2_loop.loop import ledger as led
+    from tau2_loop.tracking import registry as reg
+
+    monkeypatch.setattr(led, "ledger_path", lambda d: tmp_path / d / "ledger.jsonl")
+    monkeypatch.setattr(reg, "registry_path", lambda d: tmp_path / d / "registry.json")
+    monkeypatch.setattr(profiles, "OPTIMISERS_DIR", tmp_path / "optimisers")
+    prof = tmp_path / "optimisers" / "retail"
+    prof.mkdir(parents=True)
+    (prof / "profile.yaml").write_text("model: sonnet\nmode: routing\n")
+    ids = [str(i) for i in range(20)]
+    seen: list[dict[str, Any]] = []
+    champion_runs: list[str] = []
+
+    async def optimiser(
+        champion: Any, run_id: str, failures: list[TaskResult], **k: Any
+    ) -> OptimiserOutput:
+        seen.append(k)
+        # the person tunes the profile before cycle 2 (in a real session an edit under
+        # optimisers/ would reject this cycle: `optimiser.GUARDED`)
+        (prof / "guide.md").write_text("Research first.\n")
+        return OptimiserOutput("v1", {}, mode=k["mode"], error="no change", rejected=True)
+
+    def champion_run(d: str, a: str, c: int, t: int = 1) -> tuple[RunMeta, list[TaskResult]]:
+        champion_runs.append(a)
+        return (
+            RunMeta("r0", d, a, "fp", "m", "u", "j", "train", 20, 1, 3, 300, "t"),
+            _rows(set(ids[:10]), ids),
+        )
+
+    monkeypatch.setattr(loop_run, "run_optimiser", optimiser)
+    monkeypatch.setattr(loop_run, "_champion_run", champion_run)
+    monkeypatch.setattr(
+        loop_run,
+        "load_version",
+        lambda d, n: type("V", (), {"domain": d, "name": n, "fingerprint": "fp"})(),
+    )
+
+    asyncio.run(loop_run.run_loop("retail", cycles=2, agent="v0"))
+    assert [(k["model"], k["mode"]) for k in seen] == [("sonnet", "routing")] * 2
+    assert seen[0]["profile"].guide == "" and seen[1]["profile"].guide == "Research first.\n"
+    a, b = led.read_ledger("retail")
+    assert (a["optimiser_model"], a["optimiser_mode"]) == ("sonnet", "routing")
+    pa, pb = a["optimiser_profile"], b["optimiser_profile"]
+    assert pa["domain"] == "retail" and pa["tuned"] and pa["overrides"] == {}
+    assert pa["fingerprint"] != pb["fingerprint"] == profiles.fingerprint("retail")
+    assert (pa["guide_chars"], pb["guide_chars"]) == (0, len("Research first."))
+
+    asyncio.run(
+        loop_run.run_loop("retail", cycles=1, agent="v0", optimiser_model="opus", mode="classic")
+    )
+    assert (seen[-1]["model"], seen[-1]["mode"]) == ("opus", "classic")
+    c = led.read_ledger("retail")[-1]
+    assert c["optimiser_model"] == "opus" and c["optimiser_profile"]["model"] == "sonnet"
+    assert c["optimiser_profile"]["overrides"] == {"model": "opus", "mode": "classic"}
+
+    with pytest.raises(ValueError, match="mode must be one of"):
+        asyncio.run(loop_run.run_cycle("retail", "v0", mode="fancy"))
+    assert len(champion_runs) == 3 and len(led.read_ledger("retail")) == 3
 
 
 def test_guard_writes_rejects_a_sibling_version_dir_with_colliding_prefix(
@@ -833,6 +910,10 @@ def test_an_ab_pair_reads_the_same_half_gates_on_the_other_and_crowns_one(
     assert reg.read_registry("banking_knowledge")["champion"]["agent"] == "v2"
     ledger = led.read_ledger("banking_knowledge")
     assert [e["optimiser_mode"] for e in ledger] == ["classic", "routing"]
+    # one profile for the pair, read once; its model by default, and the pair's second mode noted
+    assert seen[0]["profile"] is seen[1]["profile"] and seen[0]["model"] == "opus"
+    # banking's profile routes since s14, so the classic partner is the override
+    assert [e["optimiser_profile"]["overrides"] for e in ledger] == [{"mode": "classic"}, {}]
     assert ledger[0]["experiment"]["pair"] == [1, 2] and ledger[0]["outcome"]["verdict"] == "hold"
     assert ledger[1]["gate_on"] == "gate half (10 of 20 train tasks)"
     # what the next optimiser reads: the read half's fixes, never a gate-half id
@@ -1009,6 +1090,16 @@ BANKING_V1_V3 = (
     "20261002T235638Z_banking_knowledge_v1_train",
     "20261003T003126Z_banking_knowledge_v1_test",
 )
+# v3 (s13: v1 with AllTools, native tool calls and the identity note), champion by the person's call
+BANKING_V3 = (
+    "20261004T023602Z_banking_knowledge_v3_train",
+    "20261004T023605Z_banking_knowledge_v3_test",
+)
+# v4 (s14: `make optimise` from v3 at high effort with parallel calls), promoted by the gate on test
+BANKING_V4 = (
+    "20261004T222002Z_banking_knowledge_v4_train",
+    "20261004T113341Z_banking_knowledge_v4_test",
+)
 
 
 def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> None:
@@ -1017,7 +1108,10 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
     from v1's split v2 run and a run of only the new tasks. A gate or a challenge reuses exactly
     those, and none of v1's other runs reaches the optimiser or a comparison. Cycle 1's v2 was
     promoted by s09's halved gate, then re-decided on test when the gate moved there: held, and
-    v1's title restored."""
+    v1's title restored. Cycle 2's v3, a tool change, was held by the gate (6 → 6 on test) and
+    then promoted by the person's call (4 Oct 2026): a harness without v1's defects. Cycle 3's v4,
+    written by `make optimise` from v3 (Sonnet at high effort, every tool call of a reply kept),
+    was promoted by the gate on test: 6 → 14, fixed 8, broke 0 (5 Oct 2026)."""
     from tau2_loop.agent.versions import base_version, lineage
     from tau2_loop.data.splits import read_split, split_ids
     from tau2_loop.loop.ledger import read_ledger
@@ -1026,14 +1120,25 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
 
     d = "banking_knowledge"
     reg = read_registry(d)
-    assert reg["champion"]["run_id"] == BANKING_V1_V3[0] and reg["challenger"]["agent"] == "v2"
+    assert reg["champion"]["run_id"] == BANKING_V4[0] and reg["challenger"] is None
     assert [(h["agent"], h["kind"]) for h in reg["history"] if h["event"] == "promote"] == [
         ("v1", "model swap"),
         ("v1", "re-baseline"),
         ("v2", "gate"),
         ("v1", "re-decided"),
+        ("v3", "tool change"),
+        ("v4", "gate"),
     ]
-    [e] = read_ledger(d)
+    e, e2, e3 = read_ledger(d)
+    o3 = e3["outcome"]
+    assert (e3["kind"], e3["champion"], e3["challenger"]) == ("optimised", "v3", "v4")
+    assert o3["verdict"] == "promote" and o3["passes"] == "6 → 14" and o3["broken"] == []
+    assert o3["test_run"] == BANKING_V4[1] and e3["optimised_from"] == "v3"
+    assert len(e3["diagnoses"]) == 48 and e3["optimiser"]["mode"] == "routing"
+    assert e3["agent_yaml"] == ["effort: medium → high", "parallel_calls: False → True"]
+    o2 = e2["outcome"]
+    assert (e2["kind"], e2["champion"], e2["challenger"]) == ("tool change", "v1", "v3")
+    assert o2["verdict"] == "hold" and o2["passes"] == "6 → 6" and o2["test_run"] == BANKING_V3[1]
     o = e["outcome"]
     assert e["gate_on"] == o["gate_on"] == "test (37 tasks)" and o["verdict"] == "hold"
     assert o["passes"] == "6 → 5" and o["test_compare"]["gated"] is True
@@ -1090,7 +1195,7 @@ def test_banking_s_sixty_train_tasks_fit_one_prompt_and_name_no_held_out_task() 
         "more lines cut, this failure's share of the prompt"
     )
     prompt = build_prompt(load_version(d, "v1"), "v9", meta.run_id, failures)
-    assert len(prompt) < 330_000
+    assert len(prompt) < 360_000  # s14 added each task's required documents and the guide
     assert not [t for t in test if re.search(rf"\b{t}\b", prompt)]
     assert "Adversarial variant of a held-out task" in prompt
     assert "applies the gate there, against the champion's test run on the same tasks" in prompt
@@ -1127,3 +1232,99 @@ def test_a_banking_task_reads_as_prose_and_thirty_failures_share_one_budget() ->
         "call_discoverable_agent_tool at messages 40, 42, 44 … 70 (16 calls)"
     )
     assert _calls([("cancel_reservation", "39_10")], "id") == "39_10 cancel_reservation"
+
+
+def test_optimise_freezes_new_agent_settings_and_shows_the_runs_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`make optimise EFFORT=high` (s14): the harness writes the new agent.yaml before the
+    session and freezes it; the session reads the policy the champion's run had, not the
+    extract's; diagnosis.json records the settings change; `.lavish/` is fenced."""
+    import asyncio
+
+    import tau2_loop.agent.versions as versions
+    import tau2_loop.loop.optimiser as opt
+
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path / "agents")
+    monkeypatch.setattr(opt, "AGENTS_DIR", tmp_path / "agents")
+    monkeypatch.setattr(opt, "RUNS_DIR", tmp_path / "runs")
+    run = tmp_path / "runs" / "run0"
+    run.mkdir(parents=True)
+    (run / "tau2_results.json").write_text(
+        json.dumps({"simulations": [{"policy": "THE VARIANT'S POLICY: use the shell tool."}]})
+    )
+    champ_dir = tmp_path / "agents" / "airline" / "v0"
+    champ_dir.mkdir(parents=True)
+    (champ_dir / "system.md").write_text("You are an agent.\n{policy}")
+    (champ_dir / "agent.yaml").write_text("model: sonnet\neffort: medium\ntool_mode: native\n")
+    champion = versions.load_version("airline", "v0")
+    new_dir = tmp_path / "agents" / "airline" / "v1"
+    prompts: list[str] = []
+    sessions: list[Any] = []
+
+    class FakeClient:
+        def __init__(self, options: Any) -> None:
+            sessions.append(options)
+
+        async def __aenter__(self) -> FakeClient:
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+        async def query(self, prompt: str) -> None:
+            prompts.append(prompt)
+            assert (new_dir / ".context" / "policy.md").read_text().startswith("THE VARIANT'S")
+            assert "effort: high" in (new_dir / "agent.yaml").read_text()
+            (new_dir / "system.md").write_text("You are a careful agent.\n{policy}")
+            (new_dir / "diagnosis.json").write_text(json.dumps({"diagnoses": []}))
+
+        async def receive_response(self) -> Any:
+            return
+            yield  # pragma: no cover - makes this an async generator
+
+    monkeypatch.setattr(opt, "ClaudeSDKClient", FakeClient)
+    monkeypatch.setattr(opt, "require_live", lambda: None)
+    monkeypatch.setattr(opt, "subscription_env", lambda: {})
+
+    out = asyncio.run(
+        opt.run_optimiser(
+            champion,
+            "run0",
+            [],
+            mode="classic",
+            settings={"effort": "high", "parallel_calls": True},
+        )
+    )
+    assert not out.rejected and out.error is None, out.error
+    v1 = versions.load_version("airline", "v1")
+    assert v1.config.effort == "high" and v1.config.parallel_calls and v1.config.model == "sonnet"
+    changes = ["effort: medium → high", "parallel_calls: False → True"]
+    assert json.loads((new_dir / "diagnosis.json").read_text())["agent_yaml"] == changes
+    assert "effort: medium → high" in prompts[0] and "as native tool calls" in prompts[0]
+    guard_reads = sessions[0].hooks["PreToolUse"][1].hooks[0]
+    page = asyncio.run(
+        guard_reads({"tool_input": {"file_path": ".lavish/s13_plan.html"}}, None, None)
+    )
+    assert page["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert opt.bash_fence_reason("cat .lavish/s13_plan.html", []) is not None
+    with pytest.raises(ValueError, match="change nothing"):
+        asyncio.run(opt.run_optimiser(champion, "run0", [], settings={"effort": "medium"}))
+
+
+def test_banking_task_blocks_name_the_required_documents_and_the_kb_is_copied(
+    tmp_path: Path,
+) -> None:
+    import tau2_loop.loop.optimiser as opt
+    from tau2_loop.data.splits import split_ids
+
+    tid = next(t for t in split_ids("banking_knowledge", "train"))
+    block = opt.task_block("banking_knowledge", tid)
+    assert "REQUIRED DOCUMENTS" in block and "doc_" in block
+    if opt._kb_source("banking_knowledge") is None:
+        pytest.skip("no tau2 checkout")
+    n = opt._copy_kb("banking_knowledge", tmp_path / "kb")
+    files = sorted((tmp_path / "kb").glob("*.md"))
+    assert n == len(files) > 600
+    assert files[0].read_text().startswith("# ") and "ID: doc_" in files[0].read_text()
+    assert opt._copy_kb("airline", tmp_path / "none") == 0

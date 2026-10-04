@@ -161,3 +161,45 @@ def test_reads_are_never_checked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         UserMessage(role="user", content="hi"), agent.get_init_state()
     )
     assert len(script.calls) == 1 and reply.tool_calls[0].id == "c1"
+
+
+def test_a_refused_text_reply_goes_back_once_and_never_reaches_the_transcript(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checks = (
+        "def check_write(name, arguments, state):\n    return None\n\n"
+        "def check_reply(text, state):\n"
+        "    if state.get('asks', 0) >= 4 and 'transfer' not in text.lower():\n"
+        "        return 'the customer has asked for a human four times: transfer them.'\n"
+        "    return None\n"
+    )
+    memory = (
+        "def remember(state, name, arguments, result):\n"
+        "    if name == 'user' and 'human' in result:\n"
+        "        state['asks'] = state.get('asks', 0) + 1\n"
+    )
+    v = make_version(tmp_path, monkeypatch, checks_py=checks, memory_py=memory)
+    script = Script([say("Let me help you first."), say("I will transfer you now.")])
+    monkeypatch.setattr(llm_utils, "generate", script)
+    agent = LoopAgent(tools=[], domain_policy="P", version=v)
+    state = agent.get_init_state()
+    state.memory["asks"] = 3
+    reply, state = agent.generate_next_message(
+        UserMessage(role="user", content="a human, please"), state
+    )
+    assert len(script.calls) == 2
+    sent_back = script.calls[1][-1]
+    assert (
+        isinstance(sent_back, SystemMessage) and "asked for a human four times" in sent_back.content
+    )
+    assert reply.content == "I will transfer you now." and state.n_blocked == 1
+    assert reply.raw_data["tau2_loop"]["blocked_reply"]["content"] == "Let me help you first."
+    assert state.messages[-1] is reply and len(state.messages) == 2
+    # a reply the check lets through is sent as written, with one model call
+    script2 = Script([say("Hello.")])
+    monkeypatch.setattr(llm_utils, "generate", script2)
+    agent2 = LoopAgent(tools=[], domain_policy="P", version=v)
+    r2, _ = agent2.generate_next_message(
+        UserMessage(role="user", content="hi"), agent2.get_init_state()
+    )
+    assert len(script2.calls) == 1 and r2.content == "Hello."

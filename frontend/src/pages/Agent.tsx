@@ -8,7 +8,9 @@ import {
   type RunAgent,
   type RunMeta,
   type TaskResult,
+  type ToolSpec,
   type TrialPayload,
+  type VersionHistory,
   domainLabel,
   fmtK,
   shortModel,
@@ -26,6 +28,7 @@ import {
   legacyNode,
   outcome,
 } from '../lib/agentgraph';
+import { ArchitectureCaption, ArchitectureFigure, VersionTable, parentOf, toolModeText, versionClaim, withKnowledge } from '../lib/architecture';
 import { useTask } from '../lib/scope';
 import { Loading } from '../lib/ui';
 import { agentPath, optimisePath, parseTrialId, trialId, trialPath, useLens } from '../lib/url';
@@ -35,6 +38,10 @@ import { agentPath, optimisePath, parseTrialId, trialId, trialPath, useLens } fr
  * conversation; the graph draws the agent in its harness, filled in from that
  * conversation, and every node opens a panel of what it received and produced.
  * Tools carry a playground that re-runs a call against the database as it stood.
+ *
+ * Under the conversation sits the version itself (s13 §2): its architecture drawn from its own
+ * folder, with every layer that differs from its parent marked, and every version of the
+ * dataset side by side. A version with no run shows only that.
  *
  * The lens is `?run=&trial=&node=&step=`. An address missing a part is completed
  * in place: the version's champion or latest run, then its first failed
@@ -102,10 +109,13 @@ export function Agent() {
   const step = lens.get('step') != null && lens.get('step') !== '' ? Number(lens.get('step')) : null;
   const parsed = trialLens ? parseTrialId(trialLens) : null;
 
+  const enc = encodeURIComponent;
   const { data: agents, error } = useGet<AgentsPayload>('/api/agents');
   const { data: health } = useGet<Health>('/healthz');
-  const { data: runs } = useGet<RunMeta[]>(domain ? `/api/runs?domain=${encodeURIComponent(domain)}` : null);
-  const enc = encodeURIComponent;
+  const { data: runs } = useGet<RunMeta[]>(domain ? `/api/runs?domain=${enc(domain)}` : null);
+  // the version view: the dataset's own tools, and each version's train and test runs
+  const { data: dom } = useGet<{ tools: ToolSpec[] }>(domain ? `/api/domains/${enc(domain)}` : null);
+  const { data: hist } = useGet<Record<string, VersionHistory>>(domain ? `/api/versions?domain=${enc(domain)}` : null);
   const { data: run } = useGet<RunPayload>(runId ? `/api/runs/${enc(runId)}` : null);
   const { data: snap } = useGet<RunAgent>(runId ? `/api/runs/${enc(runId)}/agent` : null);
   const { data: t, error: tErr } = useGet<TrialPayload>(runId && parsed ? `/api/runs/${enc(runId)}/${enc(parsed.task)}/t${parsed.trial}` : null);
@@ -225,14 +235,56 @@ export function Agent() {
   const behind = apiBehind(t);
   const head = t && !behind ? outcome(t) : null;
   const meta = run?.meta;
+  // the conversation's tools as this version's retrieval gives them, not the extract's variant
+  const tv = t && !behind ? withKnowledge(t, version.retrieval_info) : null;
+  const noRuns = !versionRuns.length && !!runs;
+  const all = agents.versions.filter((v) => v.domain === domain);
+  const parent = parentOf(version, all);
+  const dl = domainLabel(domain);
+  const versionView = version.prompt_layers ? (
+    <>
+      <h2 id="version">1 · This version — {versionClaim(version, all)}</h2>
+      <figure className="archfig">
+        <div className="label fig-title">
+          fig 1 · {dl}/{name} from its folder alone{parent ? `, each layer that differs from ${parent.name} marked` : ''}
+        </div>
+        <div className="figscroll">
+          <ArchitectureFigure v={version} all={all} tools={dom?.tools ?? null} />
+        </div>
+        <ArchitectureCaption v={version} all={all} />
+      </figure>
+      <h2>
+        2 · Every version — {dl}&rsquo;s {all.length} {all.length === 1 ? 'version' : 'versions'}, each marked against its parent
+      </h2>
+      <figure>
+        <div className="label fig-title">fig 2 · every {dl} version side by side: a row per layer, a marked cell differs from that version&rsquo;s parent</div>
+        <VersionTable versions={all} hist={hist?.[domain]?.versions ?? null} current={name} />
+        <figcaption>
+          A version&rsquo;s parent is the one it was made from, else the one before it; a pass count opens its run, harness health included.
+          <span className="path">agents/{domain}/*/ · loop/{domain}/ledger.jsonl · GET /api/versions</span>
+        </figcaption>
+      </figure>
+    </>
+  ) : (
+    <p className="empty">
+      The API is older than this page and sent no architecture to draw: restart it with <code>make dev</code>.
+    </p>
+  );
   return (
     <>
       <p className="label">
-        The agent · {domainLabel(domain)}/{name}@{version.fingerprint.slice(0, 7)} · {role(agents.registry, domain, name)} · {shortModel(String(version.config.model))} · {String(version.config.tool_mode)} tools · max {String(version.config.max_steps ?? '—')} steps
+        The agent · {dl}/{name}@{version.fingerprint.slice(0, 7)} · {role(agents.registry, domain, name)} · {shortModel(String(version.config.model))} · {toolModeText(version.tool_mode ?? String(version.config.tool_mode))}
+        {version.retrieval ? ` · ${version.retrieval} retrieval` : ''} · max {String(version.config.max_steps ?? '—')} steps
         {version.diagnosis && (
           <>
             {' '}
             · <RoundLink domain={domain} name={name} />
+          </>
+        )}
+        {!noRuns && (
+          <>
+            {' '}
+            · <a href="#version">the version, drawn without a run</a>
           </>
         )}
       </p>
@@ -242,6 +294,10 @@ export function Agent() {
           <em>{head.em}</em>
           {head.tail}
         </h1>
+      ) : noRuns ? (
+        <h1>
+          {dl}/{name} has no run yet, so <em>its own files</em> draw it
+        </h1>
       ) : (
         <h1>
           Pick a run and a conversation, and every node shows <em>what went in and what came out</em>
@@ -249,10 +305,13 @@ export function Agent() {
       )}
       {filters}
 
-      {!versionRuns.length && runs && (
-        <p className="empty">
-          {domainLabel(domain)}/{name} has no committed run to draw; its files and reasoning are on <Link to={optimisePath(domain, name)}>Optimise</Link>.
-        </p>
+      {noRuns && (
+        <>
+          <p className="empty">
+            {dl}/{name} has no committed run, so no conversation to draw: below is the version from <code>agents/{domain}/{name}/</code>, and its reasoning is on <Link to={optimisePath(domain, name)}>Optimise</Link>.
+          </p>
+          {versionView}
+        </>
       )}
       {tErr && <p className="empty">Could not load this conversation: {tErr}</p>}
       {behind && (
@@ -270,14 +329,15 @@ export function Agent() {
           </p>
           <div className="agent-cols">
             <div className="graph-wrap">
-              <AgentGraph t={t} agent={snap} meta={meta} node={node} onPick={pick} />
+              <AgentGraph t={tv ?? t} agent={snap} meta={meta} node={node} onPick={pick} />
             </div>
-            <NodePanel node={node} step={step} t={t} agent={snap} meta={meta} playground={!!health?.playground} pg={pg} onGo={(n) => setLens({ node: n, step: '' })} onRun={onRun} onClose={() => setLens({ node: '', step: '' })} />
+            <NodePanel node={node} step={step} t={tv ?? t} agent={snap} meta={meta} playground={!!health?.playground} pg={pg} onGo={(n) => setLens({ node: n, step: '' })} onRun={onRun} onClose={() => setLens({ node: '', step: '' })} />
           </div>
-          <Replay t={t} node={node} step={step} onRow={onRow} />
+          <Replay t={tv ?? t} node={node} step={step} onRow={onRow} />
         </>
       )}
       {runId && trialLens && !t && !tErr && <Loading error={null} />}
+      {!noRuns && runs && versionView}
     </>
   );
 }

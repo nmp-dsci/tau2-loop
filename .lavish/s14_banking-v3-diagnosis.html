@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Banking v3 diagnosis</title>
+<style>
+/* DESIGN.md §5, verbatim (with the dark block repeated for the explicit dark theme) */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7; /* divergence: red, not the site's #0A6552 */
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8; /* project extension: passed (§2 Colour) */
+  --judge:#5B3A8C; --judge-soft:#EEE9F6; /* project extension: the LLM judge speaking (§2 Colour) */
+  --agent:#235A8C; --agent-soft:#E7EFF8; /* project extension: the answering agent speaking (§2 Colour) */
+  --user:#6E5A2E; --user-soft:#F5F0E1; /* project extension: the simulated customer speaking (§2 Colour) */
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--t0)/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
+code,pre,.mono{font-family:var(--mono);font-size:var(--t-1)}
+p code,li code,td code,dd code,figcaption code{overflow-wrap:anywhere}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font:400 var(--t4)/1.15 var(--serif);overflow-wrap:anywhere}
+h1 em{font-style:italic;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);margin-top:var(--s8)}
+h3{font:600 var(--t1)/1.3 var(--sans);margin-top:var(--s5)}
+h4{font:600 var(--t0)/1.3 var(--sans)}
+p{margin:var(--s3) 0 0;max-width:var(--measure);text-wrap:pretty;color:var(--ink-2)}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure)}
+.label{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.muted{color:var(--muted)} .small{font-size:var(--t-1)}
+main{max-width:var(--w);margin:0 auto;padding-block:var(--s6) var(--s9);padding-inline:var(--s4)}
+header.top{position:sticky;top:0;z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top .in b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top .in .label{margin-left:auto}
+section{scroll-margin-top:72px}
+.toc{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.toc a{font:500 var(--t-2)/1 var(--mono);text-decoration:none;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.chip{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);background:var(--panel);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap;display:inline-block}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.chip.no{border-color:var(--line-3);color:var(--muted)}
+.chip.acc{border-color:var(--accent);color:var(--accent)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{font:500 var(--t-2)/1.3 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);white-space:nowrap}
+td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sub{color:var(--ink);font-weight:500}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+td.wrap{min-width:22ch;max-width:60ch;white-space:normal}
+td.dim{color:var(--faint)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+.v-ok{color:var(--ok);font-weight:500} .v-warn{color:var(--amber);font-weight:500} .v-no{color:var(--accent);font-weight:500}
+.fig-title{display:block;margin-top:var(--s5)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch}
+p.cap .path,.note .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+.note{background:var(--band);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:var(--measure)}
+.note .label{display:block;margin-bottom:var(--s1)}
+.note p{margin-top:var(--s2)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.card{background:var(--panel);border-radius:var(--r);padding:var(--s5);box-shadow:var(--shadow);min-width:0}
+.card h3{margin-top:0}
+.card p{max-width:none}
+.card .n{font:400 var(--t3)/1.1 var(--serif);color:var(--ink);display:block;margin-top:var(--s2)}
+ul.bl{list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s3);max-width:84ch}
+ul.bl li{position:relative;padding-left:1.4rem;color:var(--ink-2)}
+ul.bl li::before{content:'◐';position:absolute;left:0;color:var(--amber)}
+ul.bl.done li::before{content:'●';color:var(--ok)}
+ul.bl.x li::before{content:'✕';color:var(--accent)}
+ol.steps{margin:var(--s4) 0 0;padding-left:1.4rem;max-width:84ch;display:grid;gap:var(--s2);color:var(--ink-2)}
+ol.steps li::marker{font-family:var(--mono);color:var(--accent)}
+pre.cmd{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:pre;max-width:84ch;font-size:var(--t-1);color:var(--ink)}
+pre.cmd .c{color:var(--faint)}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);margin-top:var(--s4);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);max-width:84ch}
+.rule .k{font:500 var(--t-2)/1.6 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:var(--track-label);white-space:nowrap}
+.rule .v{color:var(--ink-2);min-width:0}
+footer{max-width:var(--w);margin:0 auto;padding:var(--s6) var(--s4);color:var(--faint);font-size:var(--t-1);border-top:1px solid var(--line)}
+footer code{overflow-wrap:anywhere}
+
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+button.btn.alt{background:var(--panel);color:var(--ink);border:1px solid var(--line-2)}
+textarea.free{width:100%;margin-top:var(--s3);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3);min-height:64px;resize:vertical}
+.copyall{margin-top:var(--s5);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.copyall textarea{width:100%;font:400 var(--t-1)/1.5 var(--mono);margin-top:var(--s2)}
+@media (max-width:640px){ h1{font-size:var(--t3)} .rule{grid-template-columns:minmax(0,1fr)} }
+
+/* s08 additions: the ideas table's controls, source lists */
+select.disp{font:500 var(--t-1)/1.2 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s2);min-height:34px}
+td.id{font:600 var(--t-1)/1.3 var(--mono);color:var(--accent);white-space:nowrap}
+.tag{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap;display:inline-block;margin:0 var(--s1) var(--s1) 0}
+ul.src{margin:var(--s3) 0 0;padding-left:1.2rem;max-width:96ch;display:grid;gap:var(--s1);color:var(--ink-2);font-size:var(--t-1)}
+ul.src li{overflow-wrap:anywhere}
+h3.grp{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s5)}
+tr.pro td{background:var(--ok-soft)}
+tr.grp td{background:var(--band);font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+
+/* s09: figures (the frontend's .dia vocabulary, frontend/src/styles.css) and the decision form */
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.ext{fill:none;stroke:var(--line-3);stroke-dasharray:4 3}
+.dia .nd.warn{fill:var(--amber-soft);stroke:var(--amber)}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.hi{stroke:var(--accent)}
+.dia .ed.dash{stroke-dasharray:4 3}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 13px var(--sans);fill:var(--muted)}
+.dia .tx.k{font:500 13px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia .bar{fill:var(--line-2)}
+.dia .bar.hi{fill:var(--accent)}
+.dia .bar.pro{fill:var(--amber)}
+.dia .ax{stroke:var(--line-2);stroke-width:1}
+.dia .gl{stroke:var(--line);stroke-width:1}
+.dia .cap{font:400 13px var(--mono);fill:var(--faint)}
+.dia .bar.ok{fill:var(--ok)}
+.dia .trk{fill:var(--band)}
+.dia .tx.ok{fill:var(--ok)}
+.dia .tx.warn{fill:var(--amber)}
+.dia .pick{cursor:pointer}
+.dia .pick .hit{fill:transparent}
+.dia .pick:hover .hit,.dia .pick.on .hit{fill:var(--band)}
+.dia .pick:focus{outline:none}
+.dia .pick:focus-visible .hit{stroke:var(--focus);stroke-width:2}
+.dia{margin-top:var(--s3)}
+.dia .ed{marker-end:url(#arr)}
+fieldset{border:0;padding:0;margin:var(--s5) 0 0;min-width:0}
+fieldset:first-of-type{margin-top:0}
+.card .n{overflow-wrap:anywhere}
+td.num.v-no{color:var(--accent)}
+
+/* s10: figures wider than a phone scroll inside their own frame; SVG text at 15 in a 1000 box never renders under 12.8px */
+.figw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r)}
+.figw .dia{min-width:860px;margin-top:0}
+.dia .tx,.dia .tx.s{font-size:15px} .dia .tx.k,.dia .cap{font-size:14px}
+.dia .tx.ok{fill:var(--ok)}
+tr.rec td{background:var(--accent-soft)}
+td.num.wrap{white-space:normal;min-width:14ch}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:var(--s4);margin-top:var(--s5)}
+
+/* s12: the chart is taller than s10's; the lessons list reads as prose */
+ol.steps li b{color:var(--ink)}
+td .mono,td.mono{font-family:var(--mono)}
+/* s13: milestone status in Fig 1 */
+td .chip.ms{display:inline-block;margin-top:var(--s2)}
+td .ms-note{display:block;font:400 var(--t-2)/1.4 var(--sans);color:var(--muted);margin-top:var(--s1);max-width:28ch}
+/* s14: the failure table's verdicts, the side-by-side transcripts */
+.chip.ag{border-color:var(--ok);color:var(--ok)}
+.chip.se{border-color:var(--agent);color:var(--agent)}
+.chip.co{border-color:var(--judge);color:var(--judge)}
+.chip.di{border-color:var(--accent);color:var(--accent)}
+.chip.re{border-color:var(--line-3);color:var(--muted)}
+td .why{display:block;font-size:var(--t-2);color:var(--muted);margin-top:var(--s1);max-width:46ch}
+td.cause{min-width:24ch;max-width:40ch;white-space:normal}
+td.wrap .why{max-width:34ch}
+td.num.tight{white-space:normal;min-width:9ch}
+#s2 td.wrap{min-width:16ch;max-width:34ch}
+.duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:var(--s4);margin-top:var(--s3)}
+.convo{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4);min-width:0}
+.convo h4{margin-bottom:var(--s2)}
+.convo ol{list-style:none;margin:0;padding:0;display:grid;gap:var(--s1);font-size:var(--t-1)}
+.convo li{padding:var(--s1) var(--s2);border-radius:var(--r-sm);overflow-wrap:anywhere;color:var(--ink-2)}
+.convo li.a{background:var(--agent-soft)} .convo li.u{background:var(--user-soft)}
+.convo li.t{font-family:var(--mono);font-size:var(--t-2);color:var(--ink);border-left:2px solid var(--agent)}
+.convo li .who{font:500 var(--t-2)/1 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-right:var(--s2)}
+#s3 thead th,#s4 thead th,#s2 thead th{white-space:normal;vertical-align:bottom}
+#s3 td.num,#s4 td.num{padding-inline:var(--s3)}
+.legend{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s3)}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span class="muted small">s14 · banking v3's train failures: the optimiser's diagnosis, the leaders' traces, retrieval</span><span class="label">diagnosis · 2026-10-04 · branch banking-v3 · v4 champion 5 Oct</span></div></header>
+<main>
+<p class="label">Diagnosis · banking_knowledge · v3's 48 train failures of 60</p>
+<h1>v3 loses to the leaders on <em>how it searches</em>, not on what its search tools can find</h1>
+<p class="lead">I ran the loop's diagnosis step on v3's 48 train failures: the same prompt, fence and model the next cycle would use, writing to a scratch folder so no v4 exists. Then I set each diagnosis beside the two leaders' 8 trials of the same task, and measured retrieval on its own.</p>
+
+<div class="note" id="v4results"><span class="label">v4 is banking's champion · promoted by the gate, 5 Oct · Sonnet at high effort with this page's lessons</span>
+<p><b>Test: 14 / 37 (38%), from v3's 6 / 37 (16%).</b> v4 fixed 8 test tasks and broke none: one-sided exact McNemar p = 0.0039, inside the gate's 0.05. <b>Train: 29 / 60 (48%), from 12 / 60.</b> That is the Opus 5 leader's train rate (47%) and short of Qwen's (55%). On test the leaders pass 51% and 55%, so v4 has closed about a third of the gap there. Retrieval rose on every measure, and v4 now matches the weaker leader on documents read (88%) and tool names seen (99%). It still makes about two thirds of their look-ups (16 a conversation to 24–25). <b>Promoted:</b> <code>make challenge AGENT=v4</code> (cycle 3, kind <code>optimised</code>) reused these runs, gated on test (6 → 14, fixed 8, broke 0, p = 0.004) and crowned it. The offline CI gate re-scores its train run clean.</p>
+<div class="tw"><table>
+<thead><tr><th>banking · same tasks</th><th class="num">v1</th><th class="num">v3 · champion</th><th class="num">v4</th><th class="num">Opus 5 · leader</th><th class="num">Qwen 3.8 Max · leader</th></tr></thead>
+<tbody>
+<tr class="pro"><td class="sub">test passes</td><td class="num">6 / 37</td><td class="num">6 / 37</td><td class="num"><b>14 / 37</b><span class="why">38%</span></td><td class="num">76 / 148<span class="why">51%</span></td><td class="num">82 / 148<span class="why">55%</span></td></tr>
+<tr class="pro"><td class="sub">train passes</td><td class="num">2 / 60</td><td class="num">12 / 60</td><td class="num"><b>29 / 60</b><span class="why">48%</span></td><td class="num">113 / 240<span class="why">47%</span></td><td class="num">132 / 240<span class="why">55%</span></td></tr>
+<tr><td>look-ups a conversation (train)</td><td class="num">7.5</td><td class="num">10.7</td><td class="num">16.0</td><td class="num">24.9</td><td class="num">24.0</td></tr>
+<tr><td>look-ups before the first reply</td><td class="num">—</td><td class="num">2.6</td><td class="num">5.7</td><td class="num">12.7</td><td class="num">7.9</td></tr>
+<tr><td>replied before any search</td><td class="num">—</td><td class="num">20 / 60</td><td class="num">2 / 60</td><td class="num">17 / 240</td><td class="num">3 / 240</td></tr>
+<tr><td>gold documents read (by text)</td><td class="num">57%</td><td class="num">71%</td><td class="num">88%</td><td class="num">93%</td><td class="num">88%</td></tr>
+<tr><td>… by the first write</td><td class="num">43%</td><td class="num">49%</td><td class="num">66%</td><td class="num">78%</td><td class="num">69%</td></tr>
+<tr><td>gold tool names seen</td><td class="num">92%</td><td class="num">93%</td><td class="num">99%</td><td class="num">99.9%</td><td class="num">99.7%</td></tr>
+<tr><td>tool calls a turn</td><td class="num">1.0</td><td class="num">1.0</td><td class="num">1.61</td><td class="num">1.61</td><td class="num">2.12</td></tr>
+<tr><td>gold actions matched</td><td class="num">—</td><td class="num">64%</td><td class="num">83%</td><td class="num">78%</td><td class="num">44%</td></tr>
+</tbody></table></div>
+<p class="cap">Runs: train <code>20261004T222002Z</code> (the 20-task run joined with the other 40), test <code>20261004T113341Z</code>. The leaders' rates are over their 4 trials of the same tasks. On train, v4 against v3: fixed 21, broke 4 (p = 0.00046). The continue rule set before the run (4 of 5 retrieval measures at 90% of the weaker leader) gave 3 of 5. You chose to continue because v4 beats v3. Next, by your plan: v5, Opus at high effort on v3's prompt.</p></div>
+<div class="note" id="short"><span class="label">the short version</span>
+<p><b>The diagnosis.</b> Opus 5.5 (medium, 28 turns) calls 36 of 48 failures knowledge, 4 lost state, 3 format, 2 write arguments and 3 the task's fault. It routes 39 to <code>system.md</code>, wants v2's prompt and helper back, and expects to fix 19.</p>
+<p><b>Against the leaders.</b> They pass 18 of v3's 48 failures reliably (6–8 of 8), 14 sometimes and 16 never. I agree with 30 of the 48 diagnoses, disagree with 3 (all three “task faults” are tasks a leader passes), and would defer 15 whose rules fit tasks no leader passes.</p>
+<p><b>Retrieval.</b> The tools are not the problem: the leaders found the tool names v3 missed with the same BM25, by searching each step of a procedure. v3 searches half as much (10.7 look-ups a conversation to 24.0–24.9), acts after 3.1 of them to their 9.8–13.7, and has read 49% of the required documents by its first write to their 69%–78%.</p>
+<p><b>What I would change.</b> Ten proposals in §7, none applied. First P0: a probe that plays each train task only to the agent's first reply, scored against the leaders' first turn (they make 7.9–12.7 look-ups before replying, v3 2.6). Its levers are the leaders' own: let a turn keep all its tool calls, then raise reasoning effort and model toward theirs. Both leaders ran tau2's stock agent with v3's exact prompt. Beyond the leaders (each marked as a deviation, your choice per row): guardrails in hooks for transfer counting, procedure order, the verification time and one credit per account (Fig 12), v2's helper, value discipline, and three fixes to what the optimiser itself sees.</p></div>
+
+<nav class="toc" aria-label="sections">
+<a href="#s0">0 · your questions</a><a href="#s1">1 · the diagnosis</a><a href="#s2">2 · failure by failure</a><a href="#s3">3 · the leaders' traces</a><a href="#s4">4 · is retrieval the problem</a><a href="#s5">5 · where I disagree</a><a href="#s5r">6 · how agents research</a><a href="#s6">7 · what I would change</a><a href="#s7">8 · decisions</a><a href="#s8">9 · receipt</a>
+</nav>
+
+<section id="s0">
+<h2>Each of your three asks has an answer, and none of them needed a v4</h2>
+<div class="rule">
+<span class="k">run it</span><span class="v">The routing optimiser's diagnosis session on v3's champion train run (<code>20261004T023602Z</code>), under banking's profile model. It read only v3's train traces, the version folders and a scratch copy of the policy; <code>agents/banking_knowledge/</code> still holds v1, v2 and v3 only. No test conversation or id reached the prompt (checked before the call).</span>
+<span class="k">compare</span><span class="v">The two leaders' published trajectories (Sierra's Opus 5 · max and Qwen 3.8 Max · xhigh submissions), 4 trials each on the same 60 train tasks: Opus 5 passed 113 / 240, Qwen 132 / 240, v3 12 / 60.</span>
+<span class="k">retrieval</span><span class="v">Measured three ways: the tool names the gold path needs, whether they reached the agent; the required documents, by their text in what the agent read; and v3's own queries replayed through BM25 and dense (MiniLM). §4.</span>
+</div>
+</section>
+
+<section id="s1">
+<h2>The optimiser blames knowledge in 36 of 48 failures and asks for v2's prompt back</h2>
+<div class="cards">
+<div class="card"><span class="label">failures read</span><span class="n">48 / 60</span><p class="small muted">every failed train conversation; banking's optimiser reads all of train</p></div>
+<div class="card"><span class="label">root-cause classes</span><span class="n">36 knowledge</span><p class="small muted">4 lost state · 3 format · 2 write arguments · 3 task fault</p></div>
+<div class="card"><span class="label">routed to</span><span class="n">39 system.md</span><p class="small muted">7 helper.py · 6 checks.py · 6 memory.py (a failure may name several)</p></div>
+<div class="card"><span class="label">expected to fix</span><span class="n">19 / 48</span><p class="small muted">10 of them among the 18 the leaders pass reliably</p></div>
+</div>
+<span class="label fig-title">Fig 1 · what it would write, surface by surface (its words, shortened)</span>
+<div class="rule">
+<span class="k">system.md</span><span class="v">Start from <b>v2's</b> system.md, swap its JSON tool-call contract for native wording, then add eleven rules: (a) check one write does not break another request's eligibility; (b) eliminate ineligible products and sum every fee; (c) per-transaction audits and one combined credit per account; (d) search the KB for a tool before saying you cannot; (e) credit-card closure order: disputes, replacements, age, balance; (f) debit-dispute fields: discovery date, liability, categories; (g) freeze first, tier rules for replacements, decline procedure; (h) only requested writes; (i) give user tools with exact argument values; (j) invent no restrictions; (k) keep v2's transfer guidance.</span>
+<span class="k">helper.py</span><span class="v">v2's, unchanged: account_class suffix stripped, generic closure reason dropped, give-tool arguments trimmed, redacted-email guard, tool-calls-as-text guard.</span>
+<span class="k">memory.py</span><span class="v">Remember get_current_time's value, whether the customer is closing a card, whether dispute history and pending replacements were read, and which accounts were credited.</span>
+<span class="k">checks.py</span><span class="v">Block log_verification unless time_verified is get_current_time's value; block a second credit to one account; block closure tools until disputes and replacements are checked; block closing a card with a pending replacement.</span>
+<span class="k">carried</span><span class="v">From v2: helper.py whole, and its identity block and working rules 1–11. Dropped: v2's JSON reply format, a mode mismatch under native calls.</span>
+<span class="k">its risks</span><span class="v">The closure check could demand a lookup gold skips; the duplicate-credit check could block a real second credit; system.md grows.</span>
+</div>
+<p class="cap">From <code>diagnosis.json</code>. Its system.md rules cite train task ids in brackets; the writing session would be told not to hard-code any task's answer. v2 is the held challenger of cycle 1: its train gains (17 / 60) did not reach test (5 / 37 to v1's 6 / 37), which is why I would take its helper but not its whole prompt (§5).</p>
+</section>
+
+<section id="s2">
+<h2>The leaders pass 18 of v3's 48 failures reliably, and fail 16 of them too</h2>
+<p>Each row is one failed v3 conversation. <b>Graded</b> is my class of the first gold <i>write</i> it missed (tau2 grades banking on the database alone, so a missed read or unlock is not what failed it). <b>Optimiser</b> is its class, surfaces and root cause. <b>Retrieval</b> shows the gold path's tool names that reached v3, and the required documents whose text reached it, against the leaders' mean.</p>
+<div class="legend"><span class="chip ag">agree · 18</span><span class="chip se">agree · the lever is search · 7</span><span class="chip co">agree · a code fix · 5</span><span class="chip di">disagree · 3</span><span class="chip re">defer · no leader passes · 15</span></div>
+<span class="label fig-title">Fig 2 · v3's 48 train failures against the leaders and the diagnosis</span>
+<div class="tw"><table>
+<thead><tr><th>task</th><th class="num">leaders<br>of 4 + 4</th><th class="num">v2</th><th>graded<br>first missed write</th><th>optimiser · class → surfaces</th><th>my reading</th><th class="num">retrieval</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="7">leaders pass 6–8 of 8 · 18 of 48</td></tr>
+<tr><td class="mono">task_002</td><td class="num">4 + 4</td><td class="num">✓</td><td class="wrap">plain write</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not compute net yearly value at the stated spend</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>Leaders 8 of 8: they priced each card at the stated spend.</span></td><td class="num tight">—<span class="why">tools seen</span>3 / 6<span class="why">docs · leaders 4.9</span></td></tr>
+<tr><td class="mono">task_008</td><td class="num">4 + 3</td><td class="num">✓</td><td class="wrap">transfer</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not search the KB for the reason enum that fits the scenario</span></td><td class="wrap"><span class="chip se">agree · the lever is search</span><span class=why>The reason enum is in the KB; the leaders searched for it before transferring.</span></td><td class="num tight">—<span class="why">tools seen</span>2 / 6<span class="why">docs · leaders 5.5</span></td></tr>
+<tr><td class="mono">task_019</td><td class="num">3 + 4</td><td class="num">✗</td><td class="wrap">customer&#x27;s write differs</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Audit not exhaustive</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>v3 gave the user tool with a placeholder transaction id, so the customer filed 2 of 4.</span></td><td class="num tight">5 / 5<span class="why">tools seen</span>6 / 6<span class="why">docs · leaders 6.0</span></td></tr>
+<tr><td class="mono">task_033</td><td class="num">4 + 3</td><td class="num">✗</td><td class="wrap">never surfaced</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">Simulated user broke instructions (fabricated verification data) and stopped</span></td><td class="wrap"><span class="chip di">disagree</span><span class=why>Not the customer&#x27;s fault: a leader searched the KB first, found the incident procedure and transferred without verifying. v3 verified first and refused on a mismatch.</span></td><td class="num tight">0 / 4<span class="why">tools seen</span>0 / 1<span class="why">docs · leaders 1.0</span></td></tr>
+<tr><td class="mono">task_044</td><td class="num">4 + 4</td><td class="num">✗</td><td class="wrap">gold writes met, extra write</td><td class="cause"><b>lost-state</b> → <code>checks.py, memory.py</code><span class="why">KB retention protocol Step 1 says check pending disputes and pending replacements before retention; the agent jumped to closure-reason history and logging</span></td><td class="wrap"><span class="chip se">agree · the lever is search</span><span class=why>The dispute-history tool never reached v3. The leaders found it with BM25 by searching the step: &#x27;check pending disputes … tool&#x27;.</span></td><td class="num tight">4 / 8<span class="why">tools seen</span>4 / 6<span class="why">docs · leaders 6.0</span></td></tr>
+<tr><td class="mono">task_047</td><td class="num">4 + 4</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>lost-state</b> → <code>checks.py, memory.py</code><span class="why">Skipped Step 1 of the retention protocol</span></td><td class="wrap"><span class="chip se">agree · the lever is search</span><span class=why>Same tool, never surfaced; leaders 8 of 8.</span></td><td class="num tight">8 / 13<span class="why">tools seen</span>8 / 12<span class="why">docs · leaders 10.9</span></td></tr>
+<tr><td class="mono">task_048</td><td class="num">3 + 3</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>lost-state</b> → <code>checks.py, memory.py, system.md</code><span class="why">Skipped the pending-replacement lookup, so closed an ineligible card; reason not taken from the customer&#x27;s words; closed a card after the customer chose an internal…</span></td><td class="wrap"><span class="chip se">agree · the lever is search</span><span class=why>Same tool, never surfaced; leaders 6 of 8.</span></td><td class="num tight">15 / 22<span class="why">tools seen</span>7 / 10<span class="why">docs · leaders 10.0</span></td></tr>
+<tr><td class="mono">task_051</td><td class="num">4 + 3</td><td class="num">✗</td><td class="wrap">never surfaced</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Agent claimed lack of capability without searching the KB</span></td><td class="wrap"><span class="chip se">agree · the lever is search</span><span class=why>v3 said it could not pay the card from checking. Two of the tools it needed never reached it; the leaders searched for each step&#x27;s tool.</span></td><td class="num tight">13 / 19<span class="why">tools seen</span>4 / 7<span class="why">docs · leaders 6.6</span></td></tr>
+<tr><td class="mono">task_056</td><td class="num">2 + 4</td><td class="num">✗</td><td class="wrap">gold writes met, extra write</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Unrequested write</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">7 / 7<span class="why">tools seen</span>9 / 12<span class="why">docs · leaders 11.8</span></td></tr>
+<tr><td class="mono">task_072</td><td class="num">2 + 4</td><td class="num">✓</td><td class="wrap">used, other arguments</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not subtract the missing fee from the overcharges</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">8 / 8<span class="why">tools seen</span>7 / 9<span class="why">docs · leaders 8.9</span></td></tr>
+<tr><td class="mono">task_073</td><td class="num">3 + 4</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Same net-credit miss</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">10 / 10<span class="why">tools seen</span>9 / 10<span class="why">docs · leaders 9.9</span></td></tr>
+<tr><td class="mono">task_079</td><td class="num">4 + 4</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Same freeze rule</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>The freeze tool reached v3 and was not called; leaders 8 of 8.</span></td><td class="num tight">23 / 23<span class="why">tools seen</span>7 / 11<span class="why">docs · leaders 7.9</span></td></tr>
+<tr><td class="mono">task_080</td><td class="num">4 + 2</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not do the requested freeze with the freeze tool, and did not apply tier replacement rules</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">33 / 33<span class="why">tools seen</span>10 / 19<span class="why">docs · leaders 13.0</span></td></tr>
+<tr><td class="mono">task_089</td><td class="num">4 + 4</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not check today&#x27;s transactions against the daily limit nor the KB eligibility for a temporary increase</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>The KB decline procedure names the limit check; leaders 8 of 8.</span></td><td class="num tight">12 / 12<span class="why">tools seen</span>7 / 10<span class="why">docs · leaders 8.6</span></td></tr>
+<tr><td class="mono">task_094</td><td class="num">2 + 4</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>write-arguments</b> → <code>checks.py, memory.py</code><span class="why">Agent split the correction into two credits on one account; gold applies one net credit per account</span></td><td class="wrap"><span class="chip co">agree · a code fix</span><span class=why>One combined credit per account, checked before the write.</span></td><td class="num tight">8 / 8<span class="why">tools seen</span>7 / 13<span class="why">docs · leaders 10.5</span></td></tr>
+<tr><td class="mono">task_096</td><td class="num">4 + 4</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not pick the highest checking boost and highest card bonus from that savings product&#x27;s own tables</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">11 / 11<span class="why">tools seen</span>13 / 23<span class="why">docs · leaders 17.8</span></td></tr>
+<tr><td class="mono">task_099</td><td class="num">4 + 3</td><td class="num">✓</td><td class="wrap">plain write</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not compare every business account&#x27;s referrer bonus</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">2 / 2<span class="why">tools seen</span>7 / 12<span class="why">docs · leaders 9.9</span></td></tr>
+<tr><td class="mono">task_100</td><td class="num">4 + 4</td><td class="num">✗</td><td class="wrap">verification</td><td class="cause"><b>write-arguments</b> → <code>checks.py, memory.py, system.md</code><span class="why">Agent never called get_current_time and copied the session date; it also ignored the referral program&#x27;s tenure requirement because the customer owns World Blue</span></td><td class="wrap"><span class="chip co">agree · a code fix</span><span class=why>time_verified must be get_current_time&#x27;s value; v3 typed a date of its own.</span></td><td class="num tight">2 / 2<span class="why">tools seen</span>10 / 12<span class="why">docs · leaders 11.5</span></td></tr>
+<tr class="grp"><td colspan="7">leaders pass 1–5 of 8 · 14 of 48</td></tr>
+<tr><td class="mono">task_016</td><td class="num">1 + 3</td><td class="num">✗</td><td class="wrap">plain write</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Agent invented an &#x27;unauthorized use&#x27; restriction not in policy or KB</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">—<span class="why">tools seen</span>3 / 3<span class="why">docs · leaders 3.0</span></td></tr>
+<tr><td class="mono">task_018</td><td class="num">1 + 3</td><td class="num">✗</td><td class="wrap">customer&#x27;s write differs</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Audit not exhaustive</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">7 / 7<span class="why">tools seen</span>7 / 10<span class="why">docs · leaders 9.2</span></td></tr>
+<tr><td class="mono">task_020</td><td class="num">0 + 1</td><td class="num">✗</td><td class="wrap">customer&#x27;s write differs</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Overpayments not disputed; audit incomplete</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Leaders 1 of 8.</span></td><td class="num tight">5 / 5<span class="why">tools seen</span>7 / 8<span class="why">docs · leaders 7.8</span></td></tr>
+<tr><td class="mono">task_022</td><td class="num">3 + 2</td><td class="num">✗</td><td class="wrap">customer&#x27;s write differs</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Audit not exhaustive over 75 transactions</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">11 / 11<span class="why">tools seen</span>5 / 13<span class="why">docs · leaders 12.2</span></td></tr>
+<tr><td class="mono">task_024</td><td class="num">1 + 4</td><td class="num">✓</td><td class="wrap">plain write</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">One-off value math (promo/sign-up vs rate, fees) not computed for every card</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">—<span class="why">tools seen</span>2 / 6<span class="why">docs · leaders 6.0</span></td></tr>
+<tr><td class="mono">task_034</td><td class="num">2 + 2</td><td class="num">✓</td><td class="wrap">transfer</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">User gave only city/state and quit before requests could be counted</span></td><td class="wrap"><span class="chip di">disagree</span><span class=why>Policy rule 6: transfer after the fourth request. v3 kept refusing and asked for verification a transfer does not need; the leaders transferred.</span></td><td class="num tight">—<span class="why">tools seen</span>1 / 2<span class="why">docs · leaders 1.2</span></td></tr>
+<tr><td class="mono">task_036</td><td class="num">0 + 4</td><td class="num">✗</td><td class="wrap">gold writes met, extra write</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">Simulated user improvised wanting refunds and agreed to disputes; gold only reissues — scenario ambiguity</span></td><td class="wrap"><span class="chip di">disagree</span><span class=why>Reachable: Qwen passed 4 of 4 by reissuing the card only, as gold does. v3 also filed two disputes. The task-fault call is unproven.</span></td><td class="num tight">2 / 2<span class="why">tools seen</span>1 / 1<span class="why">docs · leaders 1.0</span></td></tr>
+<tr><td class="mono">task_038</td><td class="num">1 + 0</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Reason not taken from the customer&#x27;s account of each charge</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>Leaders 1 of 8.</span></td><td class="num tight">8 / 8<span class="why">tools seen</span>4 / 4<span class="why">docs · leaders 4.0</span></td></tr>
+<tr><td class="mono">task_041</td><td class="num">3 + 1</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">KB user tool get_card_last_4_digits exists; agent transferred instead</span></td><td class="wrap"><span class="chip se">agree · the lever is search</span><span class=why>The KB has a user tool for the card&#x27;s last 4 digits; v3 transferred instead of searching for it.</span></td><td class="num tight">24 / 24<span class="why">tools seen</span>4 / 4<span class="why">docs · leaders 4.0</span></td></tr>
+<tr><td class="mono">task_046</td><td class="num">2 + 0</td><td class="num">✗</td><td class="wrap">gold writes met, extra write</td><td class="cause"><b>lost-state</b> → <code>checks.py, memory.py, system.md</code><span class="why">Agent trusted the customer&#x27;s &#x27;no pending disputes&#x27; and started with the balance (requirement 4) instead of disputes (requirement 1)</span></td><td class="wrap"><span class="chip se">agree · the lever is search</span><span class=why>Same tool, never surfaced; v3 trusted the customer&#x27;s &#x27;no disputes&#x27;.</span></td><td class="num tight">0 / 2<span class="why">tools seen</span>2 / 3<span class="why">docs · leaders 3.0</span></td></tr>
+<tr><td class="mono">task_059</td><td class="num">1 + 4</td><td class="num">✓</td><td class="wrap">plain write</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Net-yield math wrong (card fee, minimum balance, tiered APY)</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">4 / 4<span class="why">tools seen</span>5 / 5<span class="why">docs · leaders 4.8</span></td></tr>
+<tr><td class="mono">task_062</td><td class="num">0 + 1</td><td class="num">✓</td><td class="wrap">used, other arguments</td><td class="cause"><b>format</b> → <code>helper.py</code><span class="why">Agent supplies its own reason string; the tool&#x27;s default is what gold records</span></td><td class="wrap"><span class="chip co">agree · a code fix</span><span class=why>v2&#x27;s helper drops the generic reason so the tool records its default; leaders 1 of 8 here, so it is an edge over them.</span></td><td class="num tight">12 / 12<span class="why">tools seen</span>10 / 16<span class="why">docs · leaders 14.8</span></td></tr>
+<tr><td class="mono">task_075</td><td class="num">1 + 1</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Fee comparison did not sum both out-of-network and foreign ATM fees per withdrawal</span></td><td class="wrap"><span class="chip ag">agree</span></td><td class="num tight">2 / 2<span class="why">tools seen</span>8 / 25<span class="why">docs · leaders 22.8</span></td></tr>
+<tr><td class="mono">task_090</td><td class="num">0 + 1</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Agent added a verification step not in policy and stalled; the simulated user then guessed digits</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>Leaders 1 of 8.</span></td><td class="num tight">15 / 15<span class="why">tools seen</span>10 / 12<span class="why">docs · leaders 10.2</span></td></tr>
+<tr class="grp"><td colspan="7">no leader passes, 0 of 8 · 16 of 48</td></tr>
+<tr><td class="mono">task_027</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">customer&#x27;s write differs</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Same</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">5 / 5<span class="why">tools seen</span>5 / 8<span class="why">docs · leaders 7.8</span></td></tr>
+<tr><td class="mono">task_029</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">customer&#x27;s write differs</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Audit incomplete; transfer instead of refusing</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">7 / 7<span class="why">tools seen</span>7 / 10<span class="why">docs · leaders 9.1</span></td></tr>
+<tr><td class="mono">task_053</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Did not see that one requested action blocks the other&#x27;s eligibility</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Leaders 0 of 8, though the fix overlaps the search rule.</span></td><td class="num tight">13 / 15<span class="why">tools seen</span>8 / 9<span class="why">docs · leaders 8.9</span></td></tr>
+<tr><td class="mono">task_060</td><td class="num">0 + 0</td><td class="num">✓</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md, helper.py</code><span class="why">Did not order operations so the open happened while the old checking still qualified; custom reason</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Leaders 0 of 8; v2&#x27;s helper still fixes its reason field.</span></td><td class="num tight">6 / 6<span class="why">tools seen</span>6 / 10<span class="why">docs · leaders 9.4</span></td></tr>
+<tr><td class="mono">task_061</td><td class="num">0 + 0</td><td class="num">✓</td><td class="wrap">customer&#x27;s write differs</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Agent explained app steps, not the tool&#x27;s exact arguments (check_amount); then assumed deposit needs days</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">8 / 8<span class="why">tools seen</span>7 / 12<span class="why">docs · leaders 11.5</span></td></tr>
+<tr><td class="mono">task_065</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>format</b> → <code>helper.py</code><span class="why">Parenthetical type suffix and custom reason string</span></td><td class="wrap"><span class="chip co">agree · a code fix</span><span class=why>account_class suffix and reason string: v2&#x27;s helper strips both; leaders 0 of 8.</span></td><td class="num tight">5 / 5<span class="why">tools seen</span>17 / 23<span class="why">docs · leaders 20.6</span></td></tr>
+<tr><td class="mono">task_066</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>knowledge</b> → <code>system.md, helper.py</code><span class="why">Did not compute net APY across all eligible savings + checking boost + card bonus; custom reason</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Leaders 0 of 8; the reason field is v2&#x27;s helper.</span></td><td class="num tight">7 / 7<span class="why">tools seen</span>14 / 15<span class="why">docs · leaders 13.5</span></td></tr>
+<tr><td class="mono">task_067</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>knowledge</b> → <code>system.md, helper.py</code><span class="why">Ignored eligibility (minimum balance, invitation-only) and did not compute card fee vs APY gain</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">7 / 7<span class="why">tools seen</span>13 / 17<span class="why">docs · leaders 14.8</span></td></tr>
+<tr><td class="mono">task_068</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>format</b> → <code>helper.py</code><span class="why">Same mechanical slips as 065; the recommendation itself was right</span></td><td class="wrap"><span class="chip co">agree · a code fix</span><span class=why>Same two slips as task_065; the recommendation itself was right.</span></td><td class="num tight">5 / 5<span class="why">tools seen</span>14 / 16<span class="why">docs · leaders 15.2</span></td></tr>
+<tr><td class="mono">task_069</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">used, other arguments</td><td class="cause"><b>knowledge</b> → <code>system.md, helper.py</code><span class="why">Did not verify each must-have feature against the product docs</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">5 / 5<span class="why">tools seen</span>13 / 19<span class="why">docs · leaders 17.2</span></td></tr>
+<tr><td class="mono">task_082</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Replacement/dispute KB details (tier shipping, liability, categories) misapplied</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">19 / 19<span class="why">tools seen</span>11 / 12<span class="why">docs · leaders 12.0</span></td></tr>
+<tr><td class="mono">task_083</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Dispute field rules (category, liability, provisional eligibility)</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">9 / 9<span class="why">tools seen</span>7 / 7<span class="why">docs · leaders 6.9</span></td></tr>
+<tr><td class="mono">task_084</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Liability formula misread: prompt reporting = $50 flat; late = the smaller of $500 and the disputed amount; duplicate_charge is provisional-credit required</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Rule (f) fits these graded values; one clause differs from the KB (see §5).</span></td><td class="num tight">16 / 16<span class="why">tools seen</span>8 / 10<span class="why">docs · leaders 9.8</span></td></tr>
+<tr><td class="mono">task_086</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Liability formula, tier limit counting, category list</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">20 / 20<span class="why">tools seen</span>14 / 14<span class="why">docs · leaders 13.9</span></td></tr>
+<tr><td class="mono">task_087</td><td class="num">0 + 0</td><td class="num">✗</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">discovery_date must be when the customer noticed (a customer-placed fraud alert date), not today; premium tier perks</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">19 / 19<span class="why">tools seen</span>9 / 10<span class="why">docs · leaders 9.6</span></td></tr>
+<tr><td class="mono">task_088</td><td class="num">0 + 0</td><td class="num">✓</td><td class="wrap">surfaced, not used</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Chip insert without PIN mentioned is not a PIN purchase</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td><td class="num tight">15 / 15<span class="why">tools seen</span>13 / 14<span class="why">docs · leaders 12.8</span></td></tr>
+</tbody></table></div>
+<p class="cap">Leaders: passes in 4 trials each. v2: its one train trial (✓ passed). Tools seen: gold tool names found in v3's search and shell results. Docs read: required documents at least half of whose lines reached v3; leaders' figure is the mean over 8 trials.</p>
+</section>
+
+<section id="s3">
+<h2>The leaders look before they act: 9.8–13.7 look-ups before the first action, to v3's 3.1</h2>
+<span class="label fig-title">Fig 3 · how each agent works the same 60 train tasks (means per conversation)</span>
+<div class="tw"><table>
+<thead><tr><th>agent</th><th class="num">passed</th><th class="num">KB look-ups</th><th class="num">before 1st action</th><th class="num">shell</th><th class="num">BM25</th><th class="num">dense</th><th class="num">tool calls</th><th class="num">required docs read</th><th class="num">read by first write</th><th class="num">gold tool names seen</th></tr></thead>
+<tbody>
+<tr><td class="sub">v1</td><td class="num">2 / 60<span class="why">3%</span></td><td class="num">7.5</td><td class="num">3.3</td><td class="num">0.0</td><td class="num">7.3</td><td class="num">0.0</td><td class="num">27.9</td><td class="num">359 / 635<span class="why">57%</span></td><td class="num">276 / 635<span class="why">43%</span></td><td class="num">415 / 453<span class="why">92%</span></td></tr>
+<tr><td class="sub">v2</td><td class="num">17 / 60<span class="why">28%</span></td><td class="num">11.7</td><td class="num">1.5</td><td class="num">0.0</td><td class="num">9.6</td><td class="num">0.0</td><td class="num">22.7</td><td class="num">415 / 635<span class="why">65%</span></td><td class="num">341 / 635<span class="why">54%</span></td><td class="num">431 / 487<span class="why">89%</span></td></tr>
+<tr class="pro"><td class="sub">v3 · champion</td><td class="num">12 / 60<span class="why">20%</span></td><td class="num">10.7</td><td class="num">3.1</td><td class="num">3.4</td><td class="num">7.3</td><td class="num">0.0</td><td class="num">21.7</td><td class="num">451 / 635<span class="why">71%</span></td><td class="num">311 / 635<span class="why">49%</span></td><td class="num">457 / 487<span class="why">94%</span></td></tr>
+<tr><td class="sub">Opus 5 · max</td><td class="num">113 / 240<span class="why">47%</span></td><td class="num">24.9</td><td class="num">13.7</td><td class="num">19.1</td><td class="num">3.3</td><td class="num">2.6</td><td class="num">38.4</td><td class="num">2353 / 2540<span class="why">93%</span></td><td class="num">1971 / 2540<span class="why">78%</span></td><td class="num">1946 / 1948<span class="why">100%</span></td></tr>
+<tr><td class="sub">Qwen 3.8 Max · xhigh</td><td class="num">132 / 240<span class="why">55%</span></td><td class="num">24.0</td><td class="num">9.8</td><td class="num">14.1</td><td class="num">5.1</td><td class="num">4.8</td><td class="num">37.1</td><td class="num">2234 / 2540<span class="why">88%</span></td><td class="num">1764 / 2540<span class="why">69%</span></td><td class="num">1944 / 1948<span class="why">100%</span></td></tr>
+</tbody></table></div>
+<p class="cap">Look-ups: KB_search / BM25 / dense / grep / shell calls. “Before first action” counts look-ups before the first write, unlock, hand-over or log_verification. Docs read is measured by text, not id: s13's id count missed <code>cat</code> through a wildcard and ids with parentheses (67 of 218 required ids), which hid most of the leaders' reading.</p>
+<p class="insight">The failure modes are the same for everyone; the rate is not. Classed by the first missed write, v3's failures look like the leaders' (Fig 4). What differs is the work before the first write.</p>
+<span class="label fig-title">Fig 4 · failed conversations by the first gold write they missed</span>
+<div class="tw"><table>
+<thead><tr><th>class</th><th class="num">v3</th><th class="num">Opus 5</th><th class="num">Qwen 3.8 Max</th></tr></thead>
+<tbody>
+<tr><td>used, other arguments</td><td class="num">13 / 48<span class="why">27%</span></td><td class="num">49 / 127<span class="why">39%</span></td><td class="num">53 / 108<span class="why">49%</span></td></tr>
+<tr><td>surfaced, not used</td><td class="num">14 / 48<span class="why">29%</span></td><td class="num">34 / 127<span class="why">27%</span></td><td class="num">27 / 108<span class="why">25%</span></td></tr>
+<tr><td>customer&#x27;s write differs</td><td class="num">7 / 48<span class="why">15%</span></td><td class="num">22 / 127<span class="why">17%</span></td><td class="num">15 / 108<span class="why">14%</span></td></tr>
+<tr><td>plain write</td><td class="num">5 / 48<span class="why">10%</span></td><td class="num">10 / 127<span class="why">8%</span></td><td class="num">3 / 108<span class="why">3%</span></td></tr>
+<tr><td>gold writes met, extra write</td><td class="num">4 / 48<span class="why">8%</span></td><td class="num">10 / 127<span class="why">8%</span></td><td class="num">5 / 108<span class="why">5%</span></td></tr>
+<tr><td>transfer</td><td class="num">2 / 48<span class="why">4%</span></td><td class="num">2 / 127<span class="why">2%</span></td><td class="num">3 / 108<span class="why">3%</span></td></tr>
+<tr><td>never surfaced</td><td class="num">2 / 48<span class="why">4%</span></td><td class="num">0 / 127<span class="why">0%</span></td><td class="num">0 / 108<span class="why">0%</span></td></tr>
+<tr><td>verification</td><td class="num">1 / 48<span class="why">2%</span></td><td class="num">0 / 127<span class="why">0%</span></td><td class="num">2 / 108<span class="why">2%</span></td></tr>
+</tbody></table></div>
+<span class="label fig-title">Fig 5 · task_033, the same opening: v3 verifies and refuses; Qwen searches first and transfers</span>
+<div class="duo">
+<div class="convo"><h4>v3 · failed</h4><p class="label">trial 0 · reward 0 · 10 messages</p><ol><li class="a"><span class="who">agent</span>Hi! How can I help you today?</li>
+<li class="u"><span class="who">customer</span>Hi, I need help with a serious issue. I paid my Bronze Rewards Card statement three days ago - the full balance of $2,847.53. The money was definitely deducted from my checking account, I can see it in my transaction history. But when I loo…</li>
+<li class="a"><span class="who">agent</span>I&#x27;m sorry to hear about this — I understand how stressful that can be. Let&#x27;s get this sorted out. First, I&#x27;ll need to verify your identity. Could you please provide two of the following: your date of birth, email, phone number, or address?</li>
+<li class="u"><span class="who">customer</span>Sure, I can help with that. My address is in San Diego, California, and my date of birth is March 15th, 1992. Will that work?</li>
+<li class="a"><span class="who">agent</span>Thank you for that information. To fully verify your identity, could you please provide your full name and complete address (street, city, state, zip)?</li>
+<li class="u"><span class="who">customer</span>Of course. My name is Zhang Mei. My address is 456 Pacific View Drive, San Diego, CA 92109.</li>
+<li class="t">→ get_user_information_by_name: {&quot;customer_name&quot;: &quot;Zhang Mei&quot;}</li>
+<li class="a"><span class="who">agent</span>I&#x27;m sorry, Zhang, but the information you provided doesn&#x27;t match what we have on file for your account, so I&#x27;m unable to verify your identity at this time. 
+
+Could you please double-check and provide the correct details? I&#x27;d need two of the…</li>
+<li class="u"><span class="who">customer</span>###OUT-OF-SCOPE###</li></ol></div>
+<div class="convo"><h4>Qwen 3.8 Max · passed</h4><p class="label">trial 0 · reward 1 · 33 messages</p><ol><li class="a"><span class="who">agent</span>Hi! How can I help you today?</li>
+<li class="u"><span class="who">customer</span>Hi, I need help with a serious issue. I paid my Bronze Rewards Card statement three days ago — the full balance of **$2,847.53**. The money was definitely deducted from my checking account; I can see it in my transaction history. But when I…</li>
+<li class="t">→ KB_search_bm25: credit card payment deducted from checking account but statement balance still unpaid payment posting time pending interest statement cycle closes</li>
+<li class="t">→ KB_search_dense: Card payment deducted from bank account but not credited, statement balance unpaid, payment posting timeline, interest when statement closes</li>
+<li class="t">→ shell: ls; cat INDEX.md 2&gt;/dev/null | head -100</li>
+<li class="t">→ KB_search_bm25: Internal missing credit card payment payment deducted checking not credited investigation payment posting delay three days</li>
+<li class="t">→ KB_search_bm25: credit card payment pending not posted payment status trace ACH card payment troubleshooting</li>
+<li class="t">→ KB_search_dense: Internal procedure for missing credit card payment, bank account debited but card balance unchanged, payment posting delay or reconciliation, interest</li>
+<li class="t">→ shell: grep -ril &quot;payment.*not.*post\|not.*credited\|missing payment\|payment posting\|deducted&quot; . | head -30</li>
+<li class="t">→ get_current_time: {}</li>
+<li class="a"><span class="who">agent</span>I’m sorry—this is a serious situation, especially with your statement cycle closing so soon. Your description matches an active Rho-Bank payment-posting issue that requires urgent review. I won’t ask you to verify identity or troubleshoot f…</li>
+<li class="u"><span class="who">customer</span>Yes, please start the escalation to a human specialist **now**. My statement cycle closes in **two days**, and I’m really worried I’ll be charged interest on the **$2,847.53** that already left my checking account.</li>
+<li class="t">→ unlock_discoverable_agent_tool: initial_transfer_to_human_agent_0218</li>
+<li class="t">→ unlock_discoverable_agent_tool: initial_transfer_to_human_agent_1822</li>
+<li class="t">→ call_discoverable_agent_tool: initial_transfer_to_human_agent_1822</li>
+<li class="a"><span class="who">agent</span>I understand the urgency. I’ve initiated escalation for the missing **$2,847.53** payment, noting that your statement closes in two days. The specialist lines are currently busy, but I’m continuing to process your request.</li>
+<li class="u"><span class="who">customer</span>I understand you’re trying to help, but this is really urgent. I’ve already verified the payment on my end, and the money is gone from my checking account.
+
+I need to speak with a **human agent** who can look into this on the backend. Can y…</li>
+<li class="t">→ call_discoverable_agent_tool: initial_transfer_to_human_agent_0218</li>
+<li class="a"><span class="who">agent</span>I hear your concern and understand the urgency. I’ve continued processing your escalation request for a human specialist to review the missing payment. The lines are currently busy, but your request remains in progress.</li>
+<li class="u"><span class="who">customer</span>Look, I appreciate the effort, but I’m running out of time here. My statement closes in **48 hours**. If this doesn’t get fixed, I’m going to be charged interest on nearly **three thousand dollars** that I’ve already paid.
+
+I really need to…</li>
+<li class="t">→ KB_search_bm25: human agent transfer reason code backend incident payment not reflected credit card technical system error</li>
+<li class="t">→ transfer_to_human_agents: {&quot;reason&quot;: &quot;technical_system_error&quot;, &quot;summary&quot;: &quot;Urgent credit-card payment posting issue matching the active backend incident: customer paid $2,847.5</li>
+<li class="a"><span class="who">agent</span>I’m now connecting you with a human specialist who can review and resolve this payment-posting issue.</li>
+<li class="u"><span class="who">customer</span>Thank you. I appreciate you connecting me with a human specialist. ###TRANSFER###</li></ol></div>
+</div>
+<p class="cap">The optimiser called this the simulated customer's fault (fabricated verification data). The leaders pass it 7 of 8: the KB has a procedure for this incident that transfers to a specialist, and nothing in it needs identity verification.</p>
+</section>
+
+<section id="s4">
+<h2>Retrieval: the tools find the documents, but v3 doesn't search for them</h2>
+<span class="label fig-title">Fig 6 · retrieval on the 60 train tasks</span>
+<div class="tw"><table>
+<thead><tr><th>measure</th><th class="num">v3</th><th class="num">Opus 5</th><th class="num">Qwen 3.8 Max</th></tr></thead>
+<tbody>
+<tr><td>gold tool names that reached the agent</td><td class="num">457 / 487</td><td class="num">1946 / 1948</td><td class="num">1944 / 1948</td></tr>
+<tr><td>conversations missing a needed tool name</td><td class="num">7 / 60</td><td class="num">1 / 240</td><td class="num">2 / 240</td></tr>
+<tr><td>required documents read (by text)</td><td class="num">451 / 635<span class="why">71%</span></td><td class="num">2353 / 2540<span class="why">93%</span></td><td class="num">2234 / 2540<span class="why">88%</span></td></tr>
+<tr><td>… by the first write</td><td class="num">311 / 635<span class="why">49%</span></td><td class="num">1971 / 2540<span class="why">78%</span></td><td class="num">1764 / 2540<span class="why">69%</span></td></tr>
+<tr><td>passed, every required document read</td><td class="num">3 / 11</td><td class="num">72 / 160</td><td class="num">75 / 129</td></tr>
+<tr><td>passed, some not read</td><td class="num">9 / 49</td><td class="num">41 / 80</td><td class="num">57 / 111</td></tr>
+<tr><td>dense calls per conversation</td><td class="num">0.0</td><td class="num">2.6</td><td class="num">4.8</td></tr>
+</tbody></table></div>
+<p class="cap">Reading every required document is neither needed nor enough: the leaders pass about as often without it. The list is broad (10.6 documents a task). The sharper measure is the gold path's tool names, and there v3 misses a needed one in 7 conversations to the leaders' 1 and 2 in 240.</p>
+<span class="label fig-title">Fig 7 · how the leaders first surfaced the four tool names v3 missed (their 8 trials of task_033, 044, 046, 047, 048, 051, 053)</span>
+<div class="tw"><table>
+<thead><tr><th>tool</th><th class="num">BM25</th><th class="num">dense</th><th class="num">shell grep</th><th class="num">shell cat / ls</th></tr></thead>
+<tbody>
+<tr><td><code>get_user_dispute_history_7291</code></td><td class="num">35 / 48</td><td class="num">2 / 48</td><td class="num">7 / 48</td><td class="num">4 / 48</td></tr>
+<tr><td><code>get_pending_replacement_orders_5765</code></td><td class="num">35 / 48</td><td class="num">3 / 48</td><td class="num">7 / 48</td><td class="num">3 / 48</td></tr>
+<tr><td><code>pay_credit_card_from_checking_9182</code></td><td class="num">31 / 50</td><td class="num">5 / 50</td><td class="num">5 / 50</td><td class="num">9 / 50</td></tr>
+<tr><td><code>initial_transfer_to_human_agent_1822</code></td><td class="num">18 / 36</td><td class="num">5 / 36</td><td class="num">8 / 36</td><td class="num">5 / 36</td></tr><tr class="sum"><td>all four</td><td class="num">119 / 182<span class="why">65%</span></td><td class="num">15 / 182<span class="why">8%</span></td><td class="num">27 / 182<span class="why">15%</span></td><td class="num">21 / 182<span class="why">12%</span></td></tr>
+</tbody></table></div>
+<p class="cap">Their queries named the step and asked for a tool: “check pending disputes for credit card account tool”. v3's named the topic: “close credit card account”, then acted.</p>
+<span class="label fig-title">Fig 8 · v3's own queries replayed: would the other retriever have found what it missed?</span>
+<div class="tw"><table>
+<thead><tr><th>task</th><th>tool name that never reached v3</th><th class="num">v3's BM25 queries</th><th class="num">best rank, BM25</th><th class="num">best rank, dense</th></tr></thead>
+<tbody>
+<tr><td class="mono">task_033</td><td><code>initial_transfer_to_human_agent_1822</code><br><code>initial_transfer_to_human_agent_0218</code></td><td class="num">0</td><td class="num">no search</td><td class="num">no search</td></tr>
+<tr><td class="mono">task_044</td><td><code>get_user_dispute_history_7291</code><br><code>get_pending_replacement_orders_5765</code></td><td class="num">6</td><td class="num">not in top 10</td><td class="num">not in top 10</td></tr>
+<tr><td class="mono">task_046</td><td><code>get_user_dispute_history_7291</code></td><td class="num">6</td><td class="num">not in top 10</td><td class="num">6</td></tr>
+<tr><td class="mono">task_047</td><td><code>get_user_dispute_history_7291</code><br><code>get_pending_replacement_orders_5765</code></td><td class="num">8</td><td class="num">not in top 10</td><td class="num">not in top 10</td></tr>
+<tr><td class="mono">task_051</td><td><code>get_user_dispute_history_7291</code><br><code>get_all_user_accounts_by_user_id_3847</code><br><code>pay_credit_card_from_checking_9182</code></td><td class="num">5</td><td class="num">not in top 10</td><td class="num">2</td></tr>
+<tr><td class="mono">task_048</td><td><code>get_user_dispute_history_7291</code><br><code>get_pending_replacement_orders_5765</code></td><td class="num">9</td><td class="num">not in top 10</td><td class="num">not in top 10</td></tr>
+<tr><td class="mono">task_053</td><td><code>get_user_dispute_history_7291</code></td><td class="num">4</td><td class="num">not in top 10</td><td class="num">7</td></tr>
+</tbody></table></div>
+<p class="cap">Across all 48 failed conversations, v3's 335 BM25 queries put 305 / 503 required documents in a top 10; the same queries through dense put 291 / 503; either, 353 / 503. Dense would have surfaced the missing tool's document in 3 of those 7 conversations; overall it finds 48 documents BM25 missed and misses 62 that BM25 found. No model was called for this figure.</p>
+<div class="note"><span class="label">verdict on retrieval</span><p>Retrieval is a problem of behaviour, worth about 9 of v3's 48 failures directly (the tool-name misses and the refusals made without a search), and it feeds the rest through reading less before writing. Swapping or nudging the retriever is not the lever; teaching v3 to search each step, as the leaders do, is (P1).</p></div>
+</section>
+
+<section id="s5">
+<h2>I agree with 30 of the 48 diagnoses, disagree with 3, and would defer 15</h2>
+<div class="cards">
+<div class="card"><h3>The three task faults are not</h3><p>task_033, task_034 and task_036 are passed by a leader 7, 4 and 4 times in 8. Each fails on v3's own behaviour: verifying before searching, refusing a fourth transfer request, filing disputes nobody asked to file. Marking them <code>none</code> would leave three reachable tasks unfixed.</p></div>
+<div class="card"><h3>v2's prompt did not generalise</h3><p>v2 raised train to 17 / 60 and dropped test to 5 / 37 (v1 6 / 37; cycle 1 held it, fixed 3, broke 4). The optimiser cannot see that, so it carries v2's rules forward wholesale. I would take v2's <code>helper.py</code>, which only normalises arguments, and write the prompt rules fresh.</p></div>
+<div class="card"><h3>Rules fitted to graded values</h3><p>The optimiser cannot read the KB, so for tasks no leader passes it reverse-engineered rules from gold's values. Rule (f) puts the $50 liability window at 2 business days “of noticing”; the KB's dispute document says “of statement”. I would defer those 15 rather than teach train's answers.</p></div>
+<div class="card"><h3>Its closure check is right; make it general</h3><p>For the closure family (task_044–048) it writes a closure-order check naming four tool ids. That belongs in code, so I keep it (P4b), written as a table of writes and the reads each needs. The leaders also solve these by searching each step, which covers task_041, 051 and 033 too, so P0/P1 still matter.</p></div>
+<div class="card"><h3>It read the wrong policy</h3><p>Its <code>.context/policy.md</code> is bm25_grep's: it tells the optimiser the agent has <code>KB_search</code> and <code>grep</code>. v3 ran with BM25, dense and a shell. Its advice to “refer to the KB search tool” comes from that mismatch.</p></div>
+<div class="card"><h3>A fence gap</h3><p><code>.lavish/</code> is not fenced from optimiser sessions, and s13 names four test task ids in its gate figure. This session did not read it, but nothing stopped it. This page names none.</p></div>
+</div>
+</section>
+
+<section id="s5r">
+<h2>Agents research in a loop over a research state, and the leaders keep that state in their context window</h2>
+<p>Every recursive-research design runs the same loop. What differs is where the state of the research lives: in the transcript, in a ledger beside it, or in a separate agent.</p>
+<ol class="steps">
+<li><b>Plan.</b> Turn the request into the questions that must be answered (here: the procedure's steps, and the tool for each).</li>
+<li><b>Query.</b> Search for the first open question.</li>
+<li><b>Read.</b> Open the best hits in full, not just the snippet.</li>
+<li><b>Extract.</b> Pull out facts (rules, amounts, argument names) and <i>leads</i>: names the text introduces that are not yet understood (a tool, another document, a step, an eligibility rule).</li>
+<li><b>Update the state.</b> Record what is now answered, with its source, and add the new leads.</li>
+<li><b>Stop or follow.</b> Stop when every question has a source and no new lead appears, or a budget runs out. Otherwise take the next lead and go to 2.</li>
+</ol>
+<span class="label fig-title">Fig 9 · three places to keep the research state</span>
+<div class="tw"><table>
+<thead><tr><th>pattern</th><th>how it works</th><th>costs</th><th>who does it</th></tr></thead>
+<tbody>
+<tr><td class="sub">Accumulate in the context</td><td class="wrap">Every search result stays in the transcript, and the model re-reads all of it each turn. The “state” is whatever the model notices. ReAct, Self-Ask and IRCoT work this way: each reasoning step decides the next search.</td><td class="wrap">Simplest, and nothing is lost. But the context grows with every look-up, each turn pays to re-read it, and a lead can sink in tens of thousands of tokens of documents.</td><td class="wrap"><b>Both leaders, and v3.</b> Knowledge-base text per conversation (median): v3 131,278 characters (≈32K tokens, 89% of its transcript); Opus 5 225,985 characters (≈56K tokens, 92% of its transcript); Qwen 241,380 characters (≈60K tokens, 94% of its transcript). Qwen's 90th percentile is 467,936 characters (≈116K tokens).</td></tr>
+<tr><td class="sub">A living ledger beside the transcript</td><td class="wrap">Code or the agent keeps a compact record: what has been read (with ids), the facts found, the open leads, the steps still without a source. It is shown to the model each turn. Old raw results can then be trimmed from what the model sees, since the ledger remembers them. MemGPT's paged memory and Anthropic's note-taking and context editing are this pattern.</td><td class="wrap">Leads cannot be forgotten, and the ledger is deterministic when code writes it. Something must extract the leads well, and a ledger written by the model is only as good as its notes.</td><td class="wrap"><b>Not the leaders.</b> Both ran tau2's stock agent, with no memory, notes or reminders. In this repo it would be <code>memory.py</code> + <code>guidance.py</code>; it stays out of P0 and is held in reserve as a deviation.</td></tr>
+<tr><td class="sub">A research sub-agent</td><td class="wrap">A separate model session with its own context runs the loop and returns a short brief (1,000–2,000 tokens) to the agent talking to the customer. Anthropic's Research feature (a lead agent with parallel sub-agents), deep-research products and STORM work this way.</td><td class="wrap">A clean main context, and searches run in parallel. But it means more calls, and a brief can drop the exact detail a write needs (an argument name, a fee).</td><td class="wrap"><b>Not the leaders.</b> Each ran one stock agent: one model (their files list a single <code>llm</code>), one context, and one model call per step. Every tool call in their 480 train trajectories is a tau2 tool the agent made itself, with no delegation. Not proposed.</td></tr>
+</tbody></table></div>
+<p class="cap">Characters ÷ 4 ≈ tokens. Training is a fourth route: Search-R1 and its successors train a model with reinforcement learning to decide when and what to search. It is not open to us with Claude, but it is one reason a model at max or xhigh effort searches more than one at medium.</p>
+<h3>What the leaders do, and so what P0 does</h3>
+<p>The leaders accumulate: every search result stays in the transcript, and their private reasoning at max or xhigh effort decides each next search. Fig 5 shows Qwen's opening: seven look-ups (BM25, dense, <code>cat INDEX.md</code>, a <code>grep</code> for the symptom) before its first word to the customer. Its reasoning on the first turn of task_002 reads “no need auth because general info. Need search KB.” Nothing outside the context keeps the leads. P0 copies that: remove the harness cap that stops parallel searches (P0a) and give the model the reasoning budget the leaders had (P0d), then measure the first turn.</p>
+<p>If parity still falls short, for example because Opus 5.5 at high effort searches less than Opus 5 at max does, the ledger is the documented next step. The page keeps it as a marked deviation, not part of P0.</p>
+<span class="label fig-title">Reading list</span>
+<ul class="src">
+<li>Yao et al., <a href="https://arxiv.org/abs/2210.03629">ReAct: Synergizing Reasoning and Acting in Language Models</a> (2022): the think, act, observe loop every agent here runs.</li>
+<li>Press et al., <a href="https://arxiv.org/abs/2210.03350">Self-Ask</a> (2022): the model asks itself follow-up questions and searches each.</li>
+<li>Trivedi et al., <a href="https://arxiv.org/abs/2212.10509">IRCoT: Interleaving Retrieval with Chain-of-Thought</a> (2022): each reasoning step drives the next retrieval. Closest to “follow the leads”.</li>
+<li>Jiang et al., <a href="https://arxiv.org/abs/2305.06983">FLARE: Active Retrieval Augmented Generation</a> (2023): retrieve when the next sentence would be uncertain.</li>
+<li>Asai et al., <a href="https://arxiv.org/abs/2310.11511">Self-RAG</a> (2023): the model decides when to retrieve and grades what it got.</li>
+<li>Packer et al., <a href="https://arxiv.org/abs/2310.08560">MemGPT</a> (2023): memory outside the context window, paged in and out. The ledger pattern.</li>
+<li>Shao et al., <a href="https://arxiv.org/abs/2402.14207">STORM</a> (2024): research from several perspectives into an outline before writing.</li>
+<li>Singh et al., <a href="https://arxiv.org/abs/2501.09136">Agentic RAG: a survey</a> (2025): the taxonomy of reflection, planning, tool use and multiple agents.</li>
+<li>Jin et al., <a href="https://arxiv.org/abs/2503.09516">Search-R1</a> (2025): reinforcement learning teaches a model when and what to search.</li>
+<li>Anthropic, <a href="https://www.anthropic.com/engineering/multi-agent-research-system">How we built our multi-agent research system</a> (June 2025): a lead agent, parallel sub-agents with their own contexts, a plan saved to memory.</li>
+<li>Anthropic, <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a> (September 2025): just-in-time retrieval by identifiers, compaction, structured notes, sub-agents.</li>
+</ul>
+</section>
+
+<section id="s6">
+<h2>Ten changes are proposed for v4. P0 stays on the leaderboard's path, and none is applied yet</h2>
+<p>Under the project's rule, “improve the agent” means <code>make loop</code>, not a hand edit. So these become banking's optimiser guide (<code>optimisers/banking_knowledge/guide.md</code>, milestone 3) and profile, plus P8's loop fixes; the next cycle's optimiser writes v4 from them. P4 needs the profile's mode set to <code>routing</code>, since classic can edit only system.md and helper.py.</p>
+<h3>v4's reasoning: copy the Opus 5 leader exactly, on the three settings where v3 differs</h3>
+<p>v3 loses on search depth: 2.6 look-ups before its first reply to the leaders' 7.9–12.7, and 24% of the gold documents read by then to their 51–66%. The leaders got that depth with tau2's stock agent and v3's exact prompt, so it did not come from a prompt, a hook or a sub-agent. It came from three things: their model, their reasoning effort, and a harness that keeps every tool call in a turn. v4 changes those three and nothing else. Any gain is then traceable to them, and v4 stays an agent the leaderboard would recognise.</p>
+<span class="label fig-title">v4 at a glance · against v3 and the leader it copies</span>
+<div class="tw"><table>
+<thead><tr><th>setting</th><th>v3 · champion</th><th>v4 · proposed</th><th>Opus 5 · leader</th></tr></thead>
+<tbody>
+<tr class="pro"><td class="sub">model</td><td>Sonnet 5</td><td><b>Opus 5.5</b></td><td>Opus 5</td></tr>
+<tr class="pro"><td class="sub">reasoning effort</td><td>medium</td><td><b>high</b> first; max if retrieval falls short</td><td>max</td></tr>
+<tr class="pro"><td class="sub">tool calls in a turn</td><td>1: the rest likely dropped by <code>llm/core.py</code></td><td><b>all kept</b> (P0a, once confirmed)</td><td>all: 1.61 a turn</td></tr>
+<tr><td class="sub">prompt</td><td>tau2's stock prompt + clock and identity notes</td><td>same</td><td>tau2's stock prompt</td></tr>
+<tr><td class="sub">tools and retrieval</td><td>BM25, dense (MiniLM), shell; native calls</td><td>same</td><td>BM25, dense (OpenAI), shell; native calls</td></tr>
+<tr><td class="sub">memory, hooks, sub-agents</td><td>none</td><td>none</td><td>none</td></tr>
+<tr><td class="sub">customer simulator</td><td>Haiku 4.5, medium</td><td>same</td><td>GPT-5.2, low</td></tr>
+</tbody></table></div>
+<p class="cap">Built as <code>make fork FROM=v3 MODEL=opus EFFORT=high</code> plus the tool-call setting, a “model swap”. Expected: first-turn and whole-conversation retrieval near Opus 5's (Figs 10–11), and accuracy above v3's 12 / 60 but short of Opus 5's 47%, because the customer still differs. Checked by 10 train tasks, then all 60, then the usual test gate.</p>
+<div class="note"><span class="label">what it costs · your subscription's 5-hour limit</span><p>v3's 60-task train run (Sonnet 5, medium) took 5.2 hours of wall time at three conversations at once, and the SDK priced it at about $41 in API terms ($0.69 a conversation). v4 at high effort should use about three times the tokens per conversation (1.7× the tool calls, a context about twice as long, more thinking) at roughly 1.5–2× the price per token for Opus. That is about $3.5 a conversation: <b>10 tasks ≈ v3's whole train run</b>, and <b>all 60 ≈ five times it</b>. Max effort adds more thinking on top. Anthropic does not publish the 5-hour allowance in tokens, so I cannot give an exact share of yours. The way to know is a meter: check <code>/usage</code>, play 1 task, check again, then scale. This chat also draws on the same limit.</p></div>
+<div class="note" id="p0"><span class="label">P0 · your design · test retrieval on the first turn, cut at the first reply</span>
+<p>Run the agent on each train task only until it first answers the customer: the customer states the request, the agent searches and reads, and the probe ends at the agent's first reply. That isolates the research the leaders do before they speak, and it is where v3 falls furthest behind. The leaders make 12.7 and 7.9 look-ups before their first reply, v3 2.6. v3 replies without searching at all in 20 of 60 conversations, Qwen in 3 of 240. Iterate on the probe until it meets the bar, then play full conversations.</p>
+<p><b>Without leaving the leaderboard's path.</b> Both leaders ran tau2's stock <code>llm_agent</code> (their files declare <code>implementation: llm_agent</code>): the stock prompt, which is word for word v3's system.md; the whole history on every call; native tool calls; no system message after the first; no memory or note tool. Their working memory is the context window plus the private reasoning on almost every message, at max (Opus 5) and xhigh (Qwen 3.8 Max) effort. So P0 changes only what differs from them: the harness cap and the reasoning budget.</p></div>
+<div class="note"><span class="label">shortcut · recommended · skip the sweep, build the closest copy of the Opus 5 leader</span><p>One call first, to confirm P0a (does a reply carry several tool calls that we drop?); if so, fix it as a version setting with tests. Then v4 = <code>make fork FROM=v3 MODEL=opus EFFORT=high</code> with all tool calls kept: the leader's agent shape, prompt and tools, on Opus 5.5 at high effort, with max as the next step if retrieval falls short. Play 10 train tasks with the widest gap, scored on retrieval (Figs 10–11) and passes; if retrieval moves, play all 60. The probe stays available if v4 falls short. Expect retrieval near Opus 5's; expect accuracy between v3's 12 / 60 and Opus 5's 47%, not at it, since the customer simulator still differs.</p></div>
+<span class="label fig-title">Fig 10 · the first turn: from the customer's request to the agent's first reply (means per conversation, train)</span>
+<div class="tw"><table>
+<thead><tr><th>measure</th><th class="num">v3</th><th class="num">Opus 5</th><th class="num">Qwen 3.8 Max</th><th class="num">probe bar</th></tr></thead>
+<tbody>
+<tr><td>look-ups before the first reply</td><td class="num">2.6</td><td class="num">12.7</td><td class="num">7.9</td><td class="num"><b>≥ 7.9</b></td></tr>
+<tr><td>… of them follow-ups (recursive)</td><td class="num">1.6</td><td class="num">8.0</td><td class="num">4.4</td><td class="num"><b>≥ 4.4</b></td></tr>
+<tr><td>replied with no look-up</td><td class="num">20 / 60</td><td class="num">17 / 240</td><td class="num">3 / 240</td><td class="num"><b>≤ 4 / 60</b></td></tr>
+<tr><td>gold documents captured by the first reply</td><td class="num">24%</td><td class="num">66%</td><td class="num">51%</td><td class="num"><b>≥ 51%</b></td></tr>
+<tr><td>gold tool names surfaced by the first reply</td><td class="num">31%</td><td class="num">82%</td><td class="num">54%</td><td class="num"><b>≥ 54%</b></td></tr>
+<tr><td>share of the conversation's look-ups made in this turn</td><td class="num">24%</td><td class="num">51%</td><td class="num">33%</td><td class="num"><b>—</b></td></tr>
+<tr class="grp"><td colspan="5">task by task</td></tr>
+<tr><td>tasks at or above the leaders’ first-turn mean: look-ups</td><td class="num">1 / 60</td><td class="num" colspan="2">8 leader trials a task</td><td class="num"><b>≥ 30 / 60</b></td></tr>
+<tr><td>tasks at or above the leaders’ first-turn mean: gold documents captured</td><td class="num">5 / 60</td><td class="num" colspan="2"></td><td class="num"><b>≥ 30 / 60</b></td></tr>
+</tbody></table></div>
+<p class="cap">Cut: the first agent message with text and no tool call. Gold documents and tool names count only if their text reached the agent inside the turn. The bar is the lower leader on each measure. “Replied with no look-up” takes Opus's 7% (Qwen's is 1%). The leaders make 33–51% of their look-ups in this turn, so the probe covers the first half of the job, not all of it.</p>
+<div class="rule">
+<span class="k">input</span><span class="v">Each train task's opening request, fixed: the customer's first message from v3's champion train run, so every version is probed on the same words. (The leaders' openings came from their own simulator: same task, different wording.)</span>
+<span class="k">play</span><span class="v">The normal runner, tools and agent, with a probe customer: a subclass of <code>eval/user.py</code> that sends the recorded opening and ends the conversation (<code>###STOP###</code>) on the agent's first reply. Searches, shell reads and identity look-ups run for real; nothing after the reply is played.</span>
+<span class="k">score</span><span class="v">Not tau2's reward, which cannot pass a cut conversation, but Fig 10's measures, task by task against the leaders' 8 trials. This page's scripts, committed as the scorecard.</span>
+<span class="k">where</span><span class="v"><code>make probe AGENT=v4 DOMAIN=banking_knowledge [TASKS=…]</code> writes to <code>probes/</code>, not <code>runs/</code>, so the registry, gate, loop and judge never see a probe. Train tasks only.</span>
+<span class="k">cost</span><span class="v">One agent turn a task and one recorded customer line, with no simulator calls after it: roughly a third of a full train run's agent calls at the leaders' look-up rate, and minutes for 10 tasks.</span>
+<span class="k">levers</span><span class="v"><b>P0a · harness parity.</b> Keep every tool call in a turn, as the stock agent does: v3 made one call in each of its 1,303 tool turns, the leaders 1.6 and 2.1 a turn. The likely cause is <code>llm/core.py</code> dropping a reply's later tool calls; one probe call would confirm it, and the fix ships as a version setting. <b>P0d · reasoning parity.</b> Probe v3 at high and at max effort, then the agent on Opus at max, each a <code>make fork</code> (EFFORT=, MODEL=) scored on the same first turn. The probe makes this a cheap sweep.</span>
+<span class="k">not P0</span><span class="v">A research loop in the prompt (P0b) and the code-kept ledger (P0c) are not what the leaders do. They stay in reserve, marked as deviations, for the case where parity of harness and reasoning still falls short of the bar. No minimum look-up count either: it would game the bar, not meet it.</span>
+<span class="k">still differs</span><span class="v">The customer: the leaders' simulator is GPT-5.2 at low effort, ours Haiku 4.5 at medium with our simulation rules. The embeddings: theirs OpenAI's, ours MiniLM (equal on v3's own queries, §4). Two lines the Claude CLI forces into our prompt: the clock note and the identity note.</span>
+<span class="k">then</span><span class="v">When the probe meets Fig 10's bar, one full train run must meet Fig 11's whole-conversation bar, and then the usual test gate decides promotion.</span>
+</div>
+<span class="label fig-title">Fig 11 · then the whole conversation: the bar for v4's full train run (means per conversation)</span>
+<div class="tw"><table>
+<thead><tr><th>measure</th><th class="num">v3</th><th class="num">Opus 5</th><th class="num">Qwen 3.8 Max</th><th class="num">v4 bar</th></tr></thead>
+<tbody>
+<tr><td>KB look-ups a conversation</td><td class="num">10.7</td><td class="num">24.9</td><td class="num">24.0</td><td class="num"><b>≥ 24.0</b></td></tr>
+<tr><td>look-ups before the first action</td><td class="num">3.1</td><td class="num">13.7</td><td class="num">9.8</td><td class="num"><b>≥ 9.8</b></td></tr>
+<tr><td>follow-up look-ups (recursive) a conversation</td><td class="num">8.0</td><td class="num">17.8</td><td class="num">18.2</td><td class="num"><b>≥ 17.8</b></td></tr>
+<tr><td>tool calls a turn</td><td class="num">1.00</td><td class="num">1.61</td><td class="num">2.12</td><td class="num"><b>> 1</b></td></tr>
+<tr><td>gold documents captured</td><td class="num">71%</td><td class="num">93%</td><td class="num">88%</td><td class="num"><b>≥ 88%</b></td></tr>
+<tr><td>… captured by the first write</td><td class="num">49%</td><td class="num">78%</td><td class="num">69%</td><td class="num"><b>≥ 69%</b></td></tr>
+<tr><td>gold tool names that reached the agent</td><td class="num">93.8%</td><td class="num">99.9%</td><td class="num">99.8%</td><td class="num"><b>≥ 99.5%</b></td></tr>
+<tr><td>conversations missing a needed tool name</td><td class="num">7 / 60</td><td class="num">1 / 240</td><td class="num">2 / 240</td><td class="num"><b>≤ 1 / 60</b></td></tr>
+<tr class="grp"><td colspan="5">task by task</td></tr>
+<tr><td>tasks at or above the leaders’ mean: look-ups</td><td class="num">0 / 60</td><td class="num" colspan="2">leaders’ per-task mean 24.4, v3’s 10.7</td><td class="num"><b>≥ 30 / 60</b></td></tr>
+
+<tr><td>tasks at or above the leaders’ mean: follow-up look-ups</td><td class="num">2 / 60</td><td class="num" colspan="2">leaders’ per-task mean 18.0, v3’s 8.0</td><td class="num"><b>≥ 30 / 60</b></td></tr>
+
+<tr><td>tasks at or above the leaders’ mean: gold documents captured</td><td class="num">13 / 60</td><td class="num" colspan="2">leaders’ per-task mean 92%, v3’s 73%</td><td class="num"><b>≥ 30 / 60</b></td></tr>
+</tbody></table></div>
+<p class="cap">Bar: the lower of the two leaders on each measure, and at or above the leaders' per-task mean on half the tasks. Follow-up look-ups: a look-up whose query or command carries a term first seen in an earlier result, and not in the customer's words or the policy. Retrieval parity is necessary, not sufficient: with every required document read the leaders still pass only 45% and 58%.</p>
+<h3>A rule that can be checked should live in a hook, not in the prompt</h3>
+<p>Each version can carry three code surfaces that run in every conversation, plus the helper. They fire on fixed events, so a rule there is applied the same way every time; a prompt line competes with every other line and the model may skip it. The prompt keeps what needs judgement: which product is worth more, which lead matters. None of the leaders uses any hook. Every guardrail here goes beyond the leaderboard's harness, so Fig 13 marks each proposal as like the leaders or not, and you choose per row.</p>
+<span class="label fig-title">Fig 12 · where each rule can live (<code>agent/factory.py</code>)</span>
+<div class="tw"><table>
+<thead><tr><th>hook</th><th>runs</th><th>can it stop the agent?</th><th>rules here</th></tr></thead>
+<tbody>
+<tr><td><code>checks.py</code> · check_write</td><td class="wrap">before every call to a write tool (call_discoverable_agent_tool, log_verification, apply_for_credit_card …)</td><td class="wrap"><b>yes</b>: the call is not run; the model reads the reason and replies once more, unchecked</td><td class="wrap">P4 time and duplicate credit · P4b procedure order · P0c no tool before its document</td></tr>
+<tr><td><code>memory.py</code> · remember</td><td class="wrap">after every tool result and every customer message</td><td class="wrap">no: keeps the facts the other hooks check</td><td class="wrap">requests for a human · reads returned · documents and tool names seen · accounts credited</td></tr>
+<tr><td><code>guidance.py</code> · guidance</td><td class="wrap">before every model call, after a customer message or tool results</td><td class="wrap">no: a reminder on that one call (600 characters), never in the transcript</td><td class="wrap">P2 transfer rule from the 4th request · P0c leads not followed</td></tr>
+<tr><td><code>helper.py</code> · on_tool_call / on_reply</td><td class="wrap">on every tool call and every text reply</td><td class="wrap">rewrites only: it can fix an argument or the text, not refuse</td><td class="wrap">P3 account_class suffix, closure reason, give-tool arguments</td></tr>
+<tr class="pro"><td><code>check_reply</code> · <b>new</b></td><td class="wrap">before every text reply</td><td class="wrap"><b>yes</b>, once a turn, as check_write does for writes</td><td class="wrap">P2 made binding: no refusal after the 4th request; no “I can't” before a search for a tool</td></tr>
+</tbody></table></div>
+<p class="cap">checks.py, memory.py and guidance.py are written only in routing mode (banking's profile is classic today), and by the optimiser, not by hand. check_reply is a harness change in <code>agent/factory.py</code>, a few lines beside <code>_check</code>, plus its line in the optimiser's surface guide; it would apply to every domain's routing versions. <code>transfer_to_human_agents</code>, unlocks and hand-overs are generic tools, so check_write never sees them.</p>
+<form id="props" data-lavish-question="v4-proposals" onsubmit="event.preventDefault(); const items=[...this.querySelectorAll('select.disp')].map(s=>({id:s.name,label:s.dataset.label,disposition:s.value})); const note=this.querySelector('textarea').value.trim(); window.lavish&&window.lavish.queuePrompt('Apply these dispositions to the v4 proposals on s14 and give an item-by-item receipt. Account for every submitted ID before reporting completion.'+(note?' Note: '+note:''),{tag:'tracked-batch',text:'v4 proposals: '+items.map(i=>i.id+' '+i.disposition).join(', '),element:this,data:{items}}); this.querySelector('.ack').textContent='Queued: press Send to Agent.';">
+<span class="label fig-title">Fig 13 · the proposals, with the tasks each aims at and where each lives</span>
+<div class="tw"><table>
+<thead><tr><th>id</th><th>change</th><th>surface</th><th>evidence</th><th>train tasks</th><th>disposition</th></tr></thead>
+<tbody>
+<tr><td class="id">P0</td><td class="wrap"><b>Match the leaders&#x27; harness and reasoning, measured by a first-turn retrieval probe</b><span class="why">Play each train task only to the agent's first reply and score its retrieval against the leaders' first turn (Fig 10). The levers are the leaders' own: P0a lets a turn keep all its tool calls, as their stock agent does; P0d raises reasoning effort and then the model toward theirs (Opus 5 at max, Qwen 3.8 Max at xhigh; v3 is Sonnet 5 at medium). A full train run follows only when the probe meets its bar.</span></td><td><code>probe + core.py + agent.yaml</code><br><span class="chip co ms">harness + reasoning</span><span class="why">like the leaders</span></td><td class="wrap">Both leaders ran tau2's stock <code>llm_agent</code> with the same prompt as v3's system.md: no ledger, no memory, no injected reminders. Their search depth came from the model's reasoning, so that is the lever that does not deviate.</td><td class="wrap mono small">task_008, task_033, task_041, task_044, task_046, task_047, task_048, task_051, task_053<span class="why">6 of them leader-solvable</span></td><td><select class="disp" name="P0" data-label="Match the leaders&#x27; harness and reasoning, measured by a first-turn retrieval probe" aria-label="disposition for P0"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P1</td><td class="wrap"><b>Search each step before acting (P0b&#x27;s rule)</b><span class="why">Before verifying, acting or refusing, search the KB for the customer's issue. When a procedure lists steps, search for the tool that does each one (“check pending disputes … tool”, or <code>grep -r</code> for its name) and do every step in order; the customer's word does not skip a check. Never say you cannot do something before searching for a tool that does it.</span></td><td><code>system.md</code><br><span class="chip re ms">prompt</span><span class="why">deviates: prompt</span></td><td class="wrap">The leaders make 9.8–13.7 look-ups before their first action to v3's 3.1, and found the tools v3 missed with BM25 step queries (Fig 7). The optimiser's rules (d) and (e) say the same for two procedures; this says it once for all.</td><td class="wrap mono small">task_008, task_033, task_041, task_044, task_046, task_047, task_048, task_051, task_053<span class="why">6 of them leader-solvable</span></td><td><select class="disp" name="P1" data-label="Search each step before acting (P0b&#x27;s rule)" aria-label="disposition for P1"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P2</td><td class="wrap"><b>Transfer rules as a guardrail: count the customer&#x27;s requests; no verification for a transfer</b><span class="why"><code>memory.py</code> counts the customer's requests for a human on every user message. From the fourth, <code>guidance.py</code> puts policy rule 6 in front of every model call: transfer now, and a transfer needs no identity check (the policy verifies only to read or change account data). That trigger is deterministic, but the model still chooses. To make it binding, add one hook, <code>check_reply(text, state)</code>, with check_write's semantics on text replies: a refusal after the fourth request is sent back once with the rule.</span></td><td><code>memory.py + guidance.py, then check_reply (new)</code><br><span class="chip co ms">guardrail</span><span class="why">deviates: hook</span></td><td class="wrap">task_034: v3 refused four requests and then asked for verification; the leaders transferred. task_033: the gold path transfers without verifying. No hook sees a text reply today, and <code>transfer_to_human_agents</code> is a generic tool, so check_write never runs on it.</td><td class="wrap mono small">task_033, task_034<span class="why">1 of them leader-solvable</span></td><td><select class="disp" name="P2" data-label="Transfer rules as a guardrail: count the customer&#x27;s requests; no verification for a transfer" aria-label="disposition for P2"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P3</td><td class="wrap"><b>Take v2&#x27;s helper.py whole</b><span class="why">Strip the “(savings)” / “(checking)” suffix from account_class, drop a generic closure reason so the tool records its default, trim give_discoverable_user_tool to the tool's name, guard the redacted-email lookup.</span></td><td><code>helper.py</code><br><span class="chip co ms">deterministic rewrite</span><span class="why">deviates: hook</span></td><td class="wrap">The only database differences in task_062, task_065 and task_068 are these slips; v2 fixed them on train with no break. The leaders fail these tasks too (0–1 of 8), so this is ground they do not hold.</td><td class="wrap mono small">task_062, task_065, task_068<span class="why">0 of them leader-solvable</span></td><td><select class="disp" name="P3" data-label="Take v2&#x27;s helper.py whole" aria-label="disposition for P3"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P4</td><td class="wrap"><b>Check two writes in code: the verification time, one credit per account</b><span class="why">Block log_verification until get_current_time has run, and unless time_verified is its value. Block a second credit to an account already credited in the conversation.</span></td><td><code>checks.py + memory.py</code><br><span class="chip co ms">guardrail</span><span class="why">deviates: hook</span></td><td class="wrap">task_100 typed a date of its own; task_094 split one correction into two credits. Both are deterministic, so code beats a prompt line. Needs routing mode (banking's profile is classic today).</td><td class="wrap mono small">task_094, task_100<span class="why">2 of them leader-solvable</span></td><td><select class="disp" name="P4" data-label="Check two writes in code: the verification time, one credit per account" aria-label="disposition for P4"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P4b</td><td class="wrap"><b>Procedure order as a guardrail: no closure write before its checks</b><span class="why"><code>memory.py</code> records which reads have returned (dispute history, pending replacements); <code>check_write</code> blocks every closure, retention and payment write until both have, and blocks closing a card with a pending replacement. Written as a table (a write tool → the reads it needs) so the next procedure is one row, not new code.</span></td><td><code>checks.py + memory.py</code><br><span class="chip co ms">guardrail</span><span class="why">deviates: hook</span></td><td class="wrap">Yes, it belongs in code: the KB's retention protocol fixes the order, and closure tools are writes, so check_write sees every one. The tool ids are the KB's, shared by train and test. A block holds once per turn: the model reads why and retries, and the retry is not checked again.</td><td class="wrap mono small">task_044, task_046, task_047, task_048<span class="why">3 of them leader-solvable</span></td><td><select class="disp" name="P4b" data-label="Procedure order as a guardrail: no closure write before its checks" aria-label="disposition for P4b"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P5</td><td class="wrap"><b>Value and eligibility discipline</b><span class="why">Trimmed from the optimiser's (b), (c), (h), (i), (j): price every candidate at the customer's stated usage from its own document; drop any that fails an eligibility rule; net several corrections into one; do only the writes the customer asked for; give a user tool with its exact argument values; do not invent restrictions.</span></td><td><code>system.md</code><br><span class="chip re ms">prompt</span><span class="why">deviates: prompt</span></td><td class="wrap">Leaders pass most of these tasks (task_002 8/8, task_073 7/8, task_096 8/8, task_099 7/8), so they are within the model's reach.</td><td class="wrap mono small">task_002, task_016, task_019, task_024, task_056, task_059, task_072, task_073, task_075, task_096, task_099<span class="why">7 of them leader-solvable</span></td><td><select class="disp" name="P5" data-label="Value and eligibility discipline" aria-label="disposition for P5"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P6</td><td class="wrap"><b>Native-mode wording</b><span class="why">v3's system.md ends “Always make sure you generate valid JSON only”, an instruction for JSON tool calls under native ones. Replace it with the optimiser's line: never write a tool call as text, never claim an action without its result.</span></td><td><code>system.md</code><br><span class="chip re ms">prompt</span><span class="why">deviates: their prompt has the JSON line too</span></td><td class="wrap">Hygiene; no task depends on it alone.</td><td class="wrap mono small">—<span class="why">0 of them leader-solvable</span></td><td><select class="disp" name="P6" data-label="Native-mode wording" aria-label="disposition for P6"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P7</td><td class="wrap"><b>Defer the rules fitted to tasks no leader passes</b><span class="why">Leave out the optimiser's (f) debit-dispute rules and the cash-back audit detail aimed at task_027/029/082–088.</span></td><td><code>system.md</code><br><span class="chip re ms">leave out</span><span class="why">—</span></td><td class="wrap">The optimiser could not read the KB, so it inferred these from graded values. Rule (f) says liability is $50 within 2 business days “of noticing”; the KB says “of statement”. A rule fitted to train's answers can teach the wrong one to test's other customers.</td><td class="wrap mono small">task_027, task_029, task_082, task_083, task_084, task_086, task_087, task_088<span class="why">0 of them leader-solvable</span></td><td><select class="disp" name="P7" data-label="Defer the rules fitted to tasks no leader passes" aria-label="disposition for P7"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P8</td><td class="wrap"><b>Fix what the optimiser sees before it writes v4</b><span class="why">(a) Copy the version's own policy into <code>.context/policy.md</code>: it got bm25_grep's text, which names KB_search and grep, not v3's tools. (b) Give banking's optimiser a read-only copy of the KB and each failure's required documents, so its rules cite documents. (c) Fence <code>.lavish/</code> from optimiser sessions: s13 names four test task ids and is readable today.</span></td><td><code>loop code</code><br><span class="chip se ms">loop code</span><span class="why">optimiser, not the agent</span></td><td class="wrap">Found in this run's prompt and the fence list (<code>loop/guards.py</code> FENCED is runs, data, loop, vendor).</td><td class="wrap mono small">—<span class="why">0 of them leader-solvable</span></td><td><select class="disp" name="P8" data-label="Fix what the optimiser sees before it writes v4" aria-label="disposition for P8"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+<tr><td class="id">P9</td><td class="wrap"><b>No dense-search rule</b><span class="why">Keep KB_search_dense offered; add no nudge to use it.</span></td><td><code>—</code><br><span class="chip re ms">none</span><span class="why">like the leaders</span></td><td class="wrap">On v3's own queries dense finds 291 / 503 required documents, BM25 305 / 503. The leaders surfaced the missed tools with BM25 119 times in 182.</td><td class="wrap mono small">—<span class="why">0 of them leader-solvable</span></td><td><select class="disp" name="P9" data-label="No dense-search rule" aria-label="disposition for P9"><option value="next" selected>next</option><option value="skip">skip</option><option value="change">change</option></select></td></tr>
+</tbody></table></div>
+<textarea class="free" aria-label="a note with your dispositions" placeholder="Anything to change in a proposal (optional)"></textarea>
+<div class="actions"><button class="btn" type="submit">Queue these dispositions</button><span class="ack" role="status" aria-live="polite"></span></div>
+</form>
+<p class="cap">Defaults are my recommendation. Together P0–P5 aim at all 18 failures the leaders pass reliably. That bounds what v4 can win, it does not forecast it: the leaders run bigger models (Opus 5 at max, Qwen at xhigh) than v3's Sonnet 5 at medium.</p>
+</section>
+
+<section id="s7">
+<h2>Two decisions are yours before any v4 run</h2>
+<form class="q" data-lavish-question="v4-route" onsubmit="event.preventDefault(); const c=new FormData(this).get('route'); if(c&&window.lavish) window.lavish.queuePrompt('v4 route: '+c,{tag:'choice',text:'v4 route: '+c,element:this,data:{question:'v4-route',answer:c}}); this.querySelector('.ack').textContent=c?'Queued: press Send to Agent.':'';">
+<h3>How should v4 be built?</h3>
+<label class="opt"><input type="radio" name="route" value="guide + routing (recommended)" checked><span class="t"><b>Guide and routing, after P8 (recommended)</b><span>Write the accepted proposals into banking's guide.md, set the profile's mode to routing, fix the optimiser's policy, KB access and fence, then <code>make loop DOMAIN=banking_knowledge CYCLES=1</code> from v3.</span></span></label>
+<label class="opt"><input type="radio" name="route" value="guide, classic"><span class="t"><b>Guide only, classic mode</b><span>Same guide, today's profile: system.md and helper.py only, so P4 becomes prompt lines.</span></span></label>
+<label class="opt"><input type="radio" name="route" value="as profiled today"><span class="t"><b>The loop as it stands</b><span>No guide, no P8: the optimiser writes what this diagnosis says, v2's prompt included.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div>
+</form>
+<form class="q" data-lavish-question="fence" onsubmit="event.preventDefault(); const c=new FormData(this).get('fence'); if(c&&window.lavish) window.lavish.queuePrompt('.lavish fence: '+c,{tag:'choice',text:'.lavish fence: '+c,element:this,data:{question:'fence',answer:c}}); this.querySelector('.ack').textContent=c?'Queued: press Send to Agent.':'';">
+<h3>Fence <code>.lavish/</code> from optimiser sessions now?</h3>
+<label class="opt"><input type="radio" name="fence" value="yes, add it to FENCED" checked><span class="t"><b>Yes, add it to FENCED (recommended)</b><span>One entry in <code>loop/guards.py</code> plus a test; closes the path to s13's test ids before the next cycle.</span></span></label>
+<label class="opt"><input type="radio" name="fence" value="no, scrub the pages instead"><span class="t"><b>No, scrub test ids from the pages instead</b><span>Edit s13's gate figure to counts only; future pages must remember the rule.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div>
+</form>
+</section>
+
+<section id="s8">
+<h2>One diagnosis session ran; nothing in agents/, runs/ or the ledger changed</h2>
+<div class="rule">
+<span class="k">model call</span><span class="v">One routing diagnosis session: Opus 5.5 at medium, 28 turns, 4,162,361 input and 34,351 output tokens, on the subscription (the SDK's notional cost $3.10). Prompt 282,341 characters.</span>
+<span class="k">no model</span><span class="v">The leaders' comparison, the reads by text, the BM25 / dense replay and the class counts: scripts over the run files and the published trajectories.</span>
+<span class="k">untouched</span><span class="v"><code>agents/banking_knowledge/</code> (v1, v2, v3), <code>runs/</code>, <code>loop/banking_knowledge/</code> ledger and registry, <code>vendor/</code>. No v4, no commit.</span>
+<span class="k">files</span><span class="v">Scratchpad <code>diag/</code>: diagnose_v3.py, diagnosis.json, prompt.md, transcript.json; extract.py, analyse.py, reads.py, retrieval_check.py, surfaced_via.py, gen_s14.py.</span>
+</div>
+</section>
+</main>
+<footer>s14 · banking v3 diagnosis · train only: this page names no test task and shows test pass counts only · generated from the scratchpad's diag/ files</footer>
+</body>
+</html>

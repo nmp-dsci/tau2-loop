@@ -19,6 +19,12 @@ with a cache breakpoint on the last, so the prompt cache reads back what the
 last call sent and writes only the new turns; as one text block it wrote the
 whole transcript afresh every call (s10).
 A result's cache reads and writes are kept apart so a run can show the split.
+
+Native tool calls (a version's `tool_mode: native`, s13 milestone 2) are the one exception to
+"can only answer": the request's tools are offered as stubs on an in-process MCP server, and a
+PreToolUse hook defers every call, so the session stops with the model's tool calls unrun and
+they go back to tau2 to execute, as the JSON contract's parsed calls do. No built-in tool is
+ever offered, and the stubs have no body worth running.
 """
 
 from __future__ import annotations
@@ -49,6 +55,15 @@ MODELS: dict[str, str] = {
 Effort = Literal["low", "medium", "high", "xhigh", "max"]
 EFFORT: Effort = "medium"
 EFFORTS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+
+# The litellm parameter (and service request field) that asks for native tool calls.
+TOOL_MODE_PARAM = "tau2_loop_tool_mode"
+# native tool calls, every call of one reply kept (s14 P0a): the CLI streams each block of a reply as
+# its own AssistantMessage under one message_id, so plain native keeps the first call only
+NATIVE_PARALLEL = "native_parallel"
+# The in-process MCP server the native tools sit on; the model sees `mcp__tau2__<name>`.
+NATIVE_SERVER = "tau2"
+NATIVE_PREFIX = f"mcp__{NATIVE_SERVER}__"
 
 RETRIES = 3
 RETRY_WAIT_S = (2.0, 6.0, 15.0)
@@ -193,6 +208,8 @@ class SdkResult:
     cache_write: int = 0
     # the reply as the SDK parsed it against `output_format`'s JSON schema, when one was asked for
     structured: Any = None
+    # native mode: the model's tool calls, unrun, as {id, name, input}
+    tool_uses: list[dict[str, Any]] = field(default_factory=list)
 
 
 def cache_usage(res: SdkResult) -> dict[str, Any]:
@@ -238,26 +255,60 @@ async def _blocks(blocks: list[str]) -> AsyncIterator[dict[str, Any]]:
     }
 
 
+def _native_options(tools: list[dict[str, Any]]) -> dict[str, Any]:
+    """The tools as stubs on an in-process MCP server, and a hook that defers every call."""
+    from claude_agent_sdk import HookMatcher, create_sdk_mcp_server
+    from claude_agent_sdk import tool as sdk_tool
+
+    async def _never_run(_args: dict[str, Any]) -> dict[str, Any]:
+        return {"content": [{"type": "text", "text": "deferred to the caller"}]}
+
+    async def _defer(_input: Any, _tool_use_id: str | None, _context: Any) -> dict[str, Any]:
+        return {
+            "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "defer"}
+        }
+
+    stubs = []
+    names = []
+    for t in tools:
+        fn = t.get("function", t)
+        name = str(fn.get("name"))
+        schema = fn.get("parameters") or {"type": "object", "properties": {}}
+        stubs.append(sdk_tool(name, str(fn.get("description") or ""), schema)(_never_run))
+        names.append(NATIVE_PREFIX + name)
+    return {
+        "mcp_servers": {NATIVE_SERVER: create_sdk_mcp_server(name=NATIVE_SERVER, tools=stubs)},
+        "allowed_tools": names,
+        "hooks": {"PreToolUse": [HookMatcher(matcher=None, hooks=[_defer])]},
+    }
+
+
 async def _query(
     system_prompt: str,
     user_prompt: str | list[str],
     model: str,
     effort: str,
     output_format: dict[str, Any] | None = None,
+    native_tools: list[dict[str, Any]] | None = None,
+    parallel: bool = False,
 ) -> SdkResult:
     from claude_agent_sdk import (
         AssistantMessage,
         ClaudeAgentOptions,
         ResultMessage,
         TextBlock,
+        ToolUseBlock,
         query,
     )
 
+    native = _native_options(native_tools) if native_tools else {}
     options = ClaudeAgentOptions(
         model=model,
         system_prompt=system_prompt,
-        tools=[],  # no built-in tools: the model can only answer
-        allowed_tools=[],
+        tools=[],  # no built-in tools: the model can only answer (or, native, call the stubs)
+        allowed_tools=native.get("allowed_tools", []),
+        mcp_servers=native.get("mcp_servers", {}),
+        hooks=native.get("hooks"),
         strict_mcp_config=True,  # no inherited connector tools: 27k tokens a call otherwise (s02)
         permission_mode="bypassPermissions",
         max_turns=4,  # one reply; headroom because the CLI has ended a tool-less reply as 'max turns (1)'
@@ -275,11 +326,24 @@ async def _query(
     prompt: str | AsyncIterator[dict[str, Any]] = (
         _blocks(user_prompt) if isinstance(user_prompt, list) else user_prompt
     )
+    first_call_id: str | None = None  # the message_id of the reply that made the first call
     async for msg in query(prompt=prompt, options=options):
         if isinstance(msg, AssistantMessage):
+            if res.tool_uses:
+                # one reply: whatever follows a deferred call is not the turn's, except, with
+                # `parallel`, the later blocks of the same reply (same message_id)
+                same = first_call_id is not None and msg.message_id == first_call_id
+                if not (parallel and same):
+                    continue
             for b in msg.content:
                 if isinstance(b, TextBlock):
-                    texts.append(b.text)
+                    if not res.tool_uses:
+                        texts.append(b.text)
+                elif isinstance(b, ToolUseBlock) and native_tools:
+                    name = b.name.removeprefix(NATIVE_PREFIX)
+                    if not res.tool_uses:
+                        first_call_id = msg.message_id
+                    res.tool_uses.append({"id": b.id, "name": name, "input": dict(b.input or {})})
         elif isinstance(msg, ResultMessage):
             u = msg.usage or {}
             res.input_tokens = (
@@ -301,6 +365,8 @@ async def _query(
                 texts.append(str(msg.result))
     # The CLI names the account in every session; the address must not reach a conversation.
     res.text = redact("\n".join(t for t in texts if t).strip())
+    for u in res.tool_uses:
+        u["input"] = json.loads(redact(json.dumps(u["input"])))
     res.duration_ms = int((time.time() - started) * 1000)
     return res
 
@@ -335,6 +401,8 @@ def run_query(
     effort: str = EFFORT,
     *,
     output_format: dict[str, Any] | None = None,
+    native_tools: list[dict[str, Any]] | None = None,
+    parallel: bool = False,
 ) -> SdkResult:
     """One SDK query on a private event loop, so it works from worker threads.
 
@@ -347,13 +415,15 @@ def run_query(
         loop = asyncio.new_event_loop()
         try:
             last = loop.run_until_complete(
-                _query(system_prompt, user_prompt, model, effort, output_format)
+                _query(
+                    system_prompt, user_prompt, model, effort, output_format, native_tools, parallel
+                )
             )
         except Exception as e:  # noqa: BLE001 - transport errors are retried like HTTP ones
             last = SdkResult("", 0, 0, None, 0, None, error=f"{type(e).__name__}: {e}"[:500])
         finally:
             loop.close()
-        if last.text:
+        if last.text or last.tool_uses:
             return last  # a reply came back; an error next to it (e.g. a max-turns note) is recorded, not retried
         wait = seconds_until_reset(last.error or "")
         if wait is not None:
@@ -391,13 +461,29 @@ def answer(
     tools: list[dict[str, Any]] | None,
     model: str,
     effort: str | None = None,
+    tool_mode: str | None = None,
 ) -> Answer:
-    """The chat request as the SDK sees it, and its reply parsed back; raises CoreError on no reply."""
+    """The chat request as the SDK sees it, and its reply parsed back; raises CoreError on no reply.
+
+    `tool_mode="native"` with tools offers them to the model as tools, not as a JSON contract;
+    a reply with tool calls drops any text beside them, as the contract does. `native_parallel`
+    is native with every call of the reply kept, not just the first (s14 P0a)."""
     effort = effort if effort in EFFORTS else EFFORT
-    system_prompt, blocks = build_blocks(messages, tools)
-    res = run_query(system_prompt, blocks, resolve_model(model), effort)
-    if res.error and not res.text:
+    native = tool_mode in ("native", NATIVE_PARALLEL) and bool(tools)
+    system_prompt, blocks = build_blocks(messages, tools, native=native)
+    kw: dict[str, Any] = {"native_tools": tools if native else None}
+    if native and tool_mode == NATIVE_PARALLEL:
+        kw["parallel"] = True
+    res = run_query(system_prompt, blocks, resolve_model(model), effort, **kw)
+    if res.error and not res.text and not res.tool_uses:
         raise CoreError(f"claude-sdk: {res.error}")
+    if native:
+        calls = [
+            {"id": f"call_{uuid.uuid4().hex[:12]}", "name": u["name"], "arguments": u["input"]}
+            for u in res.tool_uses
+        ]
+        content = None if calls else (res.text or None)
+        return Answer(content=content, tool_calls=calls, parsed=bool(calls or content), result=res)
     reply = parse_reply(res.text, tools_present=bool(tools))
     calls = [
         {"id": f"call_{uuid.uuid4().hex[:12]}", "name": c["name"], "arguments": c["arguments"]}

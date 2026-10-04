@@ -28,21 +28,64 @@ def splits() -> None:
 
 
 @app.command()
+def documents() -> None:
+    """Index banking's knowledge base (each document's title and size) → data/tasks, for Evals."""
+    from tau2_loop.data.documents import KNOWLEDGE_DOMAINS, read_index, write_index
+
+    for d in KNOWLEDGE_DOMAINS:
+        p = write_index(d)
+        console.print(f"{p}: {len(read_index(d))} documents")
+
+
+@app.command()
 def fork(
     domain: str = "airline",
     model: str | None = None,
     effort: str | None = None,
     source: Annotated[str | None, typer.Option("--from")] = None,
+    retrieval: Annotated[
+        str | None, typer.Option(help="banking's retrieval variant, e.g. alltools_minilm")
+    ] = None,
+    tool_mode: Annotated[str | None, typer.Option(help="json or native")] = None,
+    identity_note: Annotated[
+        bool | None,
+        typer.Option("--identity-note/--no-identity-note", help="the harness's identity note"),
+    ] = None,
+    parallel_calls: Annotated[
+        bool | None,
+        typer.Option(
+            "--parallel-calls/--no-parallel-calls",
+            help="native only: keep every tool call of a reply",
+        ),
+    ] = None,
 ) -> None:
-    """A new version with the champion's prompt and helper and a different model or effort."""
+    """A new version with the champion's surfaces and a different model, effort, retrieval,
+    tool mode, identity note or parallel calls."""
     from tau2_loop.agent.versions import fork_version
     from tau2_loop.tracking.registry import champion_name
 
+    if retrieval:
+        from tau2_loop.eval.retrieval import register, variant_tools
+
+        register()
+        if not variant_tools(retrieval):
+            raise typer.BadParameter(f"unknown retrieval variant {retrieval!r}")
     src = source or champion_name(domain) or "v0"
-    v = fork_version(domain, src, model=model, effort=effort)
+    v = fork_version(
+        domain,
+        src,
+        model=model,
+        effort=effort,
+        retrieval=retrieval,
+        tool_mode=tool_mode,
+        identity_note=identity_note,
+        parallel_calls=parallel_calls,
+    )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "
-        f"effort {v.config.effort} · fingerprint {v.fingerprint}"
+        f"effort {v.config.effort} · tool mode {v.config.tool_mode} · retrieval "
+        f"{v.retrieval or 'none'} · identity note {v.config.identity_note} · parallel calls "
+        f"{v.config.parallel_calls} · fingerprint {v.fingerprint}"
     )
 
 
@@ -144,10 +187,14 @@ def register(run_id: str, alias: str = "challenger") -> None:
 
 @app.command()
 def promote(run_id: str, kind: str = "gate") -> None:
-    """Make a run's version the champion of its domain (--kind "model swap" for a fork by fiat)."""
+    """Make a run's version the champion of its domain (--kind "model swap" or "tool change"
+    for a fork by fiat)."""
     from tau2_loop.tracking.registry import promote as _promote
 
     console.print(_promote(run_id, kind=kind))
+
+
+OPTIMISER_HELP = "the optimiser's model for this run; default: the domain's optimiser profile"
 
 
 @app.command()
@@ -155,30 +202,95 @@ def loop(
     domain: str = "airline",
     cycles: int = 1,
     agent: str | None = None,
-    optimiser: str = "opus",
+    optimiser: Annotated[str | None, typer.Option(help=OPTIMISER_HELP)] = None,
     concurrency: int = 3,
     trials: int = 1,
     mode: Annotated[
-        str,
-        typer.Option(help="classic: system.md + helper.py; routing: diagnose, then any of five"),
-    ] = "classic",
+        str | None,
+        typer.Option(
+            help="classic: system.md + helper.py; routing: diagnose, then any of five; "
+            "default: the domain's optimiser profile"
+        ),
+    ] = None,
 ) -> None:
-    """The error loop on one domain: eval → diagnose → new version → gate → test → ledger."""
+    """The error loop on one domain: eval → diagnose → new version → gate → test → ledger. Each
+    cycle runs under the domain's optimiser profile (optimisers/<domain>/); --optimiser and
+    --mode override it for this run."""
     from tau2_loop.loop.run import run_loop
 
     asyncio.run(run_loop(domain, cycles, agent, optimiser, concurrency, trials, mode))
 
 
 @app.command()
+def optimise(
+    domain: str = "airline",
+    source: Annotated[
+        str | None, typer.Option("--from", help="the version to optimise; default the champion")
+    ] = None,
+    optimiser: Annotated[str | None, typer.Option(help=OPTIMISER_HELP)] = None,
+    mode: Annotated[
+        str | None,
+        typer.Option(help="classic or routing; default: the domain's optimiser profile"),
+    ] = None,
+    agent_model: Annotated[
+        str | None, typer.Option(help="the new version's model, if not the source's")
+    ] = None,
+    agent_effort: Annotated[
+        str | None, typer.Option(help="the new version's effort, if not the source's")
+    ] = None,
+    parallel_calls: Annotated[
+        bool | None,
+        typer.Option(
+            "--parallel-calls/--no-parallel-calls",
+            help="the new version keeps every tool call of a reply (native only)",
+        ),
+    ] = None,
+) -> None:
+    """One optimiser session on the source's train failures, writing the next version with no
+    evaluation (s14): play it with `make eval`, gate it with `make challenge`. --agent-model,
+    --agent-effort and --parallel-calls give it agent settings that differ from the source's;
+    the harness writes them, never the optimiser."""
+    from tau2_loop.loop.run import run_optimise
+
+    settings: dict[str, object] = {}
+    if agent_model:
+        settings["model"] = agent_model
+    if agent_effort:
+        settings["effort"] = agent_effort
+    if parallel_calls is not None:
+        settings["parallel_calls"] = parallel_calls
+    try:
+        opt = asyncio.run(run_optimise(domain, source, optimiser, mode, settings or None))
+    except ValueError as e:
+        console.print(f"[red]optimise refused:[/] {e}")
+        raise typer.Exit(1) from e
+    d = opt.diagnosis or {}
+    console.print(
+        f"agents/{domain}/{opt.new_version}: {opt.mode} · surfaces changed "
+        f"{', '.join(opt.surfaces_changed) or '—'} · {len(d.get('diagnoses') or [])} diagnoses · "
+        f"expected to fix {len(d.get('expected_to_fix') or [])} · {opt.n_turns} turns"
+        + (f" · agent.yaml {'; '.join(d.get('agent_yaml') or [])}" if d.get("agent_yaml") else "")
+    )
+    if opt.error or opt.rejected:
+        console.print(
+            f"[{'red' if opt.rejected else 'yellow'}]{'rejected' if opt.rejected else 'note'}:[/] "
+            f"{opt.error} (the folder is kept for reading; delete it before the next optimise)"
+        )
+        if opt.rejected:
+            raise typer.Exit(1)
+
+
+@app.command()
 def ab(
     domain: str = "banking_knowledge",
-    optimiser: str = "opus",
+    optimiser: Annotated[str | None, typer.Option(help=OPTIMISER_HELP)] = None,
     concurrency: int = 3,
     trials: int = 1,
     run_test: Annotated[bool, typer.Option("--test/--no-test")] = True,
 ) -> None:
     """Two challengers from the champion on the same failures, one per optimiser mode (classic,
-    routing); both gated and tested, at most one crowned (s09 §6)."""
+    routing); both gated and tested, at most one crowned (s09 §6). Both run under the domain's
+    optimiser profile; --optimiser overrides its model for this run."""
     from tau2_loop.loop.run import run_ab
 
     try:

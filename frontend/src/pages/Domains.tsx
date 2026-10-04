@@ -3,12 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   type DomainDetail,
   type DomainSummary,
+  type KbDocument,
   type TaskRow,
   byTask,
   domainLabel,
   shortTask,
   useGet,
 } from '../lib/api';
+import { RequiredDocs } from '../lib/docreads';
 import { Loading, Points } from '../lib/ui';
 import { domainPath, taskId as makeTaskId, taskPath, useLens } from '../lib/url';
 
@@ -110,9 +112,12 @@ type TaskFull = {
     env_assertions?: unknown[];
     reward_basis?: string[];
   };
+  /** banking: the documents the agent needs, as tau2 lists them, and with their titles and sizes */
+  required_documents?: string[];
+  documents?: KbDocument[];
 };
 
-type SortKey = 'id' | 'split' | 'n_actions' | 'n_communicate' | 'n_nl_assertions';
+type SortKey = 'id' | 'split' | 'n_actions' | 'n_communicate' | 'n_nl_assertions' | 'n_documents';
 
 export function Domain() {
   const { domain = 'airline', taskId } = useParams();
@@ -136,10 +141,19 @@ export function Domain() {
     .filter((t) => !taskId || t.id === taskId)
     .filter((t) => (split ? t.split === split : true))
     .filter((t) =>
-      q ? `${t.id} ${t.purpose ?? ''} ${t.relevant_policies ?? ''}`.toLowerCase().includes(q) : true,
+      q
+        ? `${t.id} ${t.purpose ?? ''} ${t.goal ?? ''} ${t.relevant_policies ?? ''}`.toLowerCase().includes(q)
+        : true,
     )
     .slice()
     .sort((a, b) => cmp(a, b, sort) * (desc ? -1 : 1));
+  // banking's purposes are all tau2's placeholder, so the column is the goal the scenario states
+  const goals = data.tasks.filter((t) => t.goal).length;
+  const allGoals = goals > 0 && goals === data.tasks.length;
+  const hasDocs = data.tasks.some((t) => (t.n_documents ?? 0) > 0);
+  const ht = data.harness_tools;
+  const tools = ht?.tools ?? data.tools;
+  const knowledge = new Set(ht?.retrieval_info?.tools ?? []);
 
   const head = (key: SortKey, label: string, num = false) => (
     <th
@@ -242,6 +256,9 @@ export function Domain() {
                   {(task.evaluation_criteria?.nl_assertions ?? []).join(' · ')}
                 </p>
               )}
+              {(task.documents ?? []).length > 0 && (
+                <RequiredDocs domain={domain} taskId={task.id} docs={task.documents ?? []} />
+              )}
             </div>
           </div>
           <Points
@@ -270,7 +287,7 @@ export function Domain() {
         </label>
         <input
           type="search"
-          placeholder="search id, purpose, policies"
+          placeholder={allGoals ? 'search id, goal' : 'search id, purpose, policies'}
           value={lens.get('q') ?? ''}
           onChange={(e) => setLens({ q: e.target.value })}
         />
@@ -285,11 +302,18 @@ export function Domain() {
             <tr>
               {head('id', 'task')}
               {head('split', 'split')}
-              <th>purpose</th>
+              {allGoals ? (
+                <th>
+                  customer goal<span className="path">derived from the scenario, not tau2's</span>
+                </th>
+              ) : (
+                <th>purpose</th>
+              )}
               <th>policies</th>
               {head('n_actions', 'actions', true)}
               {head('n_communicate', 'say', true)}
               {head('n_nl_assertions', 'NL', true)}
+              {hasDocs && head('n_documents', 'docs', true)}
               <th>basis</th>
             </tr>
           </thead>
@@ -310,11 +334,15 @@ export function Domain() {
                     <span className="status warn">{t.split}</span>
                   )}
                 </td>
-                <td className="wrap small">{t.purpose ?? t.reason_for_call ?? '—'}</td>
+                <td className="wrap small">
+                  {t.goal ?? t.purpose ?? t.reason_for_call ?? '—'}
+                  {t.goal && !allGoals && <span className="path">goal, derived from the scenario</span>}
+                </td>
                 <td className="wrap small muted">{t.relevant_policies ?? '—'}</td>
                 <td className="num">{t.n_actions}</td>
                 <td className="num">{t.n_communicate}</td>
                 <td className="num">{t.n_nl_assertions}</td>
+                {hasDocs && <td className="num">{t.n_documents ?? 0}</td>}
                 <td className="mono small">{(t.reward_basis ?? []).join('+')}</td>
               </tr>
             ))}
@@ -331,7 +359,14 @@ export function Domain() {
         {data.split.base_n} base tasks.
       </p>
       <details>
-        <summary>{data.tools.length} tools the harness exposes to the agent</summary>
+        <summary>
+          <span>
+            {tools.length} tools the harness exposes to{' '}
+            {ht?.version ? `${domainLabel(domain)}'s champion, ${ht.version}` : 'the agent'}
+            {ht?.retrieval ? ` · retrieval ${ht.retrieval}` : ''}
+          </span>
+        </summary>
+        {ht?.retrieval && <ToolsNote ht={ht} />}
         <div className="tw">
           <table>
             <thead>
@@ -341,9 +376,12 @@ export function Domain() {
               </tr>
             </thead>
             <tbody>
-              {data.tools.map((t) => (
+              {tools.map((t) => (
                 <tr key={t.name}>
-                  <td className="sub mono">{t.name}</td>
+                  <td className="sub mono">
+                    {t.name}
+                    {ht?.retrieval && knowledge.has(t.name) && <span className="path">{ht.retrieval}</span>}
+                  </td>
                   <td className="wrap small">{t.description}</td>
                 </tr>
               ))}
@@ -358,6 +396,46 @@ export function Domain() {
         </div>
       </details>
     </>
+  );
+}
+
+/** Which tools the list shows and why: the extract's, with banking's knowledge tools swapped for
+ *  the champion's retrieval variant's, or the extract's alone where the variant cannot be read. */
+function ToolsNote({ ht }: { ht: NonNullable<DomainDetail['harness_tools']> }) {
+  const info = ht.retrieval_info;
+  const dense = info?.dense_model ? info.dense_model.replace(/^local:/, '').replace(/^sentence-transformers\//, '') : null;
+  if (!ht.known) {
+    return (
+      <p className="small muted">
+        This image ships without tau2, so {ht.version}'s <code>{ht.retrieval}</code> tools cannot be read; these are the task
+        extract's <code>{ht.extract_retrieval}</code> tools.
+      </p>
+    );
+  }
+  if (!ht.replaced.length) {
+    return (
+      <p className="small muted">
+        {ht.version} runs tau2's <code>{ht.retrieval}</code> retrieval, the one the task extract lists.
+      </p>
+    );
+  }
+  return (
+    <p className="small muted">
+      The task extract lists <code>{ht.extract_retrieval}</code>'s {ht.replaced.map((n, i) => (
+        <span key={n}>
+          {i > 0 && ', '}
+          <code>{n}</code>
+        </span>
+      ))}
+      ; {ht.version} runs <code>{ht.retrieval}</code>, so its knowledge tools are{' '}
+      {(info?.tools ?? []).map((n, i) => (
+        <span key={n}>
+          {i > 0 && ', '}
+          <code>{n}</code>
+        </span>
+      ))}
+      {dense ? ` (dense search on ${dense})` : ''}, read from tau2's variant spec.
+    </p>
   );
 }
 

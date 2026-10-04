@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>s13 · tau2-loop — banking v3 and v4: milestones and their checks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,400;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* DESIGN.md §5, verbatim (with the dark block repeated for the explicit dark theme) */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7; /* divergence: red, not the site's #0A6552 */
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8; /* project extension: passed (§2 Colour) */
+  --judge:#5B3A8C; --judge-soft:#EEE9F6; /* project extension: the LLM judge speaking (§2 Colour) */
+  --agent:#235A8C; --agent-soft:#E7EFF8; /* project extension: the answering agent speaking (§2 Colour) */
+  --user:#6E5A2E; --user-soft:#F5F0E1; /* project extension: the simulated customer speaking (§2 Colour) */
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--t0)/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
+code,pre,.mono{font-family:var(--mono);font-size:var(--t-1)}
+p code,li code,td code,dd code,figcaption code{overflow-wrap:anywhere}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font:400 var(--t4)/1.15 var(--serif);overflow-wrap:anywhere}
+h1 em{font-style:italic;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);margin-top:var(--s8)}
+h3{font:600 var(--t1)/1.3 var(--sans);margin-top:var(--s5)}
+h4{font:600 var(--t0)/1.3 var(--sans)}
+p{margin:var(--s3) 0 0;max-width:var(--measure);text-wrap:pretty;color:var(--ink-2)}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure)}
+.label{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.muted{color:var(--muted)} .small{font-size:var(--t-1)}
+main{max-width:var(--w);margin:0 auto;padding-block:var(--s6) var(--s9);padding-inline:var(--s4)}
+header.top{position:sticky;top:0;z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top .in b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top .in .label{margin-left:auto}
+section{scroll-margin-top:72px}
+.toc{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.toc a{font:500 var(--t-2)/1 var(--mono);text-decoration:none;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.chip{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);background:var(--panel);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap;display:inline-block}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.chip.no{border-color:var(--line-3);color:var(--muted)}
+.chip.acc{border-color:var(--accent);color:var(--accent)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{font:500 var(--t-2)/1.3 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);white-space:nowrap}
+td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sub{color:var(--ink);font-weight:500}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+td.wrap{min-width:22ch;max-width:60ch;white-space:normal}
+td.dim{color:var(--faint)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+.v-ok{color:var(--ok);font-weight:500} .v-warn{color:var(--amber);font-weight:500} .v-no{color:var(--accent);font-weight:500}
+.fig-title{display:block;margin-top:var(--s5)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch}
+p.cap .path,.note .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+.note{background:var(--band);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:var(--measure)}
+.note .label{display:block;margin-bottom:var(--s1)}
+.note p{margin-top:var(--s2)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.card{background:var(--panel);border-radius:var(--r);padding:var(--s5);box-shadow:var(--shadow);min-width:0}
+.card h3{margin-top:0}
+.card p{max-width:none}
+.card .n{font:400 var(--t3)/1.1 var(--serif);color:var(--ink);display:block;margin-top:var(--s2)}
+ul.bl{list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s3);max-width:84ch}
+ul.bl li{position:relative;padding-left:1.4rem;color:var(--ink-2)}
+ul.bl li::before{content:'◐';position:absolute;left:0;color:var(--amber)}
+ul.bl.done li::before{content:'●';color:var(--ok)}
+ul.bl.x li::before{content:'✕';color:var(--accent)}
+ol.steps{margin:var(--s4) 0 0;padding-left:1.4rem;max-width:84ch;display:grid;gap:var(--s2);color:var(--ink-2)}
+ol.steps li::marker{font-family:var(--mono);color:var(--accent)}
+pre.cmd{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:pre;max-width:84ch;font-size:var(--t-1);color:var(--ink)}
+pre.cmd .c{color:var(--faint)}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);margin-top:var(--s4);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);max-width:84ch}
+.rule .k{font:500 var(--t-2)/1.6 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:var(--track-label);white-space:nowrap}
+.rule .v{color:var(--ink-2);min-width:0}
+footer{max-width:var(--w);margin:0 auto;padding:var(--s6) var(--s4);color:var(--faint);font-size:var(--t-1);border-top:1px solid var(--line)}
+footer code{overflow-wrap:anywhere}
+
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+button.btn.alt{background:var(--panel);color:var(--ink);border:1px solid var(--line-2)}
+textarea.free{width:100%;margin-top:var(--s3);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3);min-height:64px;resize:vertical}
+.copyall{margin-top:var(--s5);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.copyall textarea{width:100%;font:400 var(--t-1)/1.5 var(--mono);margin-top:var(--s2)}
+@media (max-width:640px){ h1{font-size:var(--t3)} .rule{grid-template-columns:minmax(0,1fr)} }
+
+/* s08 additions: the ideas table's controls, source lists */
+select.disp{font:500 var(--t-1)/1.2 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s2);min-height:34px}
+td.id{font:600 var(--t-1)/1.3 var(--mono);color:var(--accent);white-space:nowrap}
+.tag{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap;display:inline-block;margin:0 var(--s1) var(--s1) 0}
+ul.src{margin:var(--s3) 0 0;padding-left:1.2rem;max-width:96ch;display:grid;gap:var(--s1);color:var(--ink-2);font-size:var(--t-1)}
+ul.src li{overflow-wrap:anywhere}
+h3.grp{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s5)}
+tr.pro td{background:var(--ok-soft)}
+tr.grp td{background:var(--band);font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+
+/* s09: figures (the frontend's .dia vocabulary, frontend/src/styles.css) and the decision form */
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.ext{fill:none;stroke:var(--line-3);stroke-dasharray:4 3}
+.dia .nd.warn{fill:var(--amber-soft);stroke:var(--amber)}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.hi{stroke:var(--accent)}
+.dia .ed.dash{stroke-dasharray:4 3}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 13px var(--sans);fill:var(--muted)}
+.dia .tx.k{font:500 13px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia .bar{fill:var(--line-2)}
+.dia .bar.hi{fill:var(--accent)}
+.dia .bar.pro{fill:var(--amber)}
+.dia .ax{stroke:var(--line-2);stroke-width:1}
+.dia .gl{stroke:var(--line);stroke-width:1}
+.dia .cap{font:400 13px var(--mono);fill:var(--faint)}
+.dia .bar.ok{fill:var(--ok)}
+.dia .trk{fill:var(--band)}
+.dia .tx.ok{fill:var(--ok)}
+.dia .tx.warn{fill:var(--amber)}
+.dia .pick{cursor:pointer}
+.dia .pick .hit{fill:transparent}
+.dia .pick:hover .hit,.dia .pick.on .hit{fill:var(--band)}
+.dia .pick:focus{outline:none}
+.dia .pick:focus-visible .hit{stroke:var(--focus);stroke-width:2}
+.dia{margin-top:var(--s3)}
+.dia .ed{marker-end:url(#arr)}
+fieldset{border:0;padding:0;margin:var(--s5) 0 0;min-width:0}
+fieldset:first-of-type{margin-top:0}
+.card .n{overflow-wrap:anywhere}
+td.num.v-no{color:var(--accent)}
+
+/* s10: figures wider than a phone scroll inside their own frame; SVG text at 15 in a 1000 box never renders under 12.8px */
+.figw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r)}
+.figw .dia{min-width:860px;margin-top:0}
+.dia .tx,.dia .tx.s{font-size:15px} .dia .tx.k,.dia .cap{font-size:14px}
+.dia .tx.ok{fill:var(--ok)}
+tr.rec td{background:var(--accent-soft)}
+td.num.wrap{white-space:normal;min-width:14ch}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:var(--s4);margin-top:var(--s5)}
+
+/* s12: the chart is taller than s10's; the lessons list reads as prose */
+ol.steps li b{color:var(--ink)}
+td .mono,td.mono{font-family:var(--mono)}
+/* s13: milestone status in Fig 1 */
+td .chip.ms{display:inline-block;margin-top:var(--s2)}
+td .ms-note{display:block;font:400 var(--t-2)/1.4 var(--sans);color:var(--muted);margin-top:var(--s1);max-width:28ch}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span class="muted small">s13 · banking v3 and v4: milestones and their checks</span><span class="label">plan · 2026-10-04 · branch banking-v3</span></div></header>
+<main>
+<p class="label">Build plan · banking_knowledge · v3 built, v4 next</p>
+<h1>Five milestones take banking to the leaders' harness, each one <em>checked</em> in the Agent tab before the next starts</h1>
+<p class="lead">Milestone 0 lays foundations with no model calls: retrieval and tool mode become per-version settings, each dataset gets its own optimiser profile, and the Agent tab draws any version's architecture beside its parent's. Then each milestone builds one version and must pass its checks before the next begins. v3 got the leaders' search tools and native tool calls together (milestones 1 and 2, built on 4 Oct). v4 will be written by banking's own optimiser with the rules the leaders follow. The write-time judge waits for your call. Every version is tried on 20 train tasks before the other 77 conversations are spent, with one trial throughout.</p>
+<div class="note" id="outcome"><span class="label">the short version</span><p>Your read is partly right. Missing documents are the biggest single cause of your failures: in 8 of the 15 train tasks v2 fails and a leader passes, a needed document was never found, and the leaders found each one with the shell. But the tools aren't the whole gap, so the plan doesn't stop at them. Your 12 dispositions are all accounted for in §8: the eight marked next are milestones 1–4, and the four marked skip are dropped. Nothing has been built or run. Six decisions are in §7.</p></div>
+<div class="note" id="built"><span class="label">built and tried · 4 Oct · v3 champion by your call</span><p>Milestones 0–2 are built and packaged as v3, with the identity note added as a setting (your call). On train, v3 passed 12 of 60 to v1's 2. On the 37 test tasks it passed 6, the same as v1: it fixed 2 and broke 2 (one-sided McNemar p = 0.688), so the gate held it. You then promoted it as a <code>tool change</code>: the same test score on a harness without v1's defects, and the base to improve from. The harness defects are gone on both splits: 0 slipped calls, 0 account-email calls, 0 bare tool calls. But the new tools were under-used: the shell in 23 of 60 train and 11 of 37 test conversations, and dense search never. Details in <a href="#s9">§9</a>.</p></div>
+<nav class="toc" aria-label="sections">
+<a href="#s0">0 · your question</a><a href="#s1">1 · milestones</a><a href="#s2">2 · the Agent tab</a><a href="#s3">3 · milestone 1 in detail</a><a href="#s4">4 · milestones 2–4</a><a href="#s5">5 · an optimiser per dataset</a><a href="#s6">6 · risks</a><a href="#s7">7 · decisions</a><a href="#s8">8 · receipt</a><a href="#s9">9 · built and tried</a><a href="#src">sources</a>
+</nav>
+
+<section id="s0">
+<h2>0 · Your question — the tools are the biggest single cause, not the whole gap</h2>
+<div class="cards">
+<div class="card"><span class="label">missing documents</span><span class="n">8 / 15</span><p class="small">train tasks v2 fails and a leader passes where a needed document was never found. The leader found each by listing the product's files and reading them through the shell. <b>Milestone 1.</b></p></div>
+<div class="card"><span class="label">slipped tool calls</span><span class="n">147 / 1,017</span><p class="small">v1's replies that were tool calls written as plain text and never ran (14%; v2's were 517 of 1,690, 31%). The leaders call tools natively. <b>Milestone 2.</b></p></div>
+<div class="card"><span class="label">acting on what was read</span><span class="n">38–40 vs 62–66</span><p class="small">% passed when every required document was read: yours against the leaders'. Tools let the agent read; rules make it read first. <b>Milestone 3.</b></p></div>
+<div class="card"><span class="label">model and effort</span><span class="n">27.3 → 48.7</span><p class="small">pass^1 % of 97 tasks, Claude Opus 4.6 → Opus 5, both at max effort. The board's largest lever. You skipped it (E1, M1), so it stays open.</p></div>
+</div>
+<p class="insight">Each milestone closes one of these, and its runs show how much that one was worth.</p>
+</section>
+
+<section id="s1">
+<h2>1 · Milestones — what each builds, what it delivers, and how you see it worked</h2>
+<span class="label fig-title">Fig 1 · the build plan, one row per milestone, with where each stands on 4 Oct</span>
+<div class="tw"><table>
+<thead><tr><th>milestone</th><th>outcome</th><th>built</th><th>check offline</th><th>check in the UI</th><th>your go-ahead</th></tr></thead>
+<tbody>
+<tr><td class="sub">0 · foundations<span class="path">no version · no model calls</span><span class="chip ok ms">done · 4 Oct</span><span class="ms-note">all checks pass; Runs › v1 train reads 15% slipped and 29 bare calls in 9 conversations: the plan's 14% and 30 in 10 were over train and test</span></td><td class="wrap small">Retrieval and tool mode are per-version settings. Each dataset has its own optimiser profile. The Agent tab draws a version without a run and compares versions. Runs show harness-health numbers</td><td class="wrap small"><code>retrieval</code> in <code>agent.yaml</code> (absent = today's <code>bm25_grep</code>); <code>fork --retrieval --tool-mode</code>; <code>TASKS=</code> on <code>make eval</code>; <code>optimisers/&lt;domain&gt;/</code> profiles; the architecture view (§2); harness health on Runs</td><td class="wrap small"><code>pytest</code>, <code>make lint</code>, <code>make gate</code> pass. v1's and v2's fingerprints don't change. Every existing run re-scores. The airline, retail and telecom optimiser prompts are byte-identical to today's</td><td class="wrap small"><b>Agent › banking</b> draws v1 and v2 from <code>agent.yaml</code> alone, side by side. <b>Runs › v1 train</b> shows 14% slipped calls, 0 shell commands and 30 bare calls in 10 conversations: the numbers s12 measured by hand</td><td class="wrap small">none: no model calls. Starts when you queue §7</td></tr>
+<tr><td class="sub">1 · the leaders' tools<span class="path">K1, K2 → v3 = v1 + AllTools</span><span class="chip ok ms">done · in v3</span><span class="ms-note">replay passed (Qwen not measured); shell used in 10 of 20 smoke conversations, short of 15; dense never called</span></td><td class="wrap small">BM25, dense search and a read-only shell on your agent, behaving like the board's</td><td class="wrap small">sandbox-runtime and ripgrep; a local embedder (§7 Q2); the <code>alltools_local</code> variant; v3 by <code>make fork</code></td><td class="wrap small">replay the leaders' train-task searches through v3's tools: 7,961 shell commands, 1,998 BM25 and 1,777 dense queries (§3)</td><td class="wrap small"><b>Agent › v3 vs v1</b>: retrieval changes, the tools gain <code>shell</code> and <code>KB_search_dense</code> (with the model's name), the policy becomes AllTools'. <b>Runs › v3</b>: shell used in at least 15 of 20 conversations, no sandbox or dense errors, more required documents read than v1</td><td class="wrap small">1 smoke conversation and 20 train tasks; then the other 40 train and 37 test</td></tr>
+<tr><td class="sub">2 · native tool calls<span class="path">T1, P4 → built into v3 (<code>tool_mode: native</code>)</span><span class="chip ok ms">done · in v3</span><span class="ms-note">built into v3 with milestone 1 and the identity note, so there is no v4; probe passed, 0 slipped and 0 bare calls</span></td><td class="wrap small">No slipped calls, several calls a turn, and a locked tool can't be called by its bare name</td><td class="wrap small">a native mode in the sealed core, for versions that ask for it: tool definitions go to the SDK and the first tool call comes back to tau2 unrun. JSON versions unchanged byte for byte. The Agent tab's model panel stops calling native versions JSON</td><td class="wrap small">a one-call probe, as <code>make judge-probe</code> was, proves a tool call returns without running. A test proves a JSON version's call is unchanged</td><td class="wrap small"><b>Agent › v4 vs v3</b>: tool mode reads native. <b>Runs › v4</b>: 0 slipped calls, 0 bare discoverable calls, more than 1.0 call a turn</td><td class="wrap small">the probe (1 model call), then 20, then the rest</td></tr>
+<tr><td class="sub">3 · banking's own optimiser<span class="path">P1, P2, P4 → v4, written by <code>make loop</code></span><span class="chip warn ms">next · not started</span><span class="ms-note">the profiles exist (milestone 0); banking's guide isn't written. H1 is already in v3 as a setting. Starts from v3, now champion</span></td><td class="wrap small">The agent researches before it acts, checks claims, keeps the session email out, and never names a tool bare, because banking's optimiser now knows these rules</td><td class="wrap small">banking's profile: a guide with the four rules, budgets sized for 60 failures, and a guard that refuses a <code>system.md</code> naming a discoverable tool without unlock-then-call (§5)</td><td class="wrap small">banking's optimiser prompt holds the guide and the others' don't. The guard refuses a bad edit in a test</td><td class="wrap small"><b>Optimise › banking</b>: the profile and its fingerprint; the cycle names the profile it ran under. <b>Agent › v4 vs v3</b>: the new rules, highlighted. <b>Runs › v4</b>: look-ups before the first action rise toward the leaders' 9–13</td><td class="wrap small"><code>make loop DOMAIN=banking_knowledge CYCLES=1</code>, which starts from v3, the champion</td></tr>
+<tr><td class="sub">4 · the write-time judge<span class="path">H3 · blocked on your call</span><span class="chip no ms">blocked</span></td><td class="wrap small">A judge that checks each banking write before it runs</td><td class="wrap small">banking's labels (J0, no model), golden answers you confirm, then a replay. That needs the judge's data reopened for banking: it closed on 3 Oct (<code>labels.CLOSED_AT</code>)</td><td class="wrap small">none until you confirm the golden answers: your standing rule</td><td class="wrap small"><b>Evals › banking › judge</b> and <b>Agent › judge</b>, as for airline</td><td class="wrap small">a separate plan page, when you choose</td></tr>
+</tbody></table></div>
+<p class="cap">Every version is a challenger: its 20 train tasks first (Fig 5's checks and your bar, §7 Q4), then <code>make extend</code> for the other 40 and <code>make challenge</code> for the 37 test tasks, gated against the champion. One trial throughout. Each milestone's 20 take about 40–90 minutes, and its rollout about 3–5.5 hours.</p>
+<p class="insight">You see each milestone work in the UI first: the Agent tab shows what changed, and Runs shows whether the change did what it was for.</p>
+</section>
+
+<section id="s2">
+<h2>2 · The Agent tab — any version's architecture, without a run, beside its parent</h2>
+<p>Today the tab draws one conversation: it needs a run and a trial, and a version without runs shows "has no committed run to draw". Its tool list is the dataset's, made under <code>bm25_grep</code>, so a v3 would still show BM25's tools. Milestone 0 adds a version view drawn from the version's own files. The existing graph's boxes light up from <code>agent.yaml</code>, the surfaces present and the version's retrieval. Every box that differs from the parent version is marked. Under the graph sits a comparison table, the pattern the judge's side-by-side already uses.</p>
+<span class="label fig-title">Fig 2 · the comparison table the Agent tab shows: banking's versions as built, and v4 as planned</span>
+<div class="tw"><table>
+<thead><tr><th>layer</th><th>v1</th><th>v2</th><th>v3 · champion</th><th>v4 · next</th></tr></thead>
+<tbody>
+<tr><td class="sub">model · effort</td><td>Sonnet 5 · medium</td><td>same</td><td>same</td><td>same</td></tr>
+<tr><td class="sub">tool calls</td><td>JSON in the reply</td><td>JSON in the reply</td><td class="v-ok">native</td><td>native</td></tr>
+<tr><td class="sub">retrieval</td><td><code>bm25_grep</code>: <code>KB_search</code>, <code>grep</code></td><td>same as v1</td><td class="v-ok"><code>alltools_minilm</code>: <code>KB_search_bm25</code>, <code>KB_search_dense</code>, <code>shell</code></td><td>same as v3</td></tr>
+<tr><td class="sub">dense model</td><td class="dim">none</td><td class="dim">none</td><td class="v-ok"><code>all-MiniLM-L6-v2</code>, on this machine</td><td>same as v3</td></tr>
+<tr><td class="sub">policy template</td><td>tau2's BM25 template</td><td>same as v1</td><td class="v-ok">tau2's AllTools template, with the shell workflow</td><td>same as v3</td></tr>
+<tr><td class="sub">identity note</td><td class="dim">none</td><td>a rule in its own <code>system.md</code></td><td class="v-ok">the harness's note, as a setting</td><td>same as v3</td></tr>
+<tr><td class="sub">system.md</td><td>v1's</td><td>its own: cycle 1's rules</td><td>v1's, byte for byte</td><td class="v-ok">v3's + the optimiser's rules (P1, P2, P4, and use the shell and dense search)</td></tr>
+<tr><td class="sub">code surfaces</td><td class="dim">none</td><td><code>helper.py</code>: <code>on_tool_call</code>, <code>on_reply</code></td><td class="dim">none</td><td>whatever the optimiser routes there</td></tr>
+<tr><td class="sub">optimiser profile</td><td class="dim">not written by one</td><td>the shared optimiser</td><td class="dim">not written by one</td><td class="v-ok">banking's own, by fingerprint</td></tr>
+<tr><td class="sub">made by · kind</td><td>model swap from v0</td><td>loop cycle 1 from v1</td><td>fork · tool change from v1</td><td>loop cycle from v3</td></tr>
+<tr><td class="sub">train · test</td><td>2 / 60 · 6 / 37</td><td>17 / 60 · 5 / 37</td><td>12 / 60 · 6 / 37</td><td class="dim">filled in by the runs</td></tr>
+</tbody></table></div>
+<p class="cap">The data comes from <code>GET /api/agents/{domain}/{name}</code>, which already returns a version's files and config but which nothing calls, plus three new fields: retrieval, the tool names that retrieval gives, and the prompt layers. The tool names are read from tau2's variant spec, not by building the environment, so the view never starts a sandbox or loads an embedding model. Run-level numbers (slipped calls, shell use, bare calls, look-ups before the first action, required documents read) move from s12's scratch scripts into the run profile that <code>GET /api/runs/{id}</code> already returns. Runs shows them, and the Agent tab links to them.<span class="path">frontend/src/pages/Agent.tsx · frontend/src/lib/agentgraph.tsx (AgentGraph, NodePanel; the model panel's JSON line at :931) · frontend/src/pages/JudgeAgent.tsx (the side-by-side) · src/tau2_loop/serving/app.py: /api/agents/{domain}/{name}, /api/agents/diff, /api/runs/{id} · src/tau2_loop/eval/profile.py</span></p>
+</section>
+
+<section id="s3">
+<h2>3 · Milestone 1 in detail — v3 is v1 with AllTools, checked offline, tried on 20</h2>
+<h3>Build</h3>
+<div class="tw"><table>
+<thead><tr><th>id</th><th>change</th><th>where</th><th>done when</th></tr></thead>
+<tbody>
+<tr><td class="id">B1</td><td class="wrap"><b>Install the shell's sandbox and the embedding library.</b> Anthropic's sandbox-runtime and ripgrep for the shell; sentence-transformers for the embedding model (transcript-rag-agent uses version 5.5)</td><td class="wrap small"><code>npm install -g @anthropic-ai/sandbox-runtime@0.0.23</code>, <code>brew install ripgrep</code>, <code>uv add sentence-transformers</code></td><td class="wrap small">tau2's own dependency check passes (<code>sandbox_manager._check_sandbox_dependencies</code>)</td></tr>
+<tr><td class="id">B2</td><td class="wrap"><b>A local embedder.</b> Loaded once per process, pinned to the CPU (transcript-rag-agent found the Apple GPU path hangs on the first embed). Two entries, one in each of tau2's embedder tables: documents as they are, queries with the model's instruction if it has one. tau2 caches the 698 document vectors</td><td class="wrap small">new <code>eval/retrieval.py</code>; tau2's <code>BaseEmbedder</code> and its two <code>EMBEDDER_REGISTRY</code> tables; the pattern of transcript-rag-agent's <code>src/rag/embeddings.py</code></td><td class="wrap small">a test embeds a fixed query and gets 10 documents back; a second build reads the cache</td></tr>
+<tr><td class="id">B3</td><td class="wrap"><b>The <code>alltools_local</code> variant.</b> Built with tau2's own <code>all_tools_variant</code>, pointed at B2, and registered when the module loads. Both the runner and rescore import it, or a v3 run can't be re-scored</td><td class="wrap small"><code>eval/retrieval.py</code>, imported by <code>runner.py</code> and <code>replay.py</code></td><td class="wrap small">the banking environment builds with the shell, BM25 and dense tools, and its policy holds the shell workflow</td></tr>
+<tr><td class="id">B4</td><td class="wrap"><b>v3.</b> <code>make fork DOMAIN=banking_knowledge FROM=v1 RETRIEVAL=alltools_local</code>; its <code>diagnosis.json</code> says <code>kind: tool change</code></td><td class="wrap small"><code>agents/banking_knowledge/v3</code></td><td class="wrap small">the Agent tab shows v3 against v1 as Fig 2's first two columns</td></tr>
+</tbody></table></div>
+<p class="cap">Your agent's policy comes from tau2 and drops into <code>system.md</code>'s <code>{policy}</code> slot, so changing the retrieval swaps in AllTools' instructions, shell workflow included, with no prompt edit.<span class="path">src/tau2_loop/agent/compose.py: POLICY_SLOT · tau2 retrieval.py: build_policy, all_tools_variant · knowledge/document_preprocessors/embedding_indexer.py · input_preprocessors/embedding_encoder.py</span></p>
+
+<h3>Which embedding model</h3>
+<p>transcript-rag-agent runs <code>sentence-transformers/all-MiniLM-L6-v2</code> on this machine: no key, no bill, already downloaded (about 90 MB), 384 dimensions. It reads only the first 256 tokens of what it embeds, and tau2 embeds each document whole. The 698 documents average about 330 tokens, and roughly 58% run past 256 (13% past 512), so for those it embeds the opening and drops the tail. The opening holds the title and key terms, so this may matter little. The replay below measures it rather than guessing: both MiniLM and Qwen3-Embedding-0.6B (32k context) are scored on the leaders' own dense queries against what OpenAI's model returned.</p>
+
+<h3>Check parity offline</h3>
+<div class="tw"><table>
+<thead><tr><th>check</th><th>what it replays</th><th class="num">calls</th><th>passes when</th></tr></thead>
+<tbody>
+<tr><td class="sub">shell</td><td class="wrap">every <code>shell</code> command in Opus 5's and Qwen 3.8 Max's train conversations, run in v3's sandbox</td><td class="num">7,961</td><td class="wrap small">outputs match the transcripts', allowing for paths; the documents and <code>INDEX.md</code> are the board's</td></tr>
+<tr><td class="sub">BM25</td><td class="wrap">every <code>KB_search_bm25</code> query, through v3's BM25</td><td class="num">1,998</td><td class="wrap small">the same documents in the same order: the same tau2 pipeline, so any difference is a bug</td></tr>
+<tr><td class="sub">dense</td><td class="wrap">every <code>KB_search_dense</code> query, through MiniLM and through Qwen3-Embedding-0.6B. The transcripts hold the 10 documents OpenAI's model returned for each</td><td class="num">1,777</td><td class="wrap small">a task's required document lands in the top 10 within 5 points of OpenAI's rate. Overlap with OpenAI's 10 is reported for both</td></tr>
+</tbody></table></div>
+<p class="cap">Only train-task conversations are replayed: 240 per leader, 60 tasks × 4 trials. No optimiser reads any of it.<span class="path">submissions/{claude-opus-5,qwen3-8-max}_sierra_2026-08-04/trajectories/banking_knowledge_results.json (scratchpad copies) · counted with board/parity_count.py</span></p>
+
+<h3>Try on 20 train tasks</h3>
+<p><b>Smoke first:</b> one conversation on <code>task_073</code>, the ATM fee audit, where Opus 5 read <code>INDEX.md</code> and each account family's fee pages. It checks that the shell and dense calls appear in a real trace before 20 conversations are spent. Milestones 2 and 3 reuse the same 20 tasks, so every version is compared on the same set.</p>
+<span class="label fig-title">Fig 4 · the 20 tasks, in three groups, with v1's and v2's results on them</span>
+<div class="tw"><table>
+<thead><tr><th>group</th><th>tasks</th><th class="num">v1</th><th class="num">v2</th><th>why</th></tr></thead>
+<tbody>
+<tr><td class="sub">missing documents</td><td class="wrap small"><code>task_019 021 025 033 064 073 096 100</code></td><td class="num">0 / 8</td><td class="num">0 / 8</td><td class="wrap small">§0's eight: where the shell should help most</td></tr>
+<tr><td class="sub">v1's passes</td><td class="wrap small"><code>task_006 050</code></td><td class="num">2 / 2</td><td class="num">2 / 2</td><td class="wrap small">the regression guard: each version must keep both</td></tr>
+<tr><td class="sub">drawn by seed</td><td class="wrap small"><code>task_034 038 044 056 063 066 069 082 083 087</code></td><td class="num">0 / 10</td><td class="num">1 / 10</td><td class="wrap small">the neutral read: <code>random.Random(300).sample</code> of the other 50 train tasks, the split's own seed</td></tr>
+<tr class="sum"><td class="sub">all 20</td><td></td><td class="num">2 / 20</td><td class="num">3 / 20</td><td></td></tr>
+</tbody></table></div>
+<span class="label fig-title">Fig 5 · checks on the 20 conversations, shown on Runs, and the bar to roll out</span>
+<div class="tw"><table>
+<thead><tr><th>check</th><th>passes when</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="2">the tools work</td></tr>
+<tr><td class="sub">sandbox and dense errors</td><td class="wrap">none in 20 conversations</td></tr>
+<tr><td class="sub">the shell is used</td><td class="wrap">in at least 15 of 20 conversations (the leaders: 97–100%)</td></tr>
+<tr><td class="sub">slipped calls</td><td class="wrap">no higher than v1's 14% of replies. Shell commands carry quotes, which the JSON reply has to escape</td></tr>
+<tr><td class="sub">required documents read</td><td class="wrap">a larger share than v1 read on the same 20</td></tr>
+<tr class="grp"><td colspan="2">the bar to roll out (proposed; §7 Q4)</td></tr>
+<tr><td class="sub">score</td><td class="wrap">every check above passes, both of v1's passes are kept, and more of the 20 pass than v1's 2</td></tr>
+</tbody></table></div>
+<pre class="cmd"><span class="c"># after your go-ahead; each conversation runs on the subscription</span>
+make eval DOMAIN=banking_knowledge AGENT=v3 SPLIT=train TASKS="task_073"
+make eval DOMAIN=banking_knowledge AGENT=v3 SPLIT=train TASKS="task_019 task_021 task_025 task_033 task_064 task_073 task_096 task_100 task_006 task_050 task_034 task_038 task_044 task_056 task_063 task_066 task_069 task_082 task_083 task_087"
+<span class="c"># after your second go-ahead, only if the 20 clear the bar</span>
+make extend RUN=&lt;the 20-task run id&gt;     <span class="c"># the other 40 train tasks, joined into one run of 60</span>
+make challenge DOMAIN=banking_knowledge AGENT=v3   <span class="c"># 37 test tasks, gated against v1's 6 of 37</span></pre>
+<p class="cap"><code>make extend</code> refuses if the version's bytes, the rules or the retrieval changed, so the 20 aren't replayed. On banking the gate compares test runs by one-sided exact McNemar (<code>config.GATE_ON_TEST</code>). Twenty tasks with one trial can't prove a gain: they prove the tools work and show a direction. The gate gives the verdict.</p>
+</section>
+
+<section id="s4">
+<h2>4 · Milestones 2–4 — native calls, banking's own optimiser, then the judge</h2>
+<h3>Milestone 2 · native tool calls (T1, and P4 for free)</h3>
+<p>Today the sealed core gives the model no tools (<code>llm/core.py</code>: <code>tools=[]</code>), and the agent writes each call as JSON in its reply. <code>tool_mode</code> is already a version setting, but <code>json</code> is its only value. v3 sets <code>tool_mode: native</code> (built with milestone 1, so there is no separate version for it). For such a version the core passes the conversation's tools to the SDK as definitions, stops at the model's first tool call, and returns every call in that reply to tau2 without running any. Versions on <code>json</code> take today's path unchanged, which a test pins byte for byte. A native agent is only offered the tools it has, so a locked discoverable tool can't be called by its bare name: P4's 30 bare calls in v1 and 86 in v2 have no way to happen.</p>
+<ul class="bl">
+<li><b>The probe first:</b> one model call, as <code>make judge-probe</code> proved the judge's output format holds under the sealed core. If the subscription's CLI won't hand a tool call back unrun, milestone 2 stops there, and you hear why before anything else is spent.</li>
+<li><b>Then the same 20 tasks.</b> Checks: 0 slipped calls, 0 bare discoverable calls, more than 1.0 call a turn, and Fig 5's bar against v3.</li>
+</ul>
+<h3>Milestone 3 · banking's own optimiser writes the rules (P1, P2, H1, P4)</h3>
+<p>The project's rule is that a prompt changes through the loop, not by hand. So the rules go into banking's optimiser profile (§5), and <code>make loop</code> writes v4 from v3, the champion:</p>
+<ul class="bl">
+<li><b>P1 research first:</b> list every product and operation in the request, search the customer's stated problem before generic gates, and read each operation's procedure, eligibility and fee documents before unlocking anything.</li>
+<li><b>P2 the four failure modes:</b> check a customer's claim with a read tool before acting on it, check each request's preconditions against the others, and ask a neutral question rather than assume.</li>
+<li><b>H1 the identity note:</b> already done. v3 carries it as a setting (<code>identity_note: true</code>), and its runs made 0 account-email calls.</li>
+<li><b>P4 as a rule:</b> never name a discoverable tool without unlock-then-call, as v2's rule 7 did. A guard refuses a <code>system.md</code> that does.</li>
+</ul>
+<p class="cap">v3 is champion, so a plain <code>make loop DOMAIN=banking_knowledge CYCLES=1</code> starts from it, and the gate compares v4's test run with v3's.<span class="path">src/tau2_loop/loop/run.py: run_loop, run_cycle</span></p>
+<h3>Milestone 4 · the write-time judge (H3) — blocked on two of your rules</h3>
+<p>The judge learns from labelled checkpoints. Since 3 Oct its data is closed: a run scored after <code>labels.CLOSED_AT</code>, of any agent or domain, never joins the labels, golden answers or replays. Every banking run from v1's extension on is after that point. And no judge is replayed until you have confirmed its golden answers. So milestone 4 needs you to reopen the judge's data for banking. It would then be planned on its own page: J0 labels (no model), golden answers you tick in Review, and only then a replay.</p>
+</section>
+
+<section id="s5">
+<h2>5 · An optimiser per dataset — each tuned on its own, today's behaviour as every default</h2>
+<p>Today there is one optimiser: one prompt, one surface guide, one routing table, one set of budgets. The model and mode come from the command line. Only the data it reads differs by dataset. Milestone 0 gives each dataset a profile the loop reads before every cycle:</p>
+<span class="label fig-title">Fig 6 · a dataset's optimiser profile</span>
+<div class="tw"><table>
+<thead><tr><th>part</th><th>holds</th><th>today's value, every dataset's default</th></tr></thead>
+<tbody>
+<tr><td class="sub"><code>optimisers/&lt;domain&gt;/profile.yaml</code></td><td class="wrap">model, effort, mode (classic or routing), turn limit, the failure-reading budgets, the surfaces the optimiser may edit</td><td class="wrap small">opus · classic · 120 turns · <code>TRANSCRIPT_BUDGET</code> 60,000, <code>SCENARIO_BUDGET</code> 60,000, <code>DIFF_BUDGET</code> 90,000 · system.md and helper.py</td></tr>
+<tr><td class="sub"><code>optimisers/&lt;domain&gt;/guide.md</code></td><td class="wrap">the dataset's own lessons, added to the shared prompt</td><td class="wrap small">empty</td></tr>
+<tr><td class="sub"><code>optimisers/&lt;domain&gt;/guards.py</code> (optional)</td><td class="wrap">extra checks on what the optimiser writes, beside the shared ones in <code>loop/guards.py</code></td><td class="wrap small">none</td></tr>
+</tbody></table></div>
+<ul class="bl">
+<li><b>Nothing changes until you tune it.</b> Each default reproduces today's prompt byte for byte, which a test pins for all four datasets. Flags on <code>make loop</code> still override a profile for one run.</li>
+<li><b>Every cycle records its profile's fingerprint</b> in the ledger, as a run records its version's. Optimise shows each dataset's profile and which one wrote each version, so you can tell a better optimiser from a better prompt.</li>
+<li><b>Banking's first profile</b> is milestone 3's: the four rules, budgets sized for 60 failures, and the bare-tool-name guard.</li>
+<li><b>The optimiser still never reads <code>runs/</code>, <code>data/</code>, <code>loop/</code> or <code>vendor/</code>.</b> The harness reads the profile and passes the guide into the prompt.</li>
+</ul>
+</section>
+
+<section id="s6">
+<h2>6 · Risks — what could break, and what the plan does about it</h2>
+<div class="tw"><table>
+<thead><tr><th>risk</th><th>effect</th><th>in the plan</th></tr></thead>
+<tbody>
+<tr><td class="sub">slipped calls in v3</td><td class="wrap small">v3 keeps the JSON contract, and a shell command's quotes must be escaped inside the reply</td><td class="wrap small">measured on v3's 20. Milestone 2 removes the contract either way</td></tr>
+<tr><td class="sub">the native probe fails</td><td class="wrap small">the subscription's CLI may not hand back a tool call without running it</td><td class="wrap small">one call decides before anything else is spent; milestone 3 can still run from v3</td></tr>
+<tr><td class="sub">MiniLM's 256-token limit</td><td class="wrap small">about 58% of documents embedded without their tail</td><td class="wrap small">measured in §3's dense replay against Qwen3-0.6B and OpenAI's results</td></tr>
+<tr><td class="sub">one trial, 37 test tasks</td><td class="wrap small">the gate sees only large effects; v2 was held at 6 → 5</td><td class="wrap small">your call: one trial for now</td></tr>
+<tr><td class="sub">customer</td><td class="wrap small">Haiku 4.5, not GPT-5.2, so scores stay off the board's scale</td><td class="wrap small">unchanged, so versions differ only in what each milestone builds</td></tr>
+<tr><td class="sub">CI after a promotion</td><td class="wrap small"><code>make gate</code> rebuilds each champion run's tools. A v3-or-later champion needs the sandbox, ripgrep, the embedding model and, on Linux, bubblewrap and socat in CI. Unprivileged sandboxes may be restricted on GitHub's Ubuntu runners: verify, don't assume</td><td class="wrap small">decided only if a version with the new tools is promoted</td></tr>
+<tr><td class="sub">billing rule</td><td class="wrap small">the embedding model isn't Claude and isn't on the subscription. It runs here with no key and no bill</td><td class="wrap small">your call, in §7 Q2</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s7">
+<h2>7 · Decisions — six answers before any code</h2>
+<p>Each question has a recommendation, checked by default. Change any of them, add a note, and queue all six at once. I then build milestone 0 and milestone 1's code, and run §3's replays. I start no conversation until you've seen the replays' results and said so.</p>
+<form class="q" data-lavish-question="s13-decisions" onsubmit="event.preventDefault(); const f=event.currentTarget; const fd=new FormData(f); const qs=['q1','q2','q3','q4','q5','q6']; const items=qs.map(q=>({id:q.toUpperCase(),answer:fd.get(q)||''})).filter(i=>i.answer); const note=(fd.get('note')||'').trim(); const ack=f.querySelector('.ack'); if(items.length<qs.length){ack.textContent='Answer all six first.';return;} window.lavish?.queuePrompt('s13 plan decisions: '+items.map(i=>i.id+' = '+i.answer).join('; ')+(note?'. Note: '+note:'')+'. Build milestone 0 and milestone 1 code and run the section 3 replays per these answers; start no conversation until I approve after seeing the replay results. Account for every answer.',{tag:'tracked-batch',text:'s13: 6 decisions',element:f,queueKey:'s13-decisions',data:{items,note}}); ack.textContent='Queued 6 answers. Now press Send to Agent.';">
+<h3>Q1 · v3's base</h3>
+<label class="opt"><input type="radio" name="q1" value="v1" checked><span class="t"><b>v1, the champion (recommended)</b><span>v3 against v1 then differs only in the tools, so the gate measures them alone</span></span></label>
+<label class="opt"><input type="radio" name="q1" value="v2"><span class="t"><b>v2, the held challenger</b><span>has the identity rule and 15 train fixes, but also the "One moment please" helper and rule 7's bare tool name</span></span></label>
+<h3>Q2 · the embedding model</h3>
+<label class="opt"><input type="radio" name="q2" value="replay MiniLM and Qwen3-0.6B, keep MiniLM if both clear the bar" checked><span class="t"><b>Replay both, keep transcript-rag-agent's MiniLM if both clear the bar (recommended)</b><span>it's already set up and on disk; Qwen3-0.6B takes over only if MiniLM's 256-token limit costs too much. Either way you accept a model that isn't Claude in the setup</span></span></label>
+<label class="opt"><input type="radio" name="q2" value="MiniLM only"><span class="t"><b>MiniLM only</b><span>transcript-rag-agent's model, whatever the replay shows; the replay is still reported</span></span></label>
+<label class="opt"><input type="radio" name="q2" value="shell only, no dense"><span class="t"><b>No dense search: the shell and BM25 only</b><span>every model call stays on the subscription; dense was the smallest of the three in the paper</span></span></label>
+<h3>Q3 · the 20 train tasks</h3>
+<label class="opt"><input type="radio" name="q3" value="8 missing-document + 2 v1 passes + 10 seeded" checked><span class="t"><b>Fig 4's three groups (recommended)</b><span>the eight the tools target, v1's two passes as a guard, ten by the split's seed; reported separately</span></span></label>
+<label class="opt"><input type="radio" name="q3" value="first 20 of train in split order"><span class="t"><b>The first 20 of train, in split order</b><span>split v1's original cut, picked blind; it holds 5 of the 8 and one of v1's passes</span></span></label>
+<label class="opt"><input type="radio" name="q3" value="20 drawn by seed"><span class="t"><b>20 drawn by seed from all 60</b><span>the most neutral; may hold few of the tasks the tools target</span></span></label>
+<h3>Q4 · the bar to roll out, for every milestone</h3>
+<label class="opt"><input type="radio" name="q4" value="checks pass + v1's passes kept + beats the parent on the 20" checked><span class="t"><b>Fig 5's checks, both of v1's passes kept, and more of the 20 than its parent version (recommended)</b><span>low enough for 20 tasks, and a regression stops it</span></span></label>
+<label class="opt"><input type="radio" name="q4" value="checks pass only"><span class="t"><b>The checks only</b><span>roll out whenever the change works, and let the test gate judge the score</span></span></label>
+<label class="opt"><input type="radio" name="q4" value="checks pass + at least v2's 3 of 20"><span class="t"><b>The checks, and at least v2's 3 of 20</b><span>each version must match the held challenger before it costs another 77 conversations</span></span></label>
+<h3>Q5 · when a milestone's version is held</h3>
+<label class="opt"><input type="radio" name="q5" value="build on it if its 20-task checks passed; challenge the last against the champion" checked><span class="t"><b>Build on it anyway, and challenge the last version against the champion (recommended)</b><span>with one trial the gate sees only large effects; the tools and native calls fix defects whatever one gate says</span></span></label>
+<label class="opt"><input type="radio" name="q5" value="stop and decide"><span class="t"><b>Stop, and decide then</b><span>each milestone waits for a promotion</span></span></label>
+<h3>Q6 · how P1, P2 and H1 reach the prompt</h3>
+<label class="opt"><input type="radio" name="q6" value="through banking's optimiser guide" checked><span class="t"><b>Through banking's optimiser profile, written by <code>make loop</code> (recommended)</b><span>the project's rule: prompts change through the loop, never by hand</span></span></label>
+<label class="opt"><input type="radio" name="q6" value="by hand in a v4 fork"><span class="t"><b>By hand, in a v4 fork</b><span>faster and exactly worded, but the first prompt written outside the loop</span></span></label>
+<textarea class="free" name="note" placeholder="Anything else: a different bar, a task to add, a change to a milestone"></textarea>
+<div class="actions"><button class="btn" type="submit">Queue the six answers</button><span class="ack"></span></div>
+</form>
+<div class="copyall">
+  <button type="button" class="btn alt" onclick="(async (btn) => {
+    const qs = [...document.querySelectorAll('[data-lavish-question]')];
+    const status = btn.parentElement.querySelector('[data-lavish-copy-all-status]');
+    btn.parentElement.querySelector('[data-lavish-copy-all-manual]')?.remove();
+    const out = [];
+    for (const q of qs) {
+      const key = q.getAttribute('data-lavish-question');
+      const lines = [];
+      for (const el of q.querySelectorAll('input, textarea')) {
+        if (el.matches('input[type=radio]') && !el.checked) continue;
+        const v = (el.value || '').trim(); if (!v) continue;
+        lines.push('  ' + (el.name || 'note') + ': ' + v);
+      }
+      if (lines.length) out.push(key + ':\n' + lines.join('\n'));
+    }
+    const text = out.join('\n\n');
+    if (!text) { status.textContent = 'No answers to copy yet.'; return; }
+    try { await navigator.clipboard.writeText(text); status.textContent = 'Answers copied: paste them into the chat.'; return; } catch {}
+    const man = document.createElement('textarea'); man.value = text; man.readOnly = true; man.rows = Math.min(18, text.split('\n').length + 1);
+    man.setAttribute('aria-label', 'Answers to copy manually'); man.dataset.lavishCopyAllManual = '';
+    btn.parentElement.append(man); man.focus(); man.select(); status.textContent = 'Clipboard unavailable: copy the text below.';
+  })(this)">Copy all answers</button>
+  <span data-lavish-copy-all-status role="status" aria-live="polite" class="small muted"></span>
+</div>
+</section>
+
+<section id="s8">
+<h2>8 · Receipt — every one of s12's 12 dispositions, and your four notes</h2>
+<div class="tw"><table>
+<thead><tr><th>id</th><th>idea</th><th>your call</th><th>outcome</th></tr></thead>
+<tbody>
+<tr><td class="id">K1</td><td class="wrap small">read-only shell</td><td>next</td><td class="wrap small"><span class="v-ok">planned:</span> milestone 1 (§3)</td></tr>
+<tr><td class="id">K2</td><td class="wrap small">local dense search</td><td>next</td><td class="wrap small"><span class="v-ok">planned:</span> milestone 1, with transcript-rag-agent's model as the first choice (§7 Q2)</td></tr>
+<tr><td class="id">T1</td><td class="wrap small">native tool calls</td><td>next</td><td class="wrap small"><span class="v-ok">planned:</span> milestone 2, probe first (§4)</td></tr>
+<tr><td class="id">P4</td><td class="wrap small">unlock, then call</td><td>next</td><td class="wrap small"><span class="v-ok">planned:</span> enforced by milestone 2's native tools, and a rule and guard in milestone 3</td></tr>
+<tr><td class="id">P1</td><td class="wrap small">research first</td><td>next</td><td class="wrap small"><span class="v-ok">planned:</span> milestone 3, through banking's optimiser (§7 Q6)</td></tr>
+<tr><td class="id">P2</td><td class="wrap small">the four failure modes</td><td>next</td><td class="wrap small"><span class="v-ok">planned:</span> milestone 3, likewise</td></tr>
+<tr><td class="id">H1</td><td class="wrap small">identity note</td><td>next</td><td class="wrap small"><span class="v-ok">planned:</span> milestone 3, in banking's prompt only, so no other baseline moves</td></tr>
+<tr><td class="id">H3</td><td class="wrap small">write-time judge</td><td>next</td><td class="wrap small"><span class="v-warn">planned, blocked:</span> milestone 4 needs you to reopen the judge's data for banking (§4)</td></tr>
+<tr><td class="id">E1</td><td class="wrap small">effort high or max</td><td>skip</td><td class="wrap small"><span class="v-no">dropped.</span> The model and effort gap stays open</td></tr>
+<tr><td class="id">M1</td><td class="wrap small">Opus 5 fork</td><td>skip</td><td class="wrap small"><span class="v-no">dropped</span></td></tr>
+<tr><td class="id">O1</td><td class="wrap small">leaders' transcripts for the optimiser</td><td>skip</td><td class="wrap small"><span class="v-no">dropped.</span> §3's replay reads their tool calls only, never for an optimiser</td></tr>
+<tr><td class="id">R1</td><td class="wrap small">multi-trial gate</td><td>skip</td><td class="wrap small"><span class="v-no">dropped:</span> one trial throughout, as you said</td></tr>
+<tr class="grp"><td colspan="4">your notes on s12</td></tr>
+<tr><td class="id">n1</td><td class="wrap small">use transcript-rag-agent's embedding model</td><td>note</td><td class="wrap small"><span class="v-ok">planned:</span> MiniLM, replayed against Qwen3-0.6B (§3, §7 Q2)</td></tr>
+<tr><td class="id">n2</td><td class="wrap small">an optimiser tuned per dataset</td><td>note</td><td class="wrap small"><span class="v-ok">planned:</span> profiles in milestone 0, banking's tuned in milestone 3 (§5)</td></tr>
+<tr><td class="id">n3</td><td class="wrap small">one trial only for now</td><td>note</td><td class="wrap small"><span class="v-ok">applied</span> to every run in this plan</td></tr>
+<tr><td class="id">n4</td><td class="wrap small">a milestone table with UI checks; the Agent tab by version</td><td>note</td><td class="wrap small"><span class="v-ok">planned:</span> Fig 1 and §2</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s9">
+<h2>9 · Built and tried — v3 beats v1 on train, ties it on test, and is champion by your call</h2>
+<span class="label fig-title">Fig 7 · what was built, and how each part was checked</span>
+<div class="tw"><table>
+<thead><tr><th>part</th><th>built</th><th>checked</th></tr></thead>
+<tbody>
+<tr><td class="sub">0 · settings in the version</td><td class="wrap small"><code>retrieval</code>, <code>tool_mode</code> and <code>identity_note</code> in <code>agent.yaml</code>; <code>make fork … RETRIEVAL= TOOL_MODE= IDENTITY_NOTE=true</code>; <code>TASKS=</code> on <code>make eval</code></td><td class="wrap small">v1's and v2's fingerprints unchanged and their runs re-score (<code>make gate</code>: GATE OK)</td></tr>
+<tr><td class="sub">0 · an optimiser per dataset</td><td class="wrap small"><code>optimisers/&lt;domain&gt;/</code> profile, guide and optional guards; every cycle records its profile's fingerprint</td><td class="wrap small">all four default prompts byte-identical to before (<code>tests/test_profiles.py</code>)</td></tr>
+<tr><td class="sub">0 · the Agent tab and Runs</td><td class="wrap small">each version drawn from its own files beside its parent, every version side by side; harness health on a run's page (<code>eval/health.py</code>)</td><td class="wrap small">frontend 124 tests, design lint clean; health reproduces s12's counts (bare calls 30 in 10 conversations for v1, 86 in 20 for v2)</td></tr>
+<tr><td class="sub">1 · the leaders' tools</td><td class="wrap small">sandbox-runtime 0.0.23, ripgrep, sentence-transformers 6.1; <code>eval/retrieval.py</code> registers <code>alltools_minilm</code> and <code>alltools_qwen3_0_6b</code> into tau2 from outside it</td><td class="wrap small">Fig 8's replay</td></tr>
+<tr><td class="sub">2 · native tool calls</td><td class="wrap small">the core offers the tools as stubs on an in-process MCP server; a PreToolUse hook defers every call, so it comes back to tau2 unrun</td><td class="wrap small">the probe: 1 call, a tool call back unrun in 4.5 s; 237 offline tests pass</td></tr>
+<tr><td class="sub">the identity note</td><td class="wrap small"><code>compose.IDENTITY_NOTE</code>, added after the clock note for a version with <code>identity_note: true</code></td><td class="wrap small">the probe showed the leak in both modes, 3 of 3 calls; v3's smoke had 0</td></tr>
+</tbody></table></div>
+<span class="label fig-title">Fig 8 · the leaders' train-task tool calls replayed through v3's tools</span>
+<div class="tw"><table>
+<thead><tr><th>tool</th><th class="num">calls</th><th>result</th></tr></thead>
+<tbody>
+<tr><td class="sub">BM25</td><td class="num">1,998</td><td class="wrap small"><span class="v-ok">matches.</span> 1,863 lists identical. In the other 135, every score is equal and only tied documents swap places</td></tr>
+<tr><td class="sub">dense · MiniLM</td><td class="num">1,777</td><td class="wrap small"><span class="v-ok">clears the bar.</span> A required document is in the top 10 for 79.1% of queries, against 80.4% for OpenAI's model. 47.6% of the 10 documents are the same as OpenAI's</td></tr>
+<tr><td class="sub">dense · Qwen3-0.6B</td><td class="num">—</td><td class="wrap small"><span class="v-warn">not measured.</span> Embedding 698 documents on the CPU ran past 40 minutes. MiniLM had cleared the bar, so Qwen wasn't needed</td></tr>
+<tr><td class="sub">shell</td><td class="num">7,961</td><td class="wrap small"><span class="v-warn">same documents, different order.</span> 6,018 outputs are identical and 7,732 name the same documents. The rest differ in order: this Mac's locale sorts <code>INDEX.md</code> after every <code>doc_</code> file where the board's Linux sorts it first, and <code>grep -r</code> walks the files in a different order</td></tr>
+</tbody></table></div>
+<span class="label fig-title">Fig 9 · the 20-task smoke, v3 against v1 and v2 on the same tasks</span>
+<div class="tw"><table>
+<thead><tr><th>group</th><th class="num">v3</th><th class="num">v1</th><th class="num">v2</th><th>v3 passed</th></tr></thead>
+<tbody>
+<tr><td class="sub">missing documents</td><td class="num">3 / 8</td><td class="num">0 / 8</td><td class="num">0 / 8</td><td class="small"><code>task_021 025 064</code></td></tr>
+<tr><td class="sub">v1's passes</td><td class="num">2 / 2</td><td class="num">2 / 2</td><td class="num">2 / 2</td><td class="small"><code>task_006 050</code></td></tr>
+<tr><td class="sub">drawn by seed</td><td class="num">1 / 10</td><td class="num">0 / 10</td><td class="num">1 / 10</td><td class="small"><code>task_063</code></td></tr>
+<tr class="sum"><td class="sub">all 20</td><td class="num">6 / 20</td><td class="num">2 / 20</td><td class="num">3 / 20</td><td class="small">fixed 4, broke 0 against v1 (one-sided p ≈ 0.06 on 20)</td></tr>
+</tbody></table></div>
+<div class="tw"><table>
+<thead><tr><th>harness health, same 20</th><th class="num">v3</th><th class="num">v1</th></tr></thead>
+<tbody>
+<tr><td class="sub">slipped calls</td><td class="num v-ok">0 of 158 replies</td><td class="num">55 of 216 (25%)</td></tr>
+<tr><td class="sub">account-email calls</td><td class="num v-ok">0</td><td class="num">264, in 7 conversations</td></tr>
+<tr><td class="sub">bare discoverable calls</td><td class="num v-ok">0</td><td class="num">9</td></tr>
+<tr><td class="sub">required documents read</td><td class="num v-ok">77.7%</td><td class="num">64.5%</td></tr>
+<tr><td class="sub">shell used</td><td class="num v-warn">10 of 20 conversations</td><td class="num">0</td></tr>
+<tr><td class="sub"><code>INDEX.md</code> read</td><td class="num v-warn">2 of 20</td><td class="num">0</td></tr>
+<tr><td class="sub">dense searches</td><td class="num v-warn">0</td><td class="num">0</td></tr>
+<tr><td class="sub">sandbox or dense failures</td><td class="num">0</td><td class="num">0</td></tr>
+</tbody></table></div>
+<p class="cap">Smoke run <code>runs/20261003T215148Z_banking_knowledge_v3_custom</code>, against v1's train run <code>20261002T235638Z</code> and v2's <code>20261003T005018Z</code>. A one-conversation smoke on <code>task_073</code> passed beforehand (<code>20261003T214611Z</code>). In the 20-task run, the same task failed: one trial is noisy.</p>
+<ul class="bl">
+<li><b>The tools are under-used.</b> The shell was used in half the conversations, where the bar asked for 15 of 20, and dense search was never called. The agent searched with BM25 146 times. The leaders use the shell in 97–100% of conversations. This is the next lever: rules that send the agent to the shell and <code>INDEX.md</code>, which is milestone 3, and fixing the sort order so <code>INDEX.md</code> comes first.</li>
+<li><b>The shell isn't fully read-only on this Mac.</b> tau2 puts each conversation's copy of the documents under the temp folder, which the sandbox leaves writable. Reads outside it are still refused, and nothing graded lives there.</li>
+<li><b>The smoke landed on your threshold</b> (6 of 20 is 30%, not over), and you chose to score it in full.</li>
+</ul>
+<span class="label fig-title">Fig 10 · the full scoring: v3 against v1 on all 60 train and 37 test tasks</span>
+<div class="tw"><table>
+<thead><tr><th>measure</th><th class="num">v3 train</th><th class="num">v1 train</th><th class="num">v3 test</th><th class="num">v1 test</th></tr></thead>
+<tbody>
+<tr><td class="sub">passed</td><td class="num v-ok">12 / 60</td><td class="num">2 / 60</td><td class="num">6 / 37</td><td class="num">6 / 37</td></tr>
+<tr><td class="sub">slipped calls</td><td class="num v-ok">0 of 524</td><td class="num">96 of 641</td><td class="num v-ok">0 of 304</td><td class="num">42 of 376</td></tr>
+<tr><td class="sub">account-email calls</td><td class="num v-ok">0</td><td class="num">713, in 19</td><td class="num v-ok">0</td><td class="num">479, in 11</td></tr>
+<tr><td class="sub">bare discoverable calls</td><td class="num v-ok">0</td><td class="num">29</td><td class="num v-ok">0</td><td class="num">1</td></tr>
+<tr><td class="sub">required documents read</td><td class="num">70%</td><td class="num">58%</td><td class="num">68%</td><td class="num">64%</td></tr>
+<tr><td class="sub">shell used</td><td class="num v-warn">23 of 60</td><td class="num">0</td><td class="num v-warn">11 of 37</td><td class="num">0</td></tr>
+<tr><td class="sub">dense searches</td><td class="num v-warn">0</td><td class="num">0</td><td class="num v-warn">0</td><td class="num">0</td></tr>
+<tr><td class="sub">look-ups before acting</td><td class="num">3.1</td><td class="num">3.3</td><td class="num">2.5</td><td class="num">2.5</td></tr>
+</tbody></table></div>
+<p class="cap">Runs: v3 train <code>20261004T023602Z</code> (the smoke's 20 joined to 40 more), v3 test <code>20261004T023605Z</code>; v1 train <code>20261002T235638Z</code>, v1 test <code>20261003T003126Z</code>. Ledger: banking cycle 2, tool change v1 → v3, hold: fixed 2 (<code>task_017</code>, <code>task_057</code>), broke 2 (<code>task_012</code>, <code>task_014</code>), p = 0.688 ≥ 0.05. Then <code>make promote RUN=20261004T023602Z_banking_knowledge_v3_train KIND="tool change"</code>, your call.</p>
+<p class="insight">The harness now matches the leaders' and its defects are gone, but the agent still acts like v1: it looks up 2–3 things before acting and reaches for BM25, not the shell. The tools alone didn't move test.</p>
+<span class="label fig-title" id="retrieval-test">Fig 11 · retrieval on its own: do the search tools surface each train task's required documents?</span>
+<div class="tw"><table>
+<thead><tr><th>query</th><th>tool</th><th class="num">a required document in the top 10</th><th class="num">share of required documents in the top 10</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">the task's own customer brief as one query (60 train tasks)</td></tr>
+<tr><td class="sub" rowspan="2">customer brief</td><td>BM25</td><td class="num">68.3%</td><td class="num">13.8%</td></tr>
+<tr><td>dense · MiniLM</td><td class="num v-ok">85.0%</td><td class="num v-ok">20.5%</td></tr>
+<tr class="grp"><td colspan="4">the leaders' real queries (240 train conversations each)</td></tr>
+<tr><td class="sub" rowspan="3">leaders' queries</td><td>BM25</td><td class="num">82.2% of 1,998</td><td class="num">—</td></tr>
+<tr><td>dense · MiniLM</td><td class="num">79.1% of 1,777</td><td class="num">—</td></tr>
+<tr><td>dense · OpenAI (the board's)</td><td class="num">80.4% of 1,777</td><td class="num">—</td></tr>
+</tbody></table></div>
+<p class="cap">No model call: each query goes through v3's tools and is scored against tau2's <code>required_documents</code> (about 10 a task, so one search can't hold them all). The customer brief knows more than the agent does at the start, so its row is a ceiling, not what the agent sees. Train tasks only; the tools return at most 10 documents.<span class="path">scratchpad board/retrieval_eval.py · vendor/tau2-bench/data/tau2/domains/banking_knowledge/tasks.json</span></p>
+<p class="insight">Dense search finds a needed document for 85% of the customer briefs, against BM25's 68%, yet v3's agent never called it. Pointing the agent at dense search, through banking's optimiser guide (milestone 3), is a cheap lever.</p>
+
+</section>
+
+<section id="src">
+<h2>Sources — every claim traced to a file</h2>
+<ul class="src">
+<li>s12's field notes for §0's numbers and the 12 ideas: <code>.lavish/s12_banking-leaderboard-field-notes.html</code> §2–§6.</li>
+<li>Versions and forks: <code>src/tau2_loop/agent/versions.py</code> (<code>AgentConfig</code>, which accepts only model, effort, tool_mode and max_steps today; <code>FROZEN</code>, <code>_fingerprint</code>, <code>fork_version</code>), <code>src/tau2_loop/cli.py</code> (<code>fork --from</code>, <code>eval --task</code>, <code>extend</code>, <code>challenge</code>, <code>loop --agent</code>), <code>Makefile</code>.</li>
+<li>Retrieval today: <code>src/tau2_loop/config.py: BANKING_RETRIEVAL</code>, <code>eval/runner.py</code> (<code>RunMeta.retrieval</code>, <code>extend_run</code>, <code>compose_runs</code>), <code>eval/replay.py: env_kwargs_for</code>, <code>loop/run.py</code> (<code>_covers</code>, <code>run_loop</code>, <code>run_cycle</code>).</li>
+<li>The sealed core: <code>src/tau2_loop/llm/core.py</code> (<code>_query</code>: <code>tools=[]</code>, <code>allowed_tools=[]</code>, <code>max_turns=4</code>).</li>
+<li>The optimiser: <code>src/tau2_loop/loop/optimiser.py</code> (<code>MAX_TURNS</code>, <code>MODES</code>, the three budgets, <code>SURFACE_GUIDE</code>, <code>ROUTING_RULES</code>), <code>loop/guards.py</code>.</li>
+<li>The frontend: <code>frontend/src/pages/Agent.tsx</code>, <code>lib/agentgraph.tsx</code>, <code>pages/JudgeAgent.tsx</code>, <code>pages/Optimise.tsx</code>; the API in <code>src/tau2_loop/serving/app.py</code>.</li>
+<li>tau2 (pinned <code>2174a60</code>, unmodified): <code>domains/banking_knowledge/retrieval.py</code>, <code>knowledge/sandbox_manager.py</code>, <code>knowledge/embedders/</code>, the two <code>EMBEDDER_REGISTRY</code> tables; the 698 documents in <code>data/tau2/domains/banking_knowledge/documents/</code> (lengths estimated at 4 characters a token).</li>
+<li>transcript-rag-agent: <code>src/config.py:41-47</code> (the model and the CPU pin), <code>src/rag/embeddings.py</code>, <code>pyproject.toml</code> (sentence-transformers 5.5).</li>
+<li>Run times and the 20 tasks: v1's and v2's <code>run.json</code> and <code>results.jsonl</code>; <code>data/splits/banking_knowledge.json</code> (split v3).</li>
+<li>The leaders' train conversations: Sierra's public bucket, 240 per leader, scratchpad copies only.</li>
+</ul>
+</section>
+</main>
+<footer>s13 · tau2-loop · written 2026-10-04 on branch banking-v3 from the code at <code>c4f1d44</code>, the pinned tau2 (<code>2174a60</code>), runs/, s12's analysis and transcript-rag-agent's setup. Nothing was built, installed or run to write it.</footer>
+
+</body>
+</html>

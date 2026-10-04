@@ -12,7 +12,8 @@ the sealed core the agent service (`service.py`) calls too, and the answer
 comes back as a litellm `ModelResponse` whose `tool_calls` tau2's orchestrator
 executes unchanged. `reasoning_effort` arrives in `optional_params` when the
 caller passes `allowed_openai_params=["reasoning_effort"]` (litellm drops it for
-a custom provider otherwise); temperature and other sampling arguments have no
+a custom provider otherwise), and a version's native tool mode the same way, as
+`tau2_loop_tool_mode`; temperature and other sampling arguments have no
 counterpart in the SDK and are ignored — recorded in the run's `run.json` as
 `sampling: cli-default`.
 """
@@ -38,6 +39,7 @@ from litellm.types.utils import (
 from tau2_loop.llm import SDK_PREFIX, require_live
 from tau2_loop.llm.core import (  # re-exported: tests and callers import them from here
     MAX_WAIT_S,
+    TOOL_MODE_PARAM,
     Answer,
     SdkResult,
     answer,
@@ -73,6 +75,7 @@ class ClaudeSdkProvider(CustomLLM):  # type: ignore[misc]
             optional.get("tools"),
             model,
             optional.get("reasoning_effort"),
+            optional.get(TOOL_MODE_PARAM),
         )
         return to_model_response(a, model)
 

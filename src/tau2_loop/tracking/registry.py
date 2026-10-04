@@ -68,12 +68,12 @@ def register(run_id: str, alias: str = "challenger") -> dict[str, Any]:
     return e
 
 
-PROMOTION_KINDS = ("gate", "model swap", "re-baseline", "re-decided")
+PROMOTION_KINDS = ("gate", "model swap", "tool change", "re-baseline", "re-decided")
 
 
 def promote(run_id: str, kind: str = "gate") -> dict[str, Any]:
     """Make a run's version the champion. `kind` says why, so a history never reads a
-    model swap (by fiat), a re-baseline (same bytes, new cut) or a re-decision (the title back
+    model swap or a tool change (both forks, by fiat), a re-baseline (same bytes, new cut) or a re-decision (the title back
     to the champion a later gate's verdict took it from, when that verdict was re-read under a
     new gate rule) as a gate verdict."""
     from tau2_loop.eval.runner import load_run

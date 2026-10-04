@@ -8,6 +8,11 @@ object with either `content` (a message to the other party) or `tool_calls`
 (a list of `{name, arguments}`), never both — the same rule tau2's
 orchestrator enforces on the agent.
 
+In native mode (a version's `tool_mode: native`, s13 milestone 2) there is no contract: the
+core hands the tools to the SDK as real tool definitions and the model calls them, so the
+system prompt carries no Tools section and the ask says to call a tool or write the message.
+Earlier calls and their results still travel as transcript blocks, as in JSON mode.
+
 Pure functions, no I/O, so the contract is unit-tested offline.
 """
 
@@ -114,8 +119,15 @@ def _args(raw: Any) -> Any:
     return raw
 
 
+NATIVE_ASK = (
+    "The conversation so far follows, one block per turn. Produce the next assistant turn: "
+    "call one or more of your tools, or write your message to the other party as plain text — "
+    "the message only, no preamble and no role label. Never write a tool call out as text."
+)
+
+
 def build_blocks(
-    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None, native: bool = False
 ) -> tuple[str, list[str]]:
     """(system_prompt, user_blocks) for one SDK query: the ask, then one block per turn.
 
@@ -126,6 +138,8 @@ def build_blocks(
     every call and was written afresh.
     """
     system, turns = split_messages(messages)
+    if native and tools:
+        return system, [NATIVE_ASK, *(t for t in (render_turn(m) for m in turns) if t)]
     tool_block = render_tools(tools)
     if tool_block:
         system = f"{system}\n\n{tool_block}".strip()

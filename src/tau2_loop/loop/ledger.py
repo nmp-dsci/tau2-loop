@@ -5,6 +5,23 @@ then said about it lives here, so the next cycle's optimiser reads what was
 tried on a task before proposing it again. An entry is written before the
 challenger is evaluated (so a crashed cycle still leaves its reasoning) and the
 `outcome` is filled in by the harness after the gate — never by the optimiser.
+
+A loop cycle since s13 §5 also names the dataset's optimiser profile it ran under,
+as a run names its version's fingerprint (`loop/profiles.py`):
+
+    "optimiser_profile": {
+      "domain": "banking_knowledge", "fingerprint": "ef999e03dbeb",  # sha256 of optimisers/<domain>/
+      "tuned": false,                       # false: every value today's, no guide, no guards
+      "model": "opus", "effort": "medium", "mode": "classic", "max_turns": 120,  # the profile's own
+      "budgets": {"transcript": 60000, "scenario": 60000, "diff": 90000},
+      "surfaces": ["system.md", "helper.py"],  # what the mode it ran could edit
+      "guide_chars": 0, "guards": false,
+      "overrides": {"model": "sonnet"}      # what the cycle ran with in the profile's place
+    }
+
+`optimiser_model` and `optimiser_mode` stay what the cycle actually ran with. An entry
+without the field is older than profiles: it ran today's defaults. A `make challenge`
+cycle has no optimiser and no profile.
 """
 
 from __future__ import annotations
