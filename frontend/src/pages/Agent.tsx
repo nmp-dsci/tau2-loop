@@ -31,6 +31,7 @@ import {
 import { ArchitectureCaption, ArchitectureFigure, VersionTable, parentOf, toolModeText, versionClaim, withKnowledge } from '../lib/architecture';
 import { useTask } from '../lib/scope';
 import { Loading } from '../lib/ui';
+import { LiveConversation } from './LiveConversation';
 import { agentPath, optimisePath, parseTrialId, trialId, trialPath, useLens } from '../lib/url';
 
 /**
@@ -286,7 +287,8 @@ export function Agent() {
             {' '}
             · <a href="#version">the version, drawn without a run</a>
           </>
-        )}
+        )}{' '}
+        · <a href="#live">play a task live</a>
       </p>
       {head ? (
         <h1 className="agent-h1">
@@ -338,6 +340,7 @@ export function Agent() {
       )}
       {runId && trialLens && !t && !tErr && <Loading error={null} />}
       {!noRuns && runs && versionView}
+      <LiveConversation domain={domain} agent={name} workflows={((version.config as { workflows?: string | null }).workflows ?? null) || null} />
     </>
   );
 }

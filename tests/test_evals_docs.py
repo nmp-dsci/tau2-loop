@@ -161,7 +161,8 @@ def test_task_001_reads_per_version_are_what_the_person_counted() -> None:
     body = r.json()
     assert body["required"] == [GOLD, SILVER, BRONZE, PLATINUM]
     by = {v["version"]: v for v in body["versions"]}
-    assert set(by) == {"v1", "v2", "v3", "v4"}
+    # the four the person counted; a later version's run adds its own row (v7's train run did)
+    assert {"v1", "v2", "v3", "v4"} <= set(by)
     assert (by["v1"]["passed"], by["v1"]["read"], by["v1"]["seen"]) == (False, [SILVER], [])
     assert (by["v2"]["passed"], by["v2"]["read"], by["v2"]["seen"]) == (True, [BRONZE, GOLD], [])
     # v3 found the cards through the shell (listings, grep lines, a loop over a wildcard)

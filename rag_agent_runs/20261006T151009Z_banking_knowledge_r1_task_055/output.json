@@ -1,0 +1,778 @@
+{
+ "jobs": [
+  {
+   "job": "opening_personal_checking_accounts",
+   "when": {
+    "quote": "To open a personal checking account, ensure all of the following are true:",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+   },
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. These are checked against the records on file.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me your full name and two of the following: date of birth, email, phone number or address?",
+     "may_hold_back": false
+    },
+    {
+     "field": "foreign_atm_needs",
+     "about": "Whether the customer uses ATMs abroad and wants the fees waived or rebated",
+     "from": "customer",
+     "ask": "Do you take cash out of ATMs abroad or outside our network, and do you want those fees covered?",
+     "may_hold_back": true
+    },
+    {
+     "field": "foreign_transaction_fee_needs",
+     "about": "Whether the customer needs no foreign transaction fees on purchases abroad",
+     "from": "customer",
+     "ask": "Do you buy things in foreign currencies?",
+     "may_hold_back": true
+    },
+    {
+     "field": "checking_balance_range",
+     "about": "The balance the customer can keep in the checking account, including the most they can keep",
+     "from": "customer",
+     "ask": "Roughly how much will you keep in this account, and what is the most you could keep?",
+     "may_hold_back": true
+    },
+    {
+     "field": "multi_currency_need",
+     "about": "Whether the customer wants to hold foreign currencies",
+     "from": "customer",
+     "ask": "Do you get paid in, or want to hold, any foreign currencies?",
+     "may_hold_back": true
+    },
+    {
+     "field": "customer_age",
+     "about": "The customer's age. Student, teen and senior accounts depend on it.",
+     "from": "records",
+     "ask": "Can you confirm your date of birth?",
+     "may_hold_back": false
+    },
+    {
+     "field": "other_preferences",
+     "about": "Other stated wishes (for example eco or premium features). These are nice to have; they never outweigh a hard requirement.",
+     "from": "customer",
+     "ask": "Is there anything else that matters to you in this account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "existing_accounts",
+     "about": "The customer's existing bank accounts: type, class, status, balance and date opened",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer and ask for name plus two identity values",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record using the name, email or user id they gave",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave"
+     },
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "1. Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": "2 of the values match the record",
+     "quote": "1. Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "from the record",
+      "email": "from the record",
+      "phone_number": "from the record",
+      "date_of_birth": "from the record",
+      "time_verified": "the time get_current_time returned"
+     },
+     "after": [
+      "get_time"
+     ],
+     "if": "2 of the values match the record",
+     "quote": "1. Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's existing accounts to check eligibility",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "id": "check_elig",
+     "by": "model",
+     "do": "Check checking eligibility: age 18 or over, no more than 4 personal checking accounts, no checking account closed for cause in the past 6 months",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "2. Check eligibility requirements listed above.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "gather_needs",
+     "by": "model",
+     "do": "Ask for every checking requirement (foreign ATM, foreign transaction fees, balance range, multi-currency, age, other preferences) before choosing",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_elig"
+     ],
+     "if": null,
+     "quote": "3. Confirm the customer's desired account_class selection.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Rule out every personal checking account that fails a hard requirement (see rules). Recommend the ONE account that meets them all; for a frequent traveller with a modest balance who needs multi-currency, that is Purple Account. Explain briefly, without internal details.",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_needs"
+     ],
+     "if": null,
+     "quote": "Multi-currency wallet: Yes with up to 30 supported foreign currencies",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "id": "confirm_class",
+     "by": "model",
+     "do": "Get the customer's agreement to open the recommended account under its full official name",
+     "call": null,
+     "args": {},
+     "after": [
+      "recommend"
+     ],
+     "if": null,
+     "quote": "Personal checking account_class options must use the full official name ending with 'Account' (e.g., 'Blue Account', 'Green Account (checking)').",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "unlock_open",
+     "by": "harness",
+     "do": "Unlock the account-opening tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821"
+     },
+     "after": [
+      "confirm_class"
+     ],
+     "if": "customer agreed",
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "open_checking",
+     "by": "harness",
+     "do": "Open the checking account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": {
+       "user_id": "the verified user's id",
+       "account_type": "checking",
+       "account_class": "the confirmed full official name, e.g. 'Purple Account'"
+      }
+     },
+     "after": [
+      "unlock_open"
+     ],
+     "if": "customer agreed and eligible",
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "id": "confirm_checking",
+     "by": "model",
+     "do": "Confirm to the customer that the account is open and give its details",
+     "call": null,
+     "args": {},
+     "after": [
+      "open_checking"
+     ],
+     "if": null,
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The customer must be verified and at least 18.",
+     "quote": "2. The customer is at least 18 years old.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "rule": "The customer may hold no more than 4 personal checking accounts.",
+     "quote": "3. The customer does not exceed 4 personal checking accounts.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "rule": "Do not open if any checking account was closed for cause in the past 6 months.",
+     "quote": "4. The customer has no checking accounts closed for cause in the past 6 months.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_001"
+    },
+    {
+     "rule": "Purple Account is the only personal checking account with a multi-currency wallet. It also has 0% foreign transaction fees.",
+     "quote": "No foreign transaction fees: 0%",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "rule": "Purple Account charges $0 for foreign ATM withdrawals and rebates ATM operator fees up to $30 a month.",
+     "quote": "Global ATM fee rebates: up to $30 monthly worldwide",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "rule": "Purple's monthly fee is waived at a $3,750 minimum daily balance. This is within a 3–5k balance range.",
+     "quote": "Minimum daily balance to waive the monthly maintenance fee: $3,750",
+     "doc": "doc_checking_accounts_purple_account_002"
+    },
+    {
+     "rule": "Bluest Account (premium) is out for anyone who cannot deposit $75,000.",
+     "quote": "Deposit at least $75,000 to open your account.",
+     "doc": "doc_checking_accounts_bluest_account_002"
+    },
+    {
+     "rule": "Evergreen (eco) charges foreign ATM fees and has no multi-currency wallet, so it fails a travel need.",
+     "quote": "Foreign ATM withdrawal fee: 2% of the withdrawal amount, with a minimum of $3.00 per transaction.",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "rule": "Dark Green (student, age 17–26) and Gold Years (62+) depend on age. Light Green is a teen account.",
+     "quote": "You must be at least 62 years old to qualify.",
+     "doc": "doc_checking_accounts_gold_years_account_002"
+    }
+   ],
+   "done_when": "The customer is verified and logged, and the single agreed checking account is open, with its details given to the customer."
+  },
+  {
+   "job": "opening_personal_savings_accounts",
+   "when": {
+    "quote": "Procedure for opening personal savings accounts.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+   },
+   "info": [
+    {
+     "field": "withdrawal_frequency",
+     "about": "How many withdrawals per month the customer needs without fees",
+     "from": "customer",
+     "ask": "How often will you take money out of savings?",
+     "may_hold_back": true
+    },
+    {
+     "field": "savings_balance_range",
+     "about": "The balance the customer can keep, including the most they can keep",
+     "from": "customer",
+     "ask": "How much do you expect to keep in savings, and what is the most?",
+     "may_hold_back": true
+    },
+    {
+     "field": "compounding_need",
+     "about": "Whether daily compounding is required",
+     "from": "customer",
+     "ask": "Do you have any requirement on how interest compounds?",
+     "may_hold_back": true
+    },
+    {
+     "field": "atm_rebate_need",
+     "about": "Whether out-of-network ATM fees should be rebated",
+     "from": "customer",
+     "ask": "Do you use out-of-network ATMs with this account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "min_apy",
+     "about": "The lowest APY the customer will accept",
+     "from": "customer",
+     "ask": "Is there an interest rate you're aiming for?",
+     "may_hold_back": true
+    },
+    {
+     "field": "relationship_bonus_need",
+     "about": "Whether the customer wants a multi-product relationship bonus",
+     "from": "customer",
+     "ask": "Do you want a bonus for holding several Rho-Bank products?",
+     "may_hold_back": true
+    },
+    {
+     "field": "fund_now",
+     "about": "Whether to transfer the opening deposit from checking now",
+     "from": "customer",
+     "ask": "Would you like me to transfer the opening deposit from your checking account now?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "refresh_accounts",
+     "by": "harness",
+     "do": "Re-read the customer's accounts for savings eligibility",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "id": "check_elig",
+     "by": "model",
+     "do": "Check savings eligibility: an active checking account held at least 14 days, fewer than 5 savings accounts, no collections or negative balances",
+     "call": null,
+     "args": {},
+     "after": [
+      "refresh_accounts"
+     ],
+     "if": null,
+     "quote": "The customer’s checking account tenure is at least 14 days.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "id": "gather_needs",
+     "by": "model",
+     "do": "Ask for all savings requirements before choosing",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_elig"
+     ],
+     "if": null,
+     "quote": "Discuss available personal savings account options with the customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Rule out every savings account that fails a hard requirement (see rules). Recommend the ONE account that meets them all; for a 5–7k balance with frequent withdrawals, ATM rebates, a relationship bonus, daily compounding and at least 3% APY, that is Silver Plus Account.",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_needs"
+     ],
+     "if": null,
+     "quote": "Tier 1 APY: 3.0% for balances below the Tier 2 threshold.",
+     "doc": "doc_savings_accounts_silver_plus_account_002"
+    },
+    {
+     "id": "confirm_class",
+     "by": "model",
+     "do": "Confirm the exact account_class with the customer",
+     "call": null,
+     "args": {},
+     "after": [
+      "recommend"
+     ],
+     "if": null,
+     "quote": "Capture the exact account_class string. It must be the full official name ending with “Account” (for example, “Silver Plus Account”, “Gold Account”).",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "id": "open_savings",
+     "by": "harness",
+     "do": "Open the savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": {
+       "user_id": "the verified user's id",
+       "account_type": "savings",
+       "account_class": "the confirmed full official name, e.g. 'Silver Plus Account'"
+      }
+     },
+     "after": [
+      "confirm_class"
+     ],
+     "if": "eligible and customer agreed",
+     "quote": "Use the open_bank_account_4821 tool with account_type set to 'savings' and the confirmed account_class.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "id": "ask_funding",
+     "by": "model",
+     "do": "Ask whether to transfer the opening deposit from checking now",
+     "call": null,
+     "args": {},
+     "after": [
+      "open_savings"
+     ],
+     "if": null,
+     "quote": "Ask the customer if they want you to transfer the opening deposit from their checking account now.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "id": "transfer",
+     "by": "harness",
+     "do": "Transfer the opening deposit from checking to the new savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+      "arguments": {
+       "source_account_id": "the customer's checking account",
+       "destination_account_id": "the new savings account",
+       "amount": "the opening deposit amount confirmed with the customer"
+      }
+     },
+     "after": [
+      "ask_funding"
+     ],
+     "if": "customer says yes (unlock transfer_funds_between_bank_accounts_7291 first)",
+     "quote": "If yes: use transfer_funds_between_bank_accounts_7291 to transfer the required amount from the customer’s checking account to the newly opened savings account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "id": "deadline",
+     "by": "model",
+     "do": "If declined, state the 30-day funding window and offer a check deposit (next job)",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_funding"
+     ],
+     "if": "customer declines a transfer",
+     "quote": "If no: inform the customer they have 30 days to fund the account (via internal transfer or external deposit) or the account will be closed.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Give the new account details, including its account id, and the funding status",
+     "call": null,
+     "args": {},
+     "after": [
+      "transfer",
+      "deadline"
+     ],
+     "if": null,
+     "quote": "Provide the new account details and confirm the funding status or the funding deadline.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The customer must have an active checking account held at least 14 days.",
+     "quote": "The customer’s checking account tenure is at least 14 days.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "rule": "The customer must hold fewer than 5 personal savings accounts.",
+     "quote": "Customer currently holds fewer than 5 personal savings accounts.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "rule": "The customer must have no collections and no negative balances.",
+     "quote": "Customer has no accounts in collections and no negative balances.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+    },
+    {
+     "rule": "Silver Plus: $1,000 to open, $2,500 ongoing minimum, 15 free withdrawals a month, daily compounding.",
+     "quote": "You have up to 15 free withdrawals each month.",
+     "doc": "doc_savings_accounts_silver_plus_account_001"
+    },
+    {
+     "rule": "Silver Plus rebates ATM fees up to 25 a month.",
+     "quote": "Receive ATM fee rebates up to 25 each month.",
+     "doc": "doc_savings_accounts_silver_plus_account_002"
+    },
+    {
+     "rule": "Silver Plus has a relationship bonus.",
+     "quote": "Earn an additional relationship APY bonus of 0.025% when you qualify under the relationship criteria.",
+     "doc": "doc_savings_accounts_silver_plus_account_002"
+    },
+    {
+     "rule": "Silver: only 10 free withdrawals, and 2.5% APY below $10,000, so it fails frequent withdrawals and a 3% APY floor.",
+     "quote": "Track your withdrawal activity; transactions beyond 10 in a cycle may incur an excess withdrawal fee as described in your account disclosures.",
+     "doc": "doc_savings_accounts_silver_account_001"
+    },
+    {
+     "rule": "Gold requires a $10,000 balance (minimum reduced to $5,000 only for Gold Rewards Card holders).",
+     "quote": "Maintain at least $10,000 to keep your account in good standing.",
+     "doc": "doc_savings_accounts_gold_account_001"
+    },
+    {
+     "rule": "Green Account (savings): 8 free withdrawals a month, and no ATM rebates without an EcoCard.",
+     "quote": "Plan withdrawals to stay within 8 each month.",
+     "doc": "doc_savings_accounts_green_account_(savings)_001"
+    },
+    {
+     "rule": "Bronze: only 6 free withdrawals and 2.0% APY.",
+     "quote": "Free withdrawals per month: 6",
+     "doc": "doc_savings_accounts_bronze_account_002"
+    },
+    {
+     "rule": "Gold Plus ($25,000), Platinum ($50,000), Platinum Plus ($100,000) and Diamond Elite ($100,000 to open) all need far larger balances.",
+     "quote": "Maintain at least $50,000 to preserve Platinum benefits.",
+     "doc": "doc_savings_accounts_platinum_account_001"
+    },
+    {
+     "rule": "Linked checking APY boosts apply only to listed pairings (e.g. Purple + Platinum Plus or Gold; Blue + Silver Plus), and boosts do not stack.",
+     "quote": "Only the HIGHEST checking account APY boost is applied to the savings account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_046"
+    }
+   ],
+   "done_when": "The single agreed savings account is open, the customer has its account id, and it has either been funded or the customer has been told about the 30-day funding window."
+  },
+  {
+   "job": "depositing_a_check_into_your_account",
+   "when": {
+    "quote": "Customers can deposit checks into their checking or savings accounts using mobile check deposit.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+   },
+   "info": [
+    {
+     "field": "destination_account_id",
+     "about": "The id of the account to deposit into (for example, the new savings account)",
+     "from": "records",
+     "ask": "Which account would you like to deposit the check into?",
+     "may_hold_back": false
+    },
+    {
+     "field": "check_amount",
+     "about": "The check amount in USD",
+     "from": "customer",
+     "ask": "What is the amount on the check?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "give_tool",
+     "by": "harness",
+     "do": "Give the customer the check deposit tool",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "deposit_check_3847"
+     },
+     "after": [],
+     "if": null,
+     "quote": "To help a customer deposit a check, give them the deposit_check_3847 tool.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "id": "instruct",
+     "by": "model",
+     "do": "Tell the customer to call deposit_check_3847 with the destination account id and the check amount",
+     "call": null,
+     "args": {},
+     "after": [
+      "give_tool"
+     ],
+     "if": null,
+     "quote": "Have the user call deposit_check_3847(account_id, check_amount) where account_id is the ID of the account they want to deposit into and check_amount is the amount of the check in USD.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "id": "deposit",
+     "by": "customer",
+     "do": "Customer deposits the check",
+     "call": "deposit_check_3847",
+     "args": {
+      "account_id": "the destination account id",
+      "check_amount": "the check amount"
+     },
+     "after": [
+      "instruct"
+     ],
+     "if": null,
+     "quote": "Note: The agent cannot deposit checks on behalf of the customer - this action must be performed by the customer themselves through the mobile app.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "id": "verify_balance",
+     "by": "harness",
+     "do": "Re-read the accounts to confirm the deposit and balance",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [
+      "deposit"
+     ],
+     "if": "customer asks for confirmation",
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "id": "report",
+     "by": "model",
+     "do": "Confirm the balance and the usual 1–2 business days for funds to become available",
+     "call": null,
+     "args": {},
+     "after": [
+      "verify_balance"
+     ],
+     "if": null,
+     "quote": "Standard deposits are typically available within 1-2 business days.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The agent never deposits a check itself; the customer runs deposit_check_3847.",
+     "quote": "Note: The agent cannot deposit checks on behalf of the customer - this action must be performed by the customer themselves through the mobile app.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "rule": "The Silver Plus mobile deposit limit is $5,000 a day.",
+     "quote": "You can deposit checks through the mobile app up to a daily total of $5,000.",
+     "doc": "doc_savings_accounts_silver_plus_account_007"
+    }
+   ],
+   "done_when": "The customer has run deposit_check_3847 into the chosen account, and the agent has confirmed the resulting balance from the account records."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_001",
+   "why": "Procedure and eligibility for opening a personal checking account"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_002",
+   "why": "Procedure, eligibility and funding options for opening a personal savings account"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_009",
+   "why": "The get_all_user_accounts_by_user_id_3847 account lookup tool"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_010",
+   "why": "The transfer_funds_between_bank_accounts_7291 tool for opening deposits"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_011",
+   "why": "The deposit_check_3847 user tool for check deposits"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_046",
+   "why": "Linked checking boosts do not stack"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_001",
+   "why": "Purple travel features: 0% foreign transaction fees, $0 foreign ATM fees, $30 rebates, multi-currency wallet"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_002",
+   "why": "Purple $3,750 balance for the fee waiver"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_002",
+   "why": "Bluest needs $75,000 to open"
+  },
+  {
+   "id": "doc_checking_accounts_evergreen_account_001",
+   "why": "Evergreen foreign ATM fees"
+  },
+  {
+   "id": "doc_checking_accounts_gold_years_account_002",
+   "why": "Gold Years age limit"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_001",
+   "why": "Silver Plus minimums, free withdrawals and compounding"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_002",
+   "why": "Silver Plus APY tiers, ATM rebates and relationship bonus"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_007",
+   "why": "Silver Plus mobile deposit limit"
+  },
+  {
+   "id": "doc_savings_accounts_silver_account_001",
+   "why": "Silver withdrawal limit"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_001",
+   "why": "Gold $10,000 minimum"
+  },
+  {
+   "id": "doc_savings_accounts_green_account_(savings)_001",
+   "why": "Green savings 8-withdrawal limit"
+  },
+  {
+   "id": "doc_savings_accounts_bronze_account_002",
+   "why": "Bronze withdrawal limit"
+  },
+  {
+   "id": "doc_savings_accounts_platinum_account_001",
+   "why": "Platinum $50,000 minimum"
+  }
+ ],
+ "open_questions": [
+  "Doc 001 does not state the account_type value for checking; 'checking' is assumed by analogy with 'savings' in doc 002.",
+  "3–4 withdrawals a week can exceed Silver Plus's 15 free a month. Beyond that, an excess withdrawal fee of $1.00 per withdrawal may apply; no affordable account offers more free withdrawals.",
+  "No promotion document covers personal accounts. The promotion priority orders apply to business accounts only.",
+  "The criteria for the 'relationship bonus' on Silver Plus are not defined."
+ ]
+}

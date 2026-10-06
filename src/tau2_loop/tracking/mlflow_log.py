@@ -18,10 +18,16 @@ if TYPE_CHECKING:
     from tau2_loop.eval.results import TaskResult
     from tau2_loop.eval.runner import RunMeta
 
-# PLATFORM.md grandfathers the flat experiment names in use before M1; a new
-# experiment here would be `tau2-loop/<purpose>`.
-EXPERIMENT = "tau2-loop"
 PROJECT = "tau2-loop"
+# PLATFORM.md grandfathers the flat experiment names in use before M1. `tau2-loop`
+# holds every run and trace logged before 6 Oct 2026 and takes nothing new; since
+# then each domain logs to its own `tau2-loop/<domain>` (registry/projects.yaml).
+LEGACY_EXPERIMENT = PROJECT
+
+
+def experiment(domain: str) -> str:
+    """The domain's experiment: `tau2-loop/banking_knowledge`, `tau2-loop/airline`, …"""
+    return f"{PROJECT}/{domain}"
 
 
 class TrackingDownError(RuntimeError):
@@ -62,14 +68,14 @@ def required_tags(billing: str | None = None) -> dict[str, str]:
     }
 
 
-def _client_setup() -> None:
+def _client_setup(domain: str) -> None:
     mlflow.set_tracking_uri(settings().mlflow_tracking_uri)
-    mlflow.set_experiment(EXPERIMENT)
+    mlflow.set_experiment(experiment(domain))
 
 
 def log_run(run_dir: Path, meta: RunMeta, results: list[TaskResult]) -> str:
-    """One MLflow run per eval run; returns the MLflow run id."""
-    _client_setup()
+    """One MLflow run per eval run, in its domain's experiment; returns the MLflow run id."""
+    _client_setup(meta.domain)
     s = meta.summary or {}
     with mlflow.start_run(run_name=meta.run_id) as run:
         mlflow.set_tags(
@@ -109,6 +115,10 @@ def log_run(run_dir: Path, meta: RunMeta, results: list[TaskResult]) -> str:
                     },
                 }
             )
+        if s.get("partial_action_mean") is not None:
+            # the expected actions made, 0 to 1: banking's second accuracy metric beside
+            # pass_rate (6 Oct 2026); partial credit, never the score the gate uses
+            mlflow.log_metric("actions_done_mean", float(s["partial_action_mean"]))
         mlflow.log_metrics(
             {
                 "cost_usd_est": float(s.get("cost_usd_est", 0.0)),
@@ -140,7 +150,7 @@ def log_run(run_dir: Path, meta: RunMeta, results: list[TaskResult]) -> str:
 def log_cycle(entry: dict[str, object]) -> str | None:
     """A loop cycle as its own MLflow run, tagged `kind=cycle`, so the UI shows the story."""
     try:
-        _client_setup()
+        _client_setup(str(entry.get("domain")))
         with mlflow.start_run(run_name=f"{entry.get('domain')}-cycle-{entry.get('cycle')}") as run:
             mlflow.set_tags(
                 {

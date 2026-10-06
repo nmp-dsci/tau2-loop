@@ -1,0 +1,644 @@
+{
+ "jobs": [
+  {
+   "job": "filing_a_credit_card_transaction_dispute",
+   "when": {
+    "quote": "When a customer needs to file a formal dispute for a credit card transaction (such as unauthorized charges, merchant issues, or billing errors), the agent must gather comprehensive information and call the file_credit_card_transaction_dispute_4829 tool.",
+    "doc": "doc_credit_cards_credit_cards_(general)_014"
+   },
+   "info": [
+    {
+     "field": "identity_proofs",
+     "about": "Any 2 of: date of birth, email, phone number, address. They must match the records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me two of the following: your date of birth, email, phone number or home address?",
+     "may_hold_back": true
+    },
+    {
+     "field": "full_name_or_email",
+     "about": "Used to look up the customer's record",
+     "from": "customer",
+     "ask": "What is your full name as it appears on your account?",
+     "may_hold_back": false
+    },
+    {
+     "field": "transaction_id",
+     "about": "The disputed credit card transaction. Match it to the merchant, amount and date in the transaction list.",
+     "from": "records",
+     "ask": "Which transaction would you like to dispute (merchant, amount, date, or transaction ID if you have it)?",
+     "may_hold_back": true
+    },
+    {
+     "field": "purchase_date",
+     "about": "Date of the disputed transaction, in MM/DD/YYYY format",
+     "from": "records",
+     "ask": "When did you make the purchase?",
+     "may_hold_back": true
+    },
+    {
+     "field": "contacted_merchant",
+     "about": "Whether the customer tried to resolve the issue with the merchant first",
+     "from": "customer",
+     "ask": "Did you try to resolve this with the merchant first?",
+     "may_hold_back": true
+    },
+    {
+     "field": "issue_noticed_date",
+     "about": "Date the customer first noticed the issue, in MM/DD/YYYY format",
+     "from": "customer",
+     "ask": "On what date did you first notice the problem?",
+     "may_hold_back": true
+    },
+    {
+     "field": "dispute_reason",
+     "about": "One of the allowed reason values. Never-received goods = 'goods_services_not_received'.",
+     "from": "customer",
+     "ask": "Which best describes the issue: unauthorized/fraudulent charge, duplicate charge, incorrect amount, goods/services not received, not as described, cancelled subscription still charging, or refund never processed?",
+     "may_hold_back": false
+    },
+    {
+     "field": "resolution_requested",
+     "about": "'full_refund', 'partial_refund' (with partial_refund_amount) or 'reversal_of_charge'",
+     "from": "customer",
+     "ask": "What resolution would you like: a full refund, a partial refund, or a reversal of the charge?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_action",
+     "about": "'keep_active' or 'cancel_and_reissue'",
+     "from": "customer",
+     "ask": "Would you like to keep your current card active, or cancel it and have a replacement issued?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_last_4_digits",
+     "about": "Last 4 digits of the card used for the transaction. If the customer does not know them, give them the get_card_last_4_digits tool.",
+     "from": "customer",
+     "ask": "What are the last 4 digits of the card used for this purchase?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup",
+     "by": "model",
+     "do": "Look up the customer's record by the name or email they gave",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave"
+     },
+     "after": [],
+     "if": null,
+     "quote": "This document outlines the step-by-step workflow for agents to process CLI requests, including verification and final decision.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Ask for 2 of DOB, email, phone and address, then check them against the record. Share no account data before this check passes.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup"
+     ],
+     "if": null,
+     "quote": "This document outlines the step-by-step workflow for agents to process CLI requests, including verification and final decision.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "time_for_log",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "This document outlines the step-by-step workflow for agents to process CLI requests, including verification and final decision.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "the address on record",
+      "email": "the email on record",
+      "phone_number": "the phone on record",
+      "date_of_birth": "the DOB on record",
+      "time_verified": "the time from get_current_time"
+     },
+     "after": [
+      "time_for_log"
+     ],
+     "if": null,
+     "quote": "This document outlines the step-by-step workflow for agents to process CLI requests, including verification and final decision.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's credit card accounts (account id, card type/tier, open date, limit, balance)",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Use this tool to retrieve the last four digits of your Rho‑Bank credit card.",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "get_txns",
+     "by": "harness",
+     "do": "Get the transactions and find the disputed one (transaction_id, date, amount, card)",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "1. transaction_id (string) - ID of the transaction being disputed. ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_details",
+     "by": "model",
+     "do": "Ask for any of these the customer has not given: contacted merchant, date the issue was noticed, dispute reason, resolution wanted, and whether to keep the card active or cancel and reissue it",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_txns"
+     ],
+     "if": null,
+     "quote": "11. issue_noticed_date (string, format MM/DD/YYYY) - Ask user when they noticed the issue. ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "give_last4_tool",
+     "by": "model",
+     "do": "Give the customer the last-4-digits tool and tell them to run it with their credit card account id",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_card_last_4_digits"
+     },
+     "after": [
+      "get_accounts"
+     ],
+     "if": "the customer does not know the card's last 4 digits",
+     "quote": "Tell the user to use the exact tool name and parameter: get_card_last_4_digits(credit_card_account_id: str).",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "cust_last4",
+     "by": "customer",
+     "do": "The customer runs get_card_last_4_digits with their credit card account id",
+     "call": "call_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_card_last_4_digits",
+      "credit_card_account_id": "the customer's credit card account id"
+     },
+     "after": [
+      "give_last4_tool"
+     ],
+     "if": "the tool was given",
+     "quote": "Call the tool with your credit card account ID:",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "unlock_hist",
+     "by": "harness",
+     "do": "Unlock the dispute history tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "dispute_hist",
+     "by": "harness",
+     "do": "Count the disputes filed in the past 12 months, for the provisional credit check",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "user_id": "the verified user"
+     },
+     "after": [
+      "unlock_hist"
+     ],
+     "if": null,
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "decide_pc",
+     "by": "model",
+     "do": "Decide eligible_for_provisional_credit using all of the provisional credit rules. Use get_current_time for the age checks.",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "dispute_hist",
+      "ask_details",
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "15. eligible_for_provisional_credit (boolean) - Agent must determine this based on the Provisional Credit Eligibility Guidelines article in this knowledge base. Pass true or false.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "unlock_file",
+     "by": "harness",
+     "do": "Unlock the dispute filing tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829"
+     },
+     "after": [
+      "decide_pc"
+     ],
+     "if": null,
+     "quote": "First unlock the tool, then call it using call_discoverable_agent_tool with the tool name and a JSON string containing all the required arguments.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "file",
+     "by": "model",
+     "do": "File the dispute with all the required arguments",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829",
+      "transaction_id": "the disputed transaction id",
+      "card_action": "'keep_active' or 'cancel_and_reissue', as the customer chose",
+      "card_last_4_digits": "the card's last 4 digits",
+      "full_name": "the verified user's name",
+      "user_id": "the verified user",
+      "phone": "the phone on record",
+      "email": "the email on record",
+      "address": "the address on record",
+      "contacted_merchant": "the customer's answer",
+      "purchase_date": "the transaction date, MM/DD/YYYY",
+      "issue_noticed_date": "the customer's answer, MM/DD/YYYY",
+      "dispute_reason": "the matching allowed value",
+      "resolution_requested": "the customer's choice",
+      "partial_refund_amount": "only if partial_refund",
+      "eligible_for_provisional_credit": "the result of decide_pc"
+     },
+     "after": [
+      "unlock_file",
+      "ask_details"
+     ],
+     "if": null,
+     "quote": "First unlock the tool, then call it using call_discoverable_agent_tool with the tool name and a JSON string containing all the required arguments.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "confirm_dispute",
+     "by": "model",
+     "do": "Confirm that the dispute is filed, and say whether provisional credit applies",
+     "call": null,
+     "args": {},
+     "after": [
+      "file"
+     ],
+     "if": null,
+     "quote": "Provisional credit means the disputed amount is temporarily credited back to the customer's account while the investigation is ongoing.",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Provisional credit requires the card account to have been open at least 60 days",
+     "quote": "1. Account Standing: The customer's credit card account has been open for at least 60 days",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Eligible reasons: unauthorized_fraudulent_charge, duplicate_charge, or goods_services_not_received when the purchase was more than 30 days ago",
+     "quote": "'goods_services_not_received' (only if purchase was made more than 30 days ago)",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Amount must be at least $25.00 and no more than the tier maximum. Mid tier (Silver Rewards Card etc.) maximum is $5000.00.",
+     "quote": "Mid Tier (Silver Rewards Card, Business Silver Rewards Card, Green Rewards Card, Silver Zoom Card): Maximum $5000.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "No more than 2 disputes filed in the past 12 months",
+     "quote": "4. Previous Disputes: The customer has not filed more than 2 disputes in the past 12 months",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "For non-fraud disputes, the customer must have contacted the merchant first",
+     "quote": "For non-fraud disputes: customer did not contact merchant first",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "card_action 'keep_active' when the customer wants to keep using the current card",
+     "quote": "'keep_active': Keep the card active, just dispute this charge (use when user wants to continue using their current card)",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    }
+   ],
+   "done_when": "file_credit_card_transaction_dispute_4829 has been called with all required arguments and the customer has been told the dispute is filed and whether provisional credit applies"
+  },
+  {
+   "job": "processing_cli_approvals_and_denials",
+   "when": {
+    "quote": "This document outlines the step-by-step workflow for agents to process CLI requests, including verification and final decision. These steps MUST be followed in the exact order listed.",
+    "doc": "doc_credit_cards_credit_card_account_logistics_007"
+   },
+   "info": [
+    {
+     "field": "requested_increase_amount",
+     "about": "Dollar increase requested (not the new total). Must be within the tier maximum: Entry 25%, Mid/Premium 50% of the current limit.",
+     "from": "customer",
+     "ask": "By how much would you like to increase your credit limit (or what new total limit)?",
+     "may_hold_back": false
+    },
+    {
+     "field": "card_tier_and_account_data",
+     "about": "Card type/tier, current limit, balance, open date and past-due status",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "check_amount",
+     "by": "model",
+     "do": "Step 0: check the requested increase is within the tier maximum. If it is not, give the customer the maximum and ask them to adjust.",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "BEFORE submitting any CLI request, verify that the customer's requested increase amount is within the maximum allowed for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "unlock_submit",
+     "by": "harness",
+     "do": "Unlock the CLI submit tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "submit_credit_limit_increase_request_7392"
+     },
+     "after": [
+      "check_amount"
+     ],
+     "if": null,
+     "quote": "submit the request on their behalf using the submit_credit_limit_increase_request_7392 tool.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "submit",
+     "by": "harness",
+     "do": "Step 1: submit the request before any eligibility checks",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "submit_credit_limit_increase_request_7392",
+      "credit_card_account_id": "the card account",
+      "user_id": "the verified user",
+      "requested_increase_amount": "increase in dollars (integer)"
+     },
+     "after": [
+      "unlock_submit"
+     ],
+     "if": null,
+     "quote": "Eligibility checks are internal and not exposed to customers, so the submission must happen first.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "cli_history",
+     "by": "harness",
+     "do": "Unlock and call the CLI history tool to check the cooldown",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_credit_limit_increase_history_4829",
+      "credit_card_account_id": "the card account"
+     },
+     "after": [
+      "submit"
+     ],
+     "if": null,
+     "quote": "Cooldown Period: Use the get_credit_limit_increase_history_4829 tool to check if the customer has submitted a request within the cooldown period for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "disputes_check",
+     "by": "harness",
+     "do": "Check for active disputes on the account using get_user_dispute_history_7291. This includes a dispute filed earlier in this conversation.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "user_id": "the verified user"
+     },
+     "after": [
+      "submit"
+     ],
+     "if": null,
+     "quote": "3. No Pending Disputes: Verify the account has no active disputes.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "replacement_check",
+     "by": "harness",
+     "do": "Unlock and call the pending replacement orders check",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765",
+      "credit_card_account_id": "the card account"
+     },
+     "after": [
+      "submit"
+     ],
+     "if": null,
+     "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "payment_history",
+     "by": "harness",
+     "do": "Unlock and call the payment history tool with the months value for the tier (Entry 6, Mid/Premium 3)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_payment_history_6183",
+      "credit_card_account_id": "the card account",
+      "months": "3 for Mid-tier/Premium-tier, 6 for Entry-tier"
+     },
+     "after": [
+      "submit"
+     ],
+     "if": null,
+     "quote": "Use the get_payment_history_6183 tool to verify the customer's payment history meets the requirement for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "id": "eval",
+     "by": "model",
+     "do": "Check every criterion: account age, cooldown, disputes, replacements, past-due balance, utilization, payment history and amount. Use get_current_time for the dates.",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "cli_history",
+      "disputes_check",
+      "replacement_check",
+      "payment_history"
+     ],
+     "if": null,
+     "quote": "You MUST check ALL of the following eligibility criteria before making an approval or denial decision as this ensures complete audit records.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "approve",
+     "by": "harness",
+     "do": "Unlock and call the approval with the new total limit (current limit + increase)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "approve_credit_limit_increase_5847",
+      "credit_card_account_id": "the card account",
+      "user_id": "the verified user",
+      "new_credit_limit": "current limit + approved increase"
+     },
+     "after": [
+      "eval"
+     ],
+     "if": "all requirements are met",
+     "quote": "Use the approve_credit_limit_increase_5847 tool to approve and apply the increase.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "deny",
+     "by": "harness",
+     "do": "Unlock and call the denial with the failing reason (e.g. 'pending_disputes' if there is an active dispute)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "deny_credit_limit_increase_5848",
+      "credit_card_account_id": "the card account",
+      "user_id": "the verified user",
+      "denial_reason": "one of the allowed values"
+     },
+     "after": [
+      "eval"
+     ],
+     "if": "any requirement is not met",
+     "quote": "Use the deny_credit_limit_increase_5848 tool to record the denial.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "communicate",
+     "by": "model",
+     "do": "Step 5: tell the customer the decision. For an approval, give the new limit. For a denial, give the reason and when they may reapply.",
+     "call": null,
+     "args": {},
+     "after": [
+      "approve",
+      "deny"
+     ],
+     "if": null,
+     "quote": "For approvals, confirm the new credit limit. For denials, explain the reason and when they may be eligible to reapply.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Maximum increase per request: Mid-tier 50% and Premium-tier 50% of the current limit; Entry-tier 25%",
+     "quote": "Mid-tier cards: Maximum increase of 50% of current credit limit per request.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "rule": "Silver Rewards Card is Mid-tier",
+     "quote": "Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom): $10.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Mid-tier needs 3 consecutive on-time payment months; Entry-tier needs 6",
+     "quote": "Mid-tier cards: Requires 3 consecutive months of on-time payments.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "rule": "Minimum account age, cooldown after an approved request, and maximum utilization: Entry 120/120/70%, Mid 90/90/80%, Premium 60/60/90%. Utilization must be strictly below the threshold.",
+     "quote": "Utilization at or above the threshold does not qualify.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_005"
+    },
+    {
+     "rule": "Only approved requests trigger a cooldown",
+     "quote": "This applies only if your most recent request was approved. Denied requests do not trigger a cooldown period.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_005"
+    },
+    {
+     "rule": "The account must have no active disputes. Otherwise deny with 'pending_disputes'.",
+     "quote": "3. No Pending Disputes: Verify the account has no active disputes.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "rule": "No pending replacement card orders allowed",
+     "quote": "If a replacement is pending, the CLI cannot be processed until the replacement is delivered or cancelled.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "rule": "The account must be current with no past-due balance",
+     "quote": "5. Account Good Standing: The account must be current with no past-due balance.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    }
+   ],
+   "done_when": "The CLI request was submitted and an approve or deny tool was called after all criteria were checked, and the customer has been told the decision with its reason or the new limit"
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_014",
+   "why": "Credit card dispute filing procedure and the arguments for file_credit_card_transaction_dispute_4829"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_015",
+   "why": "Provisional credit eligibility rules and tier maximums"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_013",
+   "why": "get_card_last_4_digits, a user tool for retrieving the card's last 4 digits"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_016",
+   "why": "get_user_dispute_history_7291, for the dispute count and the active-dispute check"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_007",
+   "why": "CLI workflow: order, submit, eligibility checks, approve/deny tools"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_006",
+   "why": "Payment history requirement, get_payment_history_6183, maximum increase by tier"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_005",
+   "why": "Account age, cooldown and utilization thresholds by tier"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_005",
+   "why": "get_pending_replacement_orders_5765 for the pending replacement check"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_001",
+   "why": "Maps Silver Rewards to Mid-tier"
+  }
+ ],
+ "open_questions": [
+  "The CLI procedure requires no active disputes. A dispute filed earlier in the same conversation will likely make the CLI fail with 'pending_disputes'. The documents do not say whether to warn the customer before filing or whether the order of the two jobs should change. Following the documents literally, file the dispute (the customer's first request), then submit the CLI, check all criteria and deny it if an active dispute exists.",
+  "CLI Step 3 ('Verify Payment History and Requested Amount') is empty in the document. Use doc_credit_cards_credit_card_account_logistics_006 for the payment history months and the maximum increase.",
+  "No document names a tool for checking past-due status or account open date. Assume these come from get_credit_card_accounts_by_user records.",
+  "Every *_NNNN tool is presumably discoverable and must be unlocked before use. The documents state this only for the dispute filing tool."
+ ]
+}

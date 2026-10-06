@@ -1,7 +1,9 @@
-"""`make snapshot`: export the MLflow experiment to a JSON the demo image can serve.
+"""`make snapshot`: export the MLflow experiments to a JSON the demo image can serve.
 
 The public deployment has no tracking server, so the runs page reads this
-file. It is regenerated locally and committed with the run folders.
+file. It is regenerated locally and committed with the run folders. It reads
+each domain's `tau2-loop/<domain>` and the flat `tau2-loop` that holds the runs
+logged before them.
 """
 
 from __future__ import annotations
@@ -10,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from tau2_loop.config import LOOP_DIR, settings
+from tau2_loop.config import DOMAINS, LOOP_DIR, settings
 
 SNAPSHOT_PATH = LOOP_DIR / "mlflow_snapshot.json"
 
@@ -18,17 +20,22 @@ SNAPSHOT_PATH = LOOP_DIR / "mlflow_snapshot.json"
 def write_snapshot(path: Path = SNAPSHOT_PATH) -> Path:
     import mlflow
 
-    from tau2_loop.tracking.mlflow_log import EXPERIMENT
+    from tau2_loop.tracking.mlflow_log import LEGACY_EXPERIMENT, experiment
 
     mlflow.set_tracking_uri(settings().mlflow_tracking_uri)
-    exp = mlflow.get_experiment_by_name(EXPERIMENT)
+    names: list[str] = []
     runs: list[dict[str, Any]] = []
-    if exp is not None:
+    for name in [*(experiment(d) for d in DOMAINS), LEGACY_EXPERIMENT]:
+        exp = mlflow.get_experiment_by_name(name)
+        if exp is None:
+            continue
+        names.append(name)
         for r in mlflow.search_runs(experiment_ids=[exp.experiment_id], output_format="list"):
             runs.append(
                 {
                     "mlflow_run_id": r.info.run_id,
                     "name": r.info.run_name,
+                    "experiment": name,
                     "status": r.info.status,
                     "start_time": r.info.start_time,
                     "end_time": r.info.end_time,
@@ -38,7 +45,8 @@ def write_snapshot(path: Path = SNAPSHOT_PATH) -> Path:
                 }
             )
     payload = {
-        "experiment": EXPERIMENT,
+        "experiment": ", ".join(names) or None,
+        "experiments": names,
         "tracking_uri": settings().mlflow_tracking_uri,
         "runs": runs,
     }

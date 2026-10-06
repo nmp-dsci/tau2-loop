@@ -1,0 +1,478 @@
+{
+ "jobs": [
+  {
+   "job": "opening_personal_checking_accounts",
+   "when": {
+    "quote": "To open a personal checking account, ensure all of the following are true:",
+    "doc": "doc_bank_accounts_bank_accounts__general__001"
+   },
+   "info": [
+    {
+     "field": "identity_details",
+     "about": "Any 2 of date of birth, email, phone number, address, checked against the customer's records",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me your full name and two of these: date of birth, email, phone number or home address?",
+     "may_hold_back": false
+    },
+    {
+     "field": "atm_withdrawals_per_month",
+     "about": "How many ATM withdrawals the customer expects each month, and whether they will be out-of-network and/or abroad in a foreign currency",
+     "from": "customer",
+     "ask": "About how many ATM withdrawals do you expect each month, and will they be at out-of-network ATMs abroad in a foreign currency?",
+     "may_hold_back": true
+    },
+    {
+     "field": "withdrawal_amount",
+     "about": "The usual amount of each withdrawal, needed for percentage-based fees",
+     "from": "customer",
+     "ask": "About how much do you usually take out each time?",
+     "may_hold_back": true
+    },
+    {
+     "field": "usage_duration",
+     "about": "How many months the usage will last (for example, the trip length)",
+     "from": "customer",
+     "ask": "How long will you be using the account this way?",
+     "may_hold_back": true
+    },
+    {
+     "field": "early_direct_deposit_days_needed",
+     "about": "The minimum number of days early the customer needs direct deposit to arrive",
+     "from": "customer",
+     "ask": "How early do you need your direct deposit to arrive, for example 1 or 2 days before payday?",
+     "may_hold_back": true
+    },
+    {
+     "field": "customer_age",
+     "about": "Age worked out from the date of birth on file; some accounts have age limits",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "existing_accounts",
+     "about": "The customer's current bank accounts: count of personal checking accounts, their statuses and any closures",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup",
+     "by": "model",
+     "do": "Look up the customer by the name or email they give",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives"
+     },
+     "after": [],
+     "if": null,
+     "quote": "Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Check that the customer correctly gives 2 of: DOB, email, phone, address, matched against the record",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup"
+     ],
+     "if": null,
+     "quote": "1. The customer is verified.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time for the verification log and the age check",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification record",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "from records",
+      "email": "from records",
+      "phone_number": "from records",
+      "date_of_birth": "from records",
+      "time_verified": "the time get_current_time returned"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's existing accounts to check eligibility",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": null,
+     "quote": "Checking eligibility requirements for opening new accounts (existing account status, balances, account tenure, number of accounts)",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "check_elig",
+     "by": "model",
+     "do": "Confirm age 18 or over, no more than 4 personal checking accounts, and no checking account closed for cause in the past 6 months; stop and explain if any check fails",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "2. Check eligibility requirements listed above.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "ask_usage",
+     "by": "model",
+     "do": "Ask for any usage details not yet given: withdrawals per month, amount per withdrawal, out-of-network/foreign, duration, early direct deposit days needed",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_elig"
+     ],
+     "if": "any usage field is still unknown",
+     "quote": "3. Confirm the customer's desired account_class selection.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "compare",
+     "by": "model",
+     "do": "Drop accounts that do not meet the early direct deposit need or the customer's age. For each remaining account, work out the Rho-Bank fee per withdrawal (out-of-network fee plus foreign ATM fee when abroad) × number of withdrawals, then recommend the cheapest. State any opening-deposit or balance requirement",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_usage"
+     ],
+     "if": null,
+     "quote": "3. Confirm the customer's desired account_class selection.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "confirm_class",
+     "by": "model",
+     "do": "Get the customer's confirmation of the chosen account, using its full official name ending in 'Account'",
+     "call": null,
+     "args": {},
+     "after": [
+      "compare"
+     ],
+     "if": null,
+     "quote": "Personal checking account_class options must use the full official name ending with 'Account' (e.g., 'Blue Account', 'Green Account (checking)').",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "unlock_open",
+     "by": "harness",
+     "do": "Unlock the account-opening tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821"
+     },
+     "after": [
+      "confirm_class"
+     ],
+     "if": null,
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "open",
+     "by": "model",
+     "do": "Open the personal checking account with the confirmed account_class",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": {
+       "user_id": "the verified user's id",
+       "account_type": "checking",
+       "account_class": "the confirmed full official name, e.g. 'Bluest Account'"
+      }
+     },
+     "after": [
+      "unlock_open"
+     ],
+     "if": "the customer has confirmed and all eligibility checks pass",
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "confirm_done",
+     "by": "model",
+     "do": "Tell the customer the account is open and repeat its ATM fees and early direct deposit timing",
+     "call": null,
+     "args": {},
+     "after": [
+      "open"
+     ],
+     "if": null,
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Eligibility: verified, age 18 or over, no more than 4 personal checking accounts, no checking accounts closed for cause in the past 6 months",
+     "quote": "3. The customer does not exceed 4 personal checking accounts.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "Eligibility: the customer must be at least 18",
+     "quote": "2. The customer is at least 18 years old.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "Eligibility: no checking account closed for cause in the past 6 months",
+     "quote": "4. The customer has no checking accounts closed for cause in the past 6 months.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "Bluest Account: early direct deposit 2 days",
+     "quote": "| Early direct deposit | 2 day(s) before payday |",
+     "doc": "doc_checking_accounts_bluest_account_001"
+    },
+    {
+     "rule": "Bluest Account: out-of-network ATM fee $2.00 per withdrawal",
+     "quote": "| Cash withdrawal at an out-of-network ATM | $2.00 per withdrawal |",
+     "doc": "doc_checking_accounts_bluest_account_010"
+    },
+    {
+     "rule": "Bluest Account: foreign ATM fee $0.00",
+     "quote": "- No foreign ATM withdrawal fees: $0.00",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "rule": "Bluest Account: $75,000 minimum opening deposit; $75.00 monthly fee if the daily balance falls below $112,500",
+     "quote": "- Deposit at least $75,000 to open your account.",
+     "doc": "doc_checking_accounts_bluest_account_002"
+    },
+    {
+     "rule": "Bluest Account: ATM fee rebates up to $50 per month",
+     "quote": "- You are eligible for ATM fee rebates up to $50 per month.",
+     "doc": "doc_checking_accounts_bluest_account_007"
+    },
+    {
+     "rule": "Purple Account: early direct deposit 2 days; foreign ATM fee $0.00",
+     "quote": "| Early direct deposit | 2 days early |",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "rule": "Purple Account: foreign ATM fee $0.00",
+     "quote": "| Foreign ATM withdrawal fee | $0.00 |",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "rule": "Purple Account: out-of-network ATM fee $2.50 per withdrawal",
+     "quote": "- You are charged $2.50 per cash withdrawal made at an out-of-network ATM.",
+     "doc": "doc_checking_accounts_purple_account_012"
+    },
+    {
+     "rule": "Purple Account: ATM operator fee rebates up to $30 per month; $15.00 monthly fee waived with a $3,750 minimum daily balance",
+     "quote": "- You are eligible for refunds of ATM operator fees up to a monthly cap of $30.",
+     "doc": "doc_checking_accounts_purple_account_004"
+    },
+    {
+     "rule": "Evergreen Account: early direct deposit up to 2 days",
+     "quote": "- Early direct deposit: get your paycheck up to 2 days early",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "rule": "Evergreen Account: foreign ATM fee 2% (min $3.00)",
+     "quote": "- Foreign ATM withdrawal fee: 2% of the withdrawal amount, with a minimum of $3.00 per transaction.",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "rule": "Evergreen Account: out-of-network fee 1%, capped at $2.50 per withdrawal",
+     "quote": "- Maximum per withdrawal: $2.50",
+     "doc": "doc_checking_accounts_evergreen_account_008"
+    },
+    {
+     "rule": "Gold Years Account: 2-day early direct deposit, but only for customers 62 or older",
+     "quote": "- You must be at least 62 years old to qualify.",
+     "doc": "doc_checking_accounts_gold_years_account_002"
+    },
+    {
+     "rule": "Green Fee-Free Account has $0 ATM fees but no early direct deposit, so it fails a 1- or 2-day early deposit need",
+     "quote": "| Early direct deposit | 0 day(s) before payday |",
+     "doc": "doc_checking_accounts_green_fee-free_account_003"
+    },
+    {
+     "rule": "Blue Account: early direct deposit only 1 day",
+     "quote": "- Early direct deposit: 1 day(s) before payday",
+     "doc": "doc_checking_accounts_blue_account_001"
+    },
+    {
+     "rule": "Green Account (checking): early direct deposit only 1 day",
+     "quote": "| Early direct deposit | Up to 1 day early |",
+     "doc": "doc_checking_accounts_green_account__checking__001"
+    },
+    {
+     "rule": "Dark Green Account: early direct deposit only 1 day; ages 17-26",
+     "quote": "- Maximum primary holder age: 26",
+     "doc": "doc_checking_accounts_dark_green_account_001"
+    },
+    {
+     "rule": "Light Green Account: no early direct deposit; ages 13-24",
+     "quote": "- You must remain within the 13–24 age range to maintain the account.",
+     "doc": "doc_checking_accounts_light_green_account_002"
+    },
+    {
+     "rule": "Light Blue Account: no early direct deposit",
+     "quote": "- Early direct deposit: 0 day(s) before payday",
+     "doc": "doc_checking_accounts_light_blue_account_002"
+    }
+   ],
+   "done_when": "The customer is verified and logged, eligibility is confirmed, the customer has agreed to the account with the lowest ATM fees among those that meet their early direct deposit need and age (for a 2-day need at out-of-network ATMs abroad, the Bluest Account has the lowest per-withdrawal Rho-Bank fee: $2.00 vs Purple $2.50 vs Evergreen 1% capped at $2.50 plus 2% min $3.00), and open_bank_account_4821 has returned a new account"
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__001",
+   "why": "Internal procedure and eligibility for opening personal checking accounts; names open_bank_account_4821 and the account_class naming rule"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "Names get_all_user_accounts_by_user_id_3847 for eligibility checks"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__002",
+   "why": "Gives the open_bank_account_4821(user_id, account_type, account_class) signature"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_001",
+   "why": "Bluest: 2-day early direct deposit, $50 ATM rebate cap"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_002",
+   "why": "Bluest: $75,000 opening deposit, $112,500 balance, $75 fee"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_003",
+   "why": "Bluest: $0.00 foreign ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_007",
+   "why": "Bluest: ATM rebates and $1,500 daily ATM limit"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_010",
+   "why": "Bluest: $2.00 out-of-network ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_001",
+   "why": "Purple: 2-day early direct deposit, $0 foreign ATM fee, $30 rebates"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_002",
+   "why": "Purple: $15 monthly fee, $3,750 waiver"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_004",
+   "why": "Purple: rebates cover ATM operator fees, $1,000 daily ATM limit"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_012",
+   "why": "Purple: $2.50 out-of-network ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_evergreen_account_001",
+   "why": "Evergreen: up to 2-day early direct deposit, 2% (min $3.00) foreign ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_evergreen_account_008",
+   "why": "Evergreen: out-of-network fee 1%, capped at $2.50"
+  },
+  {
+   "id": "doc_checking_accounts_gold_years_account_002",
+   "why": "Gold Years: age 62+ requirement, $3.50 foreign ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_green_fee-free_account_003",
+   "why": "Green Fee-Free: $0 ATM fees but 0-day early direct deposit"
+  },
+  {
+   "id": "doc_checking_accounts_green_fee-free_account_005",
+   "why": "Green Fee-Free: $0 foreign ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_blue_account_001",
+   "why": "Blue: 1-day early direct deposit"
+  },
+  {
+   "id": "doc_checking_accounts_blue_account_012",
+   "why": "Blue: foreign ATM fee 3% (min $5.00)"
+  },
+  {
+   "id": "doc_checking_accounts_green_account__checking__001",
+   "why": "Green (checking): 1-day early direct deposit, $3.00 out-of-network fee"
+  },
+  {
+   "id": "doc_checking_accounts_green_account__checking__012",
+   "why": "Green (checking): foreign ATM fee 3% (min $5.00)"
+  },
+  {
+   "id": "doc_checking_accounts_dark_green_account_001",
+   "why": "Dark Green: 1-day early direct deposit, ages 17-26"
+  },
+  {
+   "id": "doc_checking_accounts_light_green_account_001",
+   "why": "Light Green: 0-day early direct deposit, 4 free out-of-network withdrawals"
+  },
+  {
+   "id": "doc_checking_accounts_light_green_account_002",
+   "why": "Light Green: ages 13-24"
+  },
+  {
+   "id": "doc_checking_accounts_light_blue_account_002",
+   "why": "Light Blue: 0-day early direct deposit"
+  }
+ ],
+ "open_questions": [
+  "The documents do not say whether a withdrawal at an out-of-network ATM abroad is charged both the out-of-network fee and the foreign ATM fee, or only one. Either way the Bluest Account ($2.00 + $0.00) costs no more than the Purple Account ($2.50 + $0.00), and both cost less than Evergreen.",
+  "It is unclear whether Bluest's ATM fee rebates ('up to $50') and Purple's rebates of 'ATM operator fees' (up to $30) also cover Rho-Bank's own out-of-network fee or only third-party surcharges.",
+  "The opening procedure does not list Bluest's $75,000 minimum opening deposit as an eligibility check, and it does not say how the deposit is collected. The agent should tell the customer about it, together with the $112,500 balance needed to avoid the $75.00 monthly fee.",
+  "The personal checking procedure does not state the account_type value for open_bank_account_4821. 'checking' is inferred from the savings procedure, which uses 'savings'."
+ ]
+}

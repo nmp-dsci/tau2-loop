@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentInfo, Registries } from './api';
-import { agentVersion, expApplies, experimentsOf, modelFamily, scopeFromLocation, scopeHref, taskApplies, type Scope } from './scope';
+import { agentVersion, agentsOf, expApplies, experimentsOf, modelFamily, scopeFromLocation, scopeHref, taskApplies, type Scope } from './scope';
 
 const v = (name: string, model: string, domain = 'airline'): AgentInfo =>
   ({ domain, name, ref: `${domain}/${name}`, fingerprint: '', config: { model }, has_helper: false, helper_functions: [], diagnosis: null, runs: [] }) as AgentInfo;
@@ -78,6 +78,36 @@ describe('the scope bar', () => {
     expect(agentVersion({ ...s, dataset: 'telecom' }, VERSIONS, REG)).toBe('v1');
     expect(scopeHref('agent', { ...s, exp: 'v6' }, { versions: VERSIONS, registry: REG })).toBe('/agent/airline/v6');
     expect(scopeHref('agent', { ...s, agent: 'judge' })).toBe('/agent/airline/judge');
+  });
+
+  it('lists each dataset’s own agents: banking has workflow_rag and no judge (s16)', () => {
+    const kinds = { airline: ['answering', 'judge'], retail: ['answering'], telecom: ['answering'], banking_knowledge: ['answering', 'workflow_rag'] };
+    expect(agentsOf('banking_knowledge', kinds)).toEqual(['answering', 'workflow_rag']);
+    expect(agentsOf('airline', kinds)).toEqual(['answering', 'judge']);
+    expect(agentsOf('retail', kinds)).toEqual(['answering']);
+    // before the registry loads, and for a kind the viewer does not know, only the answering agent
+    expect(agentsOf('banking_knowledge', null)).toEqual(['answering']);
+    expect(agentsOf('retail', { retail: ['mystery'] })).toEqual(['answering']);
+  });
+
+  it('reads workflow_rag back from each of its addresses, and builds them from the scope', () => {
+    expect(scopeFromLocation('/evals/banking_knowledge/workflow_rag', '')).toEqual({ dataset: 'banking_knowledge', agent: 'workflow_rag' });
+    expect(scopeFromLocation('/evals/banking_knowledge/workflow_rag', '?task=task_019')).toMatchObject({ agent: 'workflow_rag', task: 'task_019' });
+    expect(scopeFromLocation('/optimise/banking_knowledge/workflow_rag', '')).toMatchObject({ agent: 'workflow_rag' });
+    expect(scopeFromLocation('/agent/banking_knowledge/workflow_rag', '')).toMatchObject({ agent: 'workflow_rag' });
+    expect(scopeFromLocation('/review/workflow_rag/banking_knowledge', '')).toMatchObject({ dataset: 'banking_knowledge', agent: 'workflow_rag' });
+    expect(scopeFromLocation('/runs', '?domain=banking_knowledge&agent=workflow_rag')).toMatchObject({ dataset: 'banking_knowledge', agent: 'workflow_rag' });
+    const s: Scope = { dataset: 'banking_knowledge', agent: 'workflow_rag', exp: 'v4', task: 'task_019' };
+    for (const tab of ['evals', 'runs', 'optimise', 'agent', 'review'] as const) {
+      const [path, query = ''] = scopeHref(tab, s).split('?');
+      const back = scopeFromLocation(path, query ? `?${query}` : '');
+      expect(back.agent).toBe('workflow_rag');
+      expect(back.dataset).toBe('banking_knowledge');
+      // the answering agent's experiment never filters workflow_rag's views
+      expect(expApplies(tab, 'workflow_rag')).toBe(false);
+      expect(back.exp).toBeUndefined();
+    }
+    expect(scopeHref('evals', s)).toBe('/evals/banking_knowledge/workflow_rag?task=task_019');
   });
 
   it('every model string here falls in one family', () => {

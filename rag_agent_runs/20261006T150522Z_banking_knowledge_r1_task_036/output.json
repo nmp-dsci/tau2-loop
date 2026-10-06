@@ -1,0 +1,456 @@
+{
+ "jobs": [
+  {
+   "job": "review_recent_credit_card_transactions",
+   "when": {
+    "quote": "Review recent transaction history to check for suspicious activity.",
+    "doc": "doc_checking_accounts_purple_account_007"
+   },
+   "info": [
+    {
+     "field": "identity_details",
+     "about": "Any 2 of: date of birth, email, phone number, home address. These must match the records the lookup returns.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me your full name and two of the following: your date of birth, email address, phone number or home address?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_in_question",
+     "about": "Which Rho-Bank credit card the customer wants to review. Use this if more than one credit card account is returned.",
+     "from": "customer",
+     "ask": "Which of your Rho-Bank credit cards would you like me to review?",
+     "may_hold_back": false
+    },
+    {
+     "field": "unrecognized_transactions",
+     "about": "Which of the listed transactions the customer did not make or does not recognize",
+     "from": "customer",
+     "ask": "Do you recognize all of these charges, or are there any you did not make?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely and ask how you can help",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record using the email or full name they gave (the name lookup is case sensitive)",
+     "call": "get_user_information_by_email",
+     "args": {
+      "email": "the email the customer gave (or use get_user_information_by_name with the full name)"
+     },
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "check_identity",
+     "by": "model",
+     "do": "Check that at least 2 of DOB, email, phone and address match the record. Share no account details before this check passes.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "check_identity"
+     ],
+     "if": "identity verified",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name from records",
+      "user_id": "the verified user's id",
+      "address": "address from records",
+      "email": "email from records",
+      "phone_number": "phone from records",
+      "date_of_birth": "DOB from records",
+      "time_verified": "timestamp from get_current_time"
+     },
+     "after": [
+      "get_time"
+     ],
+     "if": "identity verified",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Retrieve the customer's credit card accounts to identify the card in question and its tier",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Look up the customer's credit card account.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_transactions",
+     "by": "harness",
+     "do": "Retrieve the customer's credit card transactions",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Review recent transaction history to check for suspicious activity.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "id": "present_transactions",
+     "by": "model",
+     "do": "List the recent transactions on the card in question (merchant, amount, date). Include every one, including any unusual ones. Then ask whether the customer recognizes them all.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_transactions",
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "Review recent transaction history to check for suspicious activity.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "id": "route_suspicious",
+     "by": "model",
+     "do": "If the customer says there are charges they did not make, treat the card as compromised and offer to cancel and replace it (next job)",
+     "call": null,
+     "args": {},
+     "after": [
+      "present_transactions"
+     ],
+     "if": "customer reports unrecognized or unauthorized charges",
+     "quote": "If suspicious transactions found: Follow stolen card protocol to assist the customer.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Do not look up or reveal transactions until the customer has matched 2 of DOB, email, phone and address and the verification is logged",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Charges the customer did not make or does not recognize count as unauthorized or fraudulent",
+     "quote": "**Unauthorized or Fraudulent Charges**: You see a charge you didn't make or don't recognize",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    }
+   ],
+   "done_when": "The customer is verified and logged, has seen the recent transactions on the card in question, and has said whether any are unauthorized. If any are, move on to the replacement job."
+  },
+  {
+   "job": "order_replacement_credit_card",
+   "when": {
+    "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+    "doc": "doc_credit_cards_credit_card_replacements_001"
+   },
+   "info": [
+    {
+     "field": "replacement_reason",
+     "about": "Exactly one of fraud_suspected, lost, stolen, damaged, expired, other. Unrecognized charges with the card still in hand mean fraud_suspected.",
+     "from": "customer",
+     "ask": "What is the reason for the replacement: suspected fraud, lost, stolen, damaged, expired, or something else?",
+     "may_hold_back": false
+    },
+    {
+     "field": "shipping_address",
+     "about": "Where to ship the new card: the primary address on file or an alternate address the customer gives, including any unit or suite",
+     "from": "customer",
+     "ask": "Where should we ship the replacement card: your address on file, or a different address? Please include any unit or suite number.",
+     "may_hold_back": true
+    },
+    {
+     "field": "shipping_speed",
+     "about": "standard (7–10 business days, free) or expedited (2–3 business days, fee by card tier)",
+     "from": "customer",
+     "ask": "Would you like standard shipping (7–10 business days, free) or expedited shipping (2–3 business days, with a fee that depends on your card tier)?",
+     "may_hold_back": true
+    },
+    {
+     "field": "expedited_fee_consent",
+     "about": "The customer's agreement to the expedited fee for their tier, needed only when a fee applies",
+     "from": "customer",
+     "ask": "Expedited shipping for your card carries a fee of [tier fee]. Do you agree to this fee?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_tier",
+     "about": "Tier of the card being replaced, read from the card type on the account record",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "confirm_reason",
+     "by": "model",
+     "do": "Confirm the replacement reason and record exactly one value. Use fraud_suspected when the customer reports unrecognized charges.",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "check_pending_unlock",
+     "by": "harness",
+     "do": "Unlock the tool that checks for pending replacement orders",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765"
+     },
+     "after": [
+      "confirm_reason"
+     ],
+     "if": null,
+     "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "check_pending",
+     "by": "harness",
+     "do": "Check the account for an existing replacement order that is still pending",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765",
+      "arguments": {
+       "credit_card_account_id": "the account id of the card being replaced"
+      }
+     },
+     "after": [
+      "check_pending_unlock"
+     ],
+     "if": null,
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "eligibility_decision",
+     "by": "model",
+     "do": "Decide eligibility. If a replacement order is pending or the tier limit for the 60-day period is exceeded, the customer is not eligible: explain why and do not order. The customer may contact support to request a manual review.",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_pending"
+     ],
+     "if": null,
+     "quote": "Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "confirm_address",
+     "by": "model",
+     "do": "Ask whether to ship to the address on file or to an alternate address, and confirm the full address including any suite or unit",
+     "call": null,
+     "args": {},
+     "after": [
+      "eligibility_decision"
+     ],
+     "if": "eligible",
+     "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "offer_shipping",
+     "by": "model",
+     "do": "Offer standard or expedited shipping and state the expedited fee for the card's tier (Entry $15.00, Mid-tier such as Silver Rewards $10.00, Premium and above $0.00). For fraud_suspected or stolen, strongly recommend expedited. If a fee applies, get the customer's consent.",
+     "call": null,
+     "args": {},
+     "after": [
+      "eligibility_decision"
+     ],
+     "if": "eligible",
+     "quote": "If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "unlock_order",
+     "by": "harness",
+     "do": "Unlock the replacement order tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291"
+     },
+     "after": [
+      "confirm_address",
+      "offer_shipping"
+     ],
+     "if": "eligible",
+     "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "place_order",
+     "by": "model",
+     "do": "Place the replacement order using the parameter names the unlock returns",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291",
+      "arguments": {
+       "card_or_account_id": "the account id or card id of the card being replaced, from get_credit_card_accounts_by_user",
+       "reason": "the confirmed reason, e.g. fraud_suspected",
+       "shipping_address": "the address the customer confirmed",
+       "shipping_speed": "standard or expedited",
+       "expedited_fee_acknowledgement": "true if the customer consented to the tier fee",
+       "notes": "context, e.g. unrecognized charges reported; ship to alternate (work) address"
+      }
+     },
+     "after": [
+      "unlock_order"
+     ],
+     "if": "eligible",
+     "quote": "Use call_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291 and include:",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "confirm_outcome",
+     "by": "model",
+     "do": "Tell the customer the old card is cancelled, give the delivery window (standard 7–10 / expedited 2–3 business days), and mention any fee. Say to watch for emails when the order is placed and when the card ships.",
+     "call": null,
+     "args": {},
+     "after": [
+      "place_order"
+     ],
+     "if": null,
+     "quote": "The old card is automatically cancelled for security and will no longer work for new purchases.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "fraud_reminder",
+     "by": "model",
+     "do": "For fraud_suspected or stolen, remind the customer to review recent transactions and dispute any unauthorized charges in the app or website. File a dispute only if the customer asks for one.",
+     "call": null,
+     "args": {},
+     "after": [
+      "place_order"
+     ],
+     "if": "reason is fraud_suspected or stolen",
+     "quote": "If the reason was fraud_suspected or stolen, remind the customer to review recent transactions and dispute any unauthorized charges in the app or website.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Do not unlock or call order_replacement_credit_card_7291 unless the customer is eligible",
+     "quote": "Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Not eligible while an earlier replacement order for the account is still pending",
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Replacement limit per 60-day period: Entry-tier 2, Mid-tier 3, Premium-tier and above 4",
+     "quote": "Replacement requests are limited within a 60-day period to help protect your account.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Silver Rewards Card is Mid-tier: up to 3 replacements per period",
+     "quote": "Mid-tier: up to 3 replacements per period.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Expedited fee: Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom) $10.00; Entry-tier $15.00; Premium-tier and above $0.00",
+     "quote": "Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom): $10.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Standard delivery is 7–10 business days and free",
+     "quote": "Standard delivery: 7–10 business days; free for all cardholders.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "rule": "The shipping address may be the primary address or an alternate one the customer gives (such as a work address with suite). Use the address the customer confirms.",
+     "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "When a fee applies, record the customer's consent to it before ordering",
+     "quote": "Expedited_fee_acknowledgement: customer consent captured if a fee applies based on tier.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ],
+   "done_when": "order_replacement_credit_card_7291 has been called with the confirmed reason, the customer-confirmed shipping address, the chosen speed and any fee consent. The customer has been told the old card is cancelled, the delivery window, any fee and the email notifications, and has had the reminder to dispute unauthorized charges. Or, if the customer is not eligible, the reason and next steps have been explained."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_card_replacements_001",
+   "why": "Internal procedure for ordering a replacement credit card: pre-checks, shipping fees by tier, the order_replacement_credit_card_7291 tool and its arguments, and what to tell the customer afterwards"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_002",
+   "why": "Shipping options, delivery times and expedited fees by tier; recommends expedited shipping for fraud"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_003",
+   "why": "Customer-facing account of what changes after a replacement: new number and CVV, same account number, email notifications"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_004",
+   "why": "Eligibility: no pending replacement allowed; limits by tier per 60-day period"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_005",
+   "why": "get_pending_replacement_orders_5765 tool for checking pending replacement orders"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_007",
+   "why": "Review transaction history for suspicious activity; follow the stolen card protocol if any is found"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_018",
+   "why": "Defines unauthorized charges as charges the customer didn't make or doesn't recognize"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_014",
+   "why": "Dispute filing procedure (file_credit_card_transaction_dispute_4829, card_action cancel_and_reissue). Use only if the customer asks to dispute."
+  }
+ ],
+ "open_questions": [
+  "No tool or record is documented for counting how many replacements were made in the past 60 days. The agent can check only for pending orders (get_pending_replacement_orders_5765) and any replacement data that get_credit_card_accounts_by_user returns.",
+  "The exact parameter names for order_replacement_credit_card_7291 are not given (the document says 'account_id or card_id'). The agent must use the schema the unlock returns.",
+  "No document gives a procedure for simply listing credit card transactions. The step rests on the policy's verification rules and on the get_credit_card_transactions_by_user tool.",
+  "It is unclear whether the agent should proactively file disputes after a fraud replacement. The document says only to remind the customer to dispute in the app or website, so file only on request."
+ ]
+}

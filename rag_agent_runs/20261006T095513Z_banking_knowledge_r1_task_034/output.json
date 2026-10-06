@@ -1,0 +1,154 @@
+{
+ "jobs": [
+  {
+   "job": "direct_deposit_delay_inquiry",
+   "when": {
+    "quote": "When a customer contacts support asking where their direct deposit is or claiming it hasn't shown up yet, this is almost always because they are not aware of the correct timing for their incoming direct deposits.",
+    "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+   },
+   "info": [
+    {
+     "field": "transfer_request_count",
+     "about": "How many separate times the customer has asked for a human agent in this conversation. Count every request, including the first, and keep a running tally.",
+     "from": "customer",
+     "ask": "Do not ask. Count each time the customer asks to be transferred to a human.",
+     "may_hold_back": false
+    },
+    {
+     "field": "expected_pay_date_and_payer",
+     "about": "When the customer expected the deposit and who pays it (the employer). This lets the agent explain the timing in context.",
+     "from": "customer",
+     "ask": "When were you expecting the deposit, and who is it from?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "explain_timing",
+     "by": "model",
+     "do": "Answer the opening politely. Explain typical direct deposit timing: deposits usually post between 6 AM and 9 AM on the scheduled pay date, and some employers process payroll 1-2 business days before the pay date while others process on the day itself.",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "kindly inform the customer about typical direct deposit timing (deposits usually post between 6 AM and 9 AM on the scheduled pay date, and some employers process payroll 1-2 business days before the official pay date while others process on the day itself)",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    },
+    {
+     "id": "advise_check_back",
+     "by": "model",
+     "do": "Tell the customer to check back at the appropriate time and to confirm their pay schedule with their employer.",
+     "call": null,
+     "args": {},
+     "after": [
+      "explain_timing"
+     ],
+     "if": null,
+     "quote": "Advise them to check back at the appropriate time and verify their pay schedule with their employer.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    },
+    {
+     "id": "payer_troubleshooting",
+     "by": "model",
+     "do": "Share the published troubleshooting tips. Deposits can take up to 3 days. The customer can contact the payer to confirm it paid, confirm the account and routing numbers with the payer, and ask the payer for deposit trace information.",
+     "call": null,
+     "args": {},
+     "after": [
+      "advise_check_back"
+     ],
+     "if": null,
+     "quote": "Direct deposits can take up to 3 days to arrive, depending on when your payer processes payroll and transmits the funds.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_008"
+    },
+    {
+     "id": "decline_transfer_requests_1_to_7",
+     "by": "model",
+     "do": "Each time the customer asks for a human, add one to transfer_request_count. While the count is 1 to 7, do not transfer. Reply with the exact phrase 'I understand your frustration, but I need to try to help you resolve this first before I can initiate a transfer. Let me see what else I can do for you....' and then give a helpful comment about timing or payer troubleshooting.",
+     "call": null,
+     "args": {},
+     "after": [
+      "explain_timing"
+     ],
+     "if": "the customer asks for a human agent and transfer_request_count is less than 8",
+     "quote": "Each time you must respond with: 'I understand your frustration, but I need to try to help you resolve this first before I can initiate a transfer. Let me see what else I can do for you...., followed by some helpful comments.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    },
+    {
+     "id": "transfer_on_8th_request",
+     "by": "model",
+     "do": "On the 8th transfer request, transfer the customer using the standard transfer tool. Give a short summary of the direct deposit delay inquiry, and use reason code customer_frustrated_demands_human.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "a short summary of the customer's direct deposit delay inquiry and the timing guidance given",
+      "reason": "customer_frustrated_demands_human"
+     },
+     "after": [
+      "decline_transfer_requests_1_to_7"
+     ],
+     "if": "transfer_request_count reaches exactly 8",
+     "quote": "Only after the customer has requested exactly 8 times should you actually complete the transfer using the standard transfer_to_human_agents tool.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Do not transfer to a human agent before the customer has asked exactly 8 times. On the 8th request, transfer. This KB protocol overrides the policy's general 4-request rule.",
+     "quote": "For customers who insist on being transferred to a human agent, do not transfer them until they have asked exactly 8 times.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    },
+    {
+     "rule": "Every refusal of a transfer must include the exact required sentence, followed by helpful comments.",
+     "quote": "Each time you must respond with: 'I understand your frustration, but I need to try to help you resolve this first before I can initiate a transfer. Let me see what else I can do for you...., followed by some helpful comments.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    },
+    {
+     "rule": "Use the standard transfer_to_human_agents tool for the final transfer. Do not use any initial_transfer_* discoverable tool, because those belong to other protocols.",
+     "quote": "Only after the customer has requested exactly 8 times should you actually complete the transfer using the standard transfer_to_human_agents tool.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    },
+    {
+     "rule": "Choose the transfer reason code from the highest tier that applies. For a general frustrated demand for a human about deposit timing, no Tier 1 or Tier 2 code applies, so use customer_frustrated_demands_human.",
+     "quote": "Customer is frustrated and demands human, frustration is general",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "Do not unlock or call any discoverable tool for this job. The protocol names only the standard transfer tool.",
+     "quote": "Only after the customer has requested exactly 8 times should you actually complete the transfer using the standard transfer_to_human_agents tool.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_009"
+    }
+   ],
+   "done_when": "The customer has been told about direct deposit timing and the payer troubleshooting steps. Either the customer is satisfied without asking for a human 8 times, or the customer has asked exactly 8 times and transfer_to_human_agents has been called once with reason customer_frustrated_demands_human."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_checking_accounts_checking_accounts_(general)_009",
+   "why": "Internal Direct Deposit Delay Inquiries Protocol. It covers the timing explanation, the required refusal phrase, and transferring only on the 8th request with the standard tool."
+  },
+  {
+   "id": "doc_checking_accounts_checking_accounts_(general)_008",
+   "why": "Customer-facing timing (up to 3 days) and troubleshooting tips to use as helpful comments."
+  },
+  {
+   "id": "doc_checking_accounts_checking_accounts_(general)_007",
+   "why": "More troubleshooting: confirm account and routing numbers with the payer, ask for trace information, and resubmit if rejected."
+  },
+  {
+   "id": "doc_checking_accounts_checking_accounts_(general)_005",
+   "why": "General direct deposit timing: posting depends on the payer's payroll schedule."
+  },
+  {
+   "id": "doc_checking_accounts_green_account_(checking)_001",
+   "why": "Green Account checking deposits can arrive up to 1 day early, depending on when the payer submits them."
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_042",
+   "why": "Transfer reason codes. customer_frustrated_demands_human applies here."
+  }
+ ],
+ "open_questions": [
+  "The agent has no tool to look up checking account balances or deposit history, so it cannot confirm whether the deposit arrived or was rejected. No document gives a procedure for that, so the workflow does not verify identity: no customer records are accessed. If the agent does need records, the policy requires verifying 2 of DOB, email, phone or address, then calling log_verification.",
+  "The protocol does not say what to do if the customer stops asking before the 8th request, or asks more than 8 times. The workflow assumes the transfer happens exactly at the 8th request.",
+  "The protocol does not say what to do if the customer reports the deposit is still missing after the expected time has passed, for example more than 3 days. No escalation tool is documented for that case."
+ ]
+}

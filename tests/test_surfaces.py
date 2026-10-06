@@ -163,6 +163,34 @@ def test_reads_are_never_checked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert len(script.calls) == 1 and reply.tool_calls[0].id == "c1"
 
 
+def test_a_transfer_is_checked_though_tau2_does_not_type_it_a_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """s15: a reason-code rule (banking doc _042's tiers) must see the transfer before it ends the call."""
+    checks = (
+        "def check_write(name, arguments, state):\n"
+        "    if name == 'transfer_to_human_agents' and arguments.get('reason') == 'other':\n"
+        "        return 'a more specific reason code applies.'\n"
+        "    return None\n"
+    )
+    v = make_version(tmp_path, monkeypatch, checks_py=checks)
+    script = Script(
+        [
+            calls(("c1", "transfer_to_human_agents", {"reason": "other"})),
+            calls(("c2", "transfer_to_human_agents", {"reason": "fraud_or_security_concern"})),
+        ]
+    )
+    monkeypatch.setattr(llm_utils, "generate", script)
+    agent = LoopAgent(tools=[], domain_policy="P", version=v)
+    assert agent.kinds.get("transfer_to_human_agents") != "write"
+    reply, state = agent.generate_next_message(
+        UserMessage(role="user", content="get me a person"), agent.get_init_state()
+    )
+    assert len(script.calls) == 2 and "more specific reason" in script.calls[1][-1].content
+    assert [tc.arguments["reason"] for tc in reply.tool_calls] == ["fraud_or_security_concern"]
+    assert state.n_blocked == 1
+
+
 def test_a_refused_text_reply_goes_back_once_and_never_reaches_the_transcript(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

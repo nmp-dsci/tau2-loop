@@ -1,0 +1,593 @@
+{
+ "jobs": [
+  {
+   "job": "credit_card_retention_and_account_closure",
+   "when": {
+    "quote": "Before attempting retention, confirm the customer is eligible to close their account. Check these in order:",
+    "doc": "doc_credit_cards_credit_card_account_logistics_003"
+   },
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. They must match the customer's records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, email, phone number or address?",
+     "may_hold_back": false
+    },
+    {
+     "field": "card_to_close",
+     "about": "Which credit card the customer wants to close. Run the whole workflow once for each card, one card at a time.",
+     "from": "customer",
+     "ask": "Which credit card would you like to close?",
+     "may_hold_back": false
+    },
+    {
+     "field": "closure_reason",
+     "about": "Why the customer wants to close this card. Map it to one of: annual_fee, not_using_card, found_better_card, unhappy_with_rewards, simplifying_finances, negative_experience, other.",
+     "from": "customer",
+     "ask": "May I ask why you'd like to close this card?",
+     "may_hold_back": true
+    },
+    {
+     "field": "desired_features",
+     "about": "If the customer found a better card elsewhere: what attracted them, such as spending categories, rates or fees.",
+     "from": "customer",
+     "ask": "What features of the other card appealed to you?",
+     "may_hold_back": true
+    },
+    {
+     "field": "payoff_authorization",
+     "about": "Whether the customer agrees to pay the outstanding balance from a Rho-Bank checking account, and the amount to pay",
+     "from": "customer",
+     "ask": "This card has an outstanding balance that must be paid before closure. Would you like me to pay it from your Rho-Bank checking account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "annual_income",
+     "about": "Needed only if the customer applies for another Rho-Bank card",
+     "from": "customer",
+     "ask": "What is your annual income?",
+     "may_hold_back": true
+    },
+    {
+     "field": "rho_bank_subscription",
+     "about": "Whether the customer has a Rho-Bank+ subscription. Needed only for a new card application.",
+     "from": "customer",
+     "ask": "Do you have a Rho-Bank+ subscription?",
+     "may_hold_back": true
+    },
+    {
+     "field": "credit_card_accounts",
+     "about": "Card type, account id, balance, open date and status of each credit card",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Ask for identifying details and look up the customer by name or email",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "name the customer gives"
+     },
+     "after": [],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_002"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Check that 2 of DOB/email/phone/address match the records; share no account data before this",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_002"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_002"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user",
+      "address": "from records",
+      "email": "from records",
+      "phone_number": "from records",
+      "date_of_birth": "from records",
+      "time_verified": "from get_current_time"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_002"
+    },
+    {
+     "id": "get_cards",
+     "by": "harness",
+     "do": "List the customer's credit card accounts and find the account id, balance and open date of the card to close",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "credit_card_account_id (string): The unique identifier for the credit card account to be closed. This can be found in the customer's account profile or by looking up their credit card accounts.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_002"
+    },
+    {
+     "id": "check_disputes",
+     "by": "harness",
+     "do": "Unlock and call get_user_dispute_history_7291. Any open or under_review dispute on this card blocks closure.",
+     "call": "get_user_dispute_history_7291",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "get_cards"
+     ],
+     "if": null,
+     "quote": "Pending disputes: The account must not have any active or pending transaction disputes. If present, advise the customer to wait for resolution before closing.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "check_replacements",
+     "by": "harness",
+     "do": "Unlock and call get_pending_replacement_orders_5765. Any order that is not delivered or cancelled blocks closure.",
+     "call": "get_pending_replacement_orders_5765",
+     "args": {
+      "credit_card_account_id": "the card to close"
+     },
+     "after": [
+      "check_disputes"
+     ],
+     "if": null,
+     "quote": "If any order is in a non-final state (for example, pending or shipped), consider the account blocked from closure.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "check_age",
+     "by": "model",
+     "do": "Use get_current_time and the card's open date to confirm the account is at least 60 days old",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "check_replacements"
+     ],
+     "if": null,
+     "quote": "Minimum account age: The account must be open for at least 60 days. If not, inform the customer they cannot close yet.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "check_balance",
+     "by": "model",
+     "do": "Check that the card's outstanding balance is $0.00",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_age"
+     ],
+     "if": null,
+     "quote": "Outstanding balance: The account must have no outstanding balance. If a balance remains, the customer must pay it off before closure.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "explain_block",
+     "by": "model",
+     "do": "Tell the customer the specific requirement that is not met (for example a pending replacement card, a pending dispute or account age) and what must be resolved. Stop this card's workflow with no retention offer and move to the next card.",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_balance"
+     ],
+     "if": "a dispute, replacement order or age requirement fails",
+     "quote": "If any requirement is not met, explain what must be resolved and do not proceed with retention offers.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "get_checking",
+     "by": "harness",
+     "do": "Unlock and call get_all_user_accounts_by_user_id_3847 to find an open checking account with enough funds",
+     "call": "get_all_user_accounts_by_user_id_3847",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "check_balance"
+     ],
+     "if": "balance > 0",
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "confirm_payoff",
+     "by": "model",
+     "do": "Tell the customer the balance and get authorization to pay it from checking",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_checking"
+     ],
+     "if": "balance > 0",
+     "quote": "Confirm the payment amount with the customer and obtain authorization to transfer.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "payoff",
+     "by": "harness",
+     "do": "Unlock pay_credit_card_from_checking_9182 and call it for the full outstanding balance",
+     "call": "pay_credit_card_from_checking_9182",
+     "args": {
+      "user_id": "the verified user",
+      "checking_account_id": "the customer's checking account",
+      "credit_card_account_id": "the card to close",
+      "amount": "the card's outstanding balance"
+     },
+     "after": [
+      "confirm_payoff"
+     ],
+     "if": "customer authorizes payoff",
+     "quote": "Unlock the pay_credit_card_from_checking_9182 tool using unlock_discoverable_agent_tool.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "closure_history",
+     "by": "harness",
+     "do": "Unlock and call get_closure_reason_history_8293. If the card has records from the past year, skip to close_card with no retention.",
+     "call": "get_closure_reason_history_8293",
+     "args": {
+      "credit_card_account_id": "the card to close"
+     },
+     "after": [
+      "check_balance"
+     ],
+     "if": "all eligibility requirements met (after payoff if needed)",
+     "quote": "If records exist for this account within that time frame, skip retention offers and proceed directly to processing the closure.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "ask_reason",
+     "by": "model",
+     "do": "Ask why the customer wants to close the card",
+     "call": null,
+     "args": {},
+     "after": [
+      "closure_history"
+     ],
+     "if": "no closure records in past year",
+     "quote": "Ask the customer why they want to close their account. Then log it using log_credit_card_closure_reason_4521.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "log_reason",
+     "by": "harness",
+     "do": "Unlock log_credit_card_closure_reason_4521 and log the reason. Pass only these three arguments.",
+     "call": "log_credit_card_closure_reason_4521",
+     "args": {
+      "credit_card_account_id": "the card to close",
+      "user_id": "the verified user",
+      "closure_reason": "one of annual_fee|not_using_card|found_better_card|unhappy_with_rewards|simplifying_finances|negative_experience|other"
+     },
+     "after": [
+      "ask_reason"
+     ],
+     "if": null,
+     "quote": "Note: Only these three arguments are accepted. Do not add additional parameters.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "fee_waiver",
+     "by": "harness",
+     "do": "Customer of 2+ years with annual-fee concern: offer a one-year waiver. If accepted, unlock and call apply_credit_card_account_flag_6147.",
+     "call": "apply_credit_card_account_flag_6147",
+     "args": {
+      "credit_card_account_id": "the card",
+      "user_id": "the verified user",
+      "flag_type": "annual_fee_waived",
+      "expiration_date": "one year from get_current_time, MM/DD/YYYY",
+      "reason": "loyalty_benefit"
+     },
+     "after": [
+      "log_reason"
+     ],
+     "if": "reason annual_fee and customer for 2+ years and customer accepts",
+     "quote": "Annual fee concerns: If they have been a customer for 2+ years, offer to waive their annual fee for one year as a loyalty benefit.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "downgrade",
+     "by": "harness",
+     "do": "Customer of less than 2 years with annual-fee concern: offer a downgrade to the Bronze Rewards Card. If accepted, unlock and call downgrade_credit_card_3847.",
+     "call": "downgrade_credit_card_3847",
+     "args": {
+      "credit_card_account_id": "the card",
+      "user_id": "the verified user",
+      "target_card_type": "Bronze Rewards Card"
+     },
+     "after": [
+      "log_reason"
+     ],
+     "if": "reason annual_fee and customer for less than 2 years and customer accepts",
+     "quote": "If they have been a customer for less than 2 years, offer a permanent downgrade to a no-annual-fee card while preserving account history.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "better_card",
+     "by": "model",
+     "do": "Ask what features attracted the customer to the other card. Compare those features with Rho-Bank cards. For example, for travel and software spending the Silver Rewards Card earns 4.0% back on travel and software, 1.0% elsewhere, with a $0.00 annual fee and a minimum credit score of $680. If a Rho-Bank card is similar or better, offer to help the customer apply instead of closing.",
+     "call": null,
+     "args": {},
+     "after": [
+      "log_reason"
+     ],
+     "if": "reason found_better_card",
+     "quote": "Found a better card: Ask what features attracted them. If Rho-Bank offers a card with similar or better benefits, offer to help them apply instead of closing the current account.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "apply_card",
+     "by": "customer",
+     "do": "The customer applies for the recommended Rho-Bank card. The current card stays open.",
+     "call": "apply_for_credit_card",
+     "args": {
+      "card_type": "the recommended card, e.g. Silver Rewards Card",
+      "customer_name": "customer's full name",
+      "annual_income": "customer-stated income",
+      "rho_bank_subscription": "customer-stated true/false"
+     },
+     "after": [
+      "better_card"
+     ],
+     "if": "customer wants to apply",
+     "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+     "doc": "doc_credit_cards_silver_rewards_card_002"
+    },
+    {
+     "id": "not_using",
+     "by": "model",
+     "do": "Remind the customer of the card's benefits and suggest a recurring subscription to keep the card active",
+     "call": null,
+     "args": {},
+     "after": [
+      "log_reason"
+     ],
+     "if": "reason not_using_card",
+     "quote": "Not using the card: Remind them of benefits they may be missing and suggest setting up a recurring subscription to keep the card active.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "rewards",
+     "by": "model",
+     "do": "Suggest bonus categories and ways to maximize rewards based on the customer's spending",
+     "call": null,
+     "args": {},
+     "after": [
+      "log_reason"
+     ],
+     "if": "reason unhappy_with_rewards",
+     "quote": "Unhappy with rewards: Check enrollment in available bonus categories and suggest ways to maximize rewards based on spending patterns.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "retention_offer",
+     "by": "model",
+     "do": "If the customer still wants to close, make ONE retention offer by card tier. Entry tier (EcoCard, Crypto-Cash Back, Bronze): 500 points or a $5 statement credit. Mid tier (Green Rewards, Silver): 2,000 points or a $20 statement credit. Premium tier and above (Gold, Platinum, Diamond): 5,000 points or a $50 statement credit.",
+     "call": null,
+     "args": {},
+     "after": [
+      "log_reason"
+     ],
+     "if": "customer still wants to close after the concern is addressed",
+     "quote": "If the customer still wants to close after addressing their concerns, make one retention offer based on their card tier:",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "apply_credit",
+     "by": "harness",
+     "do": "Unlock apply_statement_credit_8472 and apply the tier's statement credit",
+     "call": "apply_statement_credit_8472",
+     "args": {
+      "user_id": "the verified user",
+      "credit_card_account_id": "the card",
+      "amount": "5.00 entry / 20.00 mid / 50.00 premium+",
+      "reason": "retention_offer"
+     },
+     "after": [
+      "retention_offer"
+     ],
+     "if": "customer accepts the statement credit; card stays open",
+     "quote": "'retention_offer': Credit offered to retain a customer",
+     "doc": "doc_credit_cards_credit_cards__general__017"
+    },
+    {
+     "id": "close_card",
+     "by": "harness",
+     "do": "Unlock close_credit_card_account_7834 and close the account",
+     "call": "close_credit_card_account_7834",
+     "args": {
+      "credit_card_account_id": "the card to close",
+      "user_id": "the verified user"
+     },
+     "after": [
+      "check_balance"
+     ],
+     "if": "eligible AND (customer declines the retention offer OR has closure records from the past year)",
+     "quote": "If the customer declines the retention offer (or was ineligible due to prior attempts), thank them for being a Rho-Bank customer and proceed with closure. Do not apply pressure.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "id": "post_close",
+     "by": "model",
+     "do": "Tell the customer: 45 days to redeem rewards, an annual-fee refund if closed within 37 days of the fee, and a confirmation email and final statement",
+     "call": null,
+     "args": {},
+     "after": [
+      "close_card"
+     ],
+     "if": "card closed",
+     "quote": "Inform the customer they have 45 days after submitting the closure request to redeem unredeemed rewards; after that, rewards are forfeited.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The balance must be $0.00, there must be no pending disputes, the account must be at least 60 days old, and no replacement card may be pending, before closure",
+     "quote": "Outstanding balance must be $0.00 dollars",
+     "doc": "doc_credit_cards_credit_card_account_logistics_002"
+    },
+    {
+     "rule": "A pending, shipped or otherwise non-final replacement order blocks closure; tell the customer this is the reason",
+     "quote": "No pending replacement cards: If a replacement has been ordered and not yet received or activated, a closure cannot proceed.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "rule": "No retention offers when an eligibility requirement fails",
+     "quote": "If any requirement is not met, explain what must be resolved and do not proceed with retention offers.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "rule": "A payoff amount must be positive and no more than the checking balance or the card balance",
+     "quote": "Must be positive and cannot exceed the checking account balance or the credit card outstanding balance.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "rule": "Entry-tier retention: 500 bonus points or $5 statement credit",
+     "quote": "Entry-tier cards: Offer 500 bonus points or a $5 statement credit",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "rule": "Mid-tier retention: 2,000 bonus points or $20 statement credit",
+     "quote": "Mid-tier cards: Offer 2,000 bonus points or a $20 statement credit",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "rule": "Premium-tier and above retention: 5,000 bonus points or $50 statement credit",
+     "quote": "Premium and above: Offer 5,000 bonus points or a $50 statement credit",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    },
+    {
+     "rule": "Entry tier includes the EcoCard and Crypto-Cash Back Card",
+     "quote": "Entry Tier (Bronze Rewards Card, EcoCard, Business Bronze Rewards Card, Crypto-Cash Back Card): Maximum $2500.00",
+     "doc": "doc_credit_cards_credit_cards__general__015"
+    },
+    {
+     "rule": "Mid tier includes the Green Rewards Card and Silver Rewards Card",
+     "quote": "Mid Tier (Silver Rewards Card, Business Silver Rewards Card, Green Rewards Card, Silver Zoom Card): Maximum $5000.00",
+     "doc": "doc_credit_cards_credit_cards__general__015"
+    },
+    {
+     "rule": "Premium tier includes the Gold Rewards Card",
+     "quote": "Premium Tier (Gold Rewards Card, Business Gold Rewards Card): Maximum $10000.00",
+     "doc": "doc_credit_cards_credit_cards__general__015"
+    },
+    {
+     "rule": "The Gold Rewards Card earns a flat 2.5%; the Silver Rewards Card earns 4.0% on travel and software, which suits travel and software spending",
+     "quote": "Cash back on all purchases: 2.5%",
+     "doc": "doc_credit_cards_gold_rewards_card_001"
+    },
+    {
+     "rule": "The Silver Rewards Card has no annual fee",
+     "quote": "There is no annual fee: $0.00",
+     "doc": "doc_credit_cards_silver_rewards_card_007"
+    },
+    {
+     "rule": "Make only one retention offer and do not pressure the customer",
+     "quote": "Do not apply pressure.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_003"
+    }
+   ],
+   "done_when": "For each card the customer raised, one of these is true: the card is closed and the post-closure reminders are given; the blocking reason is explained (no retention offered); the customer chose a retention outcome (statement credit applied, fee waiver, downgrade, or applied for a Rho-Bank card instead); or the balance was paid off and the card was then closed or retained."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_003",
+   "why": "Retention protocol: eligibility order, closure-history check, reason logging, solutions by reason, retention offers by tier, and when to close"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_002",
+   "why": "Closure process and the close_credit_card_account_7834 tool with its arguments"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_001",
+   "why": "Customer-facing closure eligibility and rewards/annual-fee rules"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_005",
+   "why": "get_pending_replacement_orders_5765 and how pending orders block closure"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards__general__016",
+   "why": "get_user_dispute_history_7291 for the pending-dispute check"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_009",
+   "why": "Paying a credit card balance from checking with pay_credit_card_from_checking_9182"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "get_all_user_accounts_by_user_id_3847 to find the checking account"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards__general__017",
+   "why": "apply_statement_credit_8472 arguments, including reason 'retention_offer'"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards__general__015",
+   "why": "Which cards belong to which tier"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_008",
+   "why": "Downgrade to the Bronze Rewards Card with downgrade_credit_card_3847"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_002",
+   "why": "Silver Rewards Card earns 4.0% on travel and software"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_001",
+   "why": "Silver Rewards eligibility and fees: $0 annual fee, $680 minimum credit score, 1.0% base rate"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_007",
+   "why": "Silver Rewards: no annual fee"
+  },
+  {
+   "id": "doc_credit_cards_gold_rewards_card_001",
+   "why": "Gold Rewards: flat 2.5% and Rho-Bank+ required"
+  }
+ ],
+ "open_questions": [
+  "After a customer applies for a better Rho-Bank card, should the original card stay open? The protocol says 'instead of closing the current account', so the original card stays open by default.",
+  "Which closure_reason code fits 'the crypto/rewards program isn't worth it to me': unhappy_with_rewards or not_using_card? Both lead to a tailored suggestion and then the tier retention offer.",
+  "No document names a tool for granting retention bonus points; only a statement credit (apply_statement_credit_8472) can be carried out.",
+  "The simplifying_finances reason has no tailored solution in Step 4. The documents imply going straight to the one tier-based retention offer.",
+  "How to measure 'customer for 2+ years' for the annual-fee waiver is not defined; the earliest account open date is a likely choice.",
+  "The exact card_type string format for apply_for_credit_card is not documented."
+ ]
+}

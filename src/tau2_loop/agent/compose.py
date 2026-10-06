@@ -22,8 +22,11 @@ HELPER_HOOKS = ("extra_context", "on_tool_call", "on_reply")
 # s09: the code surfaces and the one hook each defines, in the order a turn meets them.
 #   memory.py    remember(state, name, arguments, result) -> None   after each tool result and user message
 #   guidance.py  guidance(state, trigger) -> str | None              before each model call ("user" | "tool")
-#   checks.py    check_write(name, arguments, state) -> str | None   on each write call; a string blocks it once
+#   checks.py    check_write(name, arguments, state) -> str | None   on each write call (and a transfer); a string blocks it once
 CODE_HOOKS = {"memory.py": "remember", "guidance.py": "guidance", "checks.py": "check_write"}
+# tools tau2 does not type as writes that check_write also sees (s15): a transfer ends the
+# conversation, so a rule about its reason (banking doc _042's tiers) must be checked before it runs
+CHECKED_TOOLS = frozenset({"transfer_to_human_agents"})
 #   checks.py    check_reply(text, state) -> str | None   on each text reply; a string sends it back once
 #                (s14: a rule about what the agent says, e.g. refusing a fourth transfer request)
 REPLY_HOOK = ("checks.py", "check_reply")

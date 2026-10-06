@@ -88,6 +88,14 @@
   golden `allow` (`review.effective_verdicts`), whatever the annotator said; no
   person checks it and `make judge-gold` calls no model for it. A person ticks
   each failed one in Evals: the first call the judge must block, or none.
+- **workflow_rag researches train only** (s16, 6–7 Oct 2026): banking's second agent,
+  `rag_agents/<domain>/rN/`, is frozen like an answering version (a change is the next rN), and
+  its sessions under `rag_agent_runs/` are immutable. The library v6 and v7 look up
+  (`find_workflow`) holds only train-question sessions; a mid-conversation `request_workflow`
+  reads only the agent's words and is never cached. Test is held out of optimisation, not hidden
+  (the person's call): Evals shows each test question's workflows as `golden.RULES` map them,
+  and `test_counts.json` stays counts only. v7 (v6 at Sonnet medium) is a held experiment:
+  train 37/60 and test 12/37 against v4's 29 and 14 (`.lavish/s17_…`); v4 stays champion.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

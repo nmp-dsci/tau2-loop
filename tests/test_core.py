@@ -327,6 +327,29 @@ def test_a_dry_run_records_effort_split_version_and_route(
     assert meta.agent_route == "service:127.0.0.1:8090"
 
 
+def test_another_customer_is_recorded_and_its_run_is_never_the_loops_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """s16: the customer's model can change for an experiment; the run says so and the loop skips it."""
+    from tau2_loop.eval import runner
+    from tau2_loop.loop import run as loop_run
+
+    monkeypatch.setattr(runner, "RUNS_DIR", tmp_path)
+    meta, _ = runner.run_eval("airline", "v0", "train", dry_run=True, track=False)
+    assert meta.user_model == "claude-sdk/claude-haiku-4-5"
+    cfg = runner._run_config(
+        "airline", runner.load_version("airline", "v0"), ["0"], 1, 1, 300, "sonnet"
+    )
+    assert cfg.llm_user == "claude-sdk/claude-sonnet-5"
+    meta2, _ = runner.run_eval(
+        "airline", "v0", "train", dry_run=True, track=False, user_model="sonnet"
+    )
+    assert meta2.user_model == "claude-sdk/claude-sonnet-5"
+    real = {"dry_run": False, "sim_rules": runner.SIM_RULES}
+    assert loop_run._covers(meta.__class__(**{**meta.__dict__, **real}), meta.task_ids, 1)
+    assert not loop_run._covers(meta2.__class__(**{**meta2.__dict__, **real}), meta2.task_ids, 1)
+
+
 # ── extending a run to its split's new tasks (3 Oct 2026, banking's split v3) ──────────────────
 
 
@@ -360,7 +383,7 @@ def _fake_run(runs: Path, run_id: str, ids: list[str], passes: set[str], **over:
         "agent": "v1",
         "fingerprint": "fp1",
         "model": "sonnet",
-        "user_model": "haiku",
+        "user_model": "claude-sdk/claude-haiku-4-5",
         "judge_model": "haiku",
         "split": "train",
         "n_tasks": len(ids),
@@ -437,6 +460,7 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
     [
         ({"fingerprint": "fp0"}, "bytes changed"),
         ({"sim_rules": None}, "other simulation rules"),
+        ({"user_model": "claude-sdk/claude-sonnet-5"}, "another customer"),
         ({"task_ids": ["t1", "t9"]}, "no longer on its train side"),
     ],
 )

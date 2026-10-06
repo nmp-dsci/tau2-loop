@@ -1,0 +1,567 @@
+{
+ "jobs": [
+  {
+   "job": "recommend_credit_card_and_savings_account_combination",
+   "when": {
+    "quote": "Certain personal checking and savings account pairings provide bonus APY on your savings account balance.",
+    "doc": "doc_bank_accounts_bank_accounts__general__012"
+   },
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Two of: date of birth, email, phone number, address. They are checked against the customer's record.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me your full name and two of these: date of birth, email, phone number or address?",
+     "may_hold_back": false
+    },
+    {
+     "field": "deposit_amount",
+     "about": "How much the customer will keep in the new savings account all year. This sets which accounts' minimums and APY tiers apply.",
+     "from": "customer",
+     "ask": "How much do you plan to deposit and keep in the savings account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "open_to_new_checking",
+     "about": "Whether the customer would open another checking account. Some savings accounts only get an extra APY boost when paired with certain checking accounts.",
+     "from": "customer",
+     "ask": "Are you open to opening a different checking account, or do you want to keep only your current one?",
+     "may_hold_back": true
+    },
+    {
+     "field": "rho_bank_plus_subscription",
+     "about": "Whether the customer has a Rho-Bank+ premium subscription. The Gold Rewards Card requires one.",
+     "from": "customer",
+     "ask": "Do you have a Rho-Bank+ premium subscription?",
+     "may_hold_back": true
+    },
+    {
+     "field": "monthly_card_spend",
+     "about": "How much the customer expects to spend on the card each month. It decides whether spend-based fee rebates or promos are reachable.",
+     "from": "customer",
+     "ask": "Roughly how much do you expect to spend on the card each month?",
+     "may_hold_back": true
+    },
+    {
+     "field": "existing_bank_accounts",
+     "about": "The customer's checking and savings accounts: class, status, balance and date opened",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "identify",
+     "by": "model",
+     "do": "Ask for identity details and look the customer up by name, email or user id",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives"
+     },
+     "after": [],
+     "if": null,
+     "quote": "Authenticate the customer and confirm identity verification status on file.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "identify"
+     ],
+     "if": "the customer correctly gave 2 of DOB, email, phone, address",
+     "quote": "Authenticate the customer and confirm identity verification status on file.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "log_verify",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user id",
+      "address": "from the record",
+      "email": "from the record",
+      "phone_number": "from the record",
+      "date_of_birth": "from the record",
+      "time_verified": "the time from get_current_time"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "Authenticate the customer and confirm identity verification status on file.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verify"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's checking and savings accounts",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user id"
+      }
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "gather_needs",
+     "by": "model",
+     "do": "Ask for the deposit amount, monthly card spend, Rho-Bank+ subscription status and whether a new checking account is acceptable, unless the customer already said",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "Discuss available personal savings account options with the customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "compute",
+     "by": "model",
+     "do": "For each personal savings account and each card the customer is eligible for, compute the net annual return: deposit × (base or tier APY + that card's APY bonus for that savings account + any linked-checking boost the customer qualifies for + any relationship bonus) − the card's annual fee − 12 × any monthly maintenance fee triggered by the deposit being under the minimum balance. Skip accounts whose opening deposit is above the deposit amount.",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_needs"
+     ],
+     "if": null,
+     "quote": "Only the HIGHEST credit card APY bonus is applied to the savings account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__045"
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Recommend the ONE card and savings account pair with the highest net return. Explain the APY parts, the card's annual fee and the minimum-balance check.",
+     "call": null,
+     "args": {},
+     "after": [
+      "compute"
+     ],
+     "if": null,
+     "quote": "Discuss available personal savings account options with the customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "apply_card",
+     "by": "customer",
+     "do": "The customer applies for the recommended card themselves",
+     "call": "apply_for_credit_card",
+     "args": {
+      "card_type": "the recommended card",
+      "customer_name": "the customer's name",
+      "annual_income": "the customer's stated income",
+      "rho_bank_subscription": "the customer's subscription status"
+     },
+     "after": [
+      "recommend"
+     ],
+     "if": "the customer accepts the recommendation",
+     "quote": "Complete the online application with your personal information and income details",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Credit card APY bonuses do not stack. Count only the single highest card bonus for the chosen savings account. Card bonuses do stack with checking boosts and relationship bonuses.",
+     "quote": "Only the highest applicable credit card APY bonus is applied to the customer's savings account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__045"
+    },
+    {
+     "rule": "A linked-checking APY boost applies only to the 18 listed checking + savings pairings. Light Blue checking is not in the list. Do not count a boost that would need a new checking account if the customer refuses one.",
+     "quote": "Only these specific pairings qualify for the linked checking account APY boost.",
+     "doc": "doc_bank_accounts_bank_accounts__general__012"
+    },
+    {
+     "rule": "Green Account (savings): base APY 4.0%, minimum opening deposit $100, minimum balance $500, monthly maintenance fee $0.00. Card bonuses: Silver Rewards +0.45%, EcoCard +0.5%, Platinum Rewards +0.35%, Diamond Elite +0.6%, Bronze Rewards +0%, Gold Rewards +0%.",
+     "quote": "Your Green Account (savings) earns 4.0% on your balance.",
+     "doc": "doc_savings_accounts_green_account_(savings)_003"
+    },
+    {
+     "rule": "The Silver Rewards Card gives +0.45% on a Green Account (savings).",
+     "quote": "Silver Rewards Card: +0.45%",
+     "doc": "doc_savings_accounts_green_account_(savings)_003"
+    },
+    {
+     "rule": "Green Account (savings) minimum balance is $500",
+     "quote": "Keep your balance at or above $500.",
+     "doc": "doc_savings_accounts_green_account_(savings)_001"
+    },
+    {
+     "rule": "Silver Account: 2.5% APY below $10,000 and 4.0% at or above $10,000. Opening deposit $500, minimum balance $1,000 ($5.00 monthly fee if missed), relationship bonus 0.025%. Card bonuses: EcoCard +2.2%, Gold Rewards +0.5%, Crypto-Cash Back +0.5%, Diamond Elite +0.25%, Platinum Rewards +0.2%, Silver Rewards +0.1%, Bronze Rewards +0%.",
+     "quote": "If it is below that amount, the applicable APY for that day is 2.5%.",
+     "doc": "doc_savings_accounts_silver_account_003"
+    },
+    {
+     "rule": "EcoCard gives +2.2% on a Silver Account",
+     "quote": "EcoCard: +2.2%",
+     "doc": "doc_savings_accounts_silver_account_006"
+    },
+    {
+     "rule": "Silver Plus Account: Tier 1 3.0% (Tier 2 4.5% at $15,000 or more), opening deposit $1,000, minimum balance $2,500 ($8.00 monthly fee if below). Card bonuses: EcoCard +0.45%, Diamond Elite +0.4%, Gold Rewards +0.2%, Bronze/Silver/Platinum Rewards +0.15%.",
+     "quote": "A monthly maintenance fee of $8.00 may be charged if your balance is below $2,500.",
+     "doc": "doc_savings_accounts_silver_plus_account_005"
+    },
+    {
+     "rule": "Bronze Account: 2.0% APY, $0 minimum, $0 fee. Card bonuses: Platinum Rewards +0.55%, Crypto +0.3%, Gold Rewards +0.25%, Bronze Rewards +0.1%, Diamond Elite +0.15%.",
+     "quote": "You earn interest at an APY of 2.0% on your balance.",
+     "doc": "doc_savings_accounts_bronze_account_001"
+    },
+    {
+     "rule": "Gold Account: 5.5% APY, opening deposit $5,000, minimum balance $10,000. A $10.00 monthly maintenance fee applies for each period the balance is below $10,000, so subtract $120 a year. Card bonuses: EcoCard +0.6%, Green Rewards +0.35%, Diamond Elite +0.3%, Silver Rewards +0.2%, Bronze/Platinum Rewards +0.15%.",
+     "quote": "Monthly maintenance: $10.00 (charged only if your balance drops below $10,000 during the statement period).",
+     "doc": "doc_savings_accounts_gold_account_001"
+    },
+    {
+     "rule": "Gold Rewards Card holders get a $5,000 Gold Account minimum, but the card needs a Rho-Bank+ premium subscription. Do not use this if the customer has no subscription.",
+     "quote": "premium subscription required: Yes",
+     "doc": "doc_credit_cards_gold_rewards_card_001"
+    },
+    {
+     "rule": "Gold Plus ($10,000 opening deposit), Platinum ($25,000), Platinum Plus ($50,000) and Diamond Elite ($100,000) savings accounts cannot be opened with a smaller deposit",
+     "quote": "Opening deposit minimum: $25,000",
+     "doc": "doc_savings_accounts_platinum_account_003"
+    },
+    {
+     "rule": "The Silver Rewards Card has a $0.00 annual fee and needs a minimum credit score of 680",
+     "quote": "Annual fee: $0.00",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "rule": "The Bronze Rewards Card has a $0.00 annual fee and needs a minimum credit score of 640",
+     "quote": "Annual fee: $0.00",
+     "doc": "doc_credit_cards_bronze_rewards_card_001"
+    },
+    {
+     "rule": "The EcoCard annual fee is $50.00 and it has no credit score requirement",
+     "quote": "Annual fee: $50.00.",
+     "doc": "doc_credit_cards_ecocard_001"
+    },
+    {
+     "rule": "The Platinum Rewards Card annual fee is $200.00. Its first-year waiver promo ended 2024-12-31.",
+     "quote": "Annual fee: $200.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_001"
+    },
+    {
+     "rule": "The Crypto-Cash Back Card annual fee is $75",
+     "quote": "Annual fee: $75.00 dollars.",
+     "doc": "doc_credit_cards_crypto-cash_back_008"
+    },
+    {
+     "rule": "The Diamond Elite Card is invitation only and has a $495.00 annual fee. Do not recommend it unless the customer has an invitation.",
+     "quote": "Membership is by invitation only (Yes).",
+     "doc": "doc_credit_cards_diamond_elite_card_001"
+    },
+    {
+     "rule": "Worked comparison for a deposit of at least $500 and below about $9,600, with no new checking account and no subscription: Green Account (savings) + Silver Rewards Card = 4.45% net with a $0 fee. This beats Silver Account + EcoCard (4.725% − $50), Silver Plus + Bronze or Silver Rewards (3.15% or 3.175%), Bronze + any card, and Gold + Silver Rewards (5.7% − $120 in maintenance fees). Gold + Silver Rewards wins only from about $9,600 up to $9,999. Always recompute with the actual deposit.",
+     "quote": "Only the highest applicable credit card APY bonus is applied to the customer's savings account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__045"
+    }
+   ],
+   "done_when": "The customer is verified and logged. The customer has one card + savings account recommendation with its net annual return explained, and has applied for the card (or declined)."
+  },
+  {
+   "job": "opening_personal_savings_accounts",
+   "when": {
+    "quote": "Procedure for opening personal savings accounts.",
+    "doc": "doc_bank_accounts_bank_accounts__general__002"
+   },
+   "info": [
+    {
+     "field": "account_class",
+     "about": "Full official savings account name ending in 'Account', for example 'Green Account'",
+     "from": "customer",
+     "ask": "Shall I open the [recommended] savings account for you?",
+     "may_hold_back": false
+    },
+    {
+     "field": "fund_now",
+     "about": "Whether to move the opening deposit from checking now",
+     "from": "customer",
+     "ask": "Would you like me to transfer the opening deposit from your checking account now?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "check_eligibility",
+     "by": "model",
+     "do": "From the account records, confirm: an active checking account open at least 14 days, fewer than 5 personal savings accounts, and no negative balances or collections",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "Confirm an active checking account exists and meets the 14-day tenure requirement.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "confirm_class",
+     "by": "model",
+     "do": "Confirm the exact account_class with the customer",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_eligibility"
+     ],
+     "if": "all eligibility items are met",
+     "quote": "account_class must use the full official name ending with 'Account'",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "unlock_open",
+     "by": "harness",
+     "do": "Unlock the account-opening tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821"
+     },
+     "after": [
+      "confirm_class"
+     ],
+     "if": null,
+     "quote": "Use the open_bank_account_4821 tool with account_type set to 'savings' and the confirmed account_class.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "open",
+     "by": "harness",
+     "do": "Open the savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": {
+       "user_id": "the verified user id",
+       "account_type": "savings",
+       "account_class": "the confirmed account name, e.g. 'Green Account'"
+      }
+     },
+     "after": [
+      "unlock_open"
+     ],
+     "if": null,
+     "quote": "Use the open_bank_account_4821 tool with account_type set to 'savings' and the confirmed account_class.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "ask_funding",
+     "by": "model",
+     "do": "Ask whether to transfer the opening deposit from checking now",
+     "call": null,
+     "args": {},
+     "after": [
+      "open"
+     ],
+     "if": null,
+     "quote": "Ask the customer if they want you to transfer the opening deposit from their checking account now.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "unlock_transfer",
+     "by": "harness",
+     "do": "Unlock the transfer tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "transfer_funds_between_bank_accounts_7291"
+     },
+     "after": [
+      "ask_funding"
+     ],
+     "if": "the customer wants the transfer now",
+     "quote": "If yes, use transfer_funds_between_bank_accounts_7291 to transfer the required amount.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "transfer",
+     "by": "harness",
+     "do": "Transfer the opening deposit from checking to the new savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+      "arguments": {
+       "source_account_id": "the customer's checking account id",
+       "destination_account_id": "the new savings account id",
+       "amount": "the amount the customer confirmed"
+      }
+     },
+     "after": [
+      "unlock_transfer"
+     ],
+     "if": "the customer wants the transfer now",
+     "quote": "If yes, use transfer_funds_between_bank_accounts_7291 to transfer the required amount.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "deadline",
+     "by": "model",
+     "do": "Tell the customer they have 30 days to fund the account or it will be closed",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_funding"
+     ],
+     "if": "the customer will fund it later",
+     "quote": "If no: inform the customer they have 30 days to fund the account (via internal transfer or external deposit) or the account will be closed.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Give the new account details and the funding status or deadline",
+     "call": null,
+     "args": {},
+     "after": [
+      "transfer",
+      "deadline"
+     ],
+     "if": null,
+     "quote": "Provide the new account details and confirm the funding status or the funding deadline.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The customer must hold an active checking account",
+     "quote": "Customer has at least one active Rho-Bank checking account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "rule": "The customer must hold fewer than 5 personal savings accounts",
+     "quote": "Customer currently holds fewer than 5 personal savings accounts.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "rule": "The customer must have no collections and no negative balances",
+     "quote": "Customer has no accounts in collections and no negative balances.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "rule": "The checking account must have been open at least 14 days",
+     "quote": "Confirm an active checking account exists and meets the 14-day tenure requirement.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    }
+   ],
+   "done_when": "The savings account is open with the confirmed account_class. It is either funded, or the customer has been told the 30-day funding deadline."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__002",
+   "why": "Procedure, eligibility and tools for opening personal savings accounts"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "The account lookup tool get_all_user_accounts_by_user_id_3847"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__012",
+   "why": "Checking + savings pairings that get an APY boost (Light Blue checking is not listed)"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__045",
+   "why": "Credit card APY bonuses do not stack; only the highest applies"
+  },
+  {
+   "id": "doc_savings_accounts_green_account_(savings)_001",
+   "why": "Green savings opening deposit and minimum balance"
+  },
+  {
+   "id": "doc_savings_accounts_green_account_(savings)_003",
+   "why": "Green savings 4.0% base APY and the bonus for each card"
+  },
+  {
+   "id": "doc_savings_accounts_silver_account_003",
+   "why": "Silver savings APY tiers"
+  },
+  {
+   "id": "doc_savings_accounts_silver_account_006",
+   "why": "Silver savings bonus for each card"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_005",
+   "why": "Silver Plus APY tiers, minimum balance and fee"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_009",
+   "why": "Silver Plus bonus for each card"
+  },
+  {
+   "id": "doc_savings_accounts_bronze_account_001",
+   "why": "Bronze savings APY"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_001",
+   "why": "Gold savings APY, minimum balance and monthly fee"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_014",
+   "why": "Gold savings bonus for each card and the Gold Rewards minimum reduction"
+  },
+  {
+   "id": "doc_savings_accounts_platinum_account_003",
+   "why": "High opening minimums rule out the premium savings accounts"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_001",
+   "why": "Silver Rewards: $0 annual fee, credit score 680"
+  },
+  {
+   "id": "doc_credit_cards_bronze_rewards_card_001",
+   "why": "Bronze Rewards: $0 annual fee"
+  },
+  {
+   "id": "doc_credit_cards_gold_rewards_card_001",
+   "why": "Gold Rewards needs a Rho-Bank+ subscription"
+  },
+  {
+   "id": "doc_credit_cards_ecocard_001",
+   "why": "EcoCard: $50 annual fee"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_001",
+   "why": "Platinum Rewards: $200 annual fee"
+  },
+  {
+   "id": "doc_credit_cards_crypto-cash_back_008",
+   "why": "Crypto-Cash Back: $75 annual fee"
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_001",
+   "why": "Diamond Elite is invitation only"
+  }
+ ],
+ "open_questions": [
+  "The documents do not give the exact card_type string apply_for_credit_card expects. The card's official name, e.g. 'Silver Rewards Card', is assumed.",
+  "If the customer's credit score is below 680 and the Silver Rewards application fails, no document says what to do next. The next-best combination would be recomputed with the cards the customer can get (e.g. Green Account + no card at 4.0%, or Silver Account + EcoCard).",
+  "A Gold Account doc says a balance below $10,000 'can affect your eligibility for the highest rate'. It is unclear whether the 5.5% still applies below the minimum or only the $10 monthly fee does.",
+  "Which customers get the 0.025% relationship bonus (Silver, Silver Plus, Gold) is not defined. Its effect is small and does not change the ranking for typical balances.",
+  "The policy says APY already includes compounding, so annual interest is taken as deposit × total APY."
+ ]
+}

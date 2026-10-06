@@ -11,6 +11,8 @@ import { Trace } from './pages/Trace';
 import { Optimise, OptimiseRound } from './pages/Optimise';
 import { JudgeLoop } from './pages/JudgeLoop';
 import { JudgeAgent } from './pages/JudgeAgent';
+import { WorkflowEvals, WorkflowPending } from './pages/Workflow';
+import { WorkflowAgent } from './pages/WorkflowAgent';
 import { Review } from './pages/Review';
 import { GoldReview } from './pages/GoldReview';
 import { Leaderboard } from './pages/Leaderboard';
@@ -57,6 +59,8 @@ export const routes: RouteObject[] = [
       // the LLM judge's eval set (s11); `judge` outranks a task id
       { id: 'evals-judge', path: '/evals/:domain/judge', element: <JudgeEvals /> },
       { id: 'evals-judge-conv', path: '/evals/:domain/judge/:runId/:taskId/:trial', element: <JudgeEvals /> },
+      // workflow_rag's golden set (s16); `workflow_rag` outranks a task id
+      { id: 'evals-workflow', path: '/evals/:domain/workflow_rag', element: <WorkflowEvals /> },
       { id: 'evals-task', path: '/evals/:domain/:taskId', element: <Domain /> },
 
       // how a conversation is judged
@@ -81,6 +85,7 @@ export const routes: RouteObject[] = [
       },
       // the tool judge's own loop beside the agent's (s11); `judge` outranks a `:version`
       { id: 'optimise-judge', path: '/optimise/:domain/judge', element: <JudgeLoop /> },
+      { id: 'optimise-workflow', path: '/optimise/:domain/workflow_rag', element: <WorkflowPending view="optimise" /> },
       {
         id: 'optimise',
         path: '/optimise/:domain',
@@ -94,11 +99,15 @@ export const routes: RouteObject[] = [
       // the tool judge's answer key (s11 J1): a person checks what structure could not pin
       { id: 'review-golden', path: '/review/golden/:domain', element: <GoldReview /> },
       { id: 'review-golden-one', path: '/review/golden/:domain/:runId/:taskId/:trial/:msg', element: <GoldReview /> },
+      // workflow_rag's golden-set review (s16): not built yet
+      { id: 'review-workflow', path: '/review/workflow_rag/:domain', element: <WorkflowPending view="review" /> },
 
       // what the agent is
       { id: 'agents', path: '/agent', element: <Agent /> },
       // the LLM judge as an agent of its own (s11); `judge` outranks a version name
       { id: 'agent-judge', path: '/agent/:domain/judge', element: <JudgeAgent /> },
+      // workflow_rag's live demo (s16): a RAG-agent session on a train question
+      { id: 'agent-workflow', path: '/agent/:domain/workflow_rag', element: <WorkflowAgent /> },
       { id: 'agent', path: '/agent/:domain/:name', element: <Agent /> },
 
       // ── addresses from before the grammar ──

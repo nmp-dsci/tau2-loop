@@ -1,0 +1,687 @@
+{
+  "diagnoses": [
+    {
+      "task_id": "task_082",
+      "symptom": "Four debit disputes filed in one parallel batch; the lost-card facts (card not in possession, PIN shared) were copied onto the recurring-charge dispute on the same card; the fraud dispute's liability was set to the charge amount; the Green Fee-Free card was closed.",
+      "graded_difference": "debit_card_disputes: recurring dispute card_in_possession/pin_compromised/pin_shared_voluntarily/provisional_credit_*; fraud dispute customer_max_liability_amount 347.5 vs 50; debit_cards dbc_..._gff closed vs ACTIVE (agent's close_debit_card at message 57)",
+      "root_cause": "Per-dispute fields were not taken from the facts of each transaction: card possession and PIN facts belong to how that transaction was made (a recurring merchant charge has nothing to do with the lost card). The liability passed v4's D2 exception (liability equal to amount between 50 and 500). The Green Fee-Free closure was a card action nobody asked for.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Judgement on each field per dispute; lesson 12 rules out a liability window or forced-credit check, so only the prompt rubric (arguments from this transaction's facts, writes only on request) applies.",
+      "evidence": "doc _031 field 10-11: ask about possession and PIN per dispute; fraud closed with 'card_in_possession': false, 'pin_compromised': 'yes_shared' copied to btxn_d1f51e0a0db9 (recurring_payment)",
+      "change": "The rubric's Request and Arguments lines plus the doc _031 dispute-field line (amount in error, type from record, noticed date from customer); no new code."
+    },
+    {
+      "task_id": "task_051",
+      "symptom": "After paying the balance the agent tried to resubmit the CLI, got a result saying a request already exists, and transferred to a human instead of approving.",
+      "graded_difference": "credit_card_accounts cc_..._bronze.credit_limit $4,000 vs $5000; agent_discoverable_tools missing approve_credit_limit_increase CALLED (agent transferred instead)",
+      "root_cause": "The agent read 'already exists' as a system error; logistics_007 says to carry on with the existing request: re-check eligibility, then approve or deny.",
+      "class": "lost-state",
+      "surfaces": [
+        "checks.py",
+        "memory.py",
+        "guidance.py"
+      ],
+      "why_this_surface": "A transfer right after an 'already exists' result can be detected mechanically; guidance gives the next step in the procedure.",
+      "evidence": "Transfer summary: 'backend data sync/duplicate-request issue preventing resubmission ... (cli_ce18a03fbbe2) having been created'",
+      "change": "memory records the last 'already exists' result; check_write sends back one transfer after it ('continue the procedure with the existing record'); guidance says the same."
+    },
+    {
+      "task_id": "task_068",
+      "symptom": "Recommended Evergreen checking + Gold Plus savings instead of Green Account + Gold Account; did not apply the customer's early-deposit and age constraints to the checking-boost pairings.",
+      "graded_difference": "accounts: opened Evergreen (checking) and Gold Plus (savings); gold opens Green Account and Gold Account (open_bank_account at messages 85, 100)",
+      "root_cause": "Incomplete catalog comparison: the agent did not price each savings product with the checking boost it can actually pair with (doc _012), given the customer's constraints.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "guidance.py",
+        "memory.py"
+      ],
+      "why_this_surface": "Recommendation is judgement; guidance lists the category's unread products before the agent chooses.",
+      "evidence": "Agent recap: 'Gold Plus Savings ... 6.1% APY'",
+      "change": "The rubric (Record/Arguments) plus a guidance note listing unread products in the category when a recommendation is asked for."
+    },
+    {
+      "task_id": "task_079",
+      "symptom": "Closed all three stolen cards without reading any account's transactions, so the pending-refund check (doc _025 req 5) was made from memory rather than from a record.",
+      "graded_difference": "agent_discoverable_tools: get_bank_account_transactions_9173 never CALLED (gold calls it per account before closing)",
+      "root_cause": "doc _025 requirements 4-5 (no pending transactions or refunds) need the account's transactions read before close_debit_card; the agent skipped that read.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "An ordering rule at a write: close_debit_card needs that account's transactions read first.",
+      "evidence": "doc _025 Requirements 4-5; MISSING 079_7/079_8 get_bank_account_transactions_9173 per account",
+      "change": "check_write H: close_debit_card is sent back once until get_bank_account_transactions has run for the card's account (any account when it is unknown)."
+    },
+    {
+      "task_id": "task_080",
+      "symptom": "The customer asked to freeze all cards; the agent closed them instead, including the Green card the customer later found, and never froze or unfroze anything.",
+      "graded_difference": "debit_cards: frozen_date/unfrozen_date missing on three cards; dbc_..._green CLOSED vs ACTIVE; agent_discoverable_tools missing freeze_debit_card, unfreeze_debit_card, get_bank_account_transactions",
+      "root_cause": "The agent replaced the requested freeze with a close (v4's prompt line did not hold), and closed cards without reading transactions.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "Whether the customer asked to freeze, whether anything was frozen and whether transactions were read are all facts in state, checkable at close_debit_card.",
+      "evidence": "Opening: 'I want to freeze all of them right away.'",
+      "change": "check_write H: block close_debit_card once when the customer asked to freeze and nothing was frozen here, or while the card is frozen here and not unfrozen, and until transactions are read."
+    },
+    {
+      "task_id": "task_025",
+      "symptom": "Recommended the Business Silver Rewards Card for a $100k purchase; gold is Business Platinum Rewards.",
+      "graded_difference": "credit_card_applications: Business Silver Rewards vs Business Platinum Rewards (apply_for_credit_card at message 28, by the user on the agent's recommendation)",
+      "root_cause": "Did not price every business card's terms (category rate, caps, promos) for the stated purchase; a 'double cash back promo' reading decided it.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "guidance.py"
+      ],
+      "why_this_surface": "Pricing is judgement; guidance makes sure every product is read.",
+      "evidence": "User: 'finding that timing advantage with the Silver card's double cash back promo'",
+      "change": "Rubric plus the unread-products guidance note; also the 'state a rate only from a sentence you read' line."
+    },
+    {
+      "task_id": "task_019",
+      "symptom": "The simulated user typed one dispute submission as text instead of running the given tool; the agent correctly said it did not run.",
+      "graded_difference": "cash_back_disputes: dispute for txn_d398545ca1a2 not submitted; user_discoverable_tool_calls missing (user's call)",
+      "root_cause": "Simulator fault: the customer had the tool and did not call it for that transaction (lesson 13).",
+      "class": "task-fault",
+      "surfaces": [],
+      "why_this_surface": "Nothing the agent can call fixes a user tool call the user never made.",
+      "evidence": "Agent: 'the earlier attempt for Thrive Market was typed as text rather than run through the actual tool, so it didn't execute'",
+      "change": "none"
+    },
+    {
+      "task_id": "task_048",
+      "symptom": "Recommended Platinum Rewards instead of Silver Rewards for travel/software spend vs a competitor's 3.5%; the Gold card payment was also made with different arguments.",
+      "graded_difference": "credit_card_applications: Platinum Rewards vs Silver Rewards (apply_for_credit_card at message 77); pay_credit_card_from_checking arguments differ (message 52)",
+      "root_cause": "Did not compare the cards on the customer's stated categories from each card's own document; the payment came before the closure-flow reads.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "checks.py"
+      ],
+      "why_this_surface": "Recommendation goes in the prompt rubric; the payment order goes in the widened check B.",
+      "evidence": "Agent: 'the Platinum Rewards Card really does look like a great match for your travel and subscription spending'",
+      "change": "Rubric; widened B (payment during a closure request needs dispute history and replacements read)."
+    },
+    {
+      "task_id": "task_053",
+      "symptom": "The agent gave get_card_last_4_digits; the simulated user then ran it, which wrote a user-tool-call record gold lacks.",
+      "graded_difference": "user_discoverable_tool_calls: get_card_last_4_digits CALLED record (user's call at message 49) that gold does not have",
+      "root_cause": "Gold has the agent give the tool (053_13) but leaves out the customer's call of it; any customer who uses the tool produces this difference.",
+      "class": "task-fault",
+      "surfaces": [],
+      "why_this_surface": "Gold omits a consequence of its own expected action.",
+      "evidence": "matched 053_13 give_discoverable_user_tool; UNEXPECTED WRITE call_discoverable_user_tool get_card_last_4_digits by the user",
+      "change": "none"
+    },
+    {
+      "task_id": "task_036",
+      "symptom": "The customer asked to review transactions and reissue the card; the agent also filed two fraud disputes nobody asked for.",
+      "graded_difference": "transaction_disputes: two disputes filed (message 37) that gold does not have",
+      "root_cause": "A write the customer never asked for, despite v4's 'only requested writes' line.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Whether the customer asked is a judgement on their words; the rubric's Request step puts it at every write.",
+      "evidence": "Customer goal: 'Review your recent transactions and ... get your card replaced'",
+      "change": "Rubric step 1 (Request: the customer asked for this in their words)."
+    },
+    {
+      "task_id": "task_016",
+      "symptom": "The agent told the customer not to make the qualifying transaction on the friend's card; gold has the customer submit it.",
+      "graded_difference": "credit_card_transaction_history: missed write txn by friend_user_5839 via submit_transaction",
+      "root_cause": "The agent invented a restriction ('spending should come from them') that no document states.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "checks.py"
+      ],
+      "why_this_surface": "check_reply sends back restriction wording that cites no document; the prompt line says state 'can't' only from a sentence read.",
+      "evidence": "User: 'the spending should be coming from them using the card themselves, not me just running up transactions on their behalf'",
+      "change": "'State ... can't only from a sentence you read' line plus a check_reply send-back on restriction wording."
+    },
+    {
+      "task_id": "task_072",
+      "symptom": "Bluest account credited $12 instead of $14 (an offsetting fee was netted where none was due).",
+      "graded_difference": "accounts chk_lj82d4f1a9.current_holdings; apply_checking_account_credit amount 12 vs 14 (message 31)",
+      "root_cause": "Arithmetic slip across the fee schedule (the domestic rebate on this account); a reading error rather than a rule gap.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Only the Arguments step of the rubric applies; no checkable fact.",
+      "evidence": "doc bluest_account_003 fee schedule; agent credit 12.00",
+      "change": "The rubric's Arguments/Record steps; no dedicated code."
+    },
+    {
+      "task_id": "task_046",
+      "symptom": "The customer asked to close a credit card; the agent paid off the balance from checking before checking for pending disputes, then found one and could not close.",
+      "graded_difference": "accounts 05.current_holdings and cc_..._bsilver.current_balance changed by pay_credit_card_from_checking (message 30); gold has no payment",
+      "root_cause": "logistics_003 Step 1 checks eligibility (disputes, replacements) before anything else in the closure; v4's B only gated the payment once a closure tool was unlocked or called.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "An ordering rule at a write.",
+      "evidence": "UNEXPECTED WRITE at message 30 pay_credit_card_from_checking before get_pending_replacement_orders at 40",
+      "change": "Widen B: pay_credit_card_from_checking while the customer has asked to close a credit card needs dispute history and pending replacements read (a CLI payment is not affected)."
+    },
+    {
+      "task_id": "task_099",
+      "symptom": "Recommended the right product (World Blue) but never read the customer's accounts, which doc _048 needs to check referrer tenure.",
+      "graded_difference": "agent_discoverable_tools: get_all_user_accounts_by_user_id never CALLED",
+      "root_cause": "Referrer eligibility depends on checking tenure (doc _048); the agent judged eligibility without reading the accounts.",
+      "class": "lost-state",
+      "surfaces": [
+        "checks.py",
+        "memory.py",
+        "guidance.py"
+      ],
+      "why_this_surface": "submit_referral is a user tool that check_write cannot see, so check_reply catches a referral-eligibility answer given before the accounts are read, and guidance prompts the read after verification.",
+      "evidence": "doc _048: 'Referrer eligibility hinges on how long you've been a Rho-Bank checking customer'",
+      "change": "check_reply sends back a referral recommendation/eligibility answer before accounts are read; guidance: once verified, read accounts before judging eligibility."
+    },
+    {
+      "task_id": "task_098",
+      "symptom": "Answered in one turn without verifying, recommended Green Fee-Free instead of Blue Account; the customer submitted it.",
+      "graded_difference": "referrals: Green Fee-Free vs Blue Account (user's submit_referral at message 12); verification_history missing log_verification",
+      "root_cause": "No catalog comparison of combined bonuses and no verification/account read before a referral answer.",
+      "class": "knowledge",
+      "surfaces": [
+        "checks.py",
+        "guidance.py",
+        "system.md"
+      ],
+      "why_this_surface": "The same referral check_reply as task_099 forces verification and the account read first; guidance lists the unread products.",
+      "evidence": "Agent's 2nd reply already recommends Green Fee-Free; 5 tool calls in total",
+      "change": "Referral check_reply plus the recommendation guidance note."
+    },
+    {
+      "task_id": "task_055",
+      "symptom": "The agent told the customer to deposit the check with a partial account id ('fcfad') before giving the tool; the customer called it twice with that id.",
+      "graded_difference": "user_discoverable_tool_calls: deposit_check_3847 record with account_id 'fcfad' (user's calls at 62, 68)",
+      "root_cause": "Instruction to use a user tool before it was given, with a truncated id.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py",
+        "system.md"
+      ],
+      "why_this_surface": "The reply text (tool named, not yet given, partial id) can be checked before it is sent.",
+      "evidence": "UNEXPECTED WRITE at 62 deposit_check_3847 {account_id: 'fcfad'} before give_discoverable_user_tool at 65",
+      "change": "check_reply sends back a reply naming a user tool not yet given, or a masked/partial id, with a use instruction; prompt line: give the tool first with full values."
+    },
+    {
+      "task_id": "task_067",
+      "symptom": "Opened Blue checking + Platinum savings instead of Purple + Platinum Plus at $100k.",
+      "graded_difference": "accounts: Blue Account and Platinum Account opened; gold Purple Account and Platinum Plus Account",
+      "root_cause": "Did not read every savings product (Platinum Plus $100k minimum met) or price each checking boost.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "guidance.py"
+      ],
+      "why_this_surface": "Recommendation judgement plus the unread-products guidance note.",
+      "evidence": "Agent recap: '~7.55% effective APY' with Platinum Account",
+      "change": "Rubric plus the recommendation guidance note."
+    },
+    {
+      "task_id": "task_069",
+      "symptom": "Opened Gold savings despite the customer needing ATM rebates on savings.",
+      "graded_difference": "accounts: Gold Account vs Silver Plus Account (open_bank_account at message 122)",
+      "root_cause": "The customer's stated requirement was not checked against the product's document before the write.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Rubric step 3 (every condition checked against a document/record).",
+      "evidence": "Agent: 'enjoy those ATM rebates!' while opening Gold Account",
+      "change": "The rubric's Record step."
+    },
+    {
+      "task_id": "task_027",
+      "symptom": "The customer lied that the cash back disputes were resolved; the agent read the dispute history (still SUBMITTED) yet updated the transaction rewards. One dispute was also never submitted.",
+      "graded_difference": "credit_card_transaction_history rewards_earned on three txns (update_transaction_rewards at message 61); cash_back_disputes missing one (the user's call)",
+      "root_cause": "doc cc_004: update only after a dispute is resolved and approved; the agent relied on the customer's word. The missing dispute was the simulated user's.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "Whether a tool result showed the transaction RESOLVED/APPROVED is a fact in state.",
+      "evidence": "doc cc_004: 'After a cash back dispute is resolved and approved, you must update...'",
+      "change": "check_write blocks update_transaction_rewards unless a tool result shows that transaction RESOLVED or APPROVED."
+    },
+    {
+      "task_id": "task_086",
+      "symptom": "Liability set to the charge amount for one dispute; one transaction_type and pin_compromised differ; replacement ordered STANDARD/CLASSIC instead of the customer's EXPEDITED/PREMIUM.",
+      "graded_difference": "debit_card_disputes liability 189.99 vs 50, transaction_type signature vs pin_purchase; debit_card_orders option/design",
+      "root_cause": "Fields not taken from the record or the customer's words; the order defaulted its options.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Dispute-field and order-argument judgement; lesson 12 forbids a liability window check.",
+      "evidence": "doc _031 field 9 'Determine from user circumstances'",
+      "change": "Dispute-field line (type from the record) and the rubric's 'none defaulted' Arguments step."
+    },
+    {
+      "task_id": "task_088",
+      "symptom": "Made an unrequested fund transfer between accounts; dispute transaction_type pin_purchase vs signature; liability set to the amount.",
+      "graded_difference": "accounts current_holdings on two accounts (transfer_funds at message 100); dispute transaction_type and liability",
+      "root_cause": "A write the customer never asked for; the transaction type was guessed rather than taken from the record.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Rubric Request step and the dispute-field line.",
+      "evidence": "Agent recap: 'transferred $200 to your Green Account'",
+      "change": "Rubric plus the dispute-field line."
+    },
+    {
+      "task_id": "task_022",
+      "symptom": "The simulated user ran only some of the ten given dispute submissions.",
+      "graded_difference": "cash_back_disputes: 7 of 10 missing (user's calls)",
+      "root_cause": "Simulator fault: the customer had the tool and the full list and did not run them (lesson 13).",
+      "class": "task-fault",
+      "surfaces": [],
+      "why_this_surface": "User tool calls are not the agent's.",
+      "evidence": "Agent: 'Could you please run submit_cash_back_dispute_0589 three more times'",
+      "change": "none"
+    },
+    {
+      "task_id": "task_018",
+      "symptom": "The simulated user typed the dispute calls as text; most never ran.",
+      "graded_difference": "cash_back_disputes: 4 of 6 missing (user's calls)",
+      "root_cause": "Simulator fault (lesson 13).",
+      "class": "task-fault",
+      "surfaces": [],
+      "why_this_surface": "User tool calls are not the agent's.",
+      "evidence": "Agent: 'none of those disputes have actually been submitted yet'",
+      "change": "none"
+    },
+    {
+      "task_id": "task_063",
+      "symptom": "Recommended EcoCard + Silver savings despite the customer's 'cards that verify creditworthiness' constraint; gold Silver Rewards + Silver Plus.",
+      "graded_difference": "credit_card_applications EcoCard vs Silver Rewards; accounts Silver vs Silver Plus",
+      "root_cause": "The customer's constraint and the full pairing math were not applied from each product's document.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "guidance.py"
+      ],
+      "why_this_surface": "Recommendation judgement.",
+      "evidence": "Agent: 'EcoCard ... no credit score minimum so you're all set'",
+      "change": "Rubric plus the recommendation guidance note."
+    },
+    {
+      "task_id": "task_008",
+      "symptom": "After many refusals of flyer offers the agent transferred with Tier-2 'unconfirmed_external_communication'; doc _042 says pick the highest tier, and Tier 1 has customer_demands_after_unavailable_offer_refusal.",
+      "graded_difference": "database matched: ACTION transfer_to_human_agents reason",
+      "root_cause": "Misread of doc _042's tier rule.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py",
+        "guidance.py"
+      ],
+      "why_this_surface": "check_write now sees transfer_to_human_agents; the reason tiers are data, and whether an offer was raised is in memory.",
+      "evidence": "doc _042: 'always select from the highest tier that applies'",
+      "change": "Transfer check: when the customer raised an offer/flyer/promotion and asked for a human, a Tier 2-4 reason is sent back once naming customer_demands_after_unavailable_offer_refusal; other Tier 2-4 reasons are sent back once with the Tier-1 list."
+    },
+    {
+      "task_id": "task_038",
+      "symptom": "The dispute's issue_noticed_date was set to the transaction date, not the day the customer noticed it.",
+      "graded_difference": "transaction_disputes issue_noticed_date 10/12/2025 vs 11/14/2025",
+      "root_cause": "The noticed date was taken from the record; it should come from when the customer first noticed.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Dispute-field rule in the prompt.",
+      "evidence": "Customer: 'I just noticed some concerning charges on your credit card statement'",
+      "change": "Dispute-field line: noticed/discovery date from when the customer first noticed."
+    },
+    {
+      "task_id": "task_056",
+      "symptom": "Opened 'Silver Plus Saver' without the ' Account' suffix.",
+      "graded_difference": "accounts account_class 'Silver Plus Saver' vs 'Silver Plus Saver Account' (message 71), and the transfer's destination id",
+      "root_cause": "Format slip: doc _004 requires the exact class name ending in 'Account'.",
+      "class": "format",
+      "surfaces": [
+        "helper.py"
+      ],
+      "why_this_surface": "A mechanical argument fix.",
+      "evidence": "doc _004: 'Ensure you capture the exact official account_class name ending with \"Account.\"'",
+      "change": "helper on_tool_call: an open_bank_account class ending in 'Saver' gets ' Account' appended."
+    },
+    {
+      "task_id": "task_041",
+      "symptom": "Marked more disputes eligible for provisional credit than cc_015 item 4 allows, and filed only some of the 16 disputes.",
+      "graded_difference": "transaction_disputes eligible_for_provisional_credit true vs false on several; many disputes missing",
+      "root_cause": "Did not count prior disputes in the past 12 months (history read plus those filed here) against cc_015 item 4.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "The count comes from the history read plus the filings here, both in state.",
+      "evidence": "doc cc_015 item 4: 'has not filed more than 2 disputes in the past 12 months'",
+      "change": "check_write sends back a credit-card dispute marked eligible beyond the count, stating the count."
+    },
+    {
+      "task_id": "task_084",
+      "symptom": "incorrect_amount dispute filed for the full charge, not the overcharge; the duplicate dispute was not marked provisional-credit eligible.",
+      "graded_difference": "debit_card_disputes disputed_amount 189.23 vs 100; duplicate provisional_credit_* false vs true",
+      "root_cause": "v4's prompt said 'disputed_amount = the full transaction', which is wrong for incorrect_amount.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Replace the wrong prompt line (lesson 10).",
+      "evidence": "doc _031 'incorrect_amount: Charged different amount than expected'; customer: 'They charged me exactly $100 more'",
+      "change": "Dispute-field line: amount in error (overcharge for incorrect amount, one copy of a duplicate, the cash not dispensed)."
+    },
+    {
+      "task_id": "task_087",
+      "symptom": "An in-store fraudulent charge was filed as card_not_present/online_purchase.",
+      "graded_difference": "debit_card_disputes dispute_category and transaction_type (message 48)",
+      "root_cause": "The transaction type was guessed instead of taken from the transaction record.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Dispute-field line.",
+      "evidence": "doc _031: card_present_fraud for in-store/physical transactions",
+      "change": "Dispute-field line: transaction type from the record."
+    },
+    {
+      "task_id": "task_083",
+      "symptom": "Dispute arguments differ for all four filings (ACTION basis).",
+      "graded_difference": "database matched: ACTION file_debit_card_transaction_dispute arguments ×4",
+      "root_cause": "Amount and field choices per dispute (e.g. ATM shortfall amount) not taken from doc _031 and the customer's words.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Dispute-field line.",
+      "evidence": "doc _031 field 8 and categories",
+      "change": "Dispute-field line (cash not dispensed for an ATM shortfall)."
+    }
+  ],
+  "surfaces": {
+    "system.md": "Keep v4's instructions. Add, in the wording of lesson 10: 'This work is multistep: think carefully after every tool result, not only at the start.' after the opening line; the five-step write rubric (Request, Procedure, Record, Arguments, Order) after the search line; 'State a fee, rate, limit, eligibility or \"can't\" only from a sentence you read in a document; invent no restriction.'; 'Give a user tool (give_discoverable_user_tool) before telling the customer to use it, with every argument's full value.'; and replace 'disputed_amount = the full transaction' with doc _031's amount in error (full charge for fraud/unauthorized; the overcharge for incorrect amount; the cash not dispensed for an ATM shortfall; one copy of a duplicate), transaction type from the record, noticed/discovery date from when the customer first noticed. Keep the liability sentence. Tasks 036, 038, 055, 068, 069, 072, 082-088, 016, 025, 063, 067.",
+    "helper.py": "Keep v2/v4 helper. In open_bank_account, after the suffix strip, a class ending in 'Saver' (case-insensitive) gets ' Account' appended (doc _004). Task 056.",
+    "checks.py": "Keep A-G and check_reply. Add H close_debit_card (doc _025 req 4-5, _026): blocked until get_bank_account_transactions has run for the card's account (any account if unknown); blocked when the customer asked to freeze and nothing was frozen here; blocked while the card was frozen here and not unfrozen (tasks 079, 080). Widen B: pay_credit_card_from_checking while the customer asked to close a credit card needs dispute history + pending replacements (task 046). Transfers (doc _042 tiers as data): offer/flyer raised + human asked → a Tier 2-4 reason is sent back once naming customer_demands_after_unavailable_offer_refusal; any other Tier 2-4 reason is sent back once with the Tier-1 list; after an 'already exists' result, a transfer is sent back once (continue the procedure) (tasks 008, 051). A credit-card dispute marked eligible for provisional credit beyond cc_015 item 4's count (history + filed here) is sent back with the count (task 041). update_transaction_rewards is blocked unless a tool result showed that transaction RESOLVED/APPROVED (cc_004, task 027). check_reply: a user tool named but not given, or a masked/partial id, with a use instruction → sent back once (task 055); restriction wording (violat, misuse, against our policy, not permitted, not allowed, prohibited) → sent back once to cite the document or drop it (task 016); a referral-eligibility/recommendation answer before the accounts are read → sent back once (tasks 098, 099). Every new rule uses _once.",
+    "memory.py": "Record: transactions read by account_id; frozen and unfrozen card ids; the customer's freeze, card-close, credit-card-close and recommendation requests; user tools given; transaction ids shown RESOLVED or APPROVED in tool results; the last 'already exists' result; category products listed (ls/grep results) and documents read; accounts read; verified (log_verification succeeded); offers/promotions/flyers the customer raised; referral talk; credit-card disputes in the history within 12 months and eligible ones filed here.",
+    "guidance.py": "Within 600 chars, add: after an 'already exists' result, continue the procedure (re-check eligibility, decide), do not transfer; once verified and before accounts are read, read them before judging eligibility, tenure or balances; when a recommendation is requested, name the category's listed-but-unread products; in the human-request note add doc _042's highest-tier rule. Keep v4's notes."
+  },
+  "expected_to_fix": [
+    "task_008",
+    "task_027",
+    "task_046",
+    "task_051",
+    "task_055",
+    "task_056",
+    "task_079",
+    "task_080",
+    "task_084",
+    "task_087",
+    "task_099",
+    "task_036",
+    "task_038"
+  ],
+  "risks": [
+    "check H could block a legitimate close_debit_card where transactions are irrelevant; it blocks once per key, so it costs one extra read at most, and doc _025 req 4-5 needs the read anyway.",
+    "The transfer reason check could push a wrong Tier-1 reason when the customer's offer mention is incidental; it sends back once, and the agent may keep its reason on the second attempt.",
+    "check_reply restriction wording may fire on a correctly cited restriction (e.g. dispute limits); the message asks to cite the document, so a cited reply goes through on the rewrite.",
+    "The referral check_reply could delay a pure FAQ answer about referrals; it asks only for the account read, which doc _048 needs for tenure.",
+    "The longer system.md (rubric) competes with policy text; it replaces the wrong disputed_amount line and adds about 900 characters, within lesson 3's budget.",
+    "The Saver suffix helper applies only to classes ending exactly in 'Saver', so personal savings classes are untouched."
+  ],
+  "carried_forward": [
+    {
+      "from": "v4",
+      "what": "All five surfaces: prompt lines, v2 helper, checks A-G and check_reply, memory, guidance",
+      "evidence": "v4 fixed 21 train tasks over v3 and passed the gate 6 → 14 on test"
+    }
+  ],
+  "dropped": [
+    {
+      "from": "v4",
+      "what": "The system.md line 'disputed_amount = the full transaction'",
+      "evidence": "task_084: incorrect_amount filed at 189.23 instead of the $100 overcharge (doc _031 amount in error)"
+    }
+  ],
+  "changes": [
+    {
+      "file": "system.md",
+      "anchor": "This work is multistep: think",
+      "what": "Adds lesson 10's lines in its wording: think after every tool result, the five-step write rubric (Request, Procedure, Record, Arguments, Order), state a fee/rate/limit/eligibility/can't only from a sentence read, and give a user tool before telling the customer to use it with full argument values.",
+      "why": "In 24 of v4's 31 train failures the settling document or record was already in the conversation. Examples: an unrequested fraud dispute (036, customer goal 'Review your recent transactions and ... get your card replaced'), an unrequested fund transfer (088 'transferred $200 to your Green Account'), an invented restriction (016 'wouldn't be appropriate'), deposit_check_3847 named before it was given (055), Gold Account opened despite the customer's ATM-rebate requirement (069), and unpriced catalog comparisons (025, 048, 063, 067, 068).",
+      "task_ids": [
+        "task_036",
+        "task_088",
+        "task_016",
+        "task_055",
+        "task_069",
+        "task_072",
+        "task_025",
+        "task_048",
+        "task_063",
+        "task_067",
+        "task_068",
+        "task_082"
+      ],
+      "verified_in_session": true,
+      "verification": "wc -c system.md = 3183 (cap 3360), and the literal {policy} appears once."
+    },
+    {
+      "file": "system.md",
+      "anchor": "Debit dispute fields are set",
+      "what": "Replaces v4's 'disputed_amount = the full transaction' with doc _031's amount in error (full charge for fraud or unauthorized, the overcharge for an incorrect amount, the cash not dispensed for an ATM shortfall, one copy of a duplicate); transaction_type comes from the record, discovery_date from when the customer first noticed, and card-possession and PIN facts belong to each transaction. v4's liability sentence is kept unchanged.",
+      "why": "084 filed incorrect_amount at the full charge although the customer said 'They charged me exactly $100 more'. 082 copied the lost card's possession and PIN facts onto the recurring-charge dispute. 087 and 088 guessed transaction_type, and 038 took the noticed date from the transaction date. Doc _031 fields 7-11 and its category list.",
+      "task_ids": [
+        "task_084",
+        "task_082",
+        "task_083",
+        "task_086",
+        "task_087",
+        "task_088",
+        "task_038"
+      ],
+      "verified_in_session": true,
+      "verification": "Read the system.md text against doc _031 fields 5-11; no code surface involved."
+    },
+    {
+      "file": "helper.py",
+      "anchor": "on_tool_call",
+      "what": "In open_bank_account, after the parenthetical-suffix strip, an account_class ending in 'Saver' (case-insensitive) gets ' Account' appended.",
+      "why": "Doc _004: 'Ensure you capture the exact official account_class name ending with \"Account.\"' Task 056 opened 'Silver Plus Saver'.",
+      "task_ids": [
+        "task_056"
+      ],
+      "verified_in_session": true,
+      "verification": "on_tool_call on 'Silver Plus Saver' returned 'Silver Plus Saver Account'; 'Silver Plus Saver Account' was left unchanged; 'Green Account (savings)' still became 'Green Account'."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "H ── close_debit_card (doc _025",
+      "what": "close_debit_card is sent back (v4's _once, per card) when the card's account has no get_bank_account_transactions read (or no read at all when the account is unknown), when the customer asked to freeze and nothing has been frozen here, or while the card is FROZEN here.",
+      "why": "Doc _025 requirements 3-5 (only ACTIVE or PENDING cards close; no pending transactions or refunds) and doc _026 (freeze vs close). In 079 the agent closed with no transaction read and got 'cannot be closed. Current status: FROZEN'. In 080 the customer opened with 'I want to freeze all of them right away' and the agent closed all three, including the Green card the customer later found.",
+      "task_ids": [
+        "task_079",
+        "task_080"
+      ],
+      "verified_in_session": true,
+      "verification": "Replayed 080's freeze request and debit-card JSON. The first close was sent back naming the freeze and the transactions read. After a freeze it was sent back for FROZEN plus the transactions read. After unfreeze and get_bank_account_transactions it returned None. The 'Closed Successfully ... cannot be reactivated' result now registers as a closed card."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "B ── credit-card closure flow",
+      "what": "B also gates pay_credit_card_from_checking whenever the customer has asked to close a credit card: the dispute history and the card's pending replacements must be read first.",
+      "why": "logistics_003 Step 1. In 046 the agent paid the balance at message 30, before get_pending_replacement_orders at message 40, then found a pending dispute and could not close.",
+      "task_ids": [
+        "task_046",
+        "task_048"
+      ],
+      "verified_in_session": true,
+      "verification": "With 046's opening message, the payment was sent back naming get_user_dispute_history_7291 and get_pending_replacement_orders_5765. With 051's 'pay off the full $3,000 balance' (a limit-increase payment) it returned None. A debit-card 'cancel all three' message did not set wants_cc_close."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "_check_transfer",
+      "what": "transfer_to_human_agents: after an 'already exists' discoverable-tool result, the transfer is sent back (continue with the existing record). When the customer raised an offer, promotion or flyer and asked for a human, a Tier 2-4 reason is sent back naming customer_demands_after_unavailable_offer_refusal. Any other Tier 2-4 reason is sent back with doc _042's Tier-1 list. All three use _once.",
+      "why": "Doc _042: 'always select from the highest tier that applies'. 008 transferred with unconfirmed_external_communication. In 051, submit_credit_limit_increase returned 'Error: A similar request may already exist.' and the agent transferred instead of approving the PENDING request (logistics_007 Steps 2 and 4).",
+      "task_ids": [
+        "task_008",
+        "task_051"
+      ],
+      "verified_in_session": true,
+      "verification": "008: with the flyer and human-request messages, unconfirmed_external_communication was sent back twice and then let through; the Tier-1 code passed. 051: technical_system_error after the 'may already exist' result was sent back; already_exists stayed set after a get_ read and cleared after approve. log_verification's 'Record may already exist' did not set it."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "I ── credit-card dispute provisional credit",
+      "what": "file_credit_card_transaction_dispute marked eligible_for_provisional_credit is sent back once the customer already has more than 2 disputes in the past 12 months. The count is the history read within 365 days plus filings let through in this conversation, counted at check time so a parallel batch is covered; the message gives the count.",
+      "why": "Doc cc_015 item 4: 'has not filed more than 2 disputes in the past 12 months'. In 041 a prior dispute (submitted 09/20/2025) was ignored and too many filings were marked eligible.",
+      "task_ids": [
+        "task_041"
+      ],
+      "verified_in_session": true,
+      "verification": "With 041's history record and current time 2025-11-14: the first two eligible filings passed, the third was sent back with 'already has 3', and an ineligible filing passed. With an empty history (080), three eligible filings all passed, because prior=2 is not more than 2."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "J ── cash back corrections",
+      "what": "update_transaction_rewards is sent back unless some tool result in this conversation showed that transaction RESOLVED or APPROVED.",
+      "why": "Doc cc_004: 'After a cash back dispute is resolved and approved, you must update...'. In 027 the customer lied that the disputes were resolved and the history read showed none, yet the agent updated three transactions.",
+      "task_ids": [
+        "task_027"
+      ],
+      "verified_in_session": true,
+      "verification": "After 027's history ('No transaction disputes found'), update_transaction_rewards for its transaction was sent back. After a record showing that transaction with status RESOLVED, it returned None."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "def _check_reply",
+      "what": "Three new send-backs, each once: (1) a reply telling the customer to call a tool not yet given, or a given tool with a masked id; (2) restriction wording (violat, misuse, against policy/terms, not permitted, not allowed, prohibited, wouldn't be appropriate, strongly recommend not); (3) a referral recommendation or eligibility answer while referral talk is on and the accounts are unread, unless the reply is asking for identity.",
+      "why": "055 reply: 'just call `deposit_check_3847(account_id, check_amount)`' before give_discoverable_user_tool, after 'Account ID ending in `...fcfad`'. 016 reply: 'wouldn't be appropriate ... I'd strongly recommend not doing that' (policy rule 1; no document says it). 098 and 099: doc _048 says 'Referrer eligibility hinges on how long you've been a Rho-Bank checking customer'.",
+      "task_ids": [
+        "task_055",
+        "task_016",
+        "task_098",
+        "task_099"
+      ],
+      "verified_in_session": true,
+      "verification": "055's reply text was sent back (not given). Once the tool was given, full-id wording passed and '...fcfad' wording was sent back. 016's reply text was sent back and a benign bonus reply passed. 099's opening plus a World Blue recommendation was sent back, an identity-request reply passed, and after get_all_user_accounts it passed."
+    },
+    {
+      "file": "memory.py",
+      "anchor": "def _remember",
+      "what": "Records the facts the new rules need: transactions read per account, card states, freeze/credit-card-close/recommendation/offer/referral requests and reco categories, tools given, verified, accounts read, RESOLVED/APPROVED transaction ids, the last 'already exists' result, products listed and opened in full, and credit-card dispute history dates. _ok now treats a result whose head says 'Successfully' as a success.",
+      "why": "v4's _ok rejected 'Debit Card Closed Successfully ... This card cannot be reactivated' (079 result text), so closed cards were never recorded, which also blinded v4's E4.",
+      "task_ids": [
+        "task_079",
+        "task_080",
+        "task_051",
+        "task_027",
+        "task_041",
+        "task_046",
+        "task_008",
+        "task_099",
+        "task_067",
+        "task_068"
+      ],
+      "verified_in_session": true,
+      "verification": "/tmp/v5_verify.py fed transcript tool results through remember, and all the check and guidance cases above ran on the resulting state. 'best way to dispute charges on my debit cards' set no recommendation category."
+    },
+    {
+      "file": "guidance.py",
+      "anchor": "def _guidance",
+      "what": "Adds three notes inside the 600-character cap: after an 'already exists' result, continue the procedure and do not transfer; with referral talk, once verified and before the accounts are read, read them (doc _048); when a recommendation is asked for, the listed-but-unread products of the customer's categories. The human-request note now cites doc _042's highest-tier rule. Leads are moved after the new notes so the cut keeps them.",
+      "why": "051 transferred after 'may already exist'. In 067 the agent never opened Platinum Plus, and in 068 it chose Gold Plus without pricing the pairings. 099 never read the accounts.",
+      "task_ids": [
+        "task_051",
+        "task_099",
+        "task_067",
+        "task_068",
+        "task_063",
+        "task_025",
+        "task_098",
+        "task_008"
+      ],
+      "verified_in_session": true,
+      "verification": "067-style savings request plus an ls listing and two cat reads returned 'savings: platinum plus account, gold plus account'. The 051 state returned the already-exists note, the referral state after log_verification returned the accounts note, and the human-request note names doc _042."
+    }
+  ],
+  "prompt_diff_summary": "Adds lesson 10's lines in its wording: the multistep line, the five-step write rubric, the 'only from a sentence you read' rule and the 'give a user tool first, full values' rule. Replaces 'disputed_amount = the full transaction' with doc _031's per-transaction fields (amount in error, type from the record, noticed date, possession and PIN per transaction) and keeps the liability sentence; 1860 to 3183 characters.",
+  "helper_diff_summary": "helper: 'Saver' class gets ' Account'. checks: new H (close_debit_card needs transactions read, freeze first when asked, unfreeze first); B widened to a payment while a credit-card close is requested; transfer tier/offer/already-exists send-backs; cc_015 eligibility count; cc_004 RESOLVED gate; check_reply for user tool not given or masked id, restriction wording, referral answer before accounts are read. memory: facts for these, and _ok accepts 'Successfully' heads. guidance: already-exists, referral accounts, unread-products notes. submit_referral is a user tool, so check_write never sees it; the referral rule therefore lives in check_reply.",
+  "routed": [
+    "system.md",
+    "helper.py",
+    "checks.py",
+    "memory.py",
+    "guidance.py"
+  ],
+  "optimised_from": "v4",
+  "source_run": "20261004T222002Z_banking_knowledge_v4_train",
+  "optimiser": {
+    "model": "Claude Opus 5.5",
+    "mode": "routing",
+    "profile": {
+      "domain": "banking_knowledge",
+      "fingerprint": "80741e4d9562",
+      "tuned": true,
+      "model": "opus",
+      "effort": "medium",
+      "mode": "routing",
+      "max_turns": 120,
+      "budgets": {
+        "transcript": 60000,
+        "scenario": 60000,
+        "diff": 90000
+      },
+      "surfaces": [
+        "system.md",
+        "helper.py",
+        "checks.py",
+        "memory.py",
+        "guidance.py"
+      ],
+      "guide_chars": 10771,
+      "guards": false,
+      "overrides": {}
+    },
+    "routed": [
+      "system.md",
+      "helper.py",
+      "checks.py",
+      "memory.py",
+      "guidance.py"
+    ],
+    "surfaces_changed": [
+      "system.md",
+      "helper.py",
+      "checks.py",
+      "memory.py",
+      "guidance.py"
+    ],
+    "turns": 70,
+    "input_tokens": 11010237,
+    "output_tokens": 69592,
+    "cost_usd_notional": 6.5701203999999995,
+    "duration_ms": 687979,
+    "error": null,
+    "rejected": false
+  }
+}

@@ -48,6 +48,10 @@ class AgentConfig:
     # native only: keep every tool call of a reply, as tau2's stock agent does (s14 P0a); off
     # unless set, so v1–v3 keep their bytes and the one-call-a-turn harness their runs had
     parallel_calls: bool = False
+    # s16: the workflow_rag version (`rag_agents/<domain>/<rN>/`) whose workflows the agent may
+    # look up (`find_workflow`) or ask it to research (`request_workflow`), two harness tools tau2
+    # never sees; None for every version before v6, so they keep their bytes
+    workflows: str | None = None
 
     def __post_init__(self) -> None:
         if self.tool_mode not in TOOL_MODES:
@@ -247,6 +251,7 @@ def fork_version(
         retrieval=retrieval or cfg.retrieval,
         identity_note=cfg.identity_note if identity_note is None else identity_note,
         parallel_calls=cfg.parallel_calls if parallel_calls is None else parallel_calls,
+        workflows=cfg.workflows,  # s16: a fork keeps the workflow_rag version its source looks up
     )
     if new == cfg:
         raise ValueError(

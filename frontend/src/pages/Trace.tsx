@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { type Event, fmtS, shortRun, shortTask, useGet } from '../lib/api';
+import { type Event, fmtS, shortRun, shortTask, showsActionsDone, useGet } from '../lib/api';
 import { DbDiff } from '../lib/dbdiff';
 import type { Check } from '../lib/goldcheck';
 import { JudgePanel, type JudgeView, judgeMarks } from '../lib/judge';
@@ -87,6 +87,16 @@ export function Trace() {
           {ri.action_checks && ri.action_checks.length > 0 && (
             <div className="card">
               <h3>Expected actions</h3>
+              {showsActionsDone(data.domain) && (
+                // banking's second accuracy metric: partial credit beside the 0-or-1 reward
+                <p className="small">
+                  <b>
+                    {ri.action_checks.filter((a) => a.action_match).length} of {ri.action_checks.length} made ·{' '}
+                    {(ri.action_checks.filter((a) => a.action_match).length / ri.action_checks.length).toFixed(2)}
+                  </b>{' '}
+                  <span className="muted">actions done, beside a reward of {ri.reward.toFixed(0)}</span>
+                </p>
+              )}
               {ri.action_checks.map((a, i) => (
                 <p key={i} className={`small ${a.action_match ? 'v-ok' : 'v-warn'}`}>
                   {a.action_match ? '✓' : '✗'} <span className="mono">{a.action.name}</span>({JSON.stringify(a.action.arguments)})

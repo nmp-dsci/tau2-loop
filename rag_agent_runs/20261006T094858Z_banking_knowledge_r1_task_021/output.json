@@ -1,0 +1,378 @@
+{
+ "jobs": [
+  {
+   "job": "submitting_a_cash_back_dispute",
+   "when": {
+    "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received.",
+    "doc": "doc_credit_cards_credit_cards_(general)_003"
+   },
+   "info": [
+    {
+     "field": "identity_lookup_key",
+     "about": "The customer's full name or email, used to find their record",
+     "from": "customer",
+     "ask": "Could you give me your full name or the email address on your account so I can find your profile?",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. They must match the record.",
+     "from": "customer",
+     "ask": "To verify your identity, please give me two of these: your date of birth, email, phone number or address on file.",
+     "may_hold_back": true
+    },
+    {
+     "field": "user_id",
+     "about": "The verified customer's user id",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "card_accounts",
+     "about": "The customer's credit card accounts and card types (for example Business Bronze Rewards Card or EcoCard), plus their open dates",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "transactions",
+     "about": "Each credit card transaction's transaction_id, card type, merchant, amount, category, date and rewards_earned",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "transactions_in_question",
+     "about": "Which transactions the customer suspects. If the customer doesn't know, the agent reviews every transaction on the cards named.",
+     "from": "customer",
+     "ask": "Are there particular transactions or cards you're concerned about, or would you like me to review all recent transactions on your cards?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup",
+     "by": "model",
+     "do": "Ask for a name or email and look up the customer's record",
+     "call": "get_user_information_by_email",
+     "args": {
+      "email": "the email the customer gives (or use get_user_information_by_name with the full name)"
+     },
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Ask for 2 of DOB, email, phone and address, and check them against the record. Share no account details until verified.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup"
+     ],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": "the customer gave 2 matching values",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "log",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "record address",
+      "email": "record email",
+      "phone_number": "record phone",
+      "date_of_birth": "record DOB",
+      "time_verified": "time from get_current_time"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Fetch the customer's credit card accounts and card types",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log"
+     ],
+     "if": null,
+     "quote": "look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "id": "get_txns",
+     "by": "harness",
+     "do": "Fetch all of the customer's credit card transactions",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log"
+     ],
+     "if": null,
+     "quote": "look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "id": "recalc",
+     "by": "model",
+     "do": "For each transaction, work out the expected points from the card type, merchant, category and the exclusion rules, rounding down. Compare the result with rewards_earned and sort each transaction into correct, legitimate exception, or error.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts",
+      "get_txns"
+     ],
+     "if": null,
+     "quote": "Recalculate the correct rewards for each transaction based on the card type, transaction category, and any applicable promotions.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "id": "explain",
+     "by": "model",
+     "do": "Tell the customer which transactions are correct, which are lower because of a legitimate exclusion (and name the exclusion), and which are actual errors. Accept that exceptions are policy, not errors.",
+     "call": null,
+     "args": {},
+     "after": [
+      "recalc"
+     ],
+     "if": null,
+     "quote": "look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "id": "give_dispute_tool",
+     "by": "harness",
+     "do": "Give the customer the cash back dispute tool",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "submit_cash_back_dispute_0589"
+     },
+     "after": [
+      "explain"
+     ],
+     "if": "at least one transaction's rewards_earned differs from the correctly calculated points",
+     "quote": "Tool to provide to the user: `submit_cash_back_dispute_0589(user_id: str, transaction_id: str)`",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "id": "instruct",
+     "by": "model",
+     "do": "Tell the customer to run the tool once for each erroneous transaction, using their user_id and that transaction's exact transaction_id. Confirm the ids with them. Do not include exception transactions.",
+     "call": null,
+     "args": {},
+     "after": [
+      "give_dispute_tool"
+     ],
+     "if": null,
+     "quote": "Tell the customer to run the tool with their own user_id and the specific transaction_id for the purchase in question.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "id": "customer_submits",
+     "by": "customer",
+     "do": "Submit one dispute for each erroneous transaction",
+     "call": "call_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "submit_cash_back_dispute_0589",
+      "arguments": "{user_id: the verified user, transaction_id: each erroneous transaction}"
+     },
+     "after": [
+      "instruct"
+     ],
+     "if": null,
+     "quote": "Confirm the customer has the correct transaction_id before they submit.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "id": "unlock_update",
+     "by": "model",
+     "do": "Unlock the rewards update tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "update_transaction_rewards_3847"
+     },
+     "after": [
+      "customer_submits"
+     ],
+     "if": "the dispute is resolved and approved",
+     "quote": "Use `unlock_discoverable_agent_tool` to unlock the agent tool `update_transaction_rewards_3847`.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "id": "apply_correction",
+     "by": "model",
+     "do": "Set each disputed transaction's rewards to the independently recalculated, rounded-down point value",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "update_transaction_rewards_3847",
+      "arguments": "{transaction_id: the disputed transaction, new_rewards_earned: 'X points' (X = correct whole number)}"
+     },
+     "after": [
+      "unlock_update"
+     ],
+     "if": "the dispute is resolved and approved",
+     "quote": "new_rewards_earned: a string formatted as 'X points' where X is the correct whole-number point value",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "id": "confirm",
+     "by": "harness",
+     "do": "Re-read the transactions to confirm each update was applied",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "apply_correction"
+     ],
+     "if": "a correction was applied",
+     "quote": "Confirm the update in credit_card_transaction_history after the tool call completes.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Business Bronze Rewards Card earns 1.0% cash back, stored as points (1 point = $0.01), so expected points = floor(amount). There are no bonus categories.",
+     "quote": "You earn 1.0% cash back on eligible purchases charged to your account.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_002"
+    },
+    {
+     "rule": "Cash back rewards are stored as points at 1 point = $0.01",
+     "quote": "For example, 250 points equals $2.50 in cash back, which matches a 2.5% cash back rate on a $100 purchase.",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "rule": "On the Business Bronze Rewards Card, coworking merchants (WeWork, Regus, Industrious) and payroll processors (Gusto, ADP, Paychex, Rippling) earn 0 points. This is a legitimate exception, not an error.",
+     "quote": "The following specific merchants earn **0% cash back** on your Business Bronze Rewards Card:",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_003"
+    },
+    {
+     "rule": "On the Business Bronze Rewards Card, Slack, Zoom, HubSpot and Salesforce earn 1.0% during the first 12 months of the subscription and 0% after that",
+     "quote": "After the initial 12-month period, auto-renewals and continued subscription payments to these merchants earn 0% cash back:",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_003"
+    },
+    {
+     "rule": "EcoCard: green/sustainable purchases earn 5 points per dollar and all other purchases earn 1 point per dollar",
+     "quote": "The only true points-based card is the EcoCard, which earns 'sustainability points' (5 points per dollar on green purchases, 1 point per dollar on other purchases)",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "rule": "EcoCard: Target, Walmart, Amazon and ThredUp earn 1 point per dollar even for eco-friendly items. This is a legitimate exception.",
+     "quote": "The following specific merchants do NOT earn the higher sustainability points rate ($5.00 points per dollar) and instead earn the standard rate ($1.00 point per dollar):",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "rule": "EcoCard: EV charging earns 5x only at Tesla Supercharger, ChargePoint or EVgo. Other networks earn 1x.",
+     "quote": "EV charging only qualifies for green rewards when using one of our 3 certified partner charging networks: Tesla Supercharger, ChargePoint, or EVgo. Charging at any other network does not qualify.",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "rule": "Points are always rounded down to a whole number, so a shortfall that comes only from truncation is not an error",
+     "quote": "All credit card rewards points are rounded down to the nearest whole number.",
+     "doc": "doc_credit_cards_credit_cards_(general)_007"
+    },
+    {
+     "rule": "Returned or credited purchases have their rewards reversed",
+     "quote": "If a purchase is returned or credited, the associated rewards are reversed.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_004"
+    },
+    {
+     "rule": "When correcting, recalculate independently and never copy any expected_rewards value",
+     "quote": "Do not rely on any expected_rewards field in the dispute record. Independently verify rates and eligibility.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "rule": "The 'Other' category holds transactions that fall under card-specific exclusions",
+     "quote": "Other (transactions that fall under card-specific exclusions or exceptions, do not list any examples here)",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    }
+   ],
+   "done_when": "The customer has been told, for each transaction, whether its rewards are correct, a legitimate exception or an error. The customer has submitted a dispute through submit_cash_back_dispute_0589 for every erroneous transaction and for no exception transaction. Any approved dispute has been corrected with update_transaction_rewards_3847 and the correction confirmed in the transaction history."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_003",
+   "why": "Cash back dispute procedure; names the user tool submit_cash_back_dispute_0589"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_004",
+   "why": "Applying approved corrections with update_transaction_rewards_3847, including the 'X points' format and independent recalculation"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_006",
+   "why": "Rewards are stored as points: 1 point = $0.01 for cash back cards; EcoCard earns 5x green and 1x other"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_007",
+   "why": "Rule that points are rounded down"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_005",
+   "why": "Category list; 'Other' is used for card-specific exclusions"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_021",
+   "why": "Investigation scope: check the merchant category, the card rates, and whether an adjustment is needed"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_002",
+   "why": "Business Bronze earns 1.0%"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_003",
+   "why": "Business Bronze exclusions: coworking, payroll, and SaaS after 12 months"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_004",
+   "why": "Reversal of rewards on returns"
+  },
+  {
+   "id": "doc_credit_cards_ecocard_002",
+   "why": "EcoCard earn rates: 5 per dollar green, 1 per dollar other"
+  },
+  {
+   "id": "doc_credit_cards_ecocard_003",
+   "why": "What qualifies as green"
+  },
+  {
+   "id": "doc_credit_cards_ecocard_004",
+   "why": "EcoCard exclusions: Target, Walmart, Amazon, ThredUp and non-partner EV charging"
+  }
+ ],
+ "open_questions": [
+  "No document says how the agent learns that a submitted cash back dispute is 'resolved and approved'. The agent has no read tool for cash_back_disputes, so it should rely on the result returned when the customer submits.",
+  "For the SaaS 12-month rule on Business Bronze, no document says how to find the subscription start date. The likely approach is the earliest transaction with the same merchant in the history, or the account open date.",
+  "The EcoCard green partner network is described as about 3 certified partners. Apart from the 3 EV networks, those partners are not named, so green eligibility outside EV charging has to come from the transaction category.",
+  "The verification steps rest on the system policy, not on a knowledge base document."
+ ]
+}

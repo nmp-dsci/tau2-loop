@@ -71,6 +71,12 @@ export const optimisePath = (domain?: string, version?: string, lens?: Lens): st
   (domain ? `/optimise/${enc(domain)}${version ? `/${enc(version)}` : ''}` : '/optimise') + search(lens);
 /** The tool judge's loop beside the agent's (s11): `/optimise/airline/judge`. */
 export const judgeLoopPath = (domain: string, lens?: Lens): string => `/optimise/${enc(domain)}/judge${search(lens)}`;
+/** workflow_rag's views (s16): its golden set in Evals, then Runs, Optimise, Agent and Review, each
+ *  under its dataset like the judge's: `/evals/banking_knowledge/workflow_rag`. */
+export const workflowEvalsPath = (domain: string, lens?: Lens): string => `/evals/${enc(domain)}/workflow_rag${search(lens)}`;
+export const workflowLoopPath = (domain: string): string => `/optimise/${enc(domain)}/workflow_rag`;
+export const workflowAgentPath = (domain: string): string => `/agent/${enc(domain)}/workflow_rag`;
+export const workflowReviewPath = (domain: string): string => `/review/workflow_rag/${enc(domain)}`;
 export const leaderboardPath = (lens?: Lens): string => `/leaderboard${search(lens)}`;
 export const rubricPath = (lens?: Lens): string => `/rubric${search(lens)}`;
 /** The review list, or one conversation's review: `/review/<run>/<task>/t1`.

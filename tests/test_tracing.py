@@ -6,13 +6,14 @@ MlflowClient and the shape of the tree can be asserted without the platform.
 
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 from tau2_loop.tracking.mlflow_log import required_tags
 from tau2_loop.tracking.prompts import prompt_name
-from tau2_loop.tracking.tracing import CUT, _cut, emit_spans
+from tau2_loop.tracking.tracing import CUT, _cut, emit_spans, fresh_ids
 
 
 @dataclass
@@ -97,6 +98,51 @@ def test_long_values_are_trimmed_with_the_length_kept() -> None:
     assert out.startswith("x" * 100) and out.endswith("[500 more]") and len(out) < len(long)
     assert _cut({"a": long, "b": 3})["b"] == 3
     assert len(_cut([long] * 80)) == 50
+
+
+def test_two_runs_with_one_seed_never_share_a_trace_id() -> None:
+    """τ² seeds the global `random` with the run's seed; OpenTelemetry draws its ids from it."""
+    from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
+
+    ids = RandomIdGenerator()
+
+    def run() -> list[int]:
+        random.seed(300)  # what τ² does at the start of every run
+        with fresh_ids():
+            return [ids.generate_trace_id() for _ in range(20)]
+
+    first, second = run(), run()
+    assert not set(first) & set(second)
+    # unprotected, the same seed gives the same ids: the collision this guards against
+    random.seed(300)
+    bare = ids.generate_trace_id()
+    random.seed(300)
+    assert ids.generate_trace_id() == bare
+    # the seeded stream outside the block is left where it was
+    random.seed(300)
+    expected = [random.random() for _ in range(3)]
+    random.seed(300)
+    with fresh_ids():
+        ids.generate_trace_id()
+    assert [random.random() for _ in range(3)] == expected
+
+
+def test_a_domain_logs_to_its_own_experiment(monkeypatch: Any) -> None:
+    """Since 6 Oct 2026 each domain has `tau2-loop/<domain>`; the flat `tau2-loop` takes nothing new."""
+    import mlflow
+
+    from tau2_loop.tracking.mlflow_log import log_cycle
+
+    chosen: list[str] = []
+
+    def stop(**_: Any) -> None:
+        raise RuntimeError("no server in tests")
+
+    monkeypatch.setattr(mlflow, "set_tracking_uri", lambda _uri: None)
+    monkeypatch.setattr(mlflow, "set_experiment", lambda name: chosen.append(name))
+    monkeypatch.setattr(mlflow, "start_run", stop)
+    assert log_cycle({"domain": "banking_knowledge", "cycle": 1}) is None
+    assert chosen == ["tau2-loop/banking_knowledge"]
 
 
 def test_the_platform_tags_are_on_every_trace() -> None:

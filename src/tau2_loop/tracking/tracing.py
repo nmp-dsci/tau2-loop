@@ -24,17 +24,39 @@ Volume: a full-split run is 4 domains × up to 114 tasks × 4 trials. Keep the
 
 from __future__ import annotations
 
+import random
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from tau2_loop.config import settings
-from tau2_loop.tracking.mlflow_log import EXPERIMENT, PROJECT, required_tags
+from tau2_loop.tracking.mlflow_log import PROJECT, experiment, required_tags
 
 if TYPE_CHECKING:
     from tau2_loop.eval.results import TaskResult
     from tau2_loop.eval.runner import RunMeta
 
 CUT = 2_000
+
+
+@contextmanager
+def fresh_ids() -> Iterator[None]:
+    """Trace and span ids drawn from fresh entropy, not from the run's seed.
+
+    OpenTelemetry draws its ids from Python's global `random`, which τ² seeds with
+    the run's seed (`runner/batch.py`). Every run then drew the same ids, and the
+    server, which keys a trace on its id, let each run overwrite the traces an
+    earlier run had logged under them: 343 of 1,027 were lost by 6 Oct 2026, and
+    22 held spans of two conversations. The global state is put back afterwards,
+    so nothing seeded downstream changes.
+    """
+    state = random.getstate()
+    random.seed()  # from os.urandom
+    try:
+        yield
+    finally:
+        random.setstate(state)
 
 
 def _cut(v: Any, n: int = CUT) -> Any:
@@ -143,13 +165,18 @@ def log_conversation(meta: RunMeta, result: TaskResult, transcript: dict[str, An
 
     Never raises: a trace is an index entry, and the run folder is the record.
     """
+    with fresh_ids():
+        return _log_conversation(meta, result, transcript)
+
+
+def _log_conversation(meta: RunMeta, result: TaskResult, transcript: dict[str, Any]) -> str | None:
     try:
         import mlflow
         from mlflow import MlflowClient
 
         s = settings()
         mlflow.set_tracking_uri(s.mlflow_tracking_uri)
-        exp = mlflow.set_experiment(EXPERIMENT)
+        exp = mlflow.set_experiment(experiment(meta.domain))
         client = MlflowClient()
         messages = list(transcript.get("messages") or [])
         t0 = _ns(transcript.get("start_time"), int(datetime.now().timestamp() * 1e9))

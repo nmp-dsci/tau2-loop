@@ -1,0 +1,710 @@
+{
+ "jobs": [
+  {
+   "job": "verify_identity_and_locate_debit_cards",
+   "when": {
+    "quote": "Generally, for any scenario involving accessing customer information in internal databases, you must first verify their identify before proceeding.",
+    "doc": "policy"
+   },
+   "info": [
+    {
+     "field": "customer_identifier",
+     "about": "the customer's name, email or user id, used to look up the customer's record",
+     "from": "customer",
+     "ask": "Could you please give me your full name so I can find your profile?",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_values",
+     "about": "at least 2 of: date of birth, email, phone number, address. These must match the record.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, email, phone number or address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "affected_accounts",
+     "about": "which checking accounts' debit cards were lost or stolen",
+     "from": "customer",
+     "ask": "Which of your checking accounts had debit cards that were lost or stolen?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record using the identifier they gave",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave (get_user_information_by_email or get_user_information_by_id work too)"
+     },
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "check_two_values",
+     "by": "model",
+     "do": "Ask for 2 of DOB, email, phone and address, and confirm they match the record. Do not share any details before verification.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "check_two_values"
+     ],
+     "if": "the customer matched 2 values",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "from the record",
+      "email": "from the record",
+      "phone_number": "from the record",
+      "date_of_birth": "from the record",
+      "time_verified": "from get_current_time"
+     },
+     "after": [
+      "get_time"
+     ],
+     "if": null,
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get all of the customer's bank accounts. Note the account_id, account_class, status and balance of each affected checking account.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "user_id": "the verified user"
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": null,
+     "quote": "The tool requires the customer's user_id and returns all account information including:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "id": "unlock_cards",
+     "by": "harness",
+     "do": "Unlock the debit card lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_cards_by_account_id_7823"
+     },
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+    },
+    {
+     "id": "get_cards",
+     "by": "harness",
+     "do": "For each affected checking account, get all of its debit cards: card_id, status, issue_reason, date_issued and card_design",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_cards_by_account_id_7823",
+      "account_id": "each affected checking account id"
+     },
+     "after": [
+      "unlock_cards"
+     ],
+     "if": null,
+     "quote": "Multiple cards may be returned if the account has card history (e.g., old closed cards plus current active card)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Verify the customer before looking up or changing account or card data. Two of DOB, email, phone and address must match.",
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    }
+   ],
+   "done_when": "The customer is verified and logged, and the active debit card of each affected checking account is identified."
+  },
+  {
+   "job": "closing_cancelling_a_debit_card",
+   "when": {
+    "quote": "Procedure for when a customer wants to close, cancel, or deactivate their debit card.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+   },
+   "info": [
+    {
+     "field": "close_reason",
+     "about": "the reason for closing, one of lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing",
+     "from": "customer",
+     "ask": "Can you confirm the cards were stolen, and not just misplaced?",
+     "may_hold_back": false
+    },
+    {
+     "field": "refund_acknowledgement",
+     "about": "whether the customer agrees that pending refunds will be credited to the linked checking account instead of the card",
+     "from": "customer",
+     "ask": "This card has a pending refund. Do you agree that the refund will be credited to your linked checking account instead, so we can close the card now? Otherwise we have to wait for the refund to process (typically 3-5 business days).",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "advise_close_not_freeze",
+     "by": "model",
+     "do": "The customer has confirmed the cards were stolen, so recommend permanently closing each card instead of freezing it. A frozen card cannot then be closed.",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": "the customer asks to freeze cards they say were stolen or lost",
+     "quote": "If customer confirms the card is lost/stolen, recommend closing instead of freezing",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    },
+    {
+     "id": "ask_reason",
+     "by": "model",
+     "do": "Confirm the closure reason for each card",
+     "call": null,
+     "args": {},
+     "after": [
+      "advise_close_not_freeze"
+     ],
+     "if": null,
+     "quote": "Ask customer for the reason they want to close the card (select from: lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "id": "unlock_txns",
+     "by": "harness",
+     "do": "Unlock the bank account transaction tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173"
+     },
+     "after": [
+      "ask_reason"
+     ],
+     "if": null,
+     "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+    },
+    {
+     "id": "get_txns",
+     "by": "harness",
+     "do": "Get the transactions of each affected checking account and look for pending transactions and pending refunds (status 'pending')",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "account_id": "each affected checking account id"
+     },
+     "after": [
+      "unlock_txns"
+     ],
+     "if": null,
+     "quote": "**status**: Transaction status, either 'posted' or 'pending'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+    },
+    {
+     "id": "check_eligibility",
+     "by": "model",
+     "do": "Check each card. The customer must own it, it must be ACTIVE or PENDING, and there must be no pending refund unless the customer acknowledges it. The 14-day card age rule does not apply to lost or stolen cards.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_txns"
+     ],
+     "if": null,
+     "quote": "Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "id": "refund_ack",
+     "by": "model",
+     "do": "Tell the customer about the pending refund. Ask them either to wait 3-5 business days or to acknowledge that the refund will go to the linked checking account.",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_eligibility"
+     ],
+     "if": "a card's account shows a pending refund",
+     "quote": "If pending refunds exist, inform the customer they must wait for the refunds to process (typically 3-5 business days) or acknowledge in writing that the refunds will be credited to the linked checking account instead.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "id": "inform_pending",
+     "by": "model",
+     "do": "Tell the customer that pending transactions will still be processed, and ask whether they want replacement cards right away",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_eligibility"
+     ],
+     "if": "the reason is lost, stolen or fraud_suspected",
+     "quote": "Inform customer that any pending transactions will still be processed",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "id": "unlock_close",
+     "by": "harness",
+     "do": "Unlock the debit card closing tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_debit_card_4721"
+     },
+     "after": [
+      "inform_pending"
+     ],
+     "if": null,
+     "quote": "Use close_debit_card_4721 to close the card with parameters: card_id, reason",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "id": "close_card",
+     "by": "harness",
+     "do": "Close each eligible card",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_debit_card_4721",
+      "card_id": "the active card of each affected account",
+      "reason": "the confirmed reason, e.g. stolen"
+     },
+     "after": [
+      "unlock_close",
+      "refund_ack"
+     ],
+     "if": "the card is eligible (if it had a pending refund, the customer has acknowledged it)",
+     "quote": "Cards reported as lost or stolen are closed immediately with no cooling-off period",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "id": "confirm_close",
+     "by": "model",
+     "do": "Confirm each closure. The card is permanently deactivated, recurring payments must be updated, and refunds will go to the linked checking account.",
+     "call": null,
+     "args": {},
+     "after": [
+      "close_card"
+     ],
+     "if": null,
+     "quote": "Confirm the card has been closed and provide the following information:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Only cards in ACTIVE or PENDING status can be closed",
+     "quote": "The debit card must currently be in ACTIVE or PENDING status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "rule": "Lost, stolen or fraud_suspected closures skip the 14-day minimum card age",
+     "quote": "These reasons bypass the minimum card age requirement (requirement 6) for security purposes",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "rule": "A card with a pending refund can be closed only after the refund processes or after the customer acknowledges that it will be credited to the linked checking account",
+     "quote": "No pending refunds: The card must not have any pending refunds.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "rule": "Freezing is only for temporary situations. A confirmed lost or stolen card is closed.",
+     "quote": "CLOSE: Permanent deactivation - cannot be reversed. Use when card is confirmed lost/stolen or customer wants to cancel.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ],
+   "done_when": "Every stolen debit card is closed with the correct reason (or the customer has been told what blocks its closure), and the customer has been told the consequences."
+  },
+  {
+   "job": "debit_card_replacement_options_by_account_tier",
+   "when": {
+    "quote": "When a customer requests a replacement debit card (due to lost, stolen, damaged, or other reasons), the replacement policies vary based on the customer's checking account tier.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+   },
+   "info": [
+    {
+     "field": "delivery_option",
+     "about": "STANDARD, EXPEDITED or RUSH, limited by what the tier allows",
+     "from": "customer",
+     "ask": "Which shipping speed would you like for this card? The options and fees for your account are ...",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_design",
+     "about": "CLASSIC, PREMIUM (metallic silver) or CUSTOM, with tier-based fees",
+     "from": "customer",
+     "ask": "Which card design would you like? The options and fees for your account are ...",
+     "may_hold_back": true
+    },
+    {
+     "field": "shipping_address",
+     "about": "the address to mail the card to (must be a US domestic address)",
+     "from": "records",
+     "ask": "Should we mail the card to your address on file?",
+     "may_hold_back": false
+    },
+    {
+     "field": "excess_fee_consent",
+     "about": "whether the customer will pay the excess replacement fee when the tier's replacement limit is exceeded",
+     "from": "customer",
+     "ask": "You've reached the replacement limit for this account. You can wait until the oldest replacement ages out, or pay the excess replacement fee. Which would you prefer?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "map_tier",
+     "by": "model",
+     "do": "Map each account to its tier. Entry: Light Blue, Light Green, Green Fee-Free. Mid: Blue, Green. Premium: Evergreen. Elite: Bluest.",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "- PREMIUM TIER (Evergreen Account)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_005"
+    },
+    {
+     "id": "count_replacements",
+     "by": "model",
+     "do": "In the card list, count cards with issue_reason lost, stolen, fraud or damaged that were issued in the last 12 months (use get_current_time), and compare with the tier limit",
+     "call": null,
+     "args": {},
+     "after": [
+      "map_tier"
+     ],
+     "if": null,
+     "quote": "Check the date_issued field and count cards issued within the last 12 months",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "id": "over_limit",
+     "by": "model",
+     "do": "If the limit is exceeded, offer the choice: wait until the oldest replacement ages out, or pay the excess fee (Entry $25, Mid $15; Premium has no fee option and must wait)",
+     "call": null,
+     "args": {},
+     "after": [
+      "count_replacements"
+     ],
+     "if": "the replacement count is at or above the tier maximum",
+     "quote": "If customer has exceeded the 2-card limit, they must wait until oldest replacement ages out of the 12-month window, OR pay a $25 excess replacement fee",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "id": "entry_wait",
+     "by": "model",
+     "do": "For Entry-tier accounts, do not order now. Tell the customer to call back 48 hours after the card was closed to order (and pay any excess fee they agreed to).",
+     "call": null,
+     "args": {},
+     "after": [
+      "over_limit"
+     ],
+     "if": "the account is ENTRY tier and the card was just closed",
+     "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "id": "check_order_eligibility",
+     "by": "model",
+     "do": "Check the ordering requirements: account OPEN, balance of at least $25, no other active or pending card on the account, and a US address",
+     "call": null,
+     "args": {},
+     "after": [
+      "count_replacements"
+     ],
+     "if": "the account is Mid, Premium or Elite tier (no waiting period)",
+     "quote": "Account must have a minimum balance of $25 (to cover potential fees)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "id": "ask_delivery",
+     "by": "model",
+     "do": "Offer the delivery options and fees for the tier. Entry: STANDARD $0 only. Mid: STANDARD $0, EXPEDITED $15. Premium: STANDARD and EXPEDITED $0, RUSH $35. Elite: all $0.",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_order_eligibility"
+     ],
+     "if": null,
+     "quote": "Ask customer for preferred delivery option (STANDARD, EXPEDITED, or RUSH) and explain fees. ",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "id": "ask_design",
+     "by": "model",
+     "do": "Offer the designs and fees for the tier. CLASSIC is $0. PREMIUM is $10 for Entry and Mid, $0 for Premium and Elite. CUSTOM is $25 for Entry and Mid, $15 for Premium, $0 for Elite.",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_delivery"
+     ],
+     "if": null,
+     "quote": "Ask customer for preferred card design (CLASSIC, PREMIUM, or CUSTOM) and explain fees. ",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "id": "confirm_address_fees",
+     "by": "model",
+     "do": "Confirm the mailing address. Tell the customer that all fees will be deducted from the linked checking account.",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_design"
+     ],
+     "if": null,
+     "quote": "Always inform the customer that the fee will be deducted from their checking account balance before placing the order.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "id": "unlock_order",
+     "by": "harness",
+     "do": "Unlock the debit card ordering tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_debit_card_5739"
+     },
+     "after": [
+      "confirm_address_fees"
+     ],
+     "if": null,
+     "quote": "Use order_debit_card_5739 to order the card. ",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "id": "order_card",
+     "by": "harness",
+     "do": "Order the replacement card with the exact tier-based fees",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_debit_card_5739",
+      "account_id": "the checking account",
+      "delivery_option": "the chosen option",
+      "card_design": "the chosen design",
+      "delivery_fee": "the tier fee for the chosen option",
+      "design_fee": "the tier fee for the chosen design"
+     },
+     "after": [
+      "unlock_order"
+     ],
+     "if": "the account has no waiting period and is within its limit (or the customer accepted the excess fee)",
+     "quote": "When using order_debit_card_5739, you must provide the exact delivery_fee and design_fee amounts based on the tier rules below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "id": "inform_delivery",
+     "by": "model",
+     "do": "Give the delivery timeframe and the fees charged. STANDARD: 7-10 business days. EXPEDITED: 3-5 business days. RUSH: 1-2 business days.",
+     "call": null,
+     "args": {},
+     "after": [
+      "order_card"
+     ],
+     "if": null,
+     "quote": "Inform customer of expected delivery timeframe and any applicable fees",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Entry tier: at most 2 replacements per rolling 12 months, 48-hour wait after closure, STANDARD shipping only, $25 excess fee option",
+     "quote": "Maximum 2 replacement cards per rolling 12-month period",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "rule": "Mid tier: at most 3 replacements, no wait, STANDARD $0 or EXPEDITED $15, $15 excess fee option",
+     "quote": "Standard (delivery_fee: $0) or expedited shipping available (delivery_fee: $15)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "rule": "Premium tier: at most 5 replacements, free expedited shipping, RUSH costs $35, no excess fee option",
+     "quote": "Rush shipping available (delivery_fee: $35)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "rule": "Premium and Elite tiers get the PREMIUM (metallic silver) design free. Entry and Mid pay $10.",
+     "quote": "PREMIUM design (metallic silver): design_fee $0 (complimentary)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "rule": "Cards issued for new_account, first_card, expired, upgrade or bank_reissue do not count toward the replacement limit",
+     "quote": "Cards with issue_reason of 'new_account', 'first_card', 'expired', 'upgrade', or 'bank_reissue' do NOT count toward the replacement limit.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "rule": "Elite tier has unlimited replacements and $0 shipping",
+     "quote": "Complimentary shipping on all replacements (delivery_fee: $0 for STANDARD, EXPEDITED, and RUSH)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    }
+   ],
+   "done_when": "A replacement is ordered with the correct fees for each account where ordering is allowed now. For any account under a waiting period, the customer has been told when they can order and which fee applies."
+  },
+  {
+   "job": "lost_stolen_card_cross_product_security_protocol",
+   "when": {
+    "quote": "When a customer reports a lost or stolen debit card, there is a risk that other cards in their wallet were also compromised.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+   },
+   "info": [
+    {
+     "field": "credit_card_in_wallet",
+     "about": "whether the customer's Rho-Bank credit card was also in the lost or stolen wallet",
+     "from": "customer",
+     "ask": "I see you also have a credit card with us. Was that card also in your lost wallet?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "check_cc",
+     "by": "harness",
+     "do": "Check whether the customer has any Rho-Bank credit cards",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [],
+     "if": null,
+     "quote": "Use get_credit_card_accounts_by_user to retrieve any credit card accounts for the customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "id": "offer_cc",
+     "by": "model",
+     "do": "Ask whether the credit card was also in the wallet, and offer a replacement with a new number",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_cc"
+     ],
+     "if": "the customer has an active credit card",
+     "quote": "Offer to order a replacement credit card with a new card number to prevent any unauthorized charges",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "id": "unlock_cc_order",
+     "by": "harness",
+     "do": "Unlock the credit card replacement tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291"
+     },
+     "after": [
+      "offer_cc"
+     ],
+     "if": "the customer accepts the replacement",
+     "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "order_cc",
+     "by": "harness",
+     "do": "Order the replacement credit card. Strongly recommend expedited shipping when the card was stolen.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291",
+      "account": "the credit card account id",
+      "reason": "stolen or lost",
+      "shipping_address": "the confirmed address",
+      "shipping_speed": "standard or expedited"
+     },
+     "after": [
+      "unlock_cc_order"
+     ],
+     "if": "the customer accepts the replacement",
+     "quote": "If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "After handling a lost or stolen debit card, always check for credit cards and offer a replacement if any exist",
+     "quote": "If yes, proactively offer to order a replacement credit card as a security precaution",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    }
+   ],
+   "done_when": "The credit card check is done. If the customer has a credit card, the replacement offer has been made and acted on or declined."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_025",
+   "why": "Debit card closing procedure: requirements (status, pending refunds, card age bypass for stolen cards) and close_debit_card_4721"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_026",
+   "why": "Freeze vs. close; recommends closing for confirmed lost or stolen cards; freeze_debit_card_3892"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_029",
+   "why": "Replacement limits, waiting periods, excess fees, and shipping and design fees by tier; how to count replacement history"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_005",
+   "why": "Maps checking account names to tiers (Light Blue = Entry, Green = Mid, Evergreen = Premium, Bluest = Elite)"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_023",
+   "why": "Debit card ordering eligibility, steps, delivery timeframes, and order_debit_card_5739"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_028",
+   "why": "get_debit_cards_by_account_id_7823 and the card fields (status, issue_reason, date_issued)"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_009",
+   "why": "get_all_user_accounts_by_user_id_3847 to find the customer's checking accounts"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_018",
+   "why": "get_bank_account_transactions_9173 to find pending transactions and refunds"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_030",
+   "why": "Cross-product protocol: check for credit cards and offer a replacement after a lost or stolen debit card"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_001",
+   "why": "Credit card replacement procedure and order_replacement_credit_card_7291"
+  }
+ ],
+ "open_questions": [
+  "The documents do not say exactly how a 'pending refund' appears in the data. It is presumably a pending transaction that is a positive credit or refund on the linked checking account.",
+  "order_debit_card_5739 is documented only with delivery_fee and design_fee. The documents do not say how the Entry $25 or Mid $15 excess replacement fee is passed or charged. Check the tool's parameters after unlocking it.",
+  "If the customer insists on freezing first, a frozen card cannot then be closed, because closing requires ACTIVE or PENDING status. The documents do not say how to close a card that is already frozen (for example, unfreeze then close). Recommend closing directly for stolen cards.",
+  "The documents do not say whether the 48-hour Entry-tier wait still applies when the customer agrees to pay the excess replacement fee. Read literally, the wait applies to every Entry-tier replacement."
+ ]
+}

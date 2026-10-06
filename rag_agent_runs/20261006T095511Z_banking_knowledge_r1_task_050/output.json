@@ -1,0 +1,584 @@
+{
+ "jobs": [
+  {
+   "job": "processing_cli_approvals_and_denials",
+   "when": {
+    "quote": "This document outlines the step-by-step workflow for agents to process CLI requests, including verification and final decision. These steps MUST be followed in the exact order listed.",
+    "doc": "doc_credit_cards_credit_card_account_logistics_007"
+   },
+   "info": [
+    {
+     "field": "customer_identifier",
+     "about": "A name, email or user id used to look up the customer's record",
+     "from": "customer",
+     "ask": "Could you give me your full name or the email address on your account so I can find your profile?",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_values",
+     "about": "At least 2 of: date of birth, email, phone number, address. They must match the record.",
+     "from": "customer",
+     "ask": "To verify your identity, could you confirm two of these: your date of birth, email, phone number or address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "target_card",
+     "about": "Which credit card account the increase is for (card product). This sets the card tier.",
+     "from": "customer",
+     "ask": "Which Rho-Bank credit card would you like the limit increase on?",
+     "may_hold_back": false
+    },
+    {
+     "field": "requested_increase_amount",
+     "about": "The dollar amount of the increase, or the new total limit the customer wants. The tool takes the increase as an integer.",
+     "from": "customer",
+     "ask": "How much would you like to increase your credit limit by (or what new total limit are you looking for)?",
+     "may_hold_back": true
+    },
+    {
+     "field": "increase_reason",
+     "about": "A brief reason for the increase",
+     "from": "customer",
+     "ask": "Could you briefly tell me what the increase is for?",
+     "may_hold_back": true
+    },
+    {
+     "field": "credit_card_account_record",
+     "about": "Account id, card type, current credit limit, current balance, open date, past-due status, from get_credit_card_accounts_by_user",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Ask for an identifier and look up the customer's record",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives (or use get_user_information_by_email / get_user_information_by_id)"
+     },
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify_identity",
+     "by": "model",
+     "do": "Ask for two of DOB, email, phone, address and compare them to the record. Share no account details before this passes.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_time_for_log",
+     "by": "harness",
+     "do": "Get the current timestamp",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify_identity"
+     ],
+     "if": "verification succeeded",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record",
+     "call": "log_verification",
+     "args": {
+      "name": "verified user's name",
+      "user_id": "verified user's id",
+      "address": "record address",
+      "email": "record email",
+      "phone_number": "record phone",
+      "date_of_birth": "record DOB",
+      "time_verified": "timestamp from get_current_time"
+     },
+     "after": [
+      "get_time_for_log"
+     ],
+     "if": "verification succeeded",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Fetch the customer's credit card accounts. Find the target card's account id, current limit, balance, open date and past-due status.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Your current credit card account information",
+     "doc": "doc_credit_cards_credit_card_account_logistics_004"
+    },
+    {
+     "id": "determine_tier",
+     "by": "model",
+     "do": "Map the card product to its tier (Gold Rewards = Premium-tier)",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "Premium-tier and above (Gold Rewards Card, Business Gold Rewards Card, Platinum Rewards Card, Business Platinum Rewards Card, Diamond Elite Card): $0.00 (complimentary).",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "id": "ask_amount_reason",
+     "by": "model",
+     "do": "Ask for the increase amount and a brief reason, if the customer has not given them",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": "amount or reason not yet given",
+     "quote": "The new total credit limit you are requesting or the dollar amount of the increase you want",
+     "doc": "doc_credit_cards_credit_card_account_logistics_004"
+    },
+    {
+     "id": "check_amount_within_tier_max",
+     "by": "model",
+     "do": "Step 0: compare the requested increase with the tier maximum (Premium/Mid 50%, Entry 25% of the current limit). If it is over, state the maximum and ask whether to proceed with that amount. Never submit an amount over the limit.",
+     "call": null,
+     "args": {},
+     "after": [
+      "determine_tier",
+      "ask_amount_reason"
+     ],
+     "if": null,
+     "quote": "BEFORE submitting any CLI request, verify that the customer's requested increase amount is within the maximum allowed for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "unlock_submit",
+     "by": "harness",
+     "do": "Unlock the CLI submission tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "submit_credit_limit_increase_request_7392"
+     },
+     "after": [
+      "check_amount_within_tier_max"
+     ],
+     "if": "the customer has confirmed an increase amount within the tier maximum",
+     "quote": "Once the customer has confirmed a valid increase amount within their tier's limits, submit the request on their behalf using the submit_credit_limit_increase_request_7392 tool.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "submit_request",
+     "by": "harness",
+     "do": "Step 1: submit the CLI request before any eligibility check",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "submit_credit_limit_increase_request_7392",
+      "credit_card_account_id": "target card account id",
+      "user_id": "the verified user",
+      "requested_increase_amount": "confirmed increase amount as integer"
+     },
+     "after": [
+      "unlock_submit"
+     ],
+     "if": null,
+     "quote": "This creates a formal record of the request before eligibility checks are performed. Eligibility checks are internal and not exposed to customers, so the submission must happen first.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "get_time_eligibility",
+     "by": "harness",
+     "do": "Get the current date to compute account age and cooldown",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "submit_request"
+     ],
+     "if": null,
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "check_account_age",
+     "by": "model",
+     "do": "Check that account age in days is at least the tier minimum (Premium 60, Mid 90, Entry 120)",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_time_eligibility"
+     ],
+     "if": null,
+     "quote": "Account Age: Verify the account has been open for the minimum required days for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "unlock_cli_history",
+     "by": "harness",
+     "do": "Unlock the CLI history tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_credit_limit_increase_history_4829"
+     },
+     "after": [
+      "submit_request"
+     ],
+     "if": null,
+     "quote": "Cooldown Period: Use the get_credit_limit_increase_history_4829 tool to check if the customer has submitted a request within the cooldown period for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "check_cooldown",
+     "by": "harness",
+     "do": "Get the CLI history. Apply the cooldown only if the most recent prior request (not the one just submitted) was approved and falls within the tier cooldown (Premium 60, Mid 90, Entry 120 days).",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_credit_limit_increase_history_4829",
+      "credit_card_account_id": "target card account id"
+     },
+     "after": [
+      "unlock_cli_history",
+      "get_time_eligibility"
+     ],
+     "if": null,
+     "quote": "This applies only if your most recent request was approved. Denied requests do not trigger a cooldown period.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_005"
+    },
+    {
+     "id": "unlock_disputes",
+     "by": "harness",
+     "do": "Unlock the dispute history tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+     },
+     "after": [
+      "submit_request"
+     ],
+     "if": null,
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards__general__016"
+    },
+    {
+     "id": "check_disputes",
+     "by": "harness",
+     "do": "Get the dispute history. Check that no dispute on this account is still active (e.g. open, under_review).",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "user_id": "the verified user"
+     },
+     "after": [
+      "unlock_disputes"
+     ],
+     "if": null,
+     "quote": "No Pending Disputes: Verify the account has no active disputes.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "unlock_replacements",
+     "by": "harness",
+     "do": "Unlock the pending replacement orders tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765"
+     },
+     "after": [
+      "submit_request"
+     ],
+     "if": null,
+     "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "check_replacements",
+     "by": "harness",
+     "do": "Check that no order is in a non-final state (pending or shipped)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765",
+      "credit_card_account_id": "target card account id"
+     },
+     "after": [
+      "unlock_replacements"
+     ],
+     "if": null,
+     "quote": "No Pending Replacement Cards: Verify there are no outstanding replacement card orders for this account.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "check_good_standing",
+     "by": "model",
+     "do": "Use the account record to confirm there is no past-due balance",
+     "call": null,
+     "args": {},
+     "after": [
+      "submit_request"
+     ],
+     "if": null,
+     "quote": "Account Good Standing: The account must be current with no past-due balance.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "check_utilization",
+     "by": "model",
+     "do": "Compute balance / current limit. It must be strictly below the tier threshold (Premium 90%, Mid 80%, Entry 70%).",
+     "call": null,
+     "args": {},
+     "after": [
+      "submit_request"
+     ],
+     "if": null,
+     "quote": "Credit Utilization: Verify current utilization is below the maximum threshold for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "unlock_payment_history",
+     "by": "harness",
+     "do": "Unlock the payment history tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_payment_history_6183"
+     },
+     "after": [
+      "submit_request"
+     ],
+     "if": null,
+     "quote": "Use the get_payment_history_6183 tool to verify the customer's payment history meets the requirement for their card tier.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "id": "check_payment_history",
+     "by": "harness",
+     "do": "Step 3: get payment history for the tier's required months (Premium/Mid 3, Entry 6). Every month must be on time and consecutive.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_payment_history_6183",
+      "credit_card_account_id": "target card account id",
+      "months": "3 for Premium/Mid-tier, 6 for Entry-tier"
+     },
+     "after": [
+      "unlock_payment_history"
+     ],
+     "if": null,
+     "quote": "Premium-tier cards: Requires 3 consecutive months of on-time payments.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "id": "unlock_approve",
+     "by": "harness",
+     "do": "Unlock the approval tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "approve_credit_limit_increase_5847"
+     },
+     "after": [
+      "check_account_age",
+      "check_cooldown",
+      "check_disputes",
+      "check_replacements",
+      "check_good_standing",
+      "check_utilization",
+      "check_payment_history"
+     ],
+     "if": "all eligibility checks pass",
+     "quote": "Use the approve_credit_limit_increase_5847 tool to approve and apply the increase.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "approve",
+     "by": "harness",
+     "do": "Approve. Set new_credit_limit = current limit + confirmed increase.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "approve_credit_limit_increase_5847",
+      "credit_card_account_id": "target card account id",
+      "user_id": "the verified user",
+      "new_credit_limit": "current credit limit + confirmed increase amount (float)"
+     },
+     "after": [
+      "unlock_approve"
+     ],
+     "if": "all eligibility checks pass",
+     "quote": "new_credit_limit (float, required): The new total credit limit to set.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "unlock_deny",
+     "by": "harness",
+     "do": "Unlock the denial tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "deny_credit_limit_increase_5848"
+     },
+     "after": [
+      "check_account_age",
+      "check_cooldown",
+      "check_disputes",
+      "check_replacements",
+      "check_good_standing",
+      "check_utilization",
+      "check_payment_history"
+     ],
+     "if": "any eligibility check fails",
+     "quote": "Use the deny_credit_limit_increase_5848 tool to record the denial.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "deny",
+     "by": "harness",
+     "do": "Record the denial with the matching reason code",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "deny_credit_limit_increase_5848",
+      "credit_card_account_id": "target card account id",
+      "user_id": "the verified user",
+      "denial_reason": "one of insufficient_account_age, cooldown_period_active, pending_disputes, pending_replacement_card, past_due_balance, high_utilization, insufficient_payment_history, requested_amount_exceeds_limit, other"
+     },
+     "after": [
+      "unlock_deny"
+     ],
+     "if": "any eligibility check fails",
+     "quote": "denial_reason (string, required): Must be one of: 'insufficient_account_age', 'cooldown_period_active', 'pending_disputes', 'pending_replacement_card', 'past_due_balance', 'high_utilization', 'insufficient_payment_history', 'requested_amount_exceeds_limit', 'other'.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "communicate",
+     "by": "model",
+     "do": "Tell the customer the decision. For an approval, confirm the new total limit. For a denial, give the reason and when they may reapply.",
+     "call": null,
+     "args": {},
+     "after": [
+      "approve",
+      "deny"
+     ],
+     "if": null,
+     "quote": "Inform the customer of the decision and provide next steps. For approvals, confirm the new credit limit. For denials, explain the reason and when they may be eligible to reapply.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Only the account owner or an authorized account manager may request a CLI. The customer must be verified with 2 of DOB, email, phone, address.",
+     "quote": "Only the account owner or an authorized account manager may submit a CLI request for the account.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_004"
+    },
+    {
+     "rule": "Card tiers: Gold Rewards, Business Gold, Platinum, Business Platinum and Diamond Elite are Premium-tier and above. Silver Rewards, Business Silver, Green Rewards and Silver Zoom are Mid-tier. Bronze Rewards, EcoCard and Business Bronze are Entry-tier.",
+     "quote": "Mid-tier (Silver Rewards Card, Business Silver Rewards Card, Green Rewards Card, Silver Zoom Card): $10.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "rule": "Maximum increase per request: Premium-tier 50% of the current limit",
+     "quote": "Premium-tier cards: Maximum increase of 50% of current credit limit per request.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "rule": "Maximum increase per request: Mid-tier 50% of the current limit",
+     "quote": "Mid-tier cards: Maximum increase of 50% of current credit limit per request.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "rule": "Maximum increase per request: Entry-tier 25% of the current limit",
+     "quote": "Entry-tier cards: Maximum increase of 25% of current credit limit per request.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "rule": "If the request is over the tier maximum, state the maximum and ask whether to proceed with it. Do not submit until a valid amount is confirmed.",
+     "quote": "If the customer requests more than the maximum allowed for their tier, inform them of the maximum amount they are eligible for and ask if they would like to proceed with that amount instead.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "rule": "Minimum account age and cooldown: Premium-tier 60 days, Mid-tier 90 days, Entry-tier 120 days",
+     "quote": "Premium-tier: 60 days",
+     "doc": "doc_credit_cards_credit_card_account_logistics_005"
+    },
+    {
+     "rule": "Cooldown applies only if the most recent prior request was approved. Denied requests do not start a cooldown.",
+     "quote": "This applies only if your most recent request was approved. Denied requests do not trigger a cooldown period.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_005"
+    },
+    {
+     "rule": "Utilization must be strictly below the threshold: Premium <90%, Mid <80%, Entry <70%",
+     "quote": "Utilization at or above the threshold does not qualify.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_005"
+    },
+    {
+     "rule": "Consecutive on-time payment months required: Premium/Mid 3, Entry 6",
+     "quote": "Entry-tier cards: Requires 6 consecutive months of on-time payments.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_006"
+    },
+    {
+     "rule": "Check all six eligibility criteria before deciding, even when one already fails",
+     "quote": "You MUST check ALL of the following eligibility criteria before making an approval or denial decision as this ensures complete audit records.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "rule": "Submit the request before running the eligibility checks",
+     "quote": "This creates a formal record of the request before eligibility checks are performed. Eligibility checks are internal and not exposed to customers, so the submission must happen first.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "rule": "A pending replacement card blocks the CLI until the card is delivered or the order is cancelled",
+     "quote": "If a replacement is pending, the CLI cannot be processed until the replacement is delivered or cancelled.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    }
+   ],
+   "done_when": "The customer is verified and logged, a within-limit request has been submitted with submit_credit_limit_increase_request_7392, all eligibility checks have been run, and the request has been approved (new total limit = old limit + increase) or denied with a valid reason code. The decision has been told to the customer."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_007",
+   "why": "Internal CLI workflow: step order, submit/approve/deny/history tools, the six eligibility checks, denial reason codes"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_006",
+   "why": "Internal: payment-history months by tier, get_payment_history_6183, maximum increase % by tier"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_005",
+   "why": "Minimum account age, cooldown (only after an approved request), utilization thresholds by tier"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_004",
+   "why": "What the customer provides (account, amount, reason); only the owner or an authorized manager can request"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_002",
+   "why": "Maps card products to Entry/Mid/Premium tiers (Gold Rewards = Premium-tier)"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_005",
+   "why": "get_pending_replacement_orders_5765 for the pending-replacement check"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards__general__016",
+   "why": "get_user_dispute_history_7291 for the active-dispute check"
+  },
+  {
+   "id": "doc_credit_cards_gold_rewards_card_005",
+   "why": "Gold Rewards Card limit range and general CLI note"
+  }
+ ],
+ "open_questions": [
+  "Step 3 of doc_credit_cards_credit_card_account_logistics_007 ('Verify Payment History and Requested Amount') has no body. The payment-history rules come from doc_credit_cards_credit_card_account_logistics_006.",
+  "The CLI history returned after submission will include the request just submitted. Leave it out of the cooldown check, and count the cooldown only from a prior approved request.",
+  "doc_credit_cards_gold_rewards_card_005 mentions providing updated income information for review. No internal procedure says to collect it, so do not ask for documents.",
+  "No document defines 'active' dispute statuses. Treat open or under_review disputes on this account as active, and closed ones as not active.",
+  "Fields such as past-due status and utilization are assumed to come from the get_credit_card_accounts_by_user record. No document names those fields."
+ ]
+}

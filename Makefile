@@ -14,6 +14,8 @@ MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
 AGENT_PORT ?= 8091
 KIND ?= gate
+# USER_MODEL unset: the customer is Haiku (eval/runner.USER_MODEL); another makes the run an experiment the loop never reuses
+USER_MODEL ?=
 
 help: ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -44,8 +46,8 @@ platform-status: ## preflight: the central MLflow must answer /health (runs befo
 smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
 	uv run tau2loop smoke --agent $(or $(AGENT),v0) --concurrency $(CONCURRENCY)
 
-eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks)
-	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t))
+eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks; USER_MODEL= the customer)
+	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t)) $(if $(USER_MODEL),--user-model $(USER_MODEL))
 
 baselines: platform-status ## each domain's base version on its train split, one trial each: v0, or the oldest version where v0 was retired (banking, v1)
 	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --split train --concurrency $(CONCURRENCY) || exit 1; done
