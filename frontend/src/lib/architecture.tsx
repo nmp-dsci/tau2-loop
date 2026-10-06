@@ -35,7 +35,7 @@ export function toolModeLong(mode: string | null | undefined): string {
     : `${mode || 'json'}: tools travel as a JSON contract in the prompt, not as native tool calls`;
 }
 
-const cfgOf = (v: AgentInfo) => v.config as { model?: string; effort?: string; tool_mode?: string; max_steps?: number; identity_note?: boolean };
+const cfgOf = (v: AgentInfo) => v.config as { model?: string; effort?: string; tool_mode?: string; max_steps?: number; identity_note?: boolean; workflows?: string | null };
 const modeOf = (v: AgentInfo) => v.tool_mode ?? cfgOf(v).tool_mode ?? 'json';
 const sha = (v: AgentInfo, f: string) => v.surfaces?.[f]?.sha ?? null;
 const codeOf = (v: AgentInfo) => (v.surfaces_present ?? (v.has_helper ? ['system.md', 'helper.py'] : ['system.md'])).filter((f) => f !== 'system.md');
@@ -58,7 +58,7 @@ export function madeText(v: AgentInfo): { value: string; detail: string } {
   return { value: m.from ? `${lead} from ${m.from}` : lead, detail: m.detail };
 }
 
-export type LayerKey = 'model' | 'tool_mode' | 'retrieval' | 'dense' | 'template' | 'layers' | 'system' | 'code' | 'steps';
+export type LayerKey = 'model' | 'tool_mode' | 'retrieval' | 'dense' | 'template' | 'layers' | 'system' | 'code' | 'workflows' | 'steps';
 export type Layer = { key: LayerKey; label: string; value: string; detail?: string; cmp: string };
 
 /** The layers a version is compared on, in the table's order. `withRetrieval` adds the three a
@@ -102,8 +102,17 @@ export function layers(v: AgentInfo, all: AgentInfo[], withRetrieval = !!v.retri
       detail: hooks.length ? `hooks: ${hooks.join(', ')}` : undefined,
       cmp: code.map((f) => `${f}:${sha(v, f)}`).join(','),
     },
-    { key: 'steps', label: 'turn cap', value: `max ${c.max_steps ?? 200} steps`, cmp: String(c.max_steps ?? 200) },
   );
+  // s16: workflow_rag's library and research as two harness tools; a row only where a version has them
+  if (all.some((x) => x.domain === v.domain && cfgOf(x).workflows)) {
+    out.push({
+      key: 'workflows',
+      label: 'workflow tools',
+      value: c.workflows ? `find_workflow + request_workflow → workflow_rag ${c.workflows}` : 'none',
+      cmp: c.workflows ?? '',
+    });
+  }
+  out.push({ key: 'steps', label: 'turn cap', value: `max ${c.max_steps ?? 200} steps`, cmp: String(c.max_steps ?? 200) });
   return out;
 }
 
@@ -210,7 +219,7 @@ export function ArchitectureFigure({ v, all, tools }: FigProps) {
   const orchY = 12;
   const grpY = orchY + 50 + 28;
   const leftH = 30 + 50 + 10 + prompt.length * rowH;
-  const rightH = 30 + 3 * 62 - 12;
+  const rightH = 30 + (c.workflows ? 4 : 3) * 62 - 12;
   const grpH = Math.max(leftH, rightH) + 14;
   const envY = grpY + grpH + 44;
   const knowledge = v.retrieval ? (info?.tools ?? []) : [];
@@ -251,6 +260,18 @@ export function ArchitectureFigure({ v, all, tools }: FigProps) {
       {box('model', 272, grpY + 30, 244, 50, 'model', `${modelName(String(c.model ?? '—'))} · ${c.effort ?? 'medium'} effort`, ch.has('model'), 'The model and its effort, frozen in agent.yaml')}
       {box('tool-mode', 272, grpY + 92, 244, 50, 'tool calls', toolModeText(mode), ch.has('tool_mode'), toolModeLong(mode))}
       {box('code', 272, grpY + 154, 244, 50, 'code surfaces', code.length ? clip(code.join(' + '), 30) : 'none', ch.has('code'), 'helper.py, checks.py, memory.py and guidance.py: the deterministic hooks around the model', !code.length)}
+      {c.workflows &&
+        box(
+          'workflows',
+          272,
+          grpY + 216,
+          244,
+          50,
+          'workflow tools',
+          `find · request → workflow_rag ${c.workflows}`,
+          ch.has('workflows'),
+          'find_workflow looks the job up in the workflows workflow_rag wrote; request_workflow has it research one now. The harness runs both inside the turn: τ² never sees them.',
+        )}
 
       <path className="ed two" d={`M270 ${grpY + grpH + 2} V${envY - 2}`} />
       <text className="cap" x={282} y={grpY + grpH + 27}>

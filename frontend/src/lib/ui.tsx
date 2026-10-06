@@ -47,6 +47,22 @@ export function Rate({
   );
 }
 
+/** Expected actions made, 0 to 1, with what it counts in the same cell (DESIGN.md: never a bare
+ *  number). For one conversation `count` is "5/6"; for a run it is the conversations averaged. */
+export function ActionsDone({ frac, count, title }: { frac: number | null | undefined; count: string; title?: string }) {
+  if (frac == null) return <span className="muted">—</span>;
+  return (
+    <span className="ratecell" title={title ?? `${count} expected actions made`}>
+      <span className="track">
+        <i className={frac < 0.5 ? 'warn' : ''} style={{ width: `${Math.max(1, frac * 100)}%` }} />
+      </span>
+      <span className="mono">
+        {frac.toFixed(2)} · {count}
+      </span>
+    </span>
+  );
+}
+
 export function Kpi({ n, b, tone }: { n: string; b: string; tone?: 'ok' | 'warn' }) {
   return (
     <div className="kpi">

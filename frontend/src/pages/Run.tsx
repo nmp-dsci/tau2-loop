@@ -4,6 +4,7 @@ import {
   type RunMeta,
   type TaskResult,
   byTask,
+  countFrac,
   domainLabel,
   fmtK,
   fmtPct,
@@ -11,12 +12,13 @@ import {
   shortModel,
   shortRun,
   shortTask,
+  showsActionsDone,
   useGet,
   when,
 } from '../lib/api';
 import { HarnessHealth, healthClaim } from '../lib/health';
 import { useTask } from '../lib/scope';
-import { Loading, Points, Rate } from '../lib/ui';
+import { ActionsDone, Loading, Points, Rate } from '../lib/ui';
 import { agentPath, runPath, runsPath, trialId, trialPath, useLens } from '../lib/url';
 
 /**
@@ -105,6 +107,8 @@ export function Run() {
   if (!data) return <Loading error={error} />;
   const { meta, results, profile, health } = data;
   const s = meta.summary;
+  // banking's second accuracy metric: expected actions made, 0 to 1, beside pass/fail
+  const done = showsActionsDone(meta.domain);
 
   const rows = results
     .filter((r) => !task || r.task_id === task)
@@ -147,6 +151,14 @@ export function Run() {
             {k} {Math.round(v * 100)}%
           </span>
         ))}
+        {done && s?.partial_action_mean != null && (
+          <span
+            className="chip ok"
+            title={`expected actions made, averaged over ${s.n_scored} conversations${s.checks?.actions ? `; ${s.checks.actions.items_met} of ${s.checks.actions.items} actions in all` : ''}`}
+          >
+            actions done {s.partial_action_mean.toFixed(2)}
+          </span>
+        )}
         {Object.entries(s?.by_termination ?? {}).map(([k, v]) => (
           <span key={k} className={`chip ${k === 'user_stop' || k === 'agent_stop' ? '' : 'warn'}`}>
             {k} {v}
@@ -292,6 +304,11 @@ export function Run() {
             <tr>
               <th>task</th>
               <th>verdict</th>
+              {done && (
+                <th className="num" title="the share of gold's expected actions the agent made">
+                  actions done
+                </th>
+              )}
               <th>components</th>
               <th>purpose</th>
               <th className="num">agent turns</th>
@@ -311,6 +328,11 @@ export function Run() {
                 <td>
                   <Verdict_ r={r} />
                 </td>
+                {done && (
+                  <td className="num">
+                    <ActionsDone frac={r.partial_action_reward ?? countFrac(r.action_checks)} count={r.action_checks ?? '—'} />
+                  </td>
+                )}
                 <td>
                   <Components r={r} />
                 </td>

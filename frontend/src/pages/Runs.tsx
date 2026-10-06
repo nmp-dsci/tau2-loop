@@ -1,9 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { type Check, type Checks, DOMAINS, type RunMeta, type VersionHistory, type VersionNode, domainLabel, fmtK, fmtPct, fmtS, shortModel, shortRun, useGet, when } from '../lib/api';
-import { Loading, Points, Rate } from '../lib/ui';
+import { type Check, type Checks, DOMAINS, type RunMeta, type VersionHistory, type VersionNode, domainLabel, fmtK, countFrac, fmtPct, fmtS, shortModel, shortRun, showsActionsDone, useGet, when } from '../lib/api';
+import { ActionsDone, Loading, Points, Rate } from '../lib/ui';
 import { runPath, trialPath, useLens } from '../lib/url';
 import { useExp, useScope, useTask } from '../lib/scope';
 import { JudgeRuns } from './JudgeRuns';
+import { WorkflowPending } from './Workflow';
 import { DomainBars, VersionsFig, standing, versionsWidth } from '../lib/versions';
 
 /** The reward checks, in the order τ² multiplies them, with the name a column shows. */
@@ -98,7 +99,7 @@ function TaskRuns({ domain, task, runs }: { domain: string; task: string; runs: 
               <th>agent</th>
               <th>verdict</th>
               <th>DB</th>
-              <th className="num">actions</th>
+              <th className="num">{showsActionsDone(domain) ? 'actions done' : 'actions'}</th>
               <th className="num">agent turns</th>
               <th>ended</th>
             </tr>
@@ -122,7 +123,13 @@ function TaskRuns({ domain, task, runs }: { domain: string; task: string; runs: 
                   </span>
                 </td>
                 <td className="small">{c.db_check == null ? <span className="dim">—</span> : c.db_check ? 'matches gold' : 'differs'}</td>
-                <td className="num">{c.action_checks ?? '—'}</td>
+                <td className="num">
+                  {showsActionsDone(domain) && countFrac(c.action_checks) != null ? (
+                    <ActionsDone frac={countFrac(c.action_checks)} count={c.action_checks ?? ''} />
+                  ) : (
+                    (c.action_checks ?? '—')
+                  )}
+                </td>
                 <td className="num">{c.n_agent_turns}</td>
                 <td className="small">{c.termination_reason}</td>
               </tr>
@@ -224,7 +231,7 @@ function ChampionFigs({ hs }: { hs: VersionHistory[] }) {
   );
 }
 
-type Snapshot = { experiment: string | null; tracking_uri?: string; runs: { mlflow_run_id?: string; name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
+type Snapshot = { experiment: string | null; experiments?: string[]; tracking_uri?: string; runs: { mlflow_run_id?: string; name: string; tags: Record<string, string>; metrics: Record<string, number>; params: Record<string, string> }[] };
 
 export function Runs() {
   const [lens, setLens] = useLens();
@@ -254,9 +261,13 @@ export function Runs() {
     .filter((r) => !exp || [r.tags.agent, r.tags.challenger, r.tags.champion].includes(exp));
   // the scope bar on the LLM judge: its replays, not the answering agent's runs
   if (lens.get('agent') === 'judge') return <JudgeRuns domain={domain || 'airline'} />;
+  // workflow_rag's runs (s16): none yet
+  if (lens.get('agent') === 'workflow_rag') return <WorkflowPending view="runs" domain={domain || 'banking_knowledge'} />;
   // so the table fits the page: a column with nothing to show for the runs listed is left out
   const ks = [1, 2, 3].filter((k) => k === 1 || real.some((r) => r.summary?.pass_hat_k[`pass^${k}`] != null));
   const checks = CHECKS.filter(([key]) => real.some((r) => r.checks?.[key]));
+  // banking's second accuracy metric: expected actions made, 0 to 1 (partial credit beside pass^1)
+  const withDone = real.some((r) => showsActionsDone(r.domain));
   return (
     <>
       <p className="label">Evaluation runs · the answering agent</p>
@@ -329,6 +340,11 @@ export function Runs() {
                   pass^{k}
                 </th>
               ))}
+              {withDone && (
+                <th className="num" title="banking: the share of gold's expected actions the agent made, averaged over the run's conversations">
+                  actions done
+                </th>
+              )}
               {checks.map(([key, label, what]) => (
                 <th key={key} className="num" title={what}>
                   {label}
@@ -367,6 +383,19 @@ export function Runs() {
                 {ks.map((k) => (
                   <PassK key={k} r={r} k={k} />
                 ))}
+                {withDone && (
+                  <td className="num">
+                    {showsActionsDone(r.domain) ? (
+                      <ActionsDone
+                        frac={r.summary?.partial_action_mean}
+                        count={`mean of ${r.summary?.n_scored ?? 0}`}
+                        title={`expected actions made, averaged over ${r.summary?.n_scored ?? 0} conversations${r.checks?.actions ? `; ${r.checks.actions.items_met} of ${r.checks.actions.items} actions in all` : ''}`}
+                      />
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
+                )}
                 {checks.map(([key, , what]) => (
                   <CheckCell key={key} c={r.checks?.[key]} what={what} />
                 ))}
@@ -390,7 +419,7 @@ export function Runs() {
       )}
 
       <h2>
-        04 · MLflow snapshot — {tracked.length} of {snap?.runs.length ?? 0} tracked runs in experiment {snap?.experiment ?? '—'}
+        04 · MLflow snapshot — {tracked.length} of {snap?.runs.length ?? 0} tracked runs in {(snap?.experiments?.length ?? 1) > 1 ? 'experiments' : 'experiment'} {snap?.experiment ?? '—'}
       </h2>
       {snap && tracked.length > 0 ? (
         <div className="tw">

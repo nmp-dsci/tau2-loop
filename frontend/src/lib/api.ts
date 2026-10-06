@@ -26,6 +26,22 @@ export type Summary = {
 /** One reward check over a run: conversations carrying it that met every item (`passed / n`),
  * the items themselves, and how many of those conversations the domain's score multiplies it into. */
 export type Check = { passed: number; n: number; items_met: number; items: number; scored: number };
+/** Banking's second accuracy metric (the person's call, 6 Oct 2026): the share of gold's expected
+ *  actions the agent made, between 0 and 1. Partial credit beside pass/fail, which counts a task
+ *  with 5 of 6 actions right the same as one with none; the gate still scores pass/fail. tau2
+ *  records it per conversation as `partial_action_reward`; a run's is the mean over its conversations. */
+export const ACTIONS_DONE_DOMAINS: readonly string[] = ['banking_knowledge'];
+export const showsActionsDone = (domain: string | null | undefined): boolean => ACTIONS_DONE_DOMAINS.includes(domain ?? '');
+/** `"5/6"` → [5, 6]; null when the string is not a count. */
+export function parseCount(s: string | null | undefined): [number, number] | null {
+  const m = /^(\d+)\/(\d+)$/.exec(s ?? '');
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
+/** `"5/6"` → 0.833…; null when there is no count or nothing was expected. */
+export function countFrac(s: string | null | undefined): number | null {
+  const c = parseCount(s);
+  return c && c[1] > 0 ? c[0] / c[1] : null;
+}
 export type Checks = Partial<Record<'db' | 'actions' | 'communicate' | 'nl' | 'env', Check>>;
 export type RunMeta = {
   run_id: string;
@@ -262,6 +278,193 @@ export type VersionHistory = { domain: string; champion: string | null; versions
 export type RetrievalInfo = { variant: string; tools: string[]; dense_model: string | null; template: string | null };
 /** How a version was made: a loop cycle (from the champion it faced), a hand-made fork's kind, or `base`. */
 export type MadeBy = { kind: string; from: string | null; cycle: number | null; detail: string };
+/** workflow_rag's golden set (s16): each question's workflows in gold's order, with gold's calls.
+ *  Train's are hand labels; test's are read off gold's calls by fixed rules (test is held out of
+ *  optimisation, not hidden), with no facts, summary or flag. */
+export type GoldenCall = { by: 'agent' | 'customer'; tool: string; args: Record<string, string> };
+/** One fact a workflow needs from the customer; `held_back` when the customer gives it only if asked. */
+export type GoldenInfo = { workflow: string; field: string; value: string; held_back: boolean };
+export type GoldenEntry = {
+  task_id: string;
+  workflows: string[];
+  gold: string;
+  flag: string;
+  situation: string;
+  calls: GoldenCall[];
+  info: GoldenInfo[];
+  distractors: string[];
+  required_documents: { id: string; title: string | null }[];
+  /** absent from an older API, where every entry was train */
+  split?: 'train' | 'test';
+  /** test only: the tools its gold calls that no train answer uses */
+  new_tools?: string[];
+};
+/** A workflow's name is ours; `kb_docs` are the knowledge base's own procedure documents that define it. */
+export type GoldenWorkflow = {
+  name: string;
+  area: string;
+  does: string;
+  gold_calls: string;
+  kb_docs: { id: string; title: string | null }[];
+  info_fields: { field: string; about: string }[];
+  train: number;
+  test: number;
+};
+export type SealedCounts = {
+  n_test: number;
+  train_reproduced: number;
+  train_mismatches: string[];
+  per_workflow: Record<string, number>;
+  covered: number;
+  needs_new: number;
+  new_tools: Record<string, number>;
+  workflows_per_task: Record<string, number>;
+};
+export type GoldenSet = {
+  domain: string;
+  status: string;
+  source: string;
+  workflows: GoldenWorkflow[];
+  verification_fields: { field: string; about: string }[];
+  entries: GoldenEntry[];
+  test: SealedCounts | null;
+  /** test's questions, workflows mapped by rule; absent from an older API */
+  test_entries?: GoldenEntry[];
+};
+
+/** workflow_rag's RAG agent (s16): a frozen version under `rag_agents/<domain>/<rN>/`. */
+export type RagVersion = {
+  name: string;
+  model: string;
+  effort: string;
+  retrieval: string;
+  tool_mode: string;
+  max_steps: number;
+  result_chars: number;
+  prompt: string;
+  tools: { name: string; description: string | null; type: string; mutates: boolean }[];
+};
+export type RagSessionMeta = {
+  id: string;
+  domain: string;
+  agent: string;
+  task_id: string;
+  model: string;
+  effort: string;
+  retrieval: string;
+  started: string;
+  status: 'running' | 'done' | 'failed' | 'interrupted';
+  steps: number;
+  tool_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  duration_ms: number;
+  error: string | null;
+};
+/** One line of a session's `events.jsonl`: the model's turn, one tool call and its result, or a note. */
+export type RagEvent = {
+  t: number;
+  kind: 'start' | 'model' | 'tool' | 'note' | 'error' | 'done';
+  step?: number;
+  text?: string | null;
+  calls?: { id: string; name: string; args: Record<string, unknown> }[];
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read?: number | null;
+  ms?: number | null;
+  id?: string;
+  name?: string;
+  args?: Record<string, unknown>;
+  content?: string;
+  refused?: boolean;
+  cut?: boolean;
+  question?: string;
+  status?: string;
+};
+export type RagQuote = { quote: string; doc: string };
+export type RagStep = {
+  id: string;
+  by: string;
+  do?: string;
+  call?: string | null;
+  args?: Record<string, unknown>;
+  after?: string[];
+  if?: string | null;
+  quote?: string;
+  doc?: string;
+};
+export type RagJob = {
+  job: string;
+  when?: RagQuote;
+  info?: { field: string; about?: string; from?: string; ask?: string; may_hold_back?: boolean }[];
+  steps?: RagStep[];
+  rules?: { rule: string; quote?: string; doc?: string }[];
+  done_when?: string;
+};
+export type RagWorkflow = { jobs: RagJob[]; documents?: { id: string; why?: string }[]; open_questions?: string[] };
+/** How close a session came to the golden entry; gold is read only here, after the session. */
+export type RagScore = {
+  golden: { workflows: string[]; info: GoldenInfo[]; calls: GoldenCall[]; required_documents: { id: string; title: string | null }[] } | null;
+  documents_seen: { required: number; hit: string[]; n: number };
+  documents_referenced?: { required: number; hit: string[]; extra: string[] };
+  quotes?: { n: number; found: number; rows: (RagQuote & { doc_id: string | null; found: boolean; long: boolean })[] };
+  tools?: { gold: string[]; hit: string[]; extra: string[] };
+  jobs?: string[];
+};
+export type RagSession = { meta: RagSessionMeta; events: RagEvent[]; output: RagWorkflow | null; score: RagScore | null };
+export type RagPayload = { versions: RagVersion[]; sessions: RagSessionMeta[]; live: boolean; reason: string };
+
+/** A live conversation (s16, `eval/live.py`): one train task played by one version, streamed. */
+export type LiveMeta = {
+  id: string;
+  domain: string;
+  agent: string;
+  fingerprint: string;
+  task_id: string;
+  model: string;
+  user_model: string;
+  workflows: string | null;
+  started: string;
+  status: 'running' | 'done' | 'failed' | 'interrupted';
+  n_messages: number;
+  reward: number | null;
+  correct: boolean | null;
+  action_checks: string | null;
+  actions_done: number | null;
+  termination: string | null;
+  duration_ms: number;
+  error: string | null;
+};
+export type LiveCall = { id: string; name: string; arguments: Record<string, unknown>; requestor?: string };
+/** One tau2 message as the orchestrator keeps it. */
+export type LiveMessage = {
+  role: 'assistant' | 'user' | 'tool';
+  content: string | null;
+  tool_calls?: LiveCall[] | null;
+  id?: string;
+  requestor?: string;
+  error?: boolean;
+  generation_time_seconds?: number | null;
+};
+export type LiveEvent = {
+  t: number;
+  kind: 'start' | 'message' | 'workflow_call' | 'workflow_research' | 'workflow_result' | 'done' | 'error';
+  i?: number;
+  message?: LiveMessage;
+  id?: string;
+  name?: string;
+  args?: Record<string, unknown>;
+  content?: string;
+  session?: string | null;
+  at?: number;
+  reward?: number;
+  correct?: boolean;
+  action_checks?: { name: string; requestor: string; arguments: Record<string, unknown>; matched: boolean }[];
+  db_match?: boolean | null;
+  text?: string;
+};
+export type LivePayload = { conversations: LiveMeta[]; tasks: { id: string; goal: string | null }[]; live: boolean; reason: string };
+export type LiveState = { meta: LiveMeta; events: LiveEvent[]; next: number };
 export type AgentInfo = {
   domain: string;
   name: string;

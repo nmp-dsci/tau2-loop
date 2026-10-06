@@ -29,6 +29,15 @@ FRONTEND_DIST = ROOT / "frontend" / "dist"
 # The four scored domains, in the order every table shows them. `mock` is the
 # adapter's smoke target and never appears in a results table.
 DOMAINS: tuple[str, ...] = ("airline", "retail", "telecom", "banking_knowledge")
+# Every agent lives under a dataset (the person's rule, s16): the viewer's agent switch and every
+# tab that picks an agent list only these. Airline's tool judge is s11's; banking's workflow_rag
+# researches each question into a workflow (s16) and has no judge.
+DATASET_AGENTS: dict[str, tuple[str, ...]] = {
+    "airline": ("answering", "judge"),
+    "retail": ("answering",),
+    "telecom": ("answering",),
+    "banking_knowledge": ("answering", "workflow_rag"),
+}
 SMOKE_DOMAIN = "mock"
 SPLIT_SEED = 300
 # The cut per domain (data/splits.py). Version 1 drew 20 train + 20 test and

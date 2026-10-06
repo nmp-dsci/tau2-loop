@@ -477,6 +477,8 @@ def test_guard_writes_rejects_a_sibling_version_dir_with_colliding_prefix(
 
     asyncio.run(opt.run_optimiser(champion, "run0", []))
 
+    # no sub-agent: one ran past the session's end and its diagnosis was never written (s15)
+    assert captured["options"].tools == ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
     guard_writes = captured["options"].hooks["PreToolUse"][0].hooks[0]
     new_dir = tmp_path / "mock" / "v1"
     sibling = tmp_path / "mock" / "v10" / "evil.py"
@@ -624,7 +626,7 @@ def _write_run(
         agent=agent.name,
         fingerprint=agent.fingerprint,
         model="claude-sdk/" + agent.config.model,
-        user_model="u",
+        user_model="claude-sdk/claude-haiku-4-5",  # the loop reuses only runs with its customer (s16)
         judge_model="j",
         split=split,
         n_tasks=len(ids),
@@ -1195,7 +1197,9 @@ def test_banking_s_sixty_train_tasks_fit_one_prompt_and_name_no_held_out_task() 
         "more lines cut, this failure's share of the prompt"
     )
     prompt = build_prompt(load_version(d, "v1"), "v9", meta.run_id, failures)
-    assert len(prompt) < 360_000  # s14 added each task's required documents and the guide
+    assert (
+        len(prompt) < 370_000
+    )  # s14 added each task's required documents and the guide; s15 its lessons
     assert not [t for t in test if re.search(rf"\b{t}\b", prompt)]
     assert "Adversarial variant of a held-out task" in prompt
     assert "applies the gate there, against the champion's test run on the same tasks" in prompt

@@ -46,6 +46,7 @@ from claude_agent_sdk import (
     ToolUseBlock,
 )
 
+from tau2_loop.agent.compose import CHECKED_TOOLS
 from tau2_loop.agent.versions import (
     AGENT_YAML_HEADER,
     CODE_SURFACES,
@@ -752,7 +753,13 @@ ROUTING_RULES = """| root cause | surface | not this |
 
 
 def _surfaces_text(domain: str) -> str:
-    writes = ", ".join(n for n, k in tool_kinds(domain).items() if k == "write") or "none known"
+    kinds = tool_kinds(domain)
+    writes = (
+        ", ".join(
+            [n for n, k in kinds.items() if k == "write"] + sorted(CHECKED_TOOLS & set(kinds))
+        )
+        or "none known"
+    )
     return SURFACE_GUIDE.format(
         writes=writes, imports=", ".join(sorted(ALLOWED_IMPORTS - {"__future__"}))
     )
@@ -1332,6 +1339,8 @@ def _write_context(
     return ctx_dir
 
 
+SESSION_TOOLS = ("Read", "Write", "Edit", "Bash", "Glob", "Grep")
+
 GUARDED = (
     "agents",
     "src/tau2_loop",
@@ -1441,7 +1450,10 @@ async def _run_session(
     options = ClaudeAgentOptions(
         model=resolve_model(model),
         effort=effort,
-        allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        # the only tools it has: a sub-agent (Agent/Task) ran outside the turn and the session
+        # ended before writing its file (s15), so `tools` closes every other built-in
+        tools=list(SESSION_TOOLS),
+        allowed_tools=list(SESSION_TOOLS),
         strict_mcp_config=True,
         permission_mode="bypassPermissions",
         max_turns=max_turns,

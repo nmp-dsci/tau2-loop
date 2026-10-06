@@ -1,7 +1,7 @@
 """The API behind the frontend, and the frontend itself when a build is present.
 
 Every read route serves a committed file: `runs/`, `agents/`, `loop/`, `data/`.
-No route calls a model. The one write route is `POST /api/review/…`, which
+No route calls a model, except the live demos (below). The one write route is `POST /api/review/…`, which
 records a person's verdict on a conversation the judge already scored — the one
 fact here that cannot be a committed file — and it is refused unless the central
 Postgres is reachable and this is not the demo image. The demo image is this
@@ -10,6 +10,15 @@ process with `DEMO_MODE=1` and nothing else.
 `POST /api/runs/…/tool` is a POST that writes nothing: the Agent tab's playground
 runs one tool call in a throwaway copy of tau2's environment (`eval/replay.py`).
 It needs tau2, which the demo image does not ship, so there it answers 503.
+
+`POST /api/live/<domain>/<agent>` plays one train task live (s16): a version against the
+customer, on the subscription, in a background thread that writes `live_runs/<id>/`, scored by
+tau2 at the end; never a run, so never logged, gated or graded into a ledger.
+
+`POST /api/workflows/<domain>/rag/sessions` is the other route that calls a model: workflow_rag's
+live demo (s16) starts a RAG-agent session on a train question, on the subscription, in a
+background thread that writes `rag_agent_runs/<id>/`. The demo image refuses it (no tau2, and
+`DEMO_MODE` refuses any model call); a test question is refused everywhere.
 """
 
 from __future__ import annotations
@@ -40,6 +49,7 @@ from tau2_loop.agent.versions import (
 )
 from tau2_loop.config import (
     BANKING_RETRIEVAL,
+    DATASET_AGENTS,
     DOMAINS,
     FRONTEND_DIST,
     RUNS_DIR,
@@ -50,7 +60,8 @@ from tau2_loop.data import documents as kb_docs
 from tau2_loop.data import leaderboard as board
 from tau2_loop.data import pg
 from tau2_loop.data.goals import customer_goal, is_placeholder
-from tau2_loop.data.splits import read_split, read_task_extract
+from tau2_loop.data.splits import read_split, read_task_extract, split_ids
+from tau2_loop.eval import live as live_mod
 from tau2_loop.eval import replay
 from tau2_loop.eval import retrieval as retrieval_mod
 from tau2_loop.eval import review as review_store
@@ -68,6 +79,8 @@ from tau2_loop.tooljudge import review as judge_review
 from tau2_loop.tooljudge import view as judge_view
 from tau2_loop.tracking.registry import read_all, read_registry
 from tau2_loop.tracking.snapshot import read_snapshot
+from tau2_loop.workflows import golden as workflow_golden
+from tau2_loop.workflows import rag_agent as workflow_rag
 
 
 class ToolIn(BaseModel):
@@ -78,6 +91,22 @@ class ToolIn(BaseModel):
     at: int
     after_calls: int = 0
     requestor: str = "assistant"
+
+
+class LiveIn(BaseModel):
+    """A live conversation: a train task, and the customer's model unless the runs' default."""
+
+    task_id: str
+    user_model: str = ""
+
+
+class RagSessionIn(BaseModel):
+    """A workflow_rag demo session: a train question, and the version's model and effort unless set."""
+
+    task_id: str
+    agent: str = "r1"
+    model: str | None = None
+    effort: str | None = None
 
 
 class GoldReviewIn(BaseModel):
@@ -379,7 +408,110 @@ def create_app() -> FastAPI:
                         **_architecture(v, names, cycles),
                     }
                 )
-        return {"versions": out, "registry": read_all()}
+        # every agent lives under a dataset (s16): the viewer lists only these
+        kinds = {d: list(DATASET_AGENTS.get(d, ("answering",))) for d in DOMAINS}
+        return {"versions": out, "registry": read_all(), "kinds": kinds}
+
+    @app.get("/api/workflows/{domain}/golden")
+    def workflow_golden_set(domain: str) -> dict[str, Any]:
+        """workflow_rag's golden set (s16): train entries open, test as sealed counts."""
+        if domain not in DOMAINS:
+            raise HTTPException(404, "no such domain")
+        g = workflow_golden.golden_set(domain)
+        if g is None:
+            raise HTTPException(404, f"{domain} has no workflow_rag golden set")
+        return g
+
+    # before `/api/live/{domain}/{agent}`, which would otherwise take "conversations" as a domain
+    @app.get("/api/live/conversations/{live_id}")
+    def live_get(live_id: str, since: int = 0) -> dict[str, Any]:
+        """A live conversation's events from `since` on, and where the next poll starts."""
+        try:
+            return live_mod.conversation(live_id, max(0, since))
+        except live_mod.LiveError as e:
+            raise HTTPException(404, str(e)) from e
+
+    @app.get("/api/live/{domain}/{agent}")
+    def live_list(domain: str, agent: str) -> dict[str, Any]:
+        """A version's live conversations, and the train tasks one can be started on."""
+        _check_domain(domain)
+        try:
+            train = set(split_ids(domain, "train"))
+        except FileNotFoundError:
+            train = set()
+        tasks = [
+            {
+                "id": t["id"],
+                "goal": customer_goal(((t.get("user_scenario") or {}).get("instructions")) or ""),
+            }
+            for t in read_task_extract(domain)["tasks"]
+            if t["id"] in train
+        ]
+        ok = replay.available() and not s.demo_mode
+        return {
+            "conversations": live_mod.conversations(domain, agent),
+            "tasks": tasks,
+            "live": ok,
+            "reason": ""
+            if ok
+            else "the demo image calls no model and ships no tau2: run the viewer from a checkout (`make dev`)",
+        }
+
+    @app.post("/api/live/{domain}/{agent}")
+    def live_start(domain: str, agent: str, body: LiveIn) -> dict[str, Any]:
+        """Play one train task live; it runs in the background and the viewer polls it."""
+        _check_domain(domain)
+        if s.demo_mode or not replay.available():
+            raise HTTPException(503, "the demo image calls no model and ships no tau2")
+        try:
+            meta = live_mod.start(domain, agent, body.task_id, body.user_model)
+        except live_mod.LiveError as e:
+            raise HTTPException(422, str(e)) from e
+        except RuntimeError as e:  # billing refused
+            raise HTTPException(503, str(e)) from e
+        return {"id": meta.id}
+
+    def _rag_domain(domain: str) -> None:
+        if domain not in DOMAINS or not workflow_golden.has_workflow_rag(domain):
+            raise HTTPException(404, f"{domain} has no workflow_rag agent")
+
+    @app.get("/api/workflows/{domain}/rag")
+    def workflow_rag_agents(domain: str) -> dict[str, Any]:
+        """workflow_rag's versions with their settings, prompt and tools, and its sessions."""
+        _rag_domain(domain)
+        names = workflow_rag.versions(domain)
+        return {
+            "versions": [workflow_rag.describe(domain, n) for n in names],
+            "sessions": workflow_rag.sessions(domain),
+            "live": replay.available() and not s.demo_mode,
+            "reason": ""
+            if replay.available() and not s.demo_mode
+            else "the demo image calls no model and ships no tau2: run the viewer from a checkout (`make dev`)",
+        }
+
+    @app.post("/api/workflows/{domain}/rag/sessions")
+    def workflow_rag_start(domain: str, body: RagSessionIn) -> dict[str, Any]:
+        """Start a RAG-agent session on a train question; it runs in the background and the
+        viewer polls it. The one route that calls a model (on the subscription)."""
+        _rag_domain(domain)
+        if s.demo_mode or not replay.available():
+            raise HTTPException(503, "the demo image calls no model and ships no tau2")
+        try:
+            meta = workflow_rag.start(domain, body.task_id, body.agent, body.model, body.effort)
+        except workflow_rag.RagAgentError as e:
+            raise HTTPException(422, str(e)) from e
+        except RuntimeError as e:  # billing refused: a key that would bill per token
+            raise HTTPException(503, str(e)) from e
+        return {"id": meta.id}
+
+    @app.get("/api/workflows/{domain}/rag/sessions/{session_id}")
+    def workflow_rag_session(domain: str, session_id: str) -> dict[str, Any]:
+        """One session as it stands: its events so far, and its workflow and score once done."""
+        _rag_domain(domain)
+        try:
+            return workflow_rag.session(domain, session_id)
+        except workflow_rag.RagAgentError as e:
+            raise HTTPException(404, str(e)) from e
 
     @app.get("/api/agents/diff")
     def agents_diff(domain: str, a: str, b: str) -> dict[str, Any]:

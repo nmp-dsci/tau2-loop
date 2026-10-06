@@ -43,7 +43,9 @@ from tau2_loop.llm import EFFORT, HARNESS, redact_tree, resolve_model, sdk_model
 
 console = Console()
 
-USER_MODEL = "haiku"
+USER_MODEL = (
+    "haiku"  # the customer every run uses unless `run_eval(user_model=)` says otherwise (s16)
+)
 USER_EFFORT = EFFORT
 # The simulation's rules beyond tau2's own: our customer (`eval.user`) holds a stop sent with words
 # until the agent's turn, and neither side may take the real date the Claude CLI tells every
@@ -138,7 +140,13 @@ def new_run_id(domain: str, version: AgentVersion, split: str) -> str:
 
 
 def _run_config(
-    domain: str, version: AgentVersion, ids: list[str], trials: int, concurrency: int, seed: int
+    domain: str,
+    version: AgentVersion,
+    ids: list[str],
+    trials: int,
+    concurrency: int,
+    seed: int,
+    user_model: str = USER_MODEL,
 ) -> Any:
     from tau2.data_model.simulation import TextRunConfig
 
@@ -162,7 +170,7 @@ def _run_config(
         "llm_agent": llm_agent,
         "llm_args_agent": llm_args_agent,
         "user": user.register(domain),
-        "llm_user": sdk_model(USER_MODEL),
+        "llm_user": sdk_model(user_model),
         "llm_args_user": with_effort({}, USER_EFFORT),
         "num_trials": trials,
         "max_concurrency": concurrency,
@@ -200,6 +208,7 @@ def run_eval(
     track: bool = True,
     dry_run: bool = False,
     seed: int = SPLIT_SEED,
+    user_model: str = USER_MODEL,
 ) -> tuple[RunMeta, list[TaskResult]]:
     if domain not in DOMAINS and domain != SMOKE_DOMAIN:
         raise ValueError(f"domain must be one of {DOMAINS + (SMOKE_DOMAIN,)}, got {domain!r}")
@@ -219,7 +228,7 @@ def run_eval(
         agent=version.name,
         fingerprint=version.fingerprint,
         model=sdk_model(version.config.model),
-        user_model=sdk_model(USER_MODEL),
+        user_model=sdk_model(user_model),
         judge_model=sdk_model(JUDGE_MODEL),
         split=split,
         n_tasks=len(ids),
@@ -267,7 +276,7 @@ def run_eval(
     from tau2.runner.batch import run_tasks
     from tau2.runner.helpers import get_tasks
 
-    config = _run_config(domain, version, ids, trials, concurrency, seed)
+    config = _run_config(domain, version, ids, trials, concurrency, seed, user_model)
     tasks = get_tasks(domain, config.task_split_name, task_ids=ids)
     by_id = {t.id: t for t in tasks}
     tau2_results = run_tasks(
@@ -341,6 +350,8 @@ def extend_run(base_run_id: str, concurrency: int = 3) -> tuple[RunMeta, list[Ta
         )
     if base.sim_rules != SIM_RULES:
         raise ValueError(f"{base_run_id} ran under other simulation rules ({base.sim_rules})")
+    if base.user_model != sdk_model(USER_MODEL):
+        raise ValueError(f"{base_run_id} ran with another customer ({base.user_model})")
     ids = split_ids(base.domain, base.split)
     moved = sorted(set(base.task_ids) - set(ids))
     if moved:

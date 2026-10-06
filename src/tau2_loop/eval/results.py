@@ -5,7 +5,9 @@ product of the components named in the task's `reward_basis` (DB hash, env
 assertions, action checks, communicate checks, NL assertions), so it is 1.0 or
 0.0 except in the rare partial cases. `correct` is `reward >= 1`. The row keeps
 each component's verdict so a failure can be read without opening the trace,
-and `partial_action_reward` as the diagnostic it is — never as the score.
+and `partial_action_reward` as the diagnostic it is — never as the score. For
+banking the viewer shows it beside pass/fail as a second accuracy metric,
+"actions done" (the person's call, 6 Oct 2026); the gate still scores pass/fail.
 """
 
 from __future__ import annotations

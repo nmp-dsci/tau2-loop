@@ -24,6 +24,10 @@ import {
   taskPath,
   trialId,
   trialPath,
+  workflowAgentPath,
+  workflowEvalsPath,
+  workflowLoopPath,
+  workflowReviewPath,
 } from './lib/url';
 import { routes } from './routes';
 
@@ -160,6 +164,13 @@ describe('every address the viewer builds lands on the page it names', () => {
     [judgeEvalsPath('airline'), 'evals-judge'],
     [goldReviewPath('airline'), 'review-golden'],
     [goldReviewPath('airline', undefined, { show: 'all' }), 'review-golden'],
+    // s16: banking's workflow_rag, never mistaken for a task or a version called `workflow_rag`
+    [workflowEvalsPath('banking_knowledge'), 'evals-workflow'],
+    [workflowEvalsPath('banking_knowledge', { wf: 'cash_back_dispute' }), 'evals-workflow'],
+    [workflowLoopPath('banking_knowledge'), 'optimise-workflow'],
+    [workflowAgentPath('banking_knowledge'), 'agent-workflow'],
+    [workflowReviewPath('banking_knowledge'), 'review-workflow'],
+    ['/runs?domain=banking_knowledge&agent=workflow_rag', 'runs'],
   ])('%s → %s', async (url, route) => {
     expect((await land(url)).route).toBe(route);
   });

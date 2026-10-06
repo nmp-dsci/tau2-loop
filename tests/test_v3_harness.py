@@ -99,6 +99,17 @@ def test_a_tool_fork_records_a_tool_change_and_its_runs_follow_its_retrieval(
         versions.fork_version("banking_knowledge", "v2", tool_mode="native")  # nothing changes
 
 
+def test_a_fork_keeps_the_workflow_rag_version_its_source_looks_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = versions.AGENTS_DIR
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path)
+    shutil.copytree(real / "banking_knowledge" / "v6", tmp_path / "banking_knowledge" / "v6")
+    v = versions.fork_version("banking_knowledge", "v6", effort="medium")
+    assert (v.config.effort, v.config.workflows) == ("medium", "r1")
+    assert "workflows: r1\n" in (v.path / "agent.yaml").read_text()
+
+
 def test_the_identity_note_is_added_only_for_a_version_that_asks() -> None:
     plain = composing.compose("Be exact.\n{policy}", "POLICY", None)
     noted = composing.compose("Be exact.\n{policy}", "POLICY", None, identity=True)

@@ -1,7 +1,9 @@
 /**
- * The viewer's scope (s11 review): which dataset, which agent, which experiment. Two agents live
- * here and are kept apart: the answering agent, which talks to the customer and calls the tools,
- * and the LLM judge, which reviews its writes and transfers. An experiment is a version of the
+ * The viewer's scope (s11 review): which dataset, which agent, which experiment. Every agent lives
+ * under a dataset (s16): each dataset lists its own (`config.DATASET_AGENTS`, served with
+ * `/api/agents`), and the bar offers only those. The answering agent talks to the customer and calls
+ * the tools; airline's LLM judge reviews its writes and transfers; banking's workflow_rag researches
+ * each question into a workflow. An experiment is a version of the
  * answering agent (`v0`, `v1`, … : the `<agent>` in every run id), so it filters whatever that
  * version produced: its runs, the round that made it, its conversations in Review and in the
  * judge's eval set. A task narrows each tab to that one task: its card in Evals, its conversation
@@ -21,27 +23,38 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { type AgentInfo, DOMAINS, type DomainDetail, type Registries, byTask, domainLabel, shortTask, useGet } from './api';
 import { taskId, taskPath } from './url';
 
-export type AgentKind = 'answering' | 'judge';
+export type AgentKind = 'answering' | 'judge' | 'workflow_rag';
 export type Scope = { dataset: string; agent: AgentKind; exp: string; task: string };
 export type Tab = 'overview' | 'evals' | 'rubric' | 'leaderboard' | 'runs' | 'optimise' | 'agent' | 'review';
 
 export const AGENTS: [AgentKind, string, string][] = [
   ['answering', 'answering agent', 'talks to the customer and calls the tools'],
   ['judge', 'LLM judge', 'reviews the answering agent’s writes and transfers before they run'],
+  ['workflow_rag', 'workflow_rag', 'researches each question into a workflow the answering agent looks up'],
 ];
+/** The agents that are not the answering one, each with an address segment of its own name. */
+export const OTHER_KINDS: AgentKind[] = ['judge', 'workflow_rag'];
+const kindAt = (seg: string | undefined): AgentKind => (OTHER_KINDS.includes(seg as AgentKind) ? (seg as AgentKind) : 'answering');
+/** A dataset's agents, in the registry's order; only the answering agent until the registry loads. */
+export function agentsOf(dataset: string, kinds?: Record<string, string[]> | null): AgentKind[] {
+  const known = AGENTS.map(([k]) => k);
+  const listed = (kinds?.[dataset] ?? ['answering']).filter((k): k is AgentKind => known.includes(k as AgentKind));
+  return listed.length ? listed : ['answering'];
+}
 /** Model families, by what every model string here contains: for naming a model, not for the scope. */
 export const MODELS: [string, string][] = [
   ['haiku', 'Haiku 4.5'],
   ['sonnet', 'Sonnet 5'],
   ['opus', 'Opus 5.5'],
 ];
-/** The tabs where both agents have a view, so the Agent switch and the experiment apply. */
+/** The tabs where an agent beyond the answering one has a view, so the Agent switch and the experiment apply. */
 export const AGENT_TABS: Tab[] = ['evals', 'runs', 'optimise', 'agent', 'review'];
 
 /** Where an experiment filters what is shown: what a version of the answering agent produced. The
  *  answering agent's tasks are the same for every version, and the judge's replays, loop and
  *  versions are the judge's own, so there it is carried but not applied. */
 export function expApplies(tab: Tab, agent: AgentKind): boolean {
+  if (agent === 'workflow_rag') return false; // its versions are its own, not the answering agent's
   if (tab === 'evals') return agent === 'judge';
   if (tab === 'review') return true;
   return agent === 'answering' && (tab === 'runs' || tab === 'optimise' || tab === 'agent');
@@ -100,15 +113,15 @@ export function scopeFromLocation(pathname: string, search: string): Partial<Sco
   if (tab === 'evals' || tab === 'optimise' || tab === 'agent') ds(parts[2]);
   if (tab === 'leaderboard' || tab === 'runs' || tab === 'review') ds(q.get('domain') ?? undefined);
   if (tab === 'runs' && parts[2]) ds(DOMAINS.find((d) => parts[2].includes(`_${d}_`)));
-  if (tab === 'review' && parts[2] === 'golden') ds(parts[3]);
-  if (tab === 'review' && parts[2] && parts[2] !== 'golden') ds(DOMAINS.find((d) => parts[2].includes(`_${d}_`)));
-  if ((tab === 'optimise' || tab === 'evals') && parts[2]) out.agent = parts[3] === 'judge' ? 'judge' : 'answering';
-  if (tab === 'agent' && parts[2]) out.agent = parts[3] === 'judge' ? 'judge' : 'answering';
-  if (tab === 'review') out.agent = parts[2] === 'golden' ? 'judge' : 'answering';
-  if (tab === 'runs') out.agent = !parts[2] && q.get('agent') === 'judge' ? 'judge' : 'answering';
+  const reviewOf: Record<string, AgentKind> = { golden: 'judge', workflow_rag: 'workflow_rag' };
+  if (tab === 'review' && reviewOf[parts[2]]) ds(parts[3]);
+  if (tab === 'review' && parts[2] && !reviewOf[parts[2]]) ds(DOMAINS.find((d) => parts[2].includes(`_${d}_`)));
+  if ((tab === 'optimise' || tab === 'evals' || tab === 'agent') && parts[2]) out.agent = kindAt(parts[3]);
+  if (tab === 'review') out.agent = reviewOf[parts[2]] ?? 'answering';
+  if (tab === 'runs') out.agent = parts[2] ? 'answering' : kindAt(q.get('agent') ?? undefined);
   if (AGENT_TABS.includes(tab) && q.has('exp')) out.exp = q.get('exp') ?? '';
   // the answering agent's Evals names its task in the path: an open task is the scope's task
-  if (tab === 'evals' && parts[2] && parts[3] !== 'judge') out.task = parts[3] ?? '';
+  if (tab === 'evals' && parts[2] && !OTHER_KINDS.includes(parts[3] as AgentKind)) out.task = parts[3] ?? '';
   else if (AGENT_TABS.includes(tab) && q.has('task')) out.task = q.get('task') ?? '';
   return out;
 }
@@ -132,6 +145,14 @@ export function agentVersion(s: Scope, versions: AgentInfo[], registry: Registri
 export function scopeHref(tab: Tab, s: Scope, agents?: { versions: AgentInfo[]; registry: Registries } | null): string {
   const d = encodeURIComponent(s.dataset);
   const judge = s.agent === 'judge';
+  if (s.agent === 'workflow_rag') {
+    // workflow_rag's five views, each under its dataset (s16)
+    if (tab === 'evals') return `/evals/${d}/workflow_rag${qs({ task: s.task })}`;
+    if (tab === 'runs') return `/runs${qs({ domain: s.dataset, agent: 'workflow_rag' })}`;
+    if (tab === 'optimise') return `/optimise/${d}/workflow_rag`;
+    if (tab === 'agent') return `/agent/${d}/workflow_rag`;
+    if (tab === 'review') return `/review/workflow_rag/${d}${qs({ task: s.task })}`;
+  }
   switch (tab) {
     case 'overview':
       return '/';
@@ -165,6 +186,8 @@ type Ctx = {
   /** the dataset's experiments, for the bar's list */
   experiments: (dataset: string) => string[];
   champion: (dataset: string) => string | null;
+  /** the dataset's agents, for the bar's switch */
+  agents: (dataset: string) => AgentKind[];
 };
 const ScopeCtx = createContext<Ctx | null>(null);
 
@@ -180,7 +203,7 @@ function readStored(): Scope {
 export function ScopeProvider({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const nav = useNavigate();
-  const { data: agents } = useGet<{ versions: AgentInfo[]; registry: Registries }>('/api/agents');
+  const { data: agents } = useGet<{ versions: AgentInfo[]; registry: Registries; kinds?: Record<string, string[]> }>('/api/agents');
   const { data: runs } = useGet<RunRow[]>('/api/runs');
   const experiments = (d: string) => experimentsOf(d, agents?.versions ?? [], runs ?? []);
   const [stored, setStored] = useState<Scope>(readStored);
@@ -190,7 +213,7 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     // on the Agent tab, a chosen experiment follows the version opened; with none chosen, opening
     // the champion chooses nothing
     const opened = tab === 'agent' ? decodeURIComponent(loc.pathname.split('/')[3] ?? '') : '';
-    if (stored.exp && opened && opened !== 'judge' && opened !== stored.exp && out.exp === undefined) out.exp = opened;
+    if (stored.exp && opened && !OTHER_KINDS.includes(opened as AgentKind) && opened !== stored.exp && out.exp === undefined) out.exp = opened;
     return out;
     // `stored` changes only through this, so it is not a dependency
   }, [loc.pathname, loc.search]);
@@ -216,8 +239,11 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
     href: (t) => scopeHref(t, scope, agents),
     experiments,
     champion: (d) => agents?.registry[d]?.champion?.agent ?? null,
+    agents: (d) => agentsOf(d, agents?.kinds),
     set: (patch) => {
       const next = { ...scope, ...patch };
+      // an agent lives under its dataset: one the new dataset lacks falls back to its answering agent
+      if (patch.dataset && agents?.kinds && !agentsOf(patch.dataset, agents.kinds).includes(next.agent)) next.agent = 'answering';
       // another dataset keeps the experiment only if it ran one of that name
       if (patch.dataset && patch.dataset !== scope.dataset && next.exp && !experiments(patch.dataset).includes(next.exp)) next.exp = '';
       // a task id belongs to its dataset: airline's 39 is not retail's
@@ -251,10 +277,10 @@ export function useTask(): string {
   return useContext(ScopeCtx)?.scope.task ?? '';
 }
 
-/** The bar under the tabs: Dataset everywhere it applies; Agent where both agents have a view; the
+/** The bar under the tabs: Dataset everywhere it applies; Agent, listing only that dataset's agents; the
  *  experiment where it filters what the tab shows. */
 export function ScopeBar() {
-  const { scope, set, tab, experiments, champion } = useScope();
+  const { scope, set, tab, experiments, champion, agents } = useScope();
   if (tab === 'overview' || tab === 'rubric') return null;
   const withAgent = AGENT_TABS.includes(tab);
   const exps = experiments(scope.dataset);
@@ -275,7 +301,7 @@ export function ScopeBar() {
       {withAgent && (
         <div className="seg" role="radiogroup" aria-label="agent">
           <span className="label">agent</span>
-          {AGENTS.map(([k, label, what]) => (
+          {AGENTS.filter(([k]) => agents(scope.dataset).includes(k)).map(([k, label, what]) => (
             <button
               key={k}
               type="button"

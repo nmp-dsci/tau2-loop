@@ -23,14 +23,22 @@ result and user message within one conversation; `guidance.py`
 `guidance(state, trigger)` returns a short reminder that rides on that one model
 call as a system message (the provider folds it into the call's system prompt,
 so the transcript never holds it); `checks.py` `check_write(name, arguments,
-state)` sees each write call before tau2 runs it, and a string back blocks the
+state)` sees each write call (and, since s15, a transfer) before tau2 runs it, and a string back blocks the
 reply once: the model gets the message as the calls' tool results and replies
 again, and that reply goes through unchecked. What a hook did is recorded on the
 reply tau2 keeps, under `raw_data["tau2_loop"]`, for the Agent tab.
+
+Since s16 a version whose `agent.yaml` names `workflows: rN` gets two harness tools beside tau2's:
+`find_workflow` (look the customer's job up in the workflows workflow_rag rN wrote) and
+`request_workflow` (have workflow_rag research it now). The harness runs them inside the turn and
+asks the model again with the result, so tau2 never sees them and they change nothing it grades;
+the calls and results stay in the agent's own history, and are recorded under
+`raw_data["tau2_loop"]["workflow"]`. A live conversation (`eval/live.py`) also streams them.
 """
 
 from __future__ import annotations
 
+import contextlib
 import types
 from dataclasses import dataclass, field
 from typing import Any
@@ -45,9 +53,10 @@ from tau2.data_model.message import (
     ToolCall,
     ToolMessage,
 )
-from tau2.environment.tool import Tool
+from tau2.environment.tool import Tool, as_tool
 
 from tau2_loop.agent.compose import (
+    CHECKED_TOOLS,
     GUIDANCE_CHARS,
     call_hook,
     compose,
@@ -111,6 +120,53 @@ BLOCKED = "NOT EXECUTED. A check on this call failed: {msg} Fix the call and sen
 HELD_BACK = (
     "NOT EXECUTED: another call in this reply failed a check. Send it again if it is still needed."
 )
+# s16: the harness's workflow tools, run inside the turn; another call in the same reply waits.
+WORKFLOW_TOOLS = ("find_workflow", "request_workflow")
+WORKFLOW_ROUNDS = 4  # workflow calls in one turn before the model is asked to go on without them
+WORKFLOW_HELD = (
+    "NOT EXECUTED: a workflow tool in the same reply ran first. Send this call again if it is "
+    "still needed."
+)
+WORKFLOW_DONE = "Workflow tools are used up for this turn: continue with your other tools or reply."
+WORKFLOW_RESULT_CHARS = 4000  # of each result, kept on the reply for the trace
+
+
+def find_workflow(request: str, job: str = "") -> str:
+    """Look up the workflow library: procedures workflow_rag researched ahead of time, by job.
+
+    Call it as soon as you know what the customer wants, before you act. It lists the library's
+    jobs ranked for your request and gives the best match in full: its steps and who takes each,
+    the facts to ask the customer for, and the rules that decide. Follow a workflow only if it is
+    the customer's job; it is guidance from the knowledge base, never a reason to skip a step the
+    policy or a document requires.
+
+    Args:
+        request: What the customer wants, in one sentence of your own words.
+        job: Optional. A job name from an earlier lookup, to read that workflow in full.
+
+    Returns:
+        The library's jobs ranked for the request, and one workflow as JSON.
+    """
+    raise RuntimeError("run by the harness, never by tau2")
+
+
+def request_workflow(request: str) -> str:
+    """Ask workflow_rag to research the procedure for a request no workflow in the library fits.
+
+    workflow_rag searches the knowledge base and writes a workflow: the steps and who takes each,
+    the facts to ask for and the rules, each with its source. It takes a few minutes while the
+    customer waits, so use it only after find_workflow found no job that fits.
+
+    Args:
+        request: What the customer wants and the facts so far that bear on the procedure, in your
+            own words. Leave out personal details such as names, ids and contact details.
+
+    Returns:
+        The workflow as JSON.
+    """
+    raise RuntimeError("run by the harness, never by tau2")
+
+
 # A text reply checks.py's check_reply refused (s14); the model sees it and writes again.
 REPLY_BLOCKED = (
     "NOT SENT: your last message did not reach the customer. A check on it failed: {msg} "
@@ -150,6 +206,14 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
             version.path, f"tau2_loop_code_{version.domain}_{version.name}"
         )
         self.kinds = tool_kinds(version.domain)
+        # s16: workflow_rag's library and research, as two harness tools (None before v6)
+        self.workflows = version.config.workflows
+        self.workflow_tools: list[Tool] = (
+            [as_tool(find_workflow), as_tool(request_workflow)] if self.workflows else []
+        )
+        # set by a live conversation: each workflow call and result is streamed as it happens
+        self.live: Any = None
+        self.conversation_id: str | None = None
 
     def system_prompt(self) -> str:
         # the one composition, shared with the viewer's `GET /api/runs/{id}/agent`
@@ -184,10 +248,10 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
             note["guidance"] = reminder
             call = call + [SystemMessage(role="system", content=reminder)]
 
-        def ask(messages: list[Any]) -> AssistantMessage:
+        def ask(messages: list[Any], workflow: bool = True) -> AssistantMessage:
             out = generate(
                 model=self.llm,
-                tools=self.tools,
+                tools=self.tools + (self.workflow_tools if workflow else []),
                 messages=messages,
                 call_name="tau2_loop_agent",
                 **self.llm_args,
@@ -198,6 +262,13 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
             return self._apply_helper(out)
 
         response = ask(call)
+        if self.workflow_tools:
+            response, extra, used = self._workflow_rounds(call, response, ask)
+            if extra:
+                # the lookups stay in the agent's own history, so later turns still have them
+                state.messages.extend(extra)
+                call = call + extra
+                note["workflow"] = used
         blocked = self._check(response, state)
         if blocked:
             # once per turn: the model sees why, replies again, and that reply goes through
@@ -238,6 +309,79 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
         state.messages.append(response)
         return response, state
 
+    def _emit(self, row: dict[str, Any]) -> None:
+        if self.live is not None:
+            # a viewer that cannot keep up never breaks a turn
+            with contextlib.suppress(Exception):
+                self.live(row)
+
+    def _workflow_rounds(
+        self, call: list[Any], response: AssistantMessage, ask: Any
+    ) -> tuple[AssistantMessage, list[Any], list[dict[str, Any]]]:
+        """Run the reply's workflow calls and ask again, until a reply makes none."""
+        extra: list[Any] = []
+        used: list[dict[str, Any]] = []
+        for _ in range(WORKFLOW_ROUNDS):
+            calls = list(response.tool_calls or [])
+            if not any(tc.name in WORKFLOW_TOOLS for tc in calls):
+                return response, extra, used
+            results = []
+            for tc in calls:
+                content = WORKFLOW_HELD
+                if tc.name in WORKFLOW_TOOLS:
+                    content, rec = self._run_workflow_tool(tc)
+                    used.append(rec)
+                results.append(
+                    ToolMessage(id=tc.id, role="tool", requestor="assistant", content=content)
+                )
+            extra += [response, *results]
+            response = ask(call + extra)
+        if any(tc.name in WORKFLOW_TOOLS for tc in response.tool_calls or []):
+            response = ask(
+                call + extra + [SystemMessage(role="system", content=WORKFLOW_DONE)], False
+            )
+        return response, extra, used
+
+    def _run_workflow_tool(self, tc: ToolCall) -> tuple[str, dict[str, Any]]:
+        from tau2_loop.workflows import library
+
+        args = dict(tc.arguments or {})
+        text = str(args.get("request") or "")
+        session: str | None = None
+        self._emit({"kind": "workflow_call", "id": tc.id, "name": tc.name, "args": args})
+        try:
+            if tc.name == "find_workflow":
+                content = library.find(
+                    self.version.domain, str(self.workflows), text, str(args.get("job") or "")
+                )
+            else:
+                content, session = library.request(
+                    self.version.domain,
+                    str(self.workflows),
+                    text,
+                    conversation=self.conversation_id,
+                    on_start=lambda m: self._emit(
+                        {"kind": "workflow_research", "id": tc.id, "session": m.id}
+                    ),
+                )
+        except Exception as e:  # noqa: BLE001 - a failed lookup is the model's to work around
+            content = f"{tc.name} failed: {type(e).__name__}: {e}"[:500]
+        self._emit(
+            {
+                "kind": "workflow_result",
+                "id": tc.id,
+                "name": tc.name,
+                "content": content,
+                "session": session,
+            }
+        )
+        return content, {
+            "name": tc.name,
+            "arguments": args,
+            "result": content[:WORKFLOW_RESULT_CHARS],
+            "session": session,
+        }
+
     def _remember(self, state: LoopAgentState, incoming: list[Any]) -> None:
         """memory.py's hook on each tool result (with the call that asked for it) and user message."""
         mod = self.code.get("memory.py")
@@ -266,13 +410,13 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
         return out.strip()[:GUIDANCE_CHARS]
 
     def _check(self, response: AssistantMessage, state: LoopAgentState) -> dict[int, str]:
-        """checks.py's verdict on each write call in a reply: the calls it blocks, by position."""
+        """checks.py's verdict on each write call (or transfer) in a reply: the calls it blocks, by position."""
         mod = self.code.get("checks.py")
         if mod is None or not response.tool_calls:
             return {}
         out: dict[int, str] = {}
         for i, tc in enumerate(response.tool_calls):
-            if self.kinds.get(tc.name) != "write":
+            if self.kinds.get(tc.name) != "write" and tc.name not in CHECKED_TOOLS:
                 continue
             msg = call_hook(mod, "check_write", tc.name, dict(tc.arguments or {}), state.memory)
             if isinstance(msg, str) and msg.strip():
