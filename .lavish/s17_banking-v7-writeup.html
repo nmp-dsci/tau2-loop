@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Banking v7 write-up</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap">
+<style>
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7;
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8;
+  --judge:#5B3A8C; --judge-soft:#EEE9F6;
+  --agent:#235A8C; --agent-soft:#E7EFF8;
+  --user:#6E5A2E; --user-soft:#F5F0E1;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  color-scheme:dark;
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink-2);font:400 var(--t0)/1.6 var(--sans)}
+a{color:var(--accent);text-underline-offset:.18em}
+a:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:.92em;overflow-wrap:anywhere}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top span{font:400 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+header.top .r{margin-left:auto}
+main{max-width:var(--w);margin:0 auto;padding:var(--s7) var(--s4) var(--s9)}
+.label,.fig-title,thead th,.eyebrow{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+h1{font:400 var(--t4)/1.2 var(--serif);color:var(--ink);margin:var(--s3) 0 0;max-width:30ch;text-wrap:balance}
+h1 em{font-style:italic;font-weight:400;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);color:var(--ink);margin:var(--s8) 0 0;text-wrap:balance}
+h3{font:600 var(--t1)/1.3 var(--sans);color:var(--ink);margin:0 0 var(--s2)}
+p{max-width:var(--measure);text-wrap:pretty}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure);margin-top:var(--s4)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch;margin-top:var(--s3)}
+.path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:2px;overflow-wrap:anywhere}
+nav.toc{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin-top:var(--s5);font:400 var(--t-1)/1.4 var(--sans)}
+.fig-title{display:block;margin-top:var(--s5)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{text-align:left;padding:var(--s3) var(--s3);border-bottom:1px solid var(--line-2);white-space:normal;vertical-align:bottom}
+thead th.num{text-align:right}
+thead tr.grp th{border-bottom:0;padding-bottom:0;color:var(--ink-2)}
+td{padding:var(--s3);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+th:first-child,td:first-child{padding-left:var(--s4)}
+th:last-child,td:last-child{padding-right:var(--s4)}
+td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.sub{color:var(--ink);font-weight:500;min-width:16ch}
+td.sub.mono{font-weight:400;font-size:var(--t-1)}
+td.wrap{min-width:20ch;max-width:48ch}
+td.small,.small{font-size:var(--t-1)}
+td.split{border-left:1px solid var(--line)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+tr.pro td{background:var(--band)}
+.muted{color:var(--faint)}
+.v-ok{color:var(--ok);font-weight:500}
+.v-no{color:var(--accent);font-weight:500}
+.v-warn{color:var(--amber);font-weight:500}
+td.num .path{text-align:right}
+/* fig 2: bars as table cells, so labels stay legible at any width */
+td.barcell{min-width:15ch;width:38%}
+.track{display:block;height:12px;border-radius:var(--r-sm);background:var(--band);overflow:hidden}
+.fill{display:block;height:100%;border-radius:var(--r-sm)}
+.fill.v7{background:var(--ink-2)}
+.fill.v4{background:var(--line-3)}
+.val{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--ink-2);margin-top:var(--s1)}
+td.who{font:500 var(--t-1)/1.4 var(--mono);color:var(--ink);white-space:nowrap}
+tr.first td{border-bottom:0;padding-bottom:var(--s1)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);min-width:0}
+.card ul,.card ol{margin:0;padding-left:1.2em}
+.card li{margin-top:var(--s2)}
+ol.qa{padding-left:1.2em;max-width:84ch}
+ol.qa li{margin-top:var(--s3)}
+section.band{background:var(--band);margin:var(--s8) calc(-1 * var(--s4)) 0;padding:var(--s2) var(--s4) var(--s7);border-radius:var(--r)}
+section.band h2{margin-top:var(--s5)}
+section.band .tw,section.band .card{background:var(--panel)}
+@media (max-width:640px){h1{font-size:var(--t3)} main{padding-top:var(--s5)}
+/* a phone stacks each row into labelled lines (data-label), so no column is scrolled off */
+.tw.stack{overflow-x:visible}
+.tw.stack table,.tw.stack tbody,.tw.stack tr,.tw.stack td{display:block;width:auto;min-width:0;max-width:none}
+.tw.stack thead{display:none}
+.tw.stack tr{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+.tw.stack tr:last-child{border-bottom:0}
+.tw.stack td,.tw.stack td:first-child,.tw.stack td:last-child{padding:var(--s1) 0;border:0;text-align:left;white-space:normal}
+.tw.stack td[data-label]{position:relative;padding-left:7.5rem}
+.tw.stack td[data-label]::before{content:attr(data-label);position:absolute;left:0;top:var(--s1);width:7rem;font:500 var(--t-2)/1.6 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.tw.stack td.num .path{text-align:left}
+.tw.stack tr.first{padding-bottom:0}
+.tw.stack td.barcell{width:auto}
+.tw.stack td:empty{display:none}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span>banking · v7 write-up · closing the workflow_rag branch</span><span class="r">S17 · 7 Oct 2026</span></div></header>
+<main>
+<p class="eyebrow">Write-up · v7 played on all 60 train and 37 test tasks · one trial each</p>
+<h1>v7 passes 37 of 60 train tasks but 12 of 37 test: its workflows help the questions they were <em>written from</em></h1>
+<p class="lead">v7 is v6, which looks up workflow_rag's library before it answers, forked to Sonnet at medium effort. Against the champion v4 (Sonnet, high), it passed 37 of 60 train tasks against 29, and 12 of 37 test tasks against 14. It halved the cost per conversation, but the library it reads cost about as much to build as that saved on one pass.</p>
+<nav class="toc"><a href="#s1">every measure</a><a href="#s2">accuracy</a><a href="#s3">workflow use</a><a href="#s4">by job</a><a href="#s5">time</a><a href="#s6">tokens and cost</a><a href="#s7">smoke</a><a href="#s8">caveats</a><a href="#s9">closing</a><a href="#s10">sources</a></nav>
+
+<section id="s1">
+<h2>01 · Every measure — better on train, worse on test, cheaper on both</h2>
+<span class="fig-title">Fig 1 · v7 against v4 on each split · one trial, every task</span>
+<div class="tw stack"><table>
+<thead><tr class="grp"><th></th><th colspan="3" class="num">train · 60 tasks</th><th colspan="3" class="num">test · 37 tasks</th></tr>
+<tr><th>measure</th><th class="num">v7</th><th class="num">v4</th><th class="num">v7 − v4</th><th class="num">v7</th><th class="num">v4</th><th class="num">v7 − v4</th></tr></thead>
+<tbody>
+<tr><td class="sub">Passed (0 or 1)<span class="path">tau2's reward is 1: database matches gold</span></td><td class="num" data-label="train · v7">37/60<span class="path">61.7%</span></td><td class="num" data-label="train · v4">29/60<span class="path">48.3%</span></td><td class="num v-ok" data-label="train · Δ">+13.3 pts<span class="path">better</span></td><td class="num" data-label="test · v7">12/37<span class="path">32.4%</span></td><td class="num" data-label="test · v4">14/37<span class="path">37.8%</span></td><td class="num v-no" data-label="test · Δ">−5.4 pts<span class="path">worse</span></td></tr>
+<tr><td class="sub">Gold actions captured<span class="path">gold's tool calls made with gold's arguments, all conversations</span></td><td class="num" data-label="train · v7">500/573<span class="path">87.3%</span></td><td class="num" data-label="train · v4">476/573<span class="path">83.1%</span></td><td class="num v-ok" data-label="train · Δ">+4.2 pts<span class="path">better</span></td><td class="num" data-label="test · v7">292/382<span class="path">76.4%</span></td><td class="num" data-label="test · v4">318/382<span class="path">83.2%</span></td><td class="num v-no" data-label="test · Δ">−6.8 pts<span class="path">worse</span></td></tr>
+<tr><td class="sub">Every gold action made<span class="path">conversations with all of gold's calls</span></td><td class="num" data-label="train · v7">37/60</td><td class="num" data-label="train · v4">28/60</td><td class="num v-ok" data-label="train · Δ">+9<span class="path">better</span></td><td class="num" data-label="test · v7">12/37</td><td class="num" data-label="test · v4">15/37</td><td class="num v-no" data-label="test · Δ">−3<span class="path">worse</span></td></tr>
+<tr><td class="sub">Median minutes<span class="path">per conversation, the customer's turns included</span></td><td class="num" data-label="train · v7">3.2</td><td class="num" data-label="train · v4">7.3</td><td class="num v-ok" data-label="train · Δ">−4.1<span class="path">better</span></td><td class="num" data-label="test · v7">3.1</td><td class="num" data-label="test · v4">5.5</td><td class="num v-ok" data-label="test · Δ">−2.4<span class="path">better</span></td></tr>
+<tr><td class="sub">Agent tokens<span class="path">per conversation, input (cache reads included) + output</span></td><td class="num" data-label="train · v7">0.99M</td><td class="num" data-label="train · v4">1.72M</td><td class="num v-ok" data-label="train · Δ">−0.74M<span class="path">better</span></td><td class="num" data-label="test · v7">1.09M</td><td class="num" data-label="test · v4">1.55M</td><td class="num v-ok" data-label="test · Δ">−0.46M<span class="path">better</span></td></tr>
+<tr><td class="sub">Tool calls<span class="path">per conversation, as tau2 saw them</span></td><td class="num" data-label="train · v7">19.8</td><td class="num" data-label="train · v4">28.4</td><td class="num v-ok" data-label="train · Δ">−8.6<span class="path">better</span></td><td class="num" data-label="test · v7">19.3</td><td class="num" data-label="test · v4">27.4</td><td class="num v-ok" data-label="test · Δ">−8.1<span class="path">better</span></td></tr>
+<tr><td class="sub">Cost<span class="path">per conversation, agent + customer (API-price estimate)</span></td><td class="num" data-label="train · v7">$0.80</td><td class="num" data-label="train · v4">$1.74</td><td class="num v-ok" data-label="train · Δ">−$0.94<span class="path">better</span></td><td class="num" data-label="test · v7">$0.94</td><td class="num" data-label="test · v4">$1.62</td><td class="num v-ok" data-label="test · Δ">−$0.68<span class="path">better</span></td></tr>
+<tr><td class="sub">Tasks fixed / broken<span class="path">v7 passed and v4 failed, and the reverse</span></td><td class="num" colspan="2" data-label="train">12 / 4</td><td class="num" data-label="train · sign test">p = 0.077<span class="path">sign test</span></td><td class="num" colspan="2" data-label="test">2 / 4</td><td class="num" data-label="test · sign test">p = 0.69<span class="path">sign test</span></td></tr>
+</tbody></table></div>
+<p class="cap">Settings differ: v7's agent ran at medium effort against a Sonnet 5 medium customer; v4's at high effort against a Haiku 4.5 medium customer (§08). Cost is the SDK's API-price estimate; the runs were billed to the subscription.<span class="path">runs/20261006T163602Z_banking_knowledge_v7_train · runs/20261004T222002Z_banking_knowledge_v4_train · runs/20261006T163559Z_banking_knowledge_v7_test · runs/20261004T113341Z_banking_knowledge_v4_test</span></p>
+<p class="insight">On train v7 fixed 12 tasks and broke 4 (p = 0.077); on test it fixed 2 and broke 4, and captured fewer of gold's calls.</p>
+</section>
+
+<section id="s2" class="band">
+<h2>02 · Accuracy — the train gain did not carry to test</h2>
+<span class="fig-title">Fig 2 · passed (0 or 1) and gold actions captured · v7 dark, v4 grey</span>
+<div class="tw stack"><table>
+<thead><tr><th>split</th><th>agent</th><th>passed</th><th>gold actions captured</th></tr></thead>
+<tbody>
+<tr class="first"><td class="sub">train · 60</td><td class="who v7" data-label="agent">v7<span class="path">sonnet-5 customer</span></td><td class="barcell" data-label="passed"><span class="track"><span class="fill v7" style="width:61.7%"></span></span><span class="val">37/60 · 62%</span></td><td class="barcell" data-label="gold actions"><span class="track"><span class="fill v7" style="width:87.3%"></span></span><span class="val">500/573 · 87%</span></td></tr>
+<tr class=""><td class="sub"></td><td class="who v4" data-label="agent">v4<span class="path">haiku-4-5 customer</span></td><td class="barcell" data-label="passed"><span class="track"><span class="fill v4" style="width:48.3%"></span></span><span class="val">29/60 · 48%</span></td><td class="barcell" data-label="gold actions"><span class="track"><span class="fill v4" style="width:83.1%"></span></span><span class="val">476/573 · 83%</span></td></tr>
+<tr class="first"><td class="sub">test · 37</td><td class="who v7" data-label="agent">v7<span class="path">sonnet-5 customer</span></td><td class="barcell" data-label="passed"><span class="track"><span class="fill v7" style="width:32.4%"></span></span><span class="val">12/37 · 32%</span></td><td class="barcell" data-label="gold actions"><span class="track"><span class="fill v7" style="width:76.4%"></span></span><span class="val">292/382 · 76%</span></td></tr>
+<tr class=""><td class="sub"></td><td class="who v4" data-label="agent">v4<span class="path">haiku-4-5 customer</span></td><td class="barcell" data-label="passed"><span class="track"><span class="fill v4" style="width:37.8%"></span></span><span class="val">14/37 · 38%</span></td><td class="barcell" data-label="gold actions"><span class="track"><span class="fill v4" style="width:83.2%"></span></span><span class="val">318/382 · 83%</span></td></tr>
+<tr class="first"><td class="sub">smoke · 20 of train</td><td class="who v7" data-label="agent">v7<span class="path">sonnet-5 customer</span></td><td class="barcell" data-label="passed"><span class="track"><span class="fill v7" style="width:65.0%"></span></span><span class="val">13/20 · 65%</span></td><td class="barcell" data-label="gold actions"><span class="track"><span class="fill v7" style="width:88.6%"></span></span><span class="val">148/167 · 89%</span></td></tr>
+<tr class=""><td class="sub"></td><td class="who v4" data-label="agent">v4<span class="path">sonnet-5 customer</span></td><td class="barcell" data-label="passed"><span class="track"><span class="fill v4" style="width:55.0%"></span></span><span class="val">11/20 · 55%</span></td><td class="barcell" data-label="gold actions"><span class="track"><span class="fill v4" style="width:85.0%"></span></span><span class="val">142/167 · 85%</span></td></tr>
+</tbody></table></div>
+<p class="cap">Gold actions captured counts every call in gold's answer that the conversation made with the same arguments (tau2's action checks), summed over the split: 573 on train, 382 on test, 167 on smoke. Smoke's v4 is the Sonnet-customer run, so its customer matches v7's.</p>
+<p class="insight">v7 got 87.3% of gold's calls on train against v4's 83.1%, and 76.4% on test against 83.2%: on new questions it made fewer of gold's calls, not just fewer passes.</p>
+</section>
+
+<section id="s3">
+<h2>03 · Workflow use — v7 never asked workflow_rag for a new workflow</h2>
+<span class="fig-title">Fig 3 · how v7 used the library, per run · read from each conversation's workflow notes</span>
+<div class="tw stack"><table>
+<thead><tr><th>per run</th><th class="num">train · 60</th><th class="num">test · 37</th><th class="num">smoke · 20</th></tr></thead>
+<tbody>
+<tr><td class="sub">Conversations<span class="path"></span></td><td class="num" data-label="train">60</td><td class="num" data-label="test">37</td><td class="num" data-label="smoke">20</td></tr>
+<tr><td class="sub">find_workflow calls<span class="path">library lookups</span></td><td class="num" data-label="train">138</td><td class="num" data-label="test">76</td><td class="num" data-label="smoke">50</td></tr>
+<tr><td class="sub">Given a library workflow<span class="path">a lookup returned one in full</span></td><td class="num" data-label="train">59/60</td><td class="num" data-label="test">36/37</td><td class="num" data-label="smoke">20/20</td></tr>
+<tr><td class="sub">request_workflow calls<span class="path">workflow_rag asked to research a new job</span></td><td class="num" data-label="train"><b class="v-no">0</b></td><td class="num" data-label="test"><b class="v-no">0</b></td><td class="num" data-label="smoke"><b class="v-no">0</b></td></tr>
+<tr><td class="sub">Searched the KB as well<span class="path">KB_search_bm25, KB_search_dense or shell</span></td><td class="num" data-label="train">44/60</td><td class="num" data-label="test">35/37</td><td class="num" data-label="smoke">16/20</td></tr>
+<tr><td class="sub">Given its own question's workflow<span class="path">researched from that task's customer script</span></td><td class="num" data-label="train">26/60</td><td class="num" data-label="test">0/37</td><td class="num" data-label="smoke">15/20</td></tr>
+<tr><td class="sub">Passed, own workflow<span class="path"></span></td><td class="num" data-label="train">18/26<span class="path">69.2%</span></td><td class="num" data-label="test">0/0<span class="path">none</span></td><td class="num" data-label="smoke">10/15<span class="path">66.7%</span></td></tr>
+<tr><td class="sub">Passed, another question's workflow<span class="path"></span></td><td class="num" data-label="train">19/34<span class="path">55.9%</span></td><td class="num" data-label="test">12/37<span class="path">32.4%</span></td><td class="num" data-label="smoke">3/5<span class="path">60.0%</span></td></tr>
+</tbody></table></div>
+<p class="cap">The library held 64 jobs, one per name, from workflow_rag's sessions on the 60 train questions; a later session's job replaced an earlier one of the same name, so 43 of the 60 questions are represented. No test question was ever researched.</p>
+<p class="insight">On test, 36 of 37 conversations were given a train workflow and none asked for research: a lookup counts any shared word in a job's name as a match, so it almost never says no.</p>
+<p>The fallback path v6 was built around, <code>request_workflow</code> on an unknown job, ran 0 times in 97 conversations. On train, conversations given their own question's workflow passed 18/26 (69.2%) against 19/34 (55.9%) for the rest.</p>
+</section>
+
+<section id="s4" class="band">
+<h2>04 · By job — train's wins on recommendations did not reappear on test</h2>
+<span class="fig-title">Fig 4 · passes per golden workflow · train labelled by hand, test mapped by rule from gold's calls</span>
+<div class="tw stack"><table>
+<thead><tr class="grp"><th></th><th colspan="2" class="num">train</th><th colspan="2" class="num">test</th></tr>
+<tr><th>golden workflow</th><th class="num">v7</th><th class="num">v4</th><th class="num">v7</th><th class="num">v4</th></tr></thead>
+<tbody>
+<tr><td class="sub mono">bank_account_opening</td><td class="num v-ok" data-label="train · v7">10/15</td><td class="num" data-label="train · v4">9/15</td><td class="num " data-label="test · v7">2/4</td><td class="num" data-label="test · v4">2/4</td></tr>
+<tr><td class="sub mono">credit_card_recommendation</td><td class="num v-ok" data-label="train · v7">12/15</td><td class="num" data-label="train · v4">9/15</td><td class="num " data-label="test · v7">1/4</td><td class="num" data-label="test · v4">1/4</td></tr>
+<tr><td class="sub mono">human_transfer</td><td class="num v-ok" data-label="train · v7">2/3</td><td class="num" data-label="train · v4">1/3</td><td class="num " data-label="test · v7">4/8</td><td class="num" data-label="test · v4">4/8</td></tr>
+<tr><td class="sub mono">cash_back_dispute</td><td class="num v-ok" data-label="train · v7">4/7</td><td class="num" data-label="train · v4">3/7</td><td class="num v-no" data-label="test · v7">0/3</td><td class="num" data-label="test · v4">1/3</td></tr>
+<tr><td class="sub mono">credit_card_dispute</td><td class="num " data-label="train · v7">1/5</td><td class="num" data-label="train · v4">1/5</td><td class="num v-ok" data-label="test · v7">1/5</td><td class="num" data-label="test · v4">0/5</td></tr>
+<tr><td class="sub mono">bank_account_closure</td><td class="num " data-label="train · v7">5/8</td><td class="num" data-label="train · v4">5/8</td><td class="num muted" data-label="test · v7">—</td><td class="num muted" data-label="test · v4">—</td></tr>
+<tr><td class="sub mono">credit_card_replacement</td><td class="num " data-label="train · v7">0/3</td><td class="num" data-label="train · v4">0/3</td><td class="num v-ok" data-label="test · v7">1/5</td><td class="num" data-label="test · v4">0/5</td></tr>
+<tr><td class="sub mono">debit_card_dispute</td><td class="num " data-label="train · v7">0/6</td><td class="num" data-label="train · v4">0/6</td><td class="num " data-label="test · v7">0/2</td><td class="num" data-label="test · v4">0/2</td></tr>
+<tr><td class="sub mono">debit_card_reissue</td><td class="num " data-label="train · v7">1/6</td><td class="num" data-label="train · v4">1/6</td><td class="num v-ok" data-label="test · v7">1/2</td><td class="num" data-label="test · v4">0/2</td></tr>
+<tr><td class="sub mono">credit_card_closure</td><td class="num v-ok" data-label="train · v7">3/4</td><td class="num" data-label="train · v4">2/4</td><td class="num " data-label="test · v7">2/3</td><td class="num" data-label="test · v4">2/3</td></tr>
+<tr><td class="sub mono">debit_card_decline</td><td class="num " data-label="train · v7">2/4</td><td class="num" data-label="train · v4">2/4</td><td class="num v-ok" data-label="test · v7">1/2</td><td class="num" data-label="test · v4">0/2</td></tr>
+<tr><td class="sub mono">referral_submission</td><td class="num v-ok" data-label="train · v7">3/3</td><td class="num" data-label="train · v4">1/3</td><td class="num " data-label="test · v7">0/3</td><td class="num" data-label="test · v4">0/3</td></tr>
+<tr><td class="sub mono">credit_limit_increase</td><td class="num v-ok" data-label="train · v7">2/3</td><td class="num" data-label="train · v4">1/3</td><td class="num " data-label="test · v7">1/2</td><td class="num" data-label="test · v4">1/2</td></tr>
+<tr><td class="sub mono">lost_stolen_debit_cards</td><td class="num " data-label="train · v7">0/2</td><td class="num" data-label="train · v4">0/2</td><td class="num " data-label="test · v7">0/3</td><td class="num" data-label="test · v4">0/3</td></tr>
+<tr><td class="sub mono">savings_interest_correction</td><td class="num " data-label="train · v7">3/3</td><td class="num" data-label="train · v4">3/3</td><td class="num " data-label="test · v7">1/2</td><td class="num" data-label="test · v4">1/2</td></tr>
+<tr><td class="sub mono">card_balance_payment</td><td class="num v-ok" data-label="train · v7">2/2</td><td class="num" data-label="train · v4">0/2</td><td class="num " data-label="test · v7">2/2</td><td class="num" data-label="test · v4">2/2</td></tr>
+<tr><td class="sub mono">atm_fee_refund</td><td class="num " data-label="train · v7">1/2</td><td class="num" data-label="train · v4">1/2</td><td class="num " data-label="test · v7">1/1</td><td class="num" data-label="test · v4">1/1</td></tr>
+<tr><td class="sub mono">check_deposit</td><td class="num v-ok" data-label="train · v7">2/2</td><td class="num" data-label="train · v4">1/2</td><td class="num " data-label="test · v7">1/1</td><td class="num" data-label="test · v4">1/1</td></tr>
+<tr><td class="sub mono">debit_card_activation</td><td class="num " data-label="train · v7">0/1</td><td class="num" data-label="train · v4">0/1</td><td class="num " data-label="test · v7">0/1</td><td class="num" data-label="test · v4">0/1</td></tr>
+<tr><td class="sub mono">fund_transfer</td><td class="num v-no" data-label="train · v7">0/2</td><td class="num" data-label="train · v4">1/2</td><td class="num muted" data-label="test · v7">—</td><td class="num muted" data-label="test · v4">—</td></tr>
+<tr><td class="sub mono">payment_incident_transfer</td><td class="num " data-label="train · v7">1/1</td><td class="num" data-label="train · v4">1/1</td><td class="num v-no" data-label="test · v7">0/1</td><td class="num" data-label="test · v4">1/1</td></tr>
+<tr><td class="sub mono">(none of train&#x27;s)</td><td class="num muted" data-label="train · v7">—</td><td class="num muted" data-label="train · v4">—</td><td class="num v-no" data-label="test · v7">0/1</td><td class="num" data-label="test · v4">1/1</td></tr>
+<tr><td class="sub mono">referral_bonus_status</td><td class="num " data-label="train · v7">0/1</td><td class="num" data-label="train · v4">0/1</td><td class="num muted" data-label="test · v7">—</td><td class="num muted" data-label="test · v4">—</td></tr>
+<tr><td class="sub mono">unavailable_offer_refusal</td><td class="num v-ok" data-label="train · v7">1/1</td><td class="num" data-label="train · v4">0/1</td><td class="num muted" data-label="test · v7">—</td><td class="num muted" data-label="test · v4">—</td></tr>
+</tbody></table></div>
+<p class="cap">A task with two or more workflows counts under each, so rows do not add to 60 or 37. Green: v7 passed more of that workflow's tasks than v4; red: fewer. The test mapping reproduces 58 of 60 train labels.<span class="path">data/workflows/banking_knowledge/labels.json · tau2_loop.workflows.golden.RULES</span></p>
+<p class="insight">Card recommendations went from 9 to 12 of 15 on train but stayed at 1 of 4 on test; card transaction disputes stayed near zero throughout.</p>
+</section>
+
+<section id="s5">
+<h2>05 · Time — the median conversation took half as long</h2>
+<span class="fig-title">Fig 5 · minutes per conversation, and hours per run</span>
+<div class="tw stack"><table>
+<thead><tr><th>run</th><th class="num">median min</th><th class="num">mean min</th><th class="num">conversation hours</th><th class="num">wall clock</th><th>why the mean differs</th></tr></thead>
+<tbody>
+<tr><td class="sub">v7 · train<span class="path">20261006T163602Z_banking_knowledge_v7_train</span></td><td class="num" data-label="median min">3.2</td><td class="num" data-label="mean min">17.2</td><td class="num" data-label="conv. hours">17.2 h</td><td class="num" data-label="wall clock">5.8 h</td><td class="wrap small" data-label="why">three conversations stalled 261–271 minutes each at a usage limit; it ran beside test</td></tr>
+<tr><td class="sub">v4 · train<span class="path">20261004T222002Z_banking_knowledge_v4_train</span></td><td class="num" data-label="median min">7.3</td><td class="num" data-label="mean min">39.6</td><td class="num" data-label="conv. hours">39.6 h</td><td class="num" data-label="wall clock">13.4 h</td><td class="wrap small" data-label="why">a long tail: the mean is 5× the median</td></tr>
+<tr><td class="sub">v7 · test<span class="path">20261006T163559Z_banking_knowledge_v7_test</span></td><td class="num" data-label="median min">3.1</td><td class="num" data-label="mean min">25.4</td><td class="num" data-label="conv. hours">15.6 h</td><td class="num" data-label="wall clock">5.3 h</td><td class="wrap small" data-label="why">three conversations stalled 262–280 minutes each at the same usage limit</td></tr>
+<tr><td class="sub">v4 · test<span class="path">20261004T113341Z_banking_knowledge_v4_test</span></td><td class="num" data-label="median min">5.5</td><td class="num" data-label="mean min">49.5</td><td class="num" data-label="conv. hours">30.5 h</td><td class="num" data-label="wall clock">10.3 h</td><td class="wrap small" data-label="why">a long tail: the mean is 9× the median</td></tr>
+</tbody></table></div>
+<p class="cap">Conversation time is tau2's own duration for each simulation, both sides included. Means are dominated by conversations that waited on rate or usage limits, so the median is the comparable figure; wall clock depends on what else was running.</p>
+<p class="insight">v7's median conversation took 3.2 minutes on train against v4's 7.3, and 3.1 on test against 5.5, with medium effort and 20 tool calls instead of 28.</p>
+<p>Building the library took 6.0 hours of Opus session time over 60 sessions, a median 4.1 minutes each and the longest 61 minutes, run four at a time.</p>
+</section>
+
+<section id="s6" class="band">
+<h2>06 · Tokens and cost — half per conversation, but the library ate the saving</h2>
+<span class="fig-title">Fig 6 · tokens and estimated cost for one pass over all 97 questions</span>
+<div class="tw stack"><table>
+<thead><tr><th>part</th><th class="num">input tokens</th><th class="num">output tokens</th><th class="num">cost</th></tr></thead>
+<tbody>
+<tr class=""><td class="sub">v7 · train conversations<span class="path">60 · agent Sonnet medium, customer Sonnet medium</span></td><td class="num" data-label="input">61.01M</td><td class="num" data-label="output">864.5k</td><td class="num" data-label="cost">$47.90</td></tr>
+<tr class=""><td class="sub">v7 · test conversations<span class="path">37</span></td><td class="num" data-label="input">41.44M</td><td class="num" data-label="output">556.7k</td><td class="num" data-label="cost">$34.66</td></tr>
+<tr class=""><td class="sub">v7 · lookup calls tau2 never saw<span class="path">214 model calls that emitted find_workflow, at each run's mean per call</span></td><td class="num" data-label="input">≈ 9.51M</td><td class="num" data-label="output">—</td><td class="num" data-label="cost">$7.63<span class=path>estimate</span></td></tr>
+<tr class=""><td class="sub">workflow_rag · building the library<span class="path">60 r1 sessions on Opus 5.5 high, once; 42.96M of the input read from cache</span></td><td class="num" data-label="input">49.83M</td><td class="num" data-label="output">1.59M</td><td class="num" data-label="cost">$84.21<span class=path>estimate</span></td></tr>
+<tr class="sum"><td class="sub">v7 · one pass over 97 questions<span class="path"></span></td><td class="num" data-label="input"></td><td class="num" data-label="output"></td><td class="num" data-label="cost">$174.40</td></tr>
+<tr class=""><td class="sub">v4 · train conversations<span class="path">60 · agent Sonnet high, customer Haiku medium</span></td><td class="num" data-label="input">103.70M</td><td class="num" data-label="output">1.96M</td><td class="num" data-label="cost">$104.32</td></tr>
+<tr class=""><td class="sub">v4 · test conversations<span class="path">37</span></td><td class="num" data-label="input">57.65M</td><td class="num" data-label="output">1.06M</td><td class="num" data-label="cost">$59.81</td></tr>
+<tr class="sum"><td class="sub">v4 · one pass over 97 questions<span class="path"></span></td><td class="num" data-label="input"></td><td class="num" data-label="output"></td><td class="num" data-label="cost">$164.13</td></tr>
+</tbody></table></div>
+<p class="cap">Input tokens include cache reads and writes, as the SDK reports them. Two lines are estimates. First, the model call that emitted each <code>find_workflow</code> stays in v7's own history and never reaches tau2's trajectory, so it is priced at the run's mean agent call ($0.03 on train). Second, workflow_rag's sessions record tokens but not cost, so they are priced at the rate of v4's Opus 5.5 optimiser session (12.95M in, 84.3k out, $21.35); a fit on the Opus customer's messages gives $83.91.<span class="path">rag_agent_runs/*_r1_task_* (60 sessions) · loop/banking_knowledge/ledger.jsonl (v4's optimiser)</span></p>
+<p class="insight">One pass cost about $174.40 with v7 against $164.13 with v4; the library is built once, so from the second pass v7 costs about half as much.</p>
+</section>
+
+<section id="s7">
+<h2>07 · Smoke — the 20-task check said +2, inside its noise</h2>
+<span class="fig-title">Fig 7 · the same 20 train tasks, one trial each, five runs</span>
+<div class="tw stack"><table>
+<thead><tr><th>agent · run</th><th>customer</th><th>agent effort</th><th class="num">passed</th><th class="num">gold actions</th><th class="num">median min</th><th class="num">cost</th></tr></thead>
+<tbody>
+<tr class="pro"><td class="sub">v7<span class="path">20261006T101239Z_banking_knowledge_v7_custom</span></td><td data-label="customer">sonnet-5</td><td data-label="effort">medium</td><td class="num" data-label="passed">13/20</td><td class="num" data-label="gold actions">88.6%</td><td class="num" data-label="median min">3.4</td><td class="num" data-label="cost">$15.05</td></tr>
+<tr class=""><td class="sub">v4<span class="path">20261005T101758Z_banking_knowledge_v4_custom</span></td><td data-label="customer">sonnet-5</td><td data-label="effort">high</td><td class="num" data-label="passed">11/20</td><td class="num" data-label="gold actions">85.0%</td><td class="num" data-label="median min">6.3</td><td class="num" data-label="cost">$33.01</td></tr>
+<tr class=""><td class="sub">v4<span class="path">20261004T222002Z_banking_knowledge_v4_train (these 20 of its train run)</span></td><td data-label="customer">haiku-4-5</td><td data-label="effort">high</td><td class="num" data-label="passed">11/20</td><td class="num" data-label="gold actions">88.6%</td><td class="num" data-label="median min">6.6</td><td class="num" data-label="cost">$39.06</td></tr>
+<tr class=""><td class="sub">v4<span class="path">20261005T235245Z_banking_knowledge_v4_custom</span></td><td data-label="customer">opus-5-5</td><td data-label="effort">high</td><td class="num" data-label="passed">12/20</td><td class="num" data-label="gold actions">86.8%</td><td class="num" data-label="median min">7.4</td><td class="num" data-label="cost">$40.66</td></tr>
+<tr class=""><td class="sub">v5<span class="path">20261005T073300Z_banking_knowledge_v5_custom</span></td><td data-label="customer">haiku-4-5</td><td data-label="effort">high</td><td class="num" data-label="passed">10/20</td><td class="num" data-label="gold actions">86.2%</td><td class="num" data-label="median min">9.7</td><td class="num" data-label="cost">$47.74</td></tr>
+</tbody></table></div>
+<p class="cap">Repeated one-trial smoke runs of one agent have differed by about 8 of 20 tasks, so 13 against 11 is not a result on its own. v7's smoke workflows were researched from these same 20 questions.</p>
+<p class="insight">Smoke and train agreed with each other and both overstated v7: they were the questions the library was written from.</p>
+</section>
+
+<section id="s8" class="band">
+<h2>08 · Caveats — four things this comparison cannot separate</h2>
+<ol class="qa">
+<li><b>Effort and customer changed with the workflows.</b> v7 ran at medium effort against a Sonnet customer; v4's runs used high effort and a Haiku customer. On smoke, v4 scored 11 of 20 with either customer, so the customer matters less than the rest.</li>
+<li><b>One trial each.</b> The test difference, 2 fixed against 4 broken, has p = 0.69; train's 12 against 4 has p = 0.077. Neither clears 0.05.</li>
+<li><b>Train is not held out for v7.</b> workflow_rag read each train question's customer script, so 26 of 60 train conversations followed a workflow written for them; test is the only honest measure here.</li>
+<li><b>Two cost lines are estimates.</b> The hidden lookup calls and the library build are priced from rates, not billed amounts; both together are $91.84 of v7's $174.40.</li>
+</ol>
+</section>
+
+<section id="s9">
+<h2>09 · Closing — keep the tooling, do not promote v7</h2>
+<div class="cards">
+<div class="card"><h3>What the branch keeps</h3><ul>
+<li>workflow_rag r1 and its live demo on the Agent tab, with gold read only by the score.</li>
+<li>v6's two harness tools, <code>find_workflow</code> and <code>request_workflow</code>, and live conversations that stream them.</li>
+<li>A fork that keeps <code>workflows:</code>, and a lookup that weighs rare words over "credit card".</li>
+<li>Evals listing all 97 questions with their split, test's workflows mapped by rule.</li>
+</ul></div>
+<div class="card"><h3>What it does not show</h3><ul>
+<li>That a cached workflow helps a question it was not written from: test fell from 14 to 12 of 37.</li>
+<li>That the fallback works: <code>request_workflow</code> never ran in a scored conversation.</li>
+<li>That workflows fix card transaction disputes: v7 passed 2 of the 18 tasks that need one, across both splits, against v4's 1.</li>
+</ul></div>
+<div class="card"><h3>If the idea is reopened</h3><ol>
+<li>Make a lookup say no: a match needs most of a job's name, else <code>request_workflow</code>.</li>
+<li>Build the train library leaving each question's own session out, so train measures what test does.</li>
+<li>Play v4 at medium effort with the Sonnet customer, so only the workflows differ.</li>
+</ol></div>
+</div>
+<p class="insight">v4 stays champion. v7 is a held experiment: none of its runs used the gate's customer, so the gate never read them.</p>
+</section>
+
+<section id="s10" class="band">
+<h2>10 · Sources — every number from a committed run</h2>
+<p class="cap">Runs, each a folder under <code>runs/</code> with <code>run.json</code>, <code>results.jsonl</code> and a trace per conversation:<span class="path">20261006T163602Z_banking_knowledge_v7_train · 20261006T163559Z_banking_knowledge_v7_test · 20261006T101239Z_banking_knowledge_v7_custom</span><span class="path">20261004T222002Z_banking_knowledge_v4_train · 20261004T113341Z_banking_knowledge_v4_test · 20261005T101758Z_banking_knowledge_v4_custom · 20261005T235245Z_banking_knowledge_v4_custom · 20261005T073300Z_banking_knowledge_v5_custom</span></p>
+<p class="cap">workflow_rag: 60 sessions of <code>rag_agents/banking_knowledge/r1</code> under <code>rag_agent_runs/</code>, one per train question, Opus 5.5 at high effort. v7: <code>agents/banking_knowledge/v7/</code>, forked from v6 with <code>effort: high → medium</code>.<span class="path">computed by scratchpad s17/data.py; test questions leave only as counts</span></p>
+</section>
+</main>
+</body>
+</html>

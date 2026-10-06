@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Banking v4 diagnosis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap">
+<style>
+/* DESIGN.md §5, verbatim (with the dark block repeated for the explicit dark theme) */
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7; /* divergence: red, not the site's #0A6552 */
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8; /* project extension: passed (§2 Colour) */
+  --judge:#5B3A8C; --judge-soft:#EEE9F6; /* project extension: the LLM judge speaking (§2 Colour) */
+  --agent:#235A8C; --agent-soft:#E7EFF8; /* project extension: the answering agent speaking (§2 Colour) */
+  --user:#6E5A2E; --user-soft:#F5F0E1; /* project extension: the simulated customer speaking (§2 Colour) */
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+
+*,*::before,*::after{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--t0)/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:.15em}
+code,pre,.mono{font-family:var(--mono);font-size:var(--t-1)}
+p code,li code,td code,dd code,figcaption code{overflow-wrap:anywhere}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font:400 var(--t4)/1.15 var(--serif);overflow-wrap:anywhere}
+h1 em{font-style:italic;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);margin-top:var(--s8)}
+h3{font:600 var(--t1)/1.3 var(--sans);margin-top:var(--s5)}
+h4{font:600 var(--t0)/1.3 var(--sans)}
+p{margin:var(--s3) 0 0;max-width:var(--measure);text-wrap:pretty;color:var(--ink-2)}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure)}
+.label{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.muted{color:var(--muted)} .small{font-size:var(--t-1)}
+main{max-width:var(--w);margin:0 auto;padding-block:var(--s6) var(--s9);padding-inline:var(--s4)}
+header.top{position:sticky;top:0;z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top .in b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top .in .label{margin-left:auto}
+section{scroll-margin-top:72px}
+.toc{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s5)}
+.toc a{font:500 var(--t-2)/1 var(--mono);text-decoration:none;color:var(--ink-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
+.chip{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);background:var(--panel);border:1px solid var(--line);color:var(--ink-2);white-space:nowrap;display:inline-block}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.chip.no{border-color:var(--line-3);color:var(--muted)}
+.chip.acc{border-color:var(--accent);color:var(--accent)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{font:500 var(--t-2)/1.3 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);text-align:left;padding:var(--s3) var(--s4);border-bottom:1px solid var(--line-2);white-space:nowrap}
+td{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+td.sub{color:var(--ink);font-weight:500}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+td.wrap{min-width:22ch;max-width:60ch;white-space:normal}
+td.dim{color:var(--faint)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+.v-ok{color:var(--ok);font-weight:500} .v-warn{color:var(--amber);font-weight:500} .v-no{color:var(--accent);font-weight:500}
+.fig-title{display:block;margin-top:var(--s5)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch}
+p.cap .path,.note .path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:var(--s1);overflow-wrap:anywhere}
+.note{background:var(--band);border-left:3px solid var(--accent);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:var(--measure)}
+.note .label{display:block;margin-bottom:var(--s1)}
+.note p{margin-top:var(--s2)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:var(--s4);margin-top:var(--s5)}
+.card{background:var(--panel);border-radius:var(--r);padding:var(--s5);box-shadow:var(--shadow);min-width:0}
+.card h3{margin-top:0}
+.card p{max-width:none}
+.card .n{font:400 var(--t3)/1.1 var(--serif);color:var(--ink);display:block;margin-top:var(--s2)}
+ul.bl{list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s3);max-width:84ch}
+ul.bl li{position:relative;padding-left:1.4rem;color:var(--ink-2)}
+ul.bl li::before{content:'◐';position:absolute;left:0;color:var(--amber)}
+ul.bl.done li::before{content:'●';color:var(--ok)}
+ul.bl.x li::before{content:'✕';color:var(--accent)}
+ol.steps{margin:var(--s4) 0 0;padding-left:1.4rem;max-width:84ch;display:grid;gap:var(--s2);color:var(--ink-2)}
+ol.steps li::marker{font-family:var(--mono);color:var(--accent)}
+pre.cmd{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:pre;max-width:84ch;font-size:var(--t-1);color:var(--ink)}
+pre.cmd .c{color:var(--faint)}
+.rule{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s4);margin-top:var(--s4);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);max-width:84ch}
+.rule .k{font:500 var(--t-2)/1.6 var(--mono);color:var(--accent);text-transform:uppercase;letter-spacing:var(--track-label);white-space:nowrap}
+.rule .v{color:var(--ink-2);min-width:0}
+footer{max-width:var(--w);margin:0 auto;padding:var(--s6) var(--s4);color:var(--faint);font-size:var(--t-1);border-top:1px solid var(--line)}
+footer code{overflow-wrap:anywhere}
+
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+button.btn.alt{background:var(--panel);color:var(--ink);border:1px solid var(--line-2)}
+textarea.free{width:100%;margin-top:var(--s3);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s3);min-height:64px;resize:vertical}
+.copyall{margin-top:var(--s5);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+.copyall textarea{width:100%;font:400 var(--t-1)/1.5 var(--mono);margin-top:var(--s2)}
+@media (max-width:640px){ h1{font-size:var(--t3)} .rule{grid-template-columns:minmax(0,1fr)} }
+
+/* s08 additions: the ideas table's controls, source lists */
+select.disp{font:500 var(--t-1)/1.2 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s2);min-height:34px}
+td.id{font:600 var(--t-1)/1.3 var(--mono);color:var(--accent);white-space:nowrap}
+.tag{font:500 var(--t-2)/1 var(--mono);padding:var(--s1) var(--s2);border-radius:var(--r-sm);border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap;display:inline-block;margin:0 var(--s1) var(--s1) 0}
+ul.src{margin:var(--s3) 0 0;padding-left:1.2rem;max-width:96ch;display:grid;gap:var(--s1);color:var(--ink-2);font-size:var(--t-1)}
+ul.src li{overflow-wrap:anywhere}
+h3.grp{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s5)}
+tr.pro td{background:var(--ok-soft)}
+tr.grp td{background:var(--band);font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+
+/* s09: figures (the frontend's .dia vocabulary, frontend/src/styles.css) and the decision form */
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.ext{fill:none;stroke:var(--line-3);stroke-dasharray:4 3}
+.dia .nd.warn{fill:var(--amber-soft);stroke:var(--amber)}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.hi{stroke:var(--accent)}
+.dia .ed.dash{stroke-dasharray:4 3}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 13px var(--sans);fill:var(--muted)}
+.dia .tx.k{font:500 13px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia .bar{fill:var(--line-2)}
+.dia .bar.hi{fill:var(--accent)}
+.dia .bar.pro{fill:var(--amber)}
+.dia .ax{stroke:var(--line-2);stroke-width:1}
+.dia .gl{stroke:var(--line);stroke-width:1}
+.dia .cap{font:400 13px var(--mono);fill:var(--faint)}
+.dia .bar.ok{fill:var(--ok)}
+.dia .trk{fill:var(--band)}
+.dia .tx.ok{fill:var(--ok)}
+.dia .tx.warn{fill:var(--amber)}
+.dia .pick{cursor:pointer}
+.dia .pick .hit{fill:transparent}
+.dia .pick:hover .hit,.dia .pick.on .hit{fill:var(--band)}
+.dia .pick:focus{outline:none}
+.dia .pick:focus-visible .hit{stroke:var(--focus);stroke-width:2}
+.dia{margin-top:var(--s3)}
+.dia .ed{marker-end:url(#arr)}
+fieldset{border:0;padding:0;margin:var(--s5) 0 0;min-width:0}
+fieldset:first-of-type{margin-top:0}
+.card .n{overflow-wrap:anywhere}
+td.num.v-no{color:var(--accent)}
+
+/* s10: figures wider than a phone scroll inside their own frame; SVG text at 15 in a 1000 box never renders under 12.8px */
+.figw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r)}
+.figw .dia{min-width:860px;margin-top:0}
+.dia .tx,.dia .tx.s{font-size:15px} .dia .tx.k,.dia .cap{font-size:14px}
+.dia .tx.ok{fill:var(--ok)}
+tr.rec td{background:var(--accent-soft)}
+td.num.wrap{white-space:normal;min-width:14ch}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:var(--s4);margin-top:var(--s5)}
+
+/* s12: the chart is taller than s10's; the lessons list reads as prose */
+ol.steps li b{color:var(--ink)}
+td .mono,td.mono{font-family:var(--mono)}
+/* s13: milestone status in Fig 1 */
+td .chip.ms{display:inline-block;margin-top:var(--s2)}
+td .ms-note{display:block;font:400 var(--t-2)/1.4 var(--sans);color:var(--muted);margin-top:var(--s1);max-width:28ch}
+/* s14: the failure table's verdicts, the side-by-side transcripts */
+.chip.ag{border-color:var(--ok);color:var(--ok)}
+.chip.se{border-color:var(--agent);color:var(--agent)}
+.chip.co{border-color:var(--judge);color:var(--judge)}
+.chip.di{border-color:var(--accent);color:var(--accent)}
+.chip.re{border-color:var(--line-3);color:var(--muted)}
+td .why{display:block;font-size:var(--t-2);color:var(--muted);margin-top:var(--s1);max-width:46ch}
+td.cause{min-width:24ch;max-width:40ch;white-space:normal}
+td.wrap .why{max-width:34ch}
+td.num.tight{white-space:normal;min-width:9ch}
+#s2 td.wrap{min-width:16ch;max-width:34ch}
+.duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:var(--s4);margin-top:var(--s3)}
+.convo{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4);min-width:0}
+.convo h4{margin-bottom:var(--s2)}
+.convo ol{list-style:none;margin:0;padding:0;display:grid;gap:var(--s1);font-size:var(--t-1)}
+.convo li{padding:var(--s1) var(--s2);border-radius:var(--r-sm);overflow-wrap:anywhere;color:var(--ink-2)}
+.convo li.a{background:var(--agent-soft)} .convo li.u{background:var(--user-soft)}
+.convo li.t{font-family:var(--mono);font-size:var(--t-2);color:var(--ink);border-left:2px solid var(--agent)}
+.convo li .who{font:500 var(--t-2)/1 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-right:var(--s2)}
+#s3 thead th,#s4 thead th,#s2 thead th{white-space:normal;vertical-align:bottom}
+#s3 td.num,#s4 td.num{padding-inline:var(--s3)}
+.legend{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s3)}
+/* s15 */
+pre.diff{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s3);overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:400 var(--t-1)/1.55 var(--mono);color:var(--ink-2);max-width:96ch}
+pre.diff .add{display:block;background:var(--ok-soft);color:var(--ink)}
+pre.diff .del{display:block;background:var(--accent-soft);color:var(--ink-2);text-decoration:line-through;text-decoration-color:var(--accent)}
+td.cause{min-width:26ch;max-width:44ch;white-space:normal}
+td .why{display:block;font-size:var(--t-2);color:var(--muted);margin-top:var(--s1);max-width:44ch}
+.chip.ag{border-color:var(--ok);color:var(--ok)}
+.chip.co{border-color:var(--judge);color:var(--judge)}
+.chip.th{border-color:var(--agent);color:var(--agent)}
+.chip.di{border-color:var(--accent);color:var(--accent)}
+.chip.re{border-color:var(--line-3);color:var(--muted)}
+.chip.si{border-color:var(--user);color:var(--user)}
+.duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:var(--s4);margin-top:var(--s3)}
+.convo{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4);min-width:0}
+.convo h4{margin-bottom:var(--s2)}
+.convo ol{list-style:none;margin:0;padding:0;display:grid;gap:var(--s1);font-size:var(--t-1)}
+.convo li{padding:var(--s1) var(--s2);border-radius:var(--r-sm);overflow-wrap:anywhere;color:var(--ink-2)}
+.convo li.a{background:var(--agent-soft)} .convo li.u{background:var(--user-soft)}
+.convo li.t{font-family:var(--mono);font-size:var(--t-2);color:var(--ink);border-left:2px solid var(--agent)}
+.convo li.hi{border-left:2px solid var(--accent);background:var(--accent-soft)}
+.convo li .who{font:500 var(--t-2)/1 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-right:var(--s2)}
+#s1 thead th,#s2 thead th,#s4 thead th,#s5 thead th{white-space:normal;vertical-align:bottom}
+form.q label.opt input[type=checkbox]{margin-top:.3em;flex:none}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span class="muted small">s15 · banking v4's train failures: the optimiser's diagnosis, thinking before acting, guardrails</span><span class="label">diagnosis · 2026-10-05 · branch banking-v5 · v4 champion</span></div></header>
+<main>
+<p class="label">Diagnosis · banking_knowledge · v4's 31 train failures of 60</p>
+<h1>v4 has the evidence and acts before using it: <em>24 of 31</em> failures</h1>
+<p class="lead">I ran the loop's diagnosis step on v4's 31 train failures, with the next cycle's prompt, fence and model, writing to a scratch folder so no v5 exists. I asked one more question of every failure: did the agent act on a guess, and was the evidence it needed retrieved? Then I set the answers beside the leaders' traces, the published work on getting a model to think before it acts, and a replay of candidate guardrails.</p>
+<nav class="toc"><a href="#s0">Short version</a><a href="#s1">Failures</a><a href="#s2">Research before writing</a><a href="#s3">Guardrails</a><a href="#s3b">Rules into checks</a><a href="#s3c">Mining rules</a><a href="#s4">What the literature says</a><a href="#s5">Proposals</a><a href="#s6">The prompt</a><a href="#s7">Decisions</a><a href="#s8">What ran</a></nav>
+
+<section id="s0">
+<h2>The short version</h2>
+<ul class="bl">
+<li><b>Guessing, with the evidence in hand.</b> The optimiser judged 24 of 31 failures acted on a guess. In 24 the document or record that settled the step was already in the conversation, unused. It was never retrieved in 5, and retrieved only after acting in 2.</li>
+<li><b>Less research before the first write.</b> v4 makes 9.0 look-ups before its first write, against 16.8 (Opus 5) and 13.4 (Qwen 3.8 Max). It has read 66% of the required documents by then; they have 78% and 69%.</li>
+<li><b>Thinking longer alone is not the gap.</b> Qwen spends fewer output tokens before its first write (6,304) than v4 (7,341) and passes more. Opus spends twice as many. What separates them is reading the procedure and checking the record before writing.</li>
+<li><b>12 failures are tasks the leaders usually pass</b> (5–8 of 8). On 11 of those 12, v4 looked up less before its first write than the leaders' mean. 13 failures are tasks the leaders also fail (0–1 of 8).</li>
+<li><b>Generic gates are noise; targeted ones work.</b> A replay shows a “leads not followed” gate firing on 29% of failed and 41% of passed conversations. The useful guardrails check a named procedure (a close needs the transactions read).</li>
+<li><b>Proposal for v5:</b> a five-point pre-write rubric and a steering line in the prompt (P1), the targeted guardrails (P3), the KB's dispute-amount rule (P4), and your choice of effort or model (Q1). I'd defer the fitted dispute checks and every generic gate.</li>
+</ul>
+</section>
+
+<section id="s1">
+<h2>12 of v4's failures are tasks the leaders usually pass</h2>
+<p>Each row is one failed train conversation: the leaders' passes on the same task (Opus 5 and Qwen 3.8 Max, 4 trials each), the optimiser's root cause and the surfaces it would change, its answer to “acted on a guess?”, and my verdict against the graded difference and the leaders' traces.</p>
+<div class="legend"><span class="chip ag">agree · 3</span><span class="chip co">agree · a guardrail · 7</span><span class="chip th">agree · a thinking lever · 7</span><span class="chip si">our simulator · 3</span><span class="chip di">defer · fitted to graded values · 4</span><span class="chip re">defer · no leader passes · 7</span></div>
+<div class="tw"><table>
+<thead><tr><th>task</th><th class="num">leaders pass</th><th>optimiser: class → surfaces · root cause</th><th>research</th><th class="num">v4 · leaders</th><th>my verdict</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="6">leaders pass 5–8 of 8 · 12 of 31</td></tr>
+<tr><td class="mono">task_008</td><td class="num">7 / 8</td><td class="cause"><b>knowledge</b> → <code>guidance.py</code><span class="why">The agent read doc _042 but did not apply &#x27;always select from the highest tier that applies&#x27;.</span></td><td class="wrap">no guess<span class="why">evidence retrieved but not used</span></td><td class="num">20 · 34.4<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>Doc _042&#x27;s tier rule was in its context; a guidance line, as the optimiser says.</span></td></tr>
+<tr><td class="mono">task_019</td><td class="num">7 / 8</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">The simulated user wrote a tool call as text instead of calling the tool, then ended the call. The agent identified the right four transactions and told the user they had not run.</span></td><td class="wrap">no guess<span class="why">evidence retrieved but not used</span></td><td class="num">6 · 16.6<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip si">our simulator</span><span class=why>Leaders 7 of 8. Our Haiku customer typed the tool call; v4 found the right four transactions.</span></td></tr>
+<tr><td class="mono">task_022</td><td class="num">5 / 8</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">The simulated user did not run the given tool, and the agent cannot run user tools.</span></td><td class="wrap">no guess<span class="why">evidence retrieved but not used</span></td><td class="num">14 · 22.5<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip si">our simulator</span><span class=why>Leaders 5 of 8: the customer never ran the given tool.</span></td></tr>
+<tr><td class="mono">task_025</td><td class="num">7 / 8</td><td class="cause"><b>knowledge</b> → <code>memory.py, guidance.py</code><span class="why">The agent priced the cards on a misread promotion and did not price every business card&#x27;s terms at the stated usage (platinum _008/_011 not used).</span></td><td class="wrap">acted on a guess<span class="why">evidence never</span></td><td class="num">10 · 24.9<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip th">agree · a thinking lever</span><span class=why>Priced on a misread promotion and skipped two platinum documents: read the whole catalog before choosing.</span></td></tr>
+<tr><td class="mono">task_048</td><td class="num">6 / 8</td><td class="cause"><b>knowledge</b> → <code>memory.py, guidance.py</code><span class="why">The recommendation was not checked against each card&#x27;s category rates in its own document (silver_rewards_card_001/_002).</span></td><td class="wrap">acted on a guess<span class="why">evidence never</span></td><td class="num">4 · 6.5<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip th">agree · a thinking lever</span><span class=why>Recommended without reading silver&#x27;s own category rates.</span></td></tr>
+<tr><td class="mono">task_051</td><td class="num">7 / 8</td><td class="cause"><b>lost-state</b> → <code>memory.py, guidance.py</code><span class="why">The agent read a duplicate-record error as a system fault. Gold resubmits the same arguments (the same call matched both submits), then approves on the existing request. The agent…</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">8 · 6<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip co">agree · a guardrail</span><span class=why>Read &#x27;already exists&#x27; as a fault and transferred; one guidance line keyed on that result.</span></td></tr>
+<tr><td class="mono">task_056</td><td class="num">6 / 8</td><td class="cause"><b>format</b> → <code>helper.py</code><span class="why">A format slip. Doc _004 requires &#x27;the exact official account_class name ending with &quot;Account&quot;&#x27;.</span></td><td class="wrap">no guess<span class="why">evidence retrieved but not used</span></td><td class="num">11 · 15.8<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip co">agree · a guardrail</span><span class=why>account_class without &#x27;Account&#x27;; one helper rule.</span></td></tr>
+<tr><td class="mono">task_072</td><td class="num">6 / 8</td><td class="cause"><b>knowledge</b> → <code>none</code><span class="why">The audit missed one of the four Bluest corrections: the missing $2 rebate or the $0.50 domestic overcharge. This is arithmetic and audit completeness, not a format slip.</span></td><td class="wrap">no guess<span class="why">evidence retrieved but not used</span></td><td class="num">4 · 8.2<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip th">agree · a thinking lever</span><span class=why>An audit missed one of four corrections: arithmetic on documents it had read. No hook can check it.</span></td></tr>
+<tr><td class="mono">task_079</td><td class="num">8 / 8</td><td class="cause"><b>lost-state</b> → <code>checks.py, memory.py</code><span class="why">Doc _025 requirements 4-5 (no pending transactions, no pending refunds) are checked with get_bank_account_transactions_9173. The agent skipped that read. In this domain the read is…</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">3 · 6.4<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip co">agree · a guardrail</span><span class=why>Leaders 8 of 8 read the account&#x27;s transactions before closing; v4 never did. Check H (§3).</span></td></tr>
+<tr><td class="mono">task_080</td><td class="num">6 / 8</td><td class="cause"><b>write-arguments</b> → <code>checks.py, memory.py</code><span class="why">The agent replaced the requested freeze with closure. The prompt line &#x27;freeze when asked&#x27; already failed twice. It also skipped the transactions read required before a close (doc _025).</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">10 · 12.4<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip co">agree · a guardrail</span><span class=why>Closed when the customer asked to freeze, and skipped the transactions read; check H.</span></td></tr>
+<tr><td class="mono">task_098</td><td class="num">5 / 8</td><td class="cause"><b>knowledge</b> → <code>system.md, memory.py, guidance.py</code><span class="why">The agent recommended after two searches, without reading each checking account&#x27;s referral terms or verifying the customer.</span></td><td class="wrap">acted on a guess<span class="why">evidence never</span></td><td class="num">5 · 9.8<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip th">agree · a thinking lever</span><span class=why>Recommended after two searches, without each account&#x27;s referral terms.</span></td></tr>
+<tr><td class="mono">task_099</td><td class="num">7 / 8</td><td class="cause"><b>lost-state</b> → <code>guidance.py</code><span class="why">Referrer eligibility depends on checking tenure from the first account opened (doc _048 FAQ). The agent took the customer&#x27;s word for the accounts held and never read the record.</span></td><td class="wrap">acted on a guess<span class="why">evidence never</span></td><td class="num">8 · 12.8<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip co">agree · a guardrail</span><span class=why>Took the customer&#x27;s word for the accounts held; guidance asks for the account read once verified.</span></td></tr>
+<tr class="grp"><td colspan="6">leaders pass 2–4 of 8 · 6 of 31</td></tr>
+<tr><td class="mono">task_016</td><td class="num">4 / 8</td><td class="cause"><b>knowledge</b> → <code>checks.py</code><span class="why">The agent invented a restriction that no document states and talked the customer out of a permitted action. Two prompt attempts already failed.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">2 · 29.6<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip th">agree · a thinking lever</span><span class=why>An invented restriction: the rubric&#x27;s evidence-before-claim line, then check_reply&#x27;s resend.</span></td></tr>
+<tr><td class="mono">task_018</td><td class="num">4 / 8</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">The simulated user wrote tool calls as text.</span></td><td class="wrap">no guess<span class="why">evidence retrieved but not used</span></td><td class="num">10 · 19.5<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip si">our simulator</span><span class=why>Leaders pass 4 of 8 here with GPT-5.2 as the customer; ours is Haiku 4.5, which typed the tool call.</span></td></tr>
+<tr><td class="mono">task_036</td><td class="num">4 / 8</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">The agent proposed disputes the customer had not asked for, then filed them after she agreed to a &#x27;full refund&#x27;. Gold does only the requested reissue (replacements_001).</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">7 · 12.4<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip th">agree · a thinking lever</span><span class=why>Proposed disputes nobody asked for; rubric item 1 (the customer asked for this).</span></td></tr>
+<tr><td class="mono">task_041</td><td class="num">4 / 8</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">Doc cc_015 item 4 (disputes in the past 12 months) was not applied with the existing history, and the long flow was cut short.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">4 · 11<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip th">agree · a thinking lever</span><span class=why>Doc cc_015 item 4 was not applied to the dispute history it had read.</span></td></tr>
+<tr><td class="mono">task_046</td><td class="num">2 / 8</td><td class="cause"><b>write-arguments</b> → <code>checks.py, memory.py</code><span class="why">Logistics_003 Step 1 checks disputes and replacements before the balance. Check B gates a payment only once closure tools are unlocked, and the agent paid before unlocking any.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved after acting</span></td><td class="num">6 · 6.1<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip co">agree · a guardrail</span><span class=why>Paid the balance before the closure checks; check B&#x27;s gate widened to a payment in a closure request.</span></td></tr>
+<tr><td class="mono">task_055</td><td class="num">4 / 8</td><td class="cause"><b>write-arguments</b> → <code>checks.py, memory.py, system.md</code><span class="why">(1) The reply told the customer to use a tool not yet given (give_discoverable_user_tool came only after the failure). (2) The account id was given partly masked, so the user guessed the…</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved after acting</span></td><td class="num">19 · 24.4<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip co">agree · a guardrail</span><span class=why>Told the customer to use a tool it had not given, with a partial id; check_reply sees that.</span></td></tr>
+<tr class="grp"><td colspan="6">leaders pass 0–1 of 8 · 13 of 31</td></tr>
+<tr><td class="mono">task_027</td><td class="num">0 / 8</td><td class="cause"><b>write-arguments</b> → <code>checks.py, memory.py</code><span class="why">Doc cc_004 allows rewards updates only for disputes that are resolved. The agent acted on the customer&#x27;s claim against the record it read (&#x27;No transaction disputes found&#x27;).</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">7 · 11.4<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>The record said no disputes; v4 took the customer&#x27;s word. Leaders 0 of 8.</span></td></tr>
+<tr><td class="mono">task_038</td><td class="num">1 / 8</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">The agent filled the date from a transaction date instead of the customer&#x27;s words. The v4 clause covers only debit discovery_date.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">5 · 7.2<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Leaders 1 of 8; the date line is in the prompt draft.</span></td></tr>
+<tr><td class="mono">task_053</td><td class="num">0 / 8</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">Gold also gives this user tool (053_13 matched), yet its expected database has no record of the customer using it. Any run where the customer uses the tool it was given fails.</span></td><td class="wrap">no guess<span class="why">evidence retrieved but not used</span></td><td class="num">4 · 11<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>Gold&#x27;s database holds no record of the user tool it gives; no agent can pass.</span></td></tr>
+<tr><td class="mono">task_063</td><td class="num">1 / 8</td><td class="cause"><b>knowledge</b> → <code>memory.py, guidance.py</code><span class="why">The stated requirement was not applied as a filter, and the pairings were not priced at $8,000.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">47 · 53.4<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Leaders 1 of 8.</span></td></tr>
+<tr><td class="mono">task_067</td><td class="num">0 / 8</td><td class="cause"><b>knowledge</b> → <code>memory.py, guidance.py</code><span class="why">The agent never priced Platinum Plus at the stated balance, nor the Purple pairing from doc _012.</span></td><td class="wrap">acted on a guess<span class="why">evidence never</span></td><td class="num">6 · 21.8<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td></tr>
+<tr><td class="mono">task_068</td><td class="num">0 / 8</td><td class="cause"><b>knowledge</b> → <code>memory.py, guidance.py</code><span class="why">The agent did not pair each savings product with each eligible checking boost from doc _012 under the age and early-deposit constraints. It chose the highest base APY without pricing…</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">25 · 21.1<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td></tr>
+<tr><td class="mono">task_069</td><td class="num">0 / 8</td><td class="cause"><b>knowledge</b> → <code>memory.py, guidance.py</code><span class="why">The agent did not drop a product that fails a stated requirement before pricing.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">8 · 27.2<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span></td></tr>
+<tr><td class="mono">task_082</td><td class="num">0 / 8</td><td class="cause"><b>write-arguments</b> → <code>checks.py, system.md</code><span class="why">(1) check D2 let liability == disputed_amount through whenever it fell between 50 and 500, so after two blocks on 0 the agent sent the amount. Gold uses 50 for every dispute reported…</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">6 · 9.6<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip di">defer · fitted to graded values</span><span class=why>Check D2&#x27;s new 30-day window is fitted to four tasks no leader passes; the KB says &#x27;statement&#x27;.</span></td></tr>
+<tr><td class="mono">task_083</td><td class="num">0 / 8</td><td class="cause"><b>task-fault</b> → <code>none</code><span class="why">Gold 083_6..9 omit customer_max_liability_amount, which the tool marks required. No compliant call can match. (Separately, the v4 &#x27;full transaction&#x27; line produced disputed_amount 250…</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">5 · 9.5<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip ag">agree</span><span class=why>Gold omits a field the tool requires. v4&#x27;s &#x27;full transaction&#x27; line was also wrong here; the draft fixes it.</span></td></tr>
+<tr><td class="mono">task_084</td><td class="num">0 / 8</td><td class="cause"><b>write-arguments</b> → <code>system.md, checks.py, memory.py</code><span class="why">(1) v4&#x27;s own prompt says &#x27;disputed_amount = the full transaction&#x27;, which is wrong for incorrect_amount and ATM shortfalls. (2) Doc _032 lists duplicate_charge as a required category; the…</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">4 · 7.6<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip di">defer · fitted to graded values</span><span class=why>The amount-in-error fix is in doc _031 and goes in the prompt; D4&#x27;s forced provisional credit waits.</span></td></tr>
+<tr><td class="mono">task_086</td><td class="num">0 / 8</td><td class="cause"><b>write-arguments</b> → <code>checks.py</code><span class="why">The same D2 exemption as 082 let liability == amount through. The other fields are judgement from the customer&#x27;s words.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">7 · 9<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip di">defer · fitted to graded values</span><span class=why>Same D2 window as task_082.</span></td></tr>
+<tr><td class="mono">task_087</td><td class="num">0 / 8</td><td class="cause"><b>knowledge</b> → <code>system.md</code><span class="why">The agent assumed online without basis; the record is an in-store debit_card_purchase at a located merchant.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">4 · 7.8<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip re">defer · no leader passes</span><span class=why>Assumed online for an in-store charge; the prompt draft says type comes from the record.</span></td></tr>
+<tr><td class="mono">task_088</td><td class="num">0 / 8</td><td class="cause"><b>write-arguments</b> → <code>checks.py</code><span class="why">The D2 exemption again; an unrequested write; transaction type guessed.</span></td><td class="wrap">acted on a guess<span class="why">evidence retrieved but not used</span></td><td class="num">5 · 8<span class="why">look-ups before the first write · leaders</span></td><td class="wrap"><span class="chip di">defer · fitted to graded values</span><span class=why>Same D2 window; and an unrequested transfer (rubric item 1).</span></td></tr>
+</tbody></table></div>
+<p class="cap">Three failures the optimiser calls task faults depend on our simulated customer, Claude Haiku 4.5, typing a tool call into its message. The leaders' customer is GPT-5.2, and they pass those tasks 4–7 of 8 times. That is a simulator difference, not an agent fault.</p>
+</section>
+
+<section id="s2">
+<h2>v4 researches less than the leaders before its first write</h2>
+<p>Per conversation, on the same 60 train tasks; the leaders' figures average their 4 trials each (240 conversations). “First write” is the first consequential write or transfer, not identity logging. Output tokens include the model's thinking, so they stand in for how long it thought.</p>
+<div class="tw"><table>
+<thead><tr><th>measure</th><th class="num">v4 · Sonnet high</th><th class="num">Opus 5 · max</th><th class="num">Qwen 3.8 Max · xhigh</th></tr></thead>
+<tbody>
+<tr><td>passes (train, these 60 tasks)</td><td class="num"><b>29 / 60<span class="why">48%</span></b></td><td class="num">113 / 240<span class="why">47%</span></td><td class="num">132 / 240<span class="why">55%</span></td></tr>
+<tr><td>look-ups before the first write</td><td class="num"><b>9.0</b></td><td class="num">16.8</td><td class="num">13.4</td></tr>
+<tr><td>required documents read by the first write</td><td class="num"><b>66%</b></td><td class="num">78%</td><td class="num">69%</td></tr>
+<tr><td>required documents read, whole conversation</td><td class="num"><b>88%</b></td><td class="num">93%</td><td class="num">88%</td></tr>
+<tr><td>look-ups before the first reply</td><td class="num"><b>5.7</b></td><td class="num">12.7</td><td class="num">7.9</td></tr>
+<tr><td>look-ups a conversation</td><td class="num"><b>16.0</b></td><td class="num">24.9</td><td class="num">24.0</td></tr>
+<tr><td>output tokens before the first write</td><td class="num"><b>7,341</b></td><td class="num">15,250</td><td class="num">6,304</td></tr>
+<tr><td>output tokens a model call</td><td class="num"><b>1,049</b></td><td class="num">1,316</td><td class="num">749</td></tr>
+</tbody></table></div>
+<p class="insight">Qwen thinks less per call than v4 and still passes more, because it reads the procedure first. The rubric should ask for research and verification at the write, not for longer thinking in general.</p>
+<span class="label fig-title">Fig 1 · look-ups before the first write, on the 12 failures the leaders usually pass</span>
+<div class="figw"><svg class="dia" viewBox="0 0 1000 494" role="img" aria-label="Look-ups before the first write, v4 against the leaders, on the 12 failures the leaders usually pass">
+<text class="tx k" x="120" y="24">look-ups before the first write · ● v4 · ○ leaders’ mean of 8 trials</text>
+<line class="gl" x1="120" y1="38" x2="120" y2="460"/><text class="cap" x="120" y="480" text-anchor="middle">0</text>
+<line class="gl" x1="325" y1="38" x2="325" y2="460"/><text class="cap" x="325" y="480" text-anchor="middle">10</text>
+<line class="gl" x1="530" y1="38" x2="530" y2="460"/><text class="cap" x="530" y="480" text-anchor="middle">20</text>
+<line class="gl" x1="735" y1="38" x2="735" y2="460"/><text class="cap" x="735" y="480" text-anchor="middle">30</text>
+<line class="gl" x1="940" y1="38" x2="940" y2="460"/><text class="cap" x="940" y="480" text-anchor="middle">40</text>
+<text class="tx s" x="108" y="68" text-anchor="end">008</text>
+<line class="ax" x1="530" y1="63" x2="825" y2="63" style="stroke-width:3"/>
+<circle cx="825" cy="63" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="530" cy="63" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="102" text-anchor="end">019</text>
+<line class="ax" x1="243" y1="97" x2="460" y2="97" style="stroke-width:3"/>
+<circle cx="460" cy="97" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="243" cy="97" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="136" text-anchor="end">022</text>
+<line class="ax" x1="407" y1="131" x2="581" y2="131" style="stroke-width:3"/>
+<circle cx="581" cy="131" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="407" cy="131" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="170" text-anchor="end">025</text>
+<line class="ax" x1="325" y1="165" x2="630" y2="165" style="stroke-width:3"/>
+<circle cx="630" cy="165" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="325" cy="165" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="204" text-anchor="end">048</text>
+<line class="ax" x1="202" y1="199" x2="253" y2="199" style="stroke-width:3"/>
+<circle cx="253" cy="199" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="202" cy="199" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="238" text-anchor="end">051</text>
+<line class="ax" x1="243" y1="233" x2="284" y2="233" style="stroke-width:3"/>
+<circle cx="243" cy="233" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="284" cy="233" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="272" text-anchor="end">056</text>
+<line class="ax" x1="346" y1="267" x2="444" y2="267" style="stroke-width:3"/>
+<circle cx="444" cy="267" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="346" cy="267" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="306" text-anchor="end">072</text>
+<line class="ax" x1="202" y1="301" x2="288" y2="301" style="stroke-width:3"/>
+<circle cx="288" cy="301" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="202" cy="301" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="340" text-anchor="end">079</text>
+<line class="ax" x1="182" y1="335" x2="251" y2="335" style="stroke-width:3"/>
+<circle cx="251" cy="335" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="182" cy="335" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="374" text-anchor="end">080</text>
+<line class="ax" x1="325" y1="369" x2="374" y2="369" style="stroke-width:3"/>
+<circle cx="374" cy="369" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="325" cy="369" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="408" text-anchor="end">098</text>
+<line class="ax" x1="222" y1="403" x2="321" y2="403" style="stroke-width:3"/>
+<circle cx="321" cy="403" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="222" cy="403" r="7" style="fill:var(--accent)"/>
+<text class="tx s" x="108" y="442" text-anchor="end">099</text>
+<line class="ax" x1="284" y1="437" x2="382" y2="437" style="stroke-width:3"/>
+<circle cx="382" cy="437" r="7" style="fill:var(--panel);stroke:var(--ink-2);stroke-width:2"/>
+<circle cx="284" cy="437" r="7" style="fill:var(--accent)"/>
+</svg></div>
+<p class="cap">v4 (filled) against the leaders' mean of 8 trials (open). Axis capped at 40.</p>
+
+<h3>The evidence was usually already there</h3>
+<div class="tw"><table>
+<thead><tr><th>was the evidence needed retrieved? (optimiser, per failure)</th><th class="num">failures</th></tr></thead>
+<tbody>
+<tr><td>retrieved but not used</td><td class="num">24 / 31<span class="why">77%</span></td></tr>
+<tr><td>never</td><td class="num">5 / 31<span class="why">16%</span></td></tr>
+<tr><td>retrieved after acting</td><td class="num">2 / 31<span class="why">6%</span></td></tr>
+</tbody></table></div>
+
+<h3>task_079: the procedure in the agent's context, unread</h3>
+<p>The customer's wallet was stolen; they want the debit cards frozen, closed and replaced. Doc _025 says a card closes only after the account's transactions are checked for pending items. Both leaders pass 4 of 4. v4 saw doc _025 named in a search result but never read it, closed the cards, and never called <code>get_bank_account_transactions</code>. The highlighted lines are the close and the transactions read.</p>
+<div class="duo">
+<div class="convo"><h4>v4 · failed</h4><p class="label">trial 0 · reward 0 · 82 messages</p><ol><li class="a"><span class="who">agent</span>Hi! How can I help you today?</li>
+<li class="u"><span class="who">customer</span>Hi, yes, thank you for picking up. Look, I&#x27;m having a pretty urgent situation here. My wallet was stolen about an hour ago at a coffee shop, and I need to freeze all my debit cards right away. I have …</li>
+<li class="t">→ KB_search_bm25: freeze debit card stolen wallet</li>
+<li class="t">→ KB_search_dense: freeze debit card lost or stolen</li>
+<li class="a"><span class="who">agent</span>This is definitely an urgent security situation, and I want to help you lock this down right away. A stolen wallet with multiple cards is serious, so let&#x27;s move quickly.
+
+First, I need to verify your …</li>
+<li class="u"><span class="who">customer</span>Sure, I understand. My name is Carlos Rodriguez. My date of birth is March 22nd, 1988, and my phone number is 512-555-0193. And my email is carlos.rodriguez@gmail.com if that helps too. I just want to…</li>
+<li class="t">→ get_user_information_by_name</li>
+<li class="t">→ get_current_time</li>
+<li class="t">→ KB_search_bm25: get checking accounts by user</li>
+<li class="t">→ log_verification</li>
+<li class="t">→ get_all_user_accounts_by_user_id_3847</li>
+<li class="t">→ get_all_user_accounts_by_user_id_3847: {&quot;user_id&quot;: &quot;cr89a2b3c4&quot;}</li>
+<li class="t">→ KB_search_bm25: get_debit_cards_by_account_id freeze_debit_card close_debit_card tool</li>
+<li class="t">→ get_debit_cards_by_account_id_7823</li>
+<li class="t">→ get_debit_cards_by_account_id_7823: {&quot;account_id&quot;: &quot;chk_cr89a2b3c4_1&quot;}</li>
+<li class="t">→ get_debit_cards_by_account_id_7823: {&quot;account_id&quot;: &quot;chk_cr89a2b3c4_2&quot;}</li>
+<li class="t">→ get_debit_cards_by_account_id_7823: {&quot;account_id&quot;: &quot;chk_cr89a2b3c4_3&quot;}</li>
+<li class="t">→ shell: grep -rn &quot;freeze_debit_card_3892\|unlock_discoverable&quot; /private/var/folders/r3/5xd07jd914gbt1c19t5bjl900000gn/</li>
+<li class="t">→ shell: grep -rln &quot;freeze_debit_card_3892\|unlock_discoverable_agent_tool.*freeze&quot; . 2&gt;/dev/null</li>
+<li class="t">→ shell: cat &quot;./doc_bank_accounts_bank_accounts__general__031.md&quot;</li>
+<li class="t">→ freeze_debit_card_3892</li>
+<li class="t">→ freeze_debit_card_3892: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_ev&quot;}</li>
+<li class="t">→ freeze_debit_card_3892: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_lb&quot;}</li>
+<li class="t">→ freeze_debit_card_3892: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_green&quot;}</li>
+<li class="a"><span class="who">agent</span>All three of your debit cards have been successfully frozen:
+
+- **Evergreen Account** (card ending 3847) — FROZEN ✅
+- **Light Blue Account** (card ending 5291) — FROZEN ✅
+- **Green Account** (card end…</li>
+<li class="u"><span class="who">customer</span>Yeah, definitely close and replace all three. These cards are definitely gone - the wallet was stolen, so there&#x27;s no point in just leaving them frozen. I need to get replacement cards for all three ac…</li>
+<li class="t">→ KB_search_bm25: close_debit_card_4721 tool</li>
+<li class="t hi">→ close_debit_card_4721</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_ev&quot;, &quot;reason&quot;: &quot;stolen&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_lb&quot;, &quot;reason&quot;: &quot;stolen&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_green&quot;, &quot;reason&quot;: &quot;stolen&quot;}</li>
+<li class="t">→ unfreeze_debit_card_3893</li>
+<li class="t">→ unfreeze_debit_card_3893: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_ev&quot;}</li>
+<li class="t">→ unfreeze_debit_card_3893: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_lb&quot;}</li>
+<li class="t">→ unfreeze_debit_card_3893: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_green&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_ev&quot;, &quot;reason&quot;: &quot;stolen&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_lb&quot;, &quot;reason&quot;: &quot;stolen&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;: &quot;dbc_cr89a2b3c4_green&quot;, &quot;reason&quot;: &quot;stolen&quot;}</li>
+<li class="t">→ KB_search_bm25: order replacement debit card</li>
+<li class="t">→ KB_search_dense: ordering a new debit card replacement process</li>
+<li class="t">→ shell: ls | grep -i checking</li>
+<li class="t">→ shell: grep -li &quot;tier&quot; doc_checking_accounts_evergreen_account_*.md doc_checking_accounts_light_blue_account_*.md doc</li>
+<li class="t">→ shell: grep -il &quot;entry tier\|mid tier\|premium tier\|elite tier\|entry-tier\|mid-tier\|premium-tier\|elite-tier&quot; doc_</li>
+<li class="t">→ shell: grep -il &quot;tier&quot; doc_checking_accounts_evergreen_account_001.md doc_checking_accounts_light_blue_account_001.md</li>
+<li class="t">→ KB_search_bm25: checking account tier classification Entry Mid Premium Elite</li>
+<li class="t">→ shell: grep -ril &quot;entry tier\|mid tier\|premium tier\|elite tier&quot; . | head -30</li>
+<li class="t">→ order_debit_card_5739</li>
+<li class="a"><span class="who">agent</span>All three cards have been closed as stolen. Now let&#x27;s get your replacements ordered. Here&#x27;s where things stand for each account:
+
+**Evergreen Account** (Premium Tier)
+- No prior replacement cards on t…</li>
+<li class="u"><span class="who">customer</span>Yeah, okay... Really? I forgot I&#x27;d already replaced that card twice this year. That&#x27;s frustrating, honestly. But I guess I don&#x27;t have a choice — I need that Light Blue card back. So yes, I&#x27;ll pay the …</li>
+<li class="a"><span class="who">agent</span>Got it — here&#x27;s what I can do right now:
+
+**Evergreen Account** — Rush shipping ($35 fee) + Premium metallic design (complimentary on your tier, so no additional fee). I&#x27;ll place that order now.
+
+**Li…</li>
+<li class="u"><span class="who">customer</span>Classic design is fine for the Green Account — keep it free and simple. I just need the cards replaced as soon as possible at this point. Go ahead and place both the Evergreen and Green orders now.</li>
+<li class="t">→ order_debit_card_5739: {&quot;account_id&quot;: &quot;chk_cr89a2b3c4_1&quot;, &quot;user_id&quot;: &quot;cr89a2b3c4&quot;, &quot;delivery_option&quot;: &quot;RUSH&quot;, &quot;delivery_fee&quot;: 35, &quot;ca</li>
+<li class="t">→ order_debit_card_5739: {&quot;account_id&quot;: &quot;chk_cr89a2b3c4_3&quot;, &quot;user_id&quot;: &quot;cr89a2b3c4&quot;, &quot;delivery_option&quot;: &quot;STANDARD&quot;, &quot;delivery_fee&quot;: 0, </li>
+<li class="a"><span class="who">agent</span>Both replacement orders are confirmed! Here&#x27;s a summary:
+
+**Evergreen Account**
+- Order ID: dcord_9e18babfb1d8
+- Rush shipping, Premium metallic design
+- Expected delivery: 1-2 business days
+- Fee cha…</li>
+<li class="u"><span class="who">customer</span>Got it. Thanks for your help. I appreciate you getting this handled so quickly — especially getting the Evergreen card expedited. I&#x27;ll call back in 48 hours to order the Light Blue replacement. Thanks…</li>
+<li class="a"><span class="who">agent</span>You&#x27;re welcome, Carlos! I&#x27;m glad we could get this sorted out quickly for you. To recap:
+
+- **Evergreen, Light Blue, and Green Account** debit cards have all been closed as stolen — they&#x27;re no longer …</li></ol></div>
+<div class="convo"><h4>Qwen 3.8 Max · passed</h4><p class="label">trial 0 · reward 1 · 71 messages</p><ol><li class="a"><span class="who">agent</span>Hi! How can I help you today?</li>
+<li class="u"><span class="who">customer</span>Hi, my wallet was stolen about an hour ago and I need to freeze all my debit cards immediately. I have three checking accounts with you — my Evergreen Account, my Light Blue Account, and my Green Acco…</li>
+<li class="t">→ shell: ls &amp;&amp; cat INDEX.md</li>
+<li class="t">→ shell: cat doc_bank_accounts_bank_accounts__general__026.md doc_bank_accounts_bank_accounts__general__030.md doc_bank</li>
+<li class="a"><span class="who">agent</span>I’m sorry your wallet was stolen. I can help secure the debit cards, but first I need to verify your identity.
+
+Please provide:
+
+- Your **Rho-Bank user ID** or exact full name, and
+- Any **two** of th…</li>
+<li class="u"><span class="who">customer</span>Sure. My full name is **Carlos Rodriguez**.
+
+Two of the items:
+- **Date of birth:** 03/22/1988  
+- **Phone number:** 512-555-0193</li>
+<li class="t">→ get_user_information_by_name</li>
+<li class="t">→ get_current_time</li>
+<li class="t">→ log_verification</li>
+<li class="t">→ shell: cat doc_bank_accounts_bank_accounts__general__009.md &amp;&amp; grep -ril &quot;get_bank_accounts\|account_id.*user_id\|ret</li>
+<li class="t">→ get_all_user_accounts_by_user_id_3847</li>
+<li class="t">→ get_all_user_accounts_by_user_id_3847: {&quot;user_id&quot;:&quot;cr89a2b3c4&quot;}</li>
+<li class="t">→ get_debit_cards_by_account_id_7823</li>
+<li class="t">→ get_debit_cards_by_account_id_7823: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_1&quot;}</li>
+<li class="t">→ get_debit_cards_by_account_id_7823: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_2&quot;}</li>
+<li class="t">→ get_debit_cards_by_account_id_7823: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_3&quot;}</li>
+<li class="t hi">→ shell: cat doc_bank_accounts_bank_accounts__general__025.md doc_bank_accounts_bank_accounts__general__029.md doc_bank</li>
+<li class="t">→ freeze_debit_card_3892</li>
+<li class="t">→ freeze_debit_card_3892: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_ev&quot;}</li>
+<li class="t">→ freeze_debit_card_3892: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_lb&quot;}</li>
+<li class="t">→ freeze_debit_card_3892: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_green&quot;}</li>
+<li class="a"><span class="who">agent</span>I’ve verified your identity and located the three active debit cards. I’m freezing them now.
+
+</li>
+<li class="a"><span class="who">agent</span>All three debit cards have been **frozen successfully**:
+
+- **Evergreen Account** card ending in **3847**
+- **Light Blue Account** card ending in **5291**
+- **Green Account** card ending in **8165**
+
+…</li>
+<li class="u"><span class="who">customer</span>Yes, please freeze all three cards right now.
+
+And since the wallet was stolen and the cards are definitely gone, I need to **cancel/close all three cards** and get **replacement cards** issued.</li>
+<li class="t">→ shell: cat doc_bank_accounts_bank_accounts__general__023.md doc_bank_accounts_bank_accounts__general__018.md; grep -r</li>
+<li class="t">→ shell: cat doc_bank_accounts_bank_accounts__general__005.md</li>
+<li class="t hi">→ get_bank_account_transactions_9173</li>
+<li class="t hi">→ close_debit_card_4721</li>
+<li class="a"><span class="who">agent</span>The cards were already frozen. I’ll now proceed with permanent closure and replacement. First, I need to check for any pending transactions or refunds.
+
+</li>
+<li class="t hi">→ get_bank_account_transactions_9173: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_1&quot;}</li>
+<li class="t hi">→ get_bank_account_transactions_9173: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_2&quot;}</li>
+<li class="t hi">→ get_bank_account_transactions_9173: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_3&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_ev&quot;,&quot;reason&quot;:&quot;stolen&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_lb&quot;,&quot;reason&quot;:&quot;stolen&quot;}</li>
+<li class="a"><span class="who">agent</span>The Evergreen and Light Blue cards are eligible for closure now. The Green card has a **pending $89.99 Amazon refund**, so it cannot be permanently closed until that refund posts or you acknowledge th…</li>
+<li class="t">→ unfreeze_debit_card_3893</li>
+<li class="t">→ unfreeze_debit_card_3893: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_ev&quot;}</li>
+<li class="t">→ unfreeze_debit_card_3893: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_lb&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_ev&quot;,&quot;reason&quot;:&quot;stolen&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_lb&quot;,&quot;reason&quot;:&quot;stolen&quot;}</li>
+<li class="a"><span class="who">agent</span>I’ve permanently closed two of the three cards:
+
+- **Evergreen Account** card ending in **3847**
+- **Light Blue Account** card ending in **5291**
+
+They cannot be reactivated. You’ll need to update any…</li>
+<li class="u"><span class="who">customer</span>Oh right, I did return something to Amazon a few days ago. Yes, I understand — I’m fine with the refund going to my checking account instead, so please go ahead and close the **Green Account** card no…</li>
+<li class="t">→ unfreeze_debit_card_3893: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_green&quot;}</li>
+<li class="t hi">→ close_debit_card_4721: {&quot;card_id&quot;:&quot;dbc_cr89a2b3c4_green&quot;,&quot;reason&quot;:&quot;stolen&quot;}</li>
+<li class="t">→ order_debit_card_5739</li>
+<li class="t">→ order_debit_card_5739: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_1&quot;,&quot;user_id&quot;:&quot;cr89a2b3c4&quot;,&quot;delivery_option&quot;:&quot;RUSH&quot;,&quot;delivery_fee&quot;:35,&quot;card_desig</li>
+<li class="t">→ order_debit_card_5739: {&quot;account_id&quot;:&quot;chk_cr89a2b3c4_3&quot;,&quot;user_id&quot;:&quot;cr89a2b3c4&quot;,&quot;delivery_option&quot;:&quot;STANDARD&quot;,&quot;delivery_fee&quot;:0,&quot;card_de</li>
+<li class="a"><span class="who">agent</span>The Green card has now been permanently closed, and I’ll place the two eligible replacement orders.
+
+</li>
+<li class="a"><span class="who">agent</span>Your **Green Account card** has been permanently closed, and you’ve acknowledged that the pending **$89.99 Amazon refund** will be credited to that checking account.
+
+### Replacement orders placed
+
+- …</li></ol></div>
+</div>
+</section>
+
+<section id="s3">
+<h2>A generic research gate fires as often on passes as on failures</h2>
+<p>I replayed four candidate guardrails over v4's 60 conversations and the Qwen leader's 240, with no model call. A gate worth adding fires on failures and stays quiet on passes.</p>
+<div class="tw"><table>
+<thead><tr><th>would fire on</th><th class="num">v4 failed</th><th class="num">v4 passed</th><th class="num">Qwen failed</th><th class="num">Qwen passed</th></tr></thead>
+<tbody>
+<tr><td class="wrap">Guessed tool: a write to a tool no knowledge result has named</td><td class="num">0 / 31<span class="why">0%</span></td><td class="num">0 / 29<span class="why">0%</span></td><td class="num">0 / 108<span class="why">0%</span></td><td class="num">0 / 132<span class="why">0%</span></td></tr>
+<tr><td class="wrap">Leads not followed: a document naming the write&#x27;s tool names other tools never looked up</td><td class="num">9 / 31<span class="why">29%</span></td><td class="num">12 / 29<span class="why">41%</span></td><td class="num">47 / 108<span class="why">44%</span></td><td class="num">48 / 132<span class="why">36%</span></td></tr>
+<tr><td class="wrap">Refusal without search: “can&#x27;t” / “unable” with no look-up since the customer&#x27;s message</td><td class="num">7 / 31<span class="why">23%</span></td><td class="num">7 / 29<span class="why">24%</span></td><td class="num">3 / 108<span class="why">3%</span></td><td class="num">4 / 132<span class="why">3%</span></td></tr>
+<tr><td class="wrap">First write of each tool (what a reflection send-back would fire on)</td><td class="num">23 / 31<span class="why">74%</span></td><td class="num">20 / 29<span class="why">69%</span></td><td class="num">92 / 108<span class="why">85%</span></td><td class="num">81 / 132<span class="why">61%</span></td></tr>
+</tbody></table></div>
+<p class="cap">No write in any conversation used a tool no result had named, so that gate never fires. The leads gate counts any tool a document names; procedure documents name many tools a given request does not need.</p>
+<p>The guardrails worth adding name a procedure: <b>close_debit_card</b> needs the account's transactions read, and a freeze first when the customer asked for one. A <b>payment inside a closure request</b> needs the two closure reads. A reply must not send the customer to a <b>user tool that was never given</b>. Each is a KB rule, checkable from the conversation's own tool results, and each fixes a task the leaders usually pass. v4's existing checks A–G blocked 8 writes and 3 replies across all 60 train conversations, so they rarely get in the way.</p>
+</section>
+
+<section id="s3b">
+<h2>Most read-but-not-applied rules can become checks the agent cannot skip</h2>
+<div class="note"><span class="label">your question · task_008 · could this be a guardrail or an asset the agent checks?</span>
+<p>Yes. Doc _042 is a table: every reason code has a tier, and the rule is “always the highest tier that applies”. That table can live in <code>checks.py</code> as data, and a check can send a transfer back once when a lower-tier code is chosen while a Tier-1 signal holds. In task_008 the customer pressed for offers the agent had said were unavailable (Tier 1, <code>customer_demands_after_unavailable_offer_refusal</code>); v4 chose the Tier-2 <code>unconfirmed_external_communication</code>. One gap first: <b>today no hook sees a transfer</b>. <code>check_write</code> runs only on tools tau2 marks as writes, and <code>transfer_to_human_agents</code> is not one. Letting the check see transfers is a small harness change, and two of the conversions below need it.</p></div>
+<p>There are two kinds of deterministic check. One computes the answer, so the model cannot get it wrong: the call is blocked until the procedure's read has run. The other is triggered by code every time but leaves the decision to the model, which must look again with the rule in front of it. Below is every failure, sorted into the two kinds plus what only the prompt can carry. Every rule comes from the KB, which train and test share, so no rule hard-codes a task's answer.</p>
+<div class="tw"><table>
+<thead><tr><th>train tasks</th><th>the rule (KB)</th><th>what code checks</th><th>hook</th><th>kind</th></tr></thead>
+<tbody>
+<tr><td class="wrap mono">008<span class="why">leaders 7 of 8</span></td><td class="wrap">Doc _042: transfer reason codes in 4 tiers; always the highest tier that applies.</td><td class="wrap">The tier table lives in checks.py as data (code → tier). memory.py sets <code>offer_refused</code> when the agent has said an offer is not available and the customer raised it again. A transfer with a Tier 2–4 reason while a Tier-1 signal holds is sent back once, naming the Tier-1 code; any other Tier 2–4 transfer is sent back once with the Tier-1 list to re-check.</td><td class="wrap"><code>check_write on transfers (harness change: today a transfer is not a write, so the hook never sees it)</code></td><td><span class="chip th">code forces a re-check</span></td></tr>
+<tr><td class="wrap mono">079, 080<span class="why">leaders 8 · 6 of 8</span></td><td class="wrap">Doc _025: close a debit card only after the account&#x27;s transactions show no pending items; doc _026: freeze when asked.</td><td class="wrap">close_debit_card is blocked until <code>get_bank_account_transactions</code> has run for that card's account, and while the customer asked to freeze and nothing was frozen.</td><td class="wrap"><code>check_write (H)</code></td><td><span class="chip ag">code decides</span></td></tr>
+<tr><td class="wrap mono">046<span class="why">leaders 2 of 8</span></td><td class="wrap">Logistics_003 Step 1: dispute history and pending replacements before any closure-flow write.</td><td class="wrap">Check B already blocks closure writes; widen it to a payment when the customer asked to close a credit card.</td><td class="wrap"><code>check_write (B)</code></td><td><span class="chip ag">code decides</span></td></tr>
+<tr><td class="wrap mono">041<span class="why">leaders 4 of 8</span></td><td class="wrap">Doc cc_015 item 4: provisional credit up to a count of disputes in the past 12 months.</td><td class="wrap">memory.py counts disputes in the history read plus those filed here; a dispute marked eligible beyond the limit is sent back with the count.</td><td class="wrap"><code>check_write (new)</code></td><td><span class="chip ag">code decides</span></td></tr>
+<tr><td class="wrap mono">027<span class="why">leaders 0 of 8</span></td><td class="wrap">Doc cc_004: update rewards only after the cash-back dispute is resolved.</td><td class="wrap">update_transaction_rewards is blocked unless a tool result shows that transaction RESOLVED or APPROVED.</td><td class="wrap"><code>check_write (new)</code></td><td><span class="chip ag">code decides</span></td></tr>
+<tr><td class="wrap mono">099, 098<span class="why">leaders 7 · 5 of 8</span></td><td class="wrap">Doc _048: referral eligibility follows checking tenure from the first account opened.</td><td class="wrap">submit_referral, and any eligibility answer, is blocked until the accounts have been read after verification.</td><td class="wrap"><code>check_write + check_reply</code></td><td><span class="chip ag">code decides</span></td></tr>
+<tr><td class="wrap mono">055<span class="why">leaders 4 of 8</span></td><td class="wrap">A user tool works only after give_discoverable_user_tool, with full argument values.</td><td class="wrap">A reply that names a user tool not yet given, or a masked id, is sent back once.</td><td class="wrap"><code>check_reply</code></td><td><span class="chip ag">code decides</span></td></tr>
+<tr><td class="wrap mono">051<span class="why">leaders 7 of 8</span></td><td class="wrap">Logistics_007: an existing request is decided, not escalated.</td><td class="wrap">After an “already exists” result, a transfer is sent back once: continue the procedure with the existing record.</td><td class="wrap"><code>check_write on transfers (same harness change)</code></td><td><span class="chip th">code forces a re-check</span></td></tr>
+<tr><td class="wrap mono">056<span class="why">leaders 6 of 8</span></td><td class="wrap">Doc _004: account_class is the exact name ending in “Account”.</td><td class="wrap">helper.py appends “Account” to a Saver class before the call runs.</td><td class="wrap"><code>helper.py</code></td><td><span class="chip ag">code decides</span></td></tr>
+<tr><td class="wrap mono">025, 048, 063, 067, 068, 069<span class="why">leaders 7 · 6 · 1 · 0 · 0 · 0 of 8</span></td><td class="wrap">Recommend after reading every product in the category and pricing each at the customer&#x27;s numbers.</td><td class="wrap">memory.py lists the category's products from <code>ls</code> results and the documents printed; an opening or application, or a reply that recommends, is sent back once while products are unread. Which product wins stays with the model: pricing reads prose rates, tiers and waivers.</td><td class="wrap"><code>check_write + check_reply</code></td><td><span class="chip th">code forces a re-check</span></td></tr>
+<tr><td class="wrap mono">016<span class="why">leaders 4 of 8</span></td><td class="wrap">Policy rule 1: no restriction a document does not state.</td><td class="wrap">A reply with restriction wording (“not permitted”, “against our policy”) is sent back once to cite the document or drop it. Phrase matching, so it can fire on a correct refusal.</td><td class="wrap"><code>check_reply</code></td><td><span class="chip th">code forces a re-check</span></td></tr>
+<tr><td class="wrap mono">036, 088<span class="why">leaders 4 · 0 of 8</span></td><td class="wrap">Make only the writes the customer asked for.</td><td class="wrap">No reliable signal: whether a dispute or transfer was requested is in the customer's words.</td><td class="wrap"><code>system.md rubric item 1</code></td><td><span class="chip re">judgement: prompt only</span></td></tr>
+<tr><td class="wrap mono">072<span class="why">leaders 6 of 8</span></td><td class="wrap">Net all corrections into one credit.</td><td class="wrap">The arithmetic reads several fee documents against statement lines; code cannot redo it without re-implementing the audit.</td><td class="wrap"><code>system.md</code></td><td><span class="chip re">judgement: prompt only</span></td></tr>
+<tr><td class="wrap mono">082, 084, 086, 087, 088<span class="why">leaders 0 · 0 · 0 · 0 · 0 of 8</span></td><td class="wrap">Doc _031/_032: liability tiers, the amount in error, required categories.</td><td class="wrap">Codeable only once the statement date is known; the optimiser's 30-day window is a guess fitted to graded values. The amount in error is checkable against the transaction record.</td><td class="wrap"><code>check_write (deferred)</code></td><td><span class="chip th">code forces a re-check</span></td></tr>
+</tbody></table></div>
+<p class="cap">Code decides on 9 tasks, forces a re-check on 14, and leaves 3 to the prompt (a task can appear in two rows). Each check fires once a turn as today: the model reads why, retries, and the retry is not checked again, so a wrong check costs one call and never traps a conversation.</p>
+</section>
+
+<section id="s3c">
+<h2>Mine the guardrails from the 44 procedure documents, not from the test questions</h2>
+<div class="note"><span class="label">your question · could guardrails be learned from the documents or the questions, run on all train and test questions?</span>
+<p><b>From the documents, yes: they are the right source.</b> The knowledge base is shared by train and test, and its procedures are written per tool and per product, not per customer. Rules mined from it therefore cover test's question types without reading a test question. It is small: of 698 documents, 44 name a tool and 150 read as procedures. Between them they cover 35 write and transfer tools, in about 91,000 characters for the 34 that are both.</p>
+<p><b>From the test questions, no.</b> Banking promotes on test: v4 became champion because it passed 14 test tasks to v3's 6. Rules learned from test questions would make that comparison meaningless, because the agent would have been fitted to the exam. It would also break the project's rule that no optimiser sees a test task (CLAUDE.md), and our scores would no longer compare with the leaderboard's, which never saw the tasks. Train questions are allowed, but they add little beyond the documents and invite rules fitted to graded answers, like the optimiser's 30-day liability window.</p></div>
+<ol class="steps">
+<li><b>Mine.</b> One read-only session (Opus, on the subscription) reads the 150 procedure documents and writes each rule as a record: the write or transfer tool it governs, its kind, its parameters, the document id and the sentence it comes from. It needs no labels, which is the unsupervised part.</li>
+<li><b>Compile.</b> One generic rule engine in <code>checks.py</code> and <code>memory.py</code> reads the records as data. A new procedure is then a new record, not new code. Kinds that code can check become checks; the rest become one prompt line per tool.</li>
+<li><b>Validate on train only.</b> Replay every rule over v4's 60 train conversations and the leaders' 240 train trajectories, with no model call. Drop any rule that fires on a passed conversation, because it would block correct behaviour; keep those that fire only on failures. This uses train's labels, so strictly it is semi-supervised.</li>
+<li><b>Gate on test, unseen.</b> The usual challenge then measures whether rules mined from documents generalise to customers the miner never saw.</li>
+</ol>
+<div class="tw"><table>
+<thead><tr><th>rule kind</th><th>what code checks</th><th>example on this page</th></tr></thead>
+<tbody>
+<tr><td class="sub">requires a read</td><td class="wrap">the write waits until a named read has run for the same account or card</td><td class="wrap">close_debit_card after the account's transactions (doc _025)</td></tr>
+<tr><td class="sub">order</td><td class="wrap">write A before write B when both are asked for</td><td class="wrap">open business checking before closing an account (doc _003, check G)</td></tr>
+<tr><td class="sub">table</td><td class="wrap">an argument must be the table's value for the account's tier or the situation</td><td class="wrap">transfer reason tiers (doc _042); debit card fees by tier (doc _029, check E)</td></tr>
+<tr><td class="sub">threshold</td><td class="wrap">a count or amount against a limit read from the record</td><td class="wrap">disputes in 12 months (doc cc_015); open disputes by tier (doc _031, check D1)</td></tr>
+<tr><td class="sub">record state</td><td class="wrap">the write waits until a tool result shows a status</td><td class="wrap">rewards updated only after a resolved dispute (doc cc_004)</td></tr>
+<tr><td class="sub">judgement</td><td class="wrap">not checkable; becomes a prompt line for that tool</td><td class="wrap">which product to recommend; whether the customer asked for a dispute</td></tr>
+</tbody></table></div>
+<p class="cap">v4's checks A–G are seven such rules, written by hand for the failures one optimiser saw. Mining writes the rest of the table the same way for every procedure, including ones no train task exercised.</p>
+</section>
+
+<section id="s4">
+<h2>Published evidence favours a rubric at the write and checks in code</h2>
+<div class="tw"><table>
+<thead><tr><th>strategy</th><th>evidence</th><th>cost</th><th>kind</th><th>here</th></tr></thead>
+<tbody>
+<tr><td class="sub wrap">Pre-write rubric in the prompt<span class="why">Before each write, list the rules that apply, check the facts are collected, check the action complies.</span></td><td class="wrap">Anthropic&#x27;s think-tool study, τ-bench airline: 0.332 → 0.584 pass^1 with a think tool plus a prompt of such checklists. The prompt&#x27;s examples did most of the work; the think tool alone scored 0.404.</td><td class="wrap">a few hundred prompt characters</td><td class="wrap">prompt only</td><td class="wrap">Proposed (P1)</td></tr>
+<tr><td class="sub wrap">More reasoning budget<span class="why">Raise effort, or the model.</span></td><td class="wrap">τ-Knowledge (the paper behind banking_knowledge): frontier models with high reasoning reach about 25.5% pass^1. The research agent reported GPT-5.2 at 11.6% without reasoning and 25.5% at high; I did not re-check that split. Anthropic&#x27;s effort guide names xhigh as the starting point for knowledge-base search.</td><td class="wrap">tokens and latency rise steeply; the 5-hour limit</td><td class="wrap">a setting</td><td class="wrap">Your call (Q1)</td></tr>
+<tr><td class="sub wrap">Steering the thinking<span class="why">“This work is multistep: think carefully after every tool result.”</span></td><td class="wrap">Anthropic&#x27;s steering guide: in adaptive mode a follow-up request that only processes tool results can skip thinking, even at high effort. That is when v4 skips the document it has just retrieved.</td><td class="wrap">nothing</td><td class="wrap">prompt only</td><td class="wrap">Proposed (P1, first line)</td></tr>
+<tr><td class="sub wrap">Reflection before a mutating step<span class="why">Send the first call of each write tool back once with the checklist; the model resubmits after thinking.</span></td><td class="wrap">SABER (2025): each deviation at a write step cut the odds of success by up to 92% (airline) and 96% (retail); read steps barely matter. Reflection before mutating steps plus context cleaning: Claude +9% relative on airline, +7% on retail.</td><td class="wrap">≈1.5 extra model calls a conversation (replayed on v4, §3)</td><td class="wrap">hook (check_write)</td><td class="wrap">Optional (P2, Q3)</td></tr>
+<tr><td class="sub wrap">Deterministic pre-write gates<span class="why">Code that checks a write&#x27;s arguments and the database state before it runs.</span></td><td class="wrap">“Reason Less, Verify More” (2026), τ² airline: gpt-4o-mini 29.6% → 42.0% pass^1, pass^5 8% → 26%; gpt-5.2 61.2% → 71.6% (one run). No model calls.</td><td class="wrap">none at run time; one rule per procedure</td><td class="wrap">hook (check_write)</td><td class="wrap">Proposed, targeted (P3)</td></tr>
+<tr><td class="sub wrap">A verifier model before each write<span class="why">A second LLM reviews the planned call.</span></td><td class="wrap">IRMA paper&#x27;s comparison: +2.4 points on airline, −9.4 on retail. Mixed.</td><td class="wrap">one model call per write</td><td class="wrap">deviates: a second agent</td><td class="wrap">Not proposed</td></tr>
+<tr><td class="sub wrap">Think tool<span class="why">A no-op tool the model calls to reason mid-turn.</span></td><td class="wrap">Superseded: Anthropic&#x27;s page now recommends extended or interleaved thinking instead in most cases. Its checklist survives as P1.</td><td class="wrap">a tool call</td><td class="wrap">deviates: adds a tool</td><td class="wrap">Not proposed</td></tr>
+<tr><td class="sub wrap">Plan-then-act / Reflexion<span class="why">A planner model, or retries across episodes.</span></td><td class="wrap">Plan-and-Act needs a trained planner; Reflexion learns across repeated trials, outside one conversation.</td><td class="wrap">an architecture</td><td class="wrap">deviates</td><td class="wrap">Not proposed</td></tr>
+</tbody></table></div>
+<p class="cap">I checked the Anthropic, SABER and pre-write-gate figures against their pages. A research agent gathered the rest, and I have not re-checked those. Most numbers come from τ-bench airline and retail, not banking.</p>
+<ul class="src">
+<li><a href="https://www.anthropic.com/engineering/claude-think-tool">Anthropic · The “think” tool (τ-bench results; the note recommending extended thinking)</a></li>
+<li><a href="https://arxiv.org/abs/2603.04370">τ-Knowledge: Evaluating Conversational Agents over Unstructured Knowledge</a></li>
+<li><a href="https://arxiv.org/abs/2512.07850">SABER: Small Actions, Big Errors</a></li>
+<li><a href="https://huggingface.co/papers/2607.07405">Reason Less, Verify More: deterministic gates</a></li>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/effort">Anthropic · effort</a></li>
+<li><a href="https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost">Anthropic · thinking steering and cost</a></li>
+<li><a href="https://arxiv.org/html/2508.20931v1">IRMA (verifier comparison on τ-bench)</a></li>
+</ul>
+</section>
+
+<section id="s5">
+<h2>Six proposals for v5, three of them hooks</h2>
+<div class="tw"><table>
+<thead><tr><th>id</th><th>proposal · surface · kind</th><th>what</th><th>why</th><th>train tasks it targets</th></tr></thead>
+<tbody>
+<tr><td class="id">P1</td><td class="wrap"><b>A pre-write rubric and one steering line in system.md</b><span class="why"><code>system.md</code> · prompt only</span></td><td class="wrap">Five checks before every write or transfer (request, procedure, record, arguments, order), then: if any answer is no or unsure, search, read or ask first. One line before the list: think carefully after every tool result. One line after it: state a fee, rate, limit, eligibility or “can't” only from a sentence you read.</td><td class="wrap">In 24 of 31 failures the optimiser found the agent acted on a guess, and in 24 the evidence was already in its context. Thinking over what it has, at the moment it writes, is the gap. Anthropic&#x27;s checklist prompt is the published version of this.</td><td class="wrap mono">016, 025, 036, 041, 048, 072, 088, 098</td></tr>
+<tr><td class="id">P2</td><td class="wrap"><b>Reflection before the first write of each tool (optional)</b><span class="why"><code>checks.py + memory.py</code> · deviates: a hook</span></td><td class="wrap">check_write sends the first call of each write tool back once, with the five checks and the document and tool names the agent has read. The model then thinks and resubmits; the retry is not checked again.</td><td class="wrap">SABER&#x27;s lever, and deterministic: it fires on every conversation, so it cannot tell failures from passes (23 of 31 failed and 20 of 29 passed conversations), and costs about 1.5 extra model calls each. It forces a pause where v4 skips one; whether the pause helps only a run can show.</td><td class="wrap mono">—</td></tr>
+<tr><td class="id">P3</td><td class="wrap"><b>Targeted guardrails from the diagnosis</b><span class="why"><code>checks.py + memory.py + guidance.py + helper.py</code> · deviates: hooks</span></td><td class="wrap">H: close_debit_card needs the account's transactions read; when the customer asked to freeze, freeze first (doc _025, _026). B widened: a payment inside a closure request needs the two closure reads (logistics_003). check_reply: naming a user tool not yet given; a restriction no document states. guidance: after an “already exists” result continue the procedure; read the accounts once verified; list unread catalog products before a recommendation; doc _042's highest-tier rule. helper: “Saver” classes end in “Account”.</td><td class="wrap">Each is a procedure the KB states, checkable from the conversation&#x27;s own tool results, and each fixes a task the leaders usually pass. The generic gates in §3 fire as often on passes as on failures; these fire only where a procedure is skipped.</td><td class="wrap mono">008, 016, 025, 046, 048, 051, 055, 056, 079, 080, 098, 099</td></tr>
+<tr><td class="id">P4</td><td class="wrap"><b>Fix the dispute-amount line from the KB; defer the fitted dispute checks</b><span class="why"><code>system.md (now) · checks.py D2/D3/D4 (deferred)</code> · prompt only</span></td><td class="wrap">Replace v4's “disputed_amount = the full transaction” with doc _031's amount in error (overcharge, cash not dispensed, one copy of a duplicate), and type from the record. Leave out the optimiser's D2 30-day liability window and D4's forced provisional credit.</td><td class="wrap">v4&#x27;s own prompt line caused task_083&#x27;s and task_084&#x27;s amounts. D2 and D4 are fitted to the graded values of four tasks no leader passes; the optimiser calls its window an approximation of “the statement showing the transaction”. The s14 lesson holds: a rule fitted to train&#x27;s answers can teach test&#x27;s other customers the wrong one.</td><td class="wrap mono">083, 084, 087</td></tr>
+<tr><td class="id">P5</td><td class="wrap"><b>Reasoning budget</b><span class="why"><code>agent.yaml</code> · like the leaders</span></td><td class="wrap">Your call (Q1). The leaders run Opus 5 at max and Qwen 3.8 Max at xhigh; v4 is Sonnet at high.</td><td class="wrap">Effort is the lever the leaders use, and it does not deviate. A rubric (P1) asks for thinking; effort pays for it. They work together: effort alone can still skip thinking on a turn that only reads a tool result.</td><td class="wrap mono">—</td></tr>
+<tr><td class="id">P6</td><td class="wrap"><b>No generic research gate</b><span class="why"><code>—</code> · —</span></td><td class="wrap">No hook that blocks a write for unfollowed leads, and no block on a refusal without a search.</td><td class="wrap">Replayed on v4: the leads gate would fire in 9 of 31 failed and 12 of 29 passed conversations, and the refusal gate in 7 and 7. On the leaders&#x27; passes it fires as often. Noise.</td><td class="wrap mono">—</td></tr>
+</tbody></table></div>
+<p class="cap">“Like the leaders” keeps their stock single-loop agent; a hook deviates from it, as v4's checks already do. The optimiser expected its own full set to fix 7 train tasks: 079, 046, 056, 099, 084, 008, 051.</p>
+</section>
+
+<section id="s6">
+<h2>The prompt: v4's lines, a rubric at the write, the KB's dispute amount</h2>
+<p>A diff from v4's <code>system.md</code> (1,860 characters) to the draft (3,023). Green lines are added, struck lines removed. The rubric asks for checks rather than answers, so it names no customer or task.</p>
+<pre class="diff">&lt;instructions&gt;
+You are a customer service agent following the &lt;policy&gt; below. Tool calls are native: never write a tool call as text, and never claim an action is done without its tool result.
+<span class="add">This work is multistep: think carefully after every tool result, not only at the start.</span>
+- Search first: before verifying, acting or refusing, search the KB for the issue (bm25 and dense), cat the best documents in full, grep -r every tool and document they name. Act once each step has its document and tool. A KB search needs no identity check. Never say something can&#x27;t be done before searching for a tool that does it.
+<span class="add">- Before every write or transfer, check in your reasoning:</span>
+<span class="add">  1. Request: the customer asked for this, in their words (a KB &quot;recommend&quot; is advice, not a request).</span>
+<span class="add">  2. Procedure: you have read in full the document this step comes from, and looked up every tool and document it names.</span>
+<span class="add">  3. Record: every condition it lists is checked against a tool result (accounts, transactions, disputes, pending orders), not the customer&#x27;s word.</span>
+<span class="add">  4. Arguments: each value comes from a tool result or the customer&#x27;s words; none guessed, defaulted or partial.</span>
+<span class="add">  5. Order: doing it now blocks none of the customer&#x27;s other requests.</span>
+<span class="add">  If any answer is no or unsure, search, read or ask first. One more search costs less than a wrong write.</span>
+<span class="add">- State a fee, rate, limit, eligibility or &quot;can&#x27;t&quot; only from a sentence you read in a document; invent no restriction.</span>
+- Today&#x27;s date comes only from get_current_time; session-context dates/names are not the customer&#x27;s.
+- Recommendations: list the whole right catalog (`ls | grep &lt;category&gt;`), read each product&#x27;s documents (rates, tiers, maintained minimums, fees, waivers, credits, exclusions, tenure), drop ineligible ones, price the rest at the stated usage, recommend one with the math.
+- Corrections are net per account (overcharges minus fees that should have been charged) as one credit; a discrepancy in either direction counts.
+- Several requests: read every procedure, then order them so none blocks another (opens before closes; a CLI before a dispute).
+<span class="del">- Do what the customer asked (freeze when asked to; a KB &quot;recommend&quot; is advice). Make only requested writes; add no step the procedure lacks; invent no restriction.</span>
+<span class="add">- Do what the customer asked (freeze when asked to). Make only requested writes; add no step the procedure lacks.</span>
+<span class="del">- Debit dispute fields come from the customer&#x27;s words: discovery_date = when they first noticed; disputed_amount = the full transaction; transaction_type from how the card was used. Liability runs from the statement showing the transaction: $50 if reported within 2 business days of it, else $500 (or the amount if lower). Fraud, unauthorized, ATM cash and duplicate need no merchant contact.</span>
+<span class="add">- Give a user tool (give_discoverable_user_tool) before telling the customer to use it, with every argument&#x27;s full value.</span>
+<span class="add">- Dispute fields come from the customer&#x27;s words and the record: the noticed/discovery date = when they first noticed; disputed_amount = the amount in error (the full charge for fraud or unauthorized; the overcharge for an incorrect amount; the cash not dispensed for an ATM shortfall; one copy of a duplicate); transaction type from the record. Liability runs from the statement showing the transaction: $50 if reported within 2 business days of it, else $500 (or the amount if lower). Fraud, unauthorized, ATM cash and duplicate need no merchant contact.</span>
+- Customer tool calls are invisible to you; one typed in their message did not run.
+&lt;/instructions&gt;
+&lt;policy&gt;
+{policy}
+&lt;/policy&gt;</pre>
+</section>
+
+<section id="s7">
+<h2>Five decisions before v5 is written</h2>
+<form class="q" data-lavish-question="q1" onsubmit="event.preventDefault();const v=[...new FormData(this).getAll('q1')].join('; ');const t='Q1 · v5&#x27;s model and effort: '+(v||'none');if(window.lavish){window.lavish.queuePrompt(t,{tag:'choice',text:t,element:this,data:{question:'q1',answer:v}});this.querySelector('.ack').textContent='Queued: press Send to Agent.';}else{this.querySelector('.ack').textContent='Reply in chat with: '+t;}"><h3>Q1 · v5&#x27;s model and effort</h3>
+<label class="opt"><input type="radio" name="q1" value="Sonnet xhigh with P1 + P3" checked><span class="t"><b>Sonnet 5 at xhigh, with the rubric and the targeted guardrails (recommended)</b><span>One step up the effort ladder the leaders climbed, on the model v4 is tuned for. The rubric gives the extra thinking a job.</span></span></label>
+<label class="opt"><input type="radio" name="q1" value="Sonnet high with P1 + P3"><span class="t"><b>Sonnet 5 at high, rubric and guardrails only</b><span>Cheapest; isolates what the prompt and hooks do, as v4 isolated nothing.</span></span></label>
+<label class="opt"><input type="radio" name="q1" value="Opus high with P1 + P3"><span class="t"><b>Opus 5.5 at high, on v4&#x27;s surfaces plus the rubric and guardrails</b><span>A bigger model with this work's lessons; the most tokens of these four.</span></span></label>
+<label class="opt"><input type="radio" name="q1" value="Opus high on v3&#x27;s prompt"><span class="t"><b>Opus 5.5 at high on v3&#x27;s stock prompt (your earlier v5 plan)</b><span>Like the leaders: stock prompt, a stronger model. Tests whether the model alone closes the gap, without v4's hooks.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div></form>
+<form class="q" data-lavish-question="q2" onsubmit="event.preventDefault();const v=[...new FormData(this).getAll('q2')].join('; ');const t='Q2 · which guardrails go in v5: '+(v||'none');if(window.lavish){window.lavish.queuePrompt(t,{tag:'choice',text:t,element:this,data:{question:'q2',answer:v}});this.querySelector('.ack').textContent='Queued: press Send to Agent.';}else{this.querySelector('.ack').textContent='Reply in chat with: '+t;}"><h3>Q2 · which guardrails go in v5</h3>
+<label class="opt"><input type="checkbox" name="q2" value="H close_debit_card" checked><span class="t"><b>H · close_debit_card: transactions read; freeze first when asked</b><span>task_079 (leaders 8/8), task_080 (6/8).</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="B widened" checked><span class="t"><b>B widened · payment inside a closure request needs both closure reads</b><span>task_046.</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="check_reply tools" checked><span class="t"><b>check_reply · a user tool named before it is given</b><span>task_055.</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="check_reply restriction" checked><span class="t"><b>check_reply · a restriction no document states</b><span>task_016; costs a resend on a correct refusal.</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="guidance set" checked><span class="t"><b>guidance · already-exists, accounts read, unread catalog, tier rule</b><span>task_051, 099, 098, 025, 048, 008.</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="transfer check" checked><span class="t"><b>Transfers seen by check_write (harness change) · doc _042 tier check, already-exists re-check</b><span>task_008 (leaders 7/8), task_051 (7/8).</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="rule checks" checked><span class="t"><b>New rule checks · dispute count (cc_015), rewards after resolved (cc_004), referral needs the accounts read</b><span>task_041, 027, 099, 098.</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="helper Saver" checked><span class="t"><b>helper · “Saver” classes end in “Account”</b><span>task_056.</span></span></label>
+<label class="opt"><input type="checkbox" name="q2" value="D2 D4 fitted"><span class="t"><b>D2 / D4 · the fitted dispute liability and provisional-credit checks</b><span>Not recommended: fitted to tasks no leader passes.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div></form>
+<form class="q" data-lavish-question="q3" onsubmit="event.preventDefault();const v=[...new FormData(this).getAll('q3')].join('; ');const t='Q3 · reflection before the first write of each tool (P2): '+(v||'none');if(window.lavish){window.lavish.queuePrompt(t,{tag:'choice',text:t,element:this,data:{question:'q3',answer:v}});this.querySelector('.ack').textContent='Queued: press Send to Agent.';}else{this.querySelector('.ack').textContent='Reply in chat with: '+t;}"><h3>Q3 · reflection before the first write of each tool (P2)</h3>
+<label class="opt"><input type="radio" name="q3" value="no, rubric in the prompt only" checked><span class="t"><b>No: the rubric lives in the prompt (recommended for v5)</b><span>Measure what P1 does first; add the send-back if writes still skip the checks.</span></span></label>
+<label class="opt"><input type="radio" name="q3" value="yes, add the send-back"><span class="t"><b>Yes: send each tool&#x27;s first write back once with the checklist</b><span>Forces the pause deterministically; ≈1.5 extra calls a conversation.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div></form>
+<form class="q" data-lavish-question="q5" onsubmit="event.preventDefault();const v=[...new FormData(this).getAll('q5')].join('; ');const t='Q5 · where v5&#x27;s guardrails come from: '+(v||'none');if(window.lavish){window.lavish.queuePrompt(t,{tag:'choice',text:t,element:this,data:{question:'q5',answer:v}});this.querySelector('.ack').textContent='Queued: press Send to Agent.';}else{this.querySelector('.ack').textContent='Reply in chat with: '+t;}"><h3>Q5 · where v5&#x27;s guardrails come from</h3>
+<label class="opt"><input type="radio" name="q5" value="mine from KB, validate on train" checked><span class="t"><b>Mine them from the KB&#x27;s procedure documents, validate on train, keep test unseen (recommended)</b><span>Covers every procedure, not just the failures one optimiser read; the gate stays honest.</span></span></label>
+<label class="opt"><input type="radio" name="q5" value="hand list"><span class="t"><b>The hand list in Q2 only</b><span>Faster; covers the failures on this page.</span></span></label>
+<label class="opt"><input type="radio" name="q5" value="KB plus train questions"><span class="t"><b>Mine from the KB and the 60 train questions</b><span>Adds question types, at the risk of rules fitted to train's answers.</span></span></label>
+<label class="opt"><input type="radio" name="q5" value="include test questions"><span class="t"><b>Include the test questions</b><span>Not recommended: it fits the agent to the exam the gate promotes on, and needs the CLAUDE.md rule changed.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div></form>
+<form class="q" data-lavish-question="q4" onsubmit="event.preventDefault();const v=[...new FormData(this).getAll('q4')].join('; ');const t='Q4 · after v5 is written: '+(v||'none');if(window.lavish){window.lavish.queuePrompt(t,{tag:'choice',text:t,element:this,data:{question:'q4',answer:v}});this.querySelector('.ack').textContent='Queued: press Send to Agent.';}else{this.querySelector('.ack').textContent='Reply in chat with: '+t;}"><h3>Q4 · after v5 is written</h3>
+<label class="opt"><input type="radio" name="q4" value="20-task smoke then full" checked><span class="t"><b>Play 20 train tasks, check the research measures in §2, then the full train and test runs (as v4)</b><span>The same staged plan v4 passed.</span></span></label>
+<label class="opt"><input type="radio" name="q4" value="write only"><span class="t"><b>Write v5 and stop, for me to review the files first</b><span>No run.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div></form>
+</section>
+
+<section id="s8">
+<h2>Two diagnosis sessions ran; nothing in agents/, runs/ or the ledger changed</h2>
+<div class="rule">
+<span class="k">model calls</span><span class="v">The loop's routing diagnosis on v4's train failures: Opus 5.5 at medium, 48 turns, 7,852,367 input and 54,276 output tokens, on the subscription. A first session ended early: it started three background sub-agents and stopped before writing its file. Optimiser sessions now get the six tools they are meant to have (<code>loop/optimiser.py</code>, one test), uncommitted on <code>banking-v5</code>. Plus one research agent for §4.</span>
+<span class="k">no model</span><span class="v">Research before the first write, the gate replay, the leaders' comparison: scripts over the run files and the leaders' published trajectories.</span>
+<span class="k">untouched</span><span class="v"><code>agents/banking_knowledge/</code>, <code>runs/</code>, the ledger and registry, <code>vendor/</code>. No v5.</span>
+<span class="k">files</span><span class="v">Scratchpad <code>diag5/</code>: diagnose_v4.py, diagnosis.json, prompt.md, transcript.json, guess.py, simulate.py, proposed_system.md, gen_s15.py.</span>
+</div>
+</section>
+</main>
+<footer>s15 · banking v4 diagnosis · train only: this page names no test task and shows test pass counts only · generated from the scratchpad's diag5/ files</footer>
+</body>
+</html>
