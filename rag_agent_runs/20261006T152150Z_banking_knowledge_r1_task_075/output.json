@@ -1,0 +1,444 @@
+{
+ "jobs": [
+  {
+   "job": "opening_personal_checking_accounts",
+   "when": {
+    "quote": "To open a personal checking account, ensure all of the following are true:",
+    "doc": "doc_bank_accounts_bank_accounts__general__001"
+   },
+   "info": [
+    {
+     "field": "identity_details",
+     "about": "Any 2 of: date of birth, email, phone number, address. These are checked against the customer's record.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, email, phone number or address on file?",
+     "may_hold_back": false
+    },
+    {
+     "field": "customer_lookup_key",
+     "about": "The customer's full name, email or user id, used to find the record",
+     "from": "customer",
+     "ask": "Could you please tell me your full name (or the email on your profile) so I can find your record?",
+     "may_hold_back": false
+    },
+    {
+     "field": "trip_length_months",
+     "about": "How many months the customer will use ATMs abroad",
+     "from": "customer",
+     "ask": "How long will you be abroad?",
+     "may_hold_back": true
+    },
+    {
+     "field": "withdrawals_per_month",
+     "about": "How many ATM withdrawals the customer expects to make each month",
+     "from": "customer",
+     "ask": "About how many ATM withdrawals do you expect to make each month?",
+     "may_hold_back": true
+    },
+    {
+     "field": "amount_per_withdrawal",
+     "about": "The usual USD-equivalent amount of each withdrawal. It decides percentage and tiered fees and must fit within each account's daily ATM limit.",
+     "from": "customer",
+     "ask": "About how much will you usually take out in each withdrawal?",
+     "may_hold_back": true
+    },
+    {
+     "field": "atm_type",
+     "about": "Whether the withdrawals are at foreign ATMs abroad in a foreign currency and/or at out-of-network ATMs",
+     "from": "customer",
+     "ask": "Will these be withdrawals abroad in a foreign currency at ATMs outside Rho-Bank's network?",
+     "may_hold_back": true
+    },
+    {
+     "field": "date_of_birth_age",
+     "about": "The customer's age. It decides general eligibility (18+) and the age-limited accounts (Light Green 13–24, Dark Green 17–26, Gold Years 62+).",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "existing_accounts",
+     "about": "Existing accounts with their type, class, status and date opened. Used to count personal checking accounts and find any closed for cause.",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup",
+     "by": "harness",
+     "do": "Look up the customer's record using the name, email or user id they gave",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave (or use get_user_information_by_email / get_user_information_by_id)"
+     },
+     "after": [],
+     "if": null,
+     "quote": "1. Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Ask for 2 of: DOB, email, phone, address. Check them against the record. Share nothing from the record before this check passes.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup"
+     ],
+     "if": null,
+     "quote": "1. Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": "2 of the customer's details match the record",
+     "quote": "1. Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "log_verify",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "the address on record",
+      "email": "the email on record",
+      "phone_number": "the phone on record",
+      "date_of_birth": "the DOB on record",
+      "time_verified": "the time from get_current_time"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "1. Verify customer identity.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's existing bank accounts to check eligibility",
+     "call": "get_all_user_accounts_by_user_id_3847",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "after": [
+      "log_verify"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "check_eligibility",
+     "by": "model",
+     "do": "Confirm the customer is 18 or older (from the DOB on record), has no more than 4 personal checking accounts, and has no checking account closed for cause in the past 6 months. If any check fails, say the account cannot be opened.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "2. Check eligibility requirements listed above.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "ask_usage",
+     "by": "model",
+     "do": "If the customer has not already said, ask for the number of months, withdrawals per month, amount per withdrawal, and whether the ATMs are foreign and/or out-of-network",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_eligibility"
+     ],
+     "if": "any usage detail is missing",
+     "quote": "3. Confirm the customer's desired account_class selection.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "compare_fees",
+     "by": "model",
+     "do": "For every personal checking account, compute total Rho-Bank ATM fees = per-withdrawal fee (from that account's foreign-ATM and out-of-network fee rules) × withdrawals per month × months, applying free allowances, minimums, caps and tiers. Remove accounts the customer is not age-eligible for and accounts whose daily ATM limit is below the per-withdrawal amount. Recommend the lowest total. Results for each account: Green Fee-Free $0 foreign + $0 out-of-network; Purple $0 foreign but $2.50 out-of-network; Bluest $0 foreign but $2.00 out-of-network and a $75,000 opening deposit; Light Blue 2 free/month then $4.00 foreign and $2.50 out-of-network; Evergreen 2% (min $3.00) foreign, 1% (max $2.50) out-of-network; Blue and Green (checking) greater of 3% or $5.00 foreign.",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_usage"
+     ],
+     "if": null,
+     "quote": "Foreign ATM withdrawals are also fee-free: $0.00 per withdrawal. Third-party ATM operator fees may still apply.",
+     "doc": "doc_checking_accounts_green_fee-free_account_005"
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Explain the lowest-fee account and the fee total, plus relevant notes: third-party operator fees may still apply, the daily ATM limit, and the monthly maintenance fee and its waiver. Ask the customer to confirm the exact account_class. Do not reveal internal procedure.",
+     "call": null,
+     "args": {},
+     "after": [
+      "compare_fees"
+     ],
+     "if": null,
+     "quote": "3. Confirm the customer's desired account_class selection.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "open",
+     "by": "harness",
+     "do": "Open the chosen personal checking account using its full official name",
+     "call": "open_bank_account_4821",
+     "args": {
+      "user_id": "the verified user's id",
+      "account_type": "checking",
+      "account_class": "the confirmed official name ending in 'Account', e.g. 'Green Fee-Free Account'"
+     },
+     "after": [
+      "recommend"
+     ],
+     "if": "the customer confirms the account and all eligibility checks passed",
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Confirm the new account (class and new account id) to the customer",
+     "call": null,
+     "args": {},
+     "after": [
+      "open"
+     ],
+     "if": null,
+     "quote": "4. Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The customer must be verified before eligibility is checked or an account is opened",
+     "quote": "1. The customer is verified.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "The customer must be at least 18 years old",
+     "quote": "2. The customer is at least 18 years old.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "The customer may hold no more than 4 personal checking accounts",
+     "quote": "3. The customer does not exceed 4 personal checking accounts.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "No checking account closed for cause in the past 6 months",
+     "quote": "4. The customer has no checking accounts closed for cause in the past 6 months.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "account_class must be the full official name ending with 'Account'",
+     "quote": "Personal checking account_class options must use the full official name ending with 'Account' (e.g., 'Blue Account', 'Green Account (checking)').",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "Green Fee-Free Account: $0.00 foreign ATM fee",
+     "quote": "Foreign ATM withdrawals are also fee-free: $0.00 per withdrawal. Third-party ATM operator fees may still apply.",
+     "doc": "doc_checking_accounts_green_fee-free_account_005"
+    },
+    {
+     "rule": "Green Fee-Free Account: $0.00 out-of-network ATM fee",
+     "quote": "Rho does not charge a fee for using out-of-network ATMs: $0.00 per withdrawal.",
+     "doc": "doc_checking_accounts_green_fee-free_account_005"
+    },
+    {
+     "rule": "Green Fee-Free Account: daily ATM limit is $500",
+     "quote": "Your daily ATM withdrawal limit is $500. This limit applies to all ATM withdrawals within a 24-hour period.",
+     "doc": "doc_checking_accounts_green_fee-free_account_005"
+    },
+    {
+     "rule": "Green Fee-Free Account: $22.50 monthly fee, waived with a $150 minimum daily balance",
+     "quote": "It is waived when you maintain a minimum daily balance of $150 during the statement cycle.",
+     "doc": "doc_checking_accounts_green_fee-free_account_005"
+    },
+    {
+     "rule": "Purple Account: $0.00 foreign ATM fee",
+     "quote": "No foreign ATM withdrawal fees: $0.00 per withdrawal (third-party ATM operator fees may still apply)",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "rule": "Purple Account: $2.50 out-of-network ATM fee per withdrawal",
+     "quote": "You are charged $2.50 per cash withdrawal made at an out-of-network ATM.",
+     "doc": "doc_checking_accounts_purple_account_012"
+    },
+    {
+     "rule": "Bluest Account: $0.00 foreign ATM fee",
+     "quote": "Withdraw from ATMs abroad with no Rho-Bank fee: $0.00. Third-party ATM operator fees may still apply.",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "rule": "Bluest Account: $2.00 out-of-network ATM fee per withdrawal",
+     "quote": "| Cash withdrawal at an out-of-network ATM | $2.00 per withdrawal |",
+     "doc": "doc_checking_accounts_bluest_account_010"
+    },
+    {
+     "rule": "Bluest Account: $75,000 opening deposit",
+     "quote": "Deposit at least $75,000 to open your account.",
+     "doc": "doc_checking_accounts_bluest_account_002"
+    },
+    {
+     "rule": "Blue Account: foreign ATM fee is the greater of 3% or $5.00 per withdrawal",
+     "quote": "For ATM withdrawals made in a foreign currency, you are charged 3% of the withdrawal amount, with a minimum fee of $5.00 per withdrawal.",
+     "doc": "doc_checking_accounts_blue_account_012"
+    },
+    {
+     "rule": "Blue Account: out-of-network fee is 1% (max $3.00)",
+     "quote": "Out-of-network ATM withdrawal: 1% of withdrawal amount (max $3.00)",
+     "doc": "doc_checking_accounts_blue_account_001"
+    },
+    {
+     "rule": "Green Account (checking): foreign ATM fee is the greater of 3% or $5.00",
+     "quote": "3% of the withdrawal amount (calculated on the U.S. dollar equivalent), or",
+     "doc": "doc_checking_accounts_green_account__checking__012"
+    },
+    {
+     "rule": "Green Account (checking): $3.00 out-of-network fee",
+     "quote": "Using a non-network ATM incurs a $3.00 fee; the ATM owner may charge additional fees",
+     "doc": "doc_checking_accounts_green_account__checking__001"
+    },
+    {
+     "rule": "Evergreen Account: foreign ATM fee is 2% (min $3.00)",
+     "quote": "Foreign ATM withdrawal fee: 2% of the withdrawal amount, with a minimum of $3.00 per transaction.",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "rule": "Evergreen Account: out-of-network fee is 1%, capped at $2.50",
+     "quote": "The percentage is applied to the cash dispensed amount. If the percentage-based fee exceeds $2.50, the fee is capped at $2.50.",
+     "doc": "doc_checking_accounts_evergreen_account_008"
+    },
+    {
+     "rule": "Light Blue Account: 2 free foreign withdrawals per month, then $4.00 each",
+     "quote": "After you use all 2 free foreign ATM withdrawals in a month, each additional foreign ATM withdrawal is charged a fee of $4.00.",
+     "doc": "doc_checking_accounts_light_blue_account_006"
+    },
+    {
+     "rule": "Light Blue Account: 2 free out-of-network withdrawals per month, then $2.50 each; daily ATM limit $400",
+     "quote": "Your daily ATM withdrawal limit is $400. This limit applies to all ATM withdrawals within a 24-hour period.",
+     "doc": "doc_checking_accounts_light_blue_account_004"
+    },
+    {
+     "rule": "Light Green Account: only for ages 13–24 (foreign fee $5.00 above $300; daily ATM limit $150)",
+     "quote": "If you are below 13 or past 24, you are not eligible as the primary account holder for this account type.",
+     "doc": "doc_checking_accounts_light_green_account_003"
+    },
+    {
+     "rule": "Dark Green Account: only for ages 17–26; foreign fee 2.5% capped at $6.00; daily ATM limit $300",
+     "quote": "The fee is capped at a maximum of $6.00 per transaction, protecting you from excessive fees on larger withdrawals.",
+     "doc": "doc_checking_accounts_dark_green_account_002"
+    },
+    {
+     "rule": "Gold Years Account: only for ages 62+; foreign fee $3.50 per withdrawal, waived when the balance is $10,000 or more",
+     "quote": "You must be at least 62 years old to qualify.",
+     "doc": "doc_checking_accounts_gold_years_account_002"
+    }
+   ],
+   "done_when": "The customer is verified and logged, eligibility is confirmed, the lowest-fee eligible personal checking account has been recommended with its fee total, and open_bank_account_4821 has opened the account class the customer confirmed (or the customer has been told why it cannot be opened)."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__001",
+   "why": "Internal procedure for opening personal checking accounts: eligibility rules, steps, and the open_bank_account_4821 tool"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "get_all_user_accounts_by_user_id_3847 for checking eligibility (account count, status)"
+  },
+  {
+   "id": "doc_checking_accounts_green_fee-free_account_005",
+   "why": "Green Fee-Free: $0 foreign and $0 out-of-network ATM fees, $500 daily limit, maintenance fee waiver"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_001",
+   "why": "Purple: $0 foreign ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_012",
+   "why": "Purple: $2.50 out-of-network fee"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_003",
+   "why": "Bluest: $0 foreign ATM fee"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_010",
+   "why": "Bluest: $2.00 out-of-network fee"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_002",
+   "why": "Bluest: $75,000 opening deposit"
+  },
+  {
+   "id": "doc_checking_accounts_blue_account_012",
+   "why": "Blue: foreign fee 3% (min $5.00), $500 daily limit"
+  },
+  {
+   "id": "doc_checking_accounts_blue_account_001",
+   "why": "Blue: out-of-network fee 1% (max $3.00)"
+  },
+  {
+   "id": "doc_checking_accounts_green_account__checking__012",
+   "why": "Green (checking): foreign fee 3% (min $5.00)"
+  },
+  {
+   "id": "doc_checking_accounts_green_account__checking__001",
+   "why": "Green (checking): $3.00 out-of-network fee"
+  },
+  {
+   "id": "doc_checking_accounts_evergreen_account_001",
+   "why": "Evergreen: foreign fee 2% (min $3.00)"
+  },
+  {
+   "id": "doc_checking_accounts_evergreen_account_008",
+   "why": "Evergreen: out-of-network fee 1% (cap $2.50)"
+  },
+  {
+   "id": "doc_checking_accounts_light_blue_account_006",
+   "why": "Light Blue: 2 free foreign withdrawals, then $4.00"
+  },
+  {
+   "id": "doc_checking_accounts_light_blue_account_004",
+   "why": "Light Blue: out-of-network allowance and fee, $400 daily limit"
+  },
+  {
+   "id": "doc_checking_accounts_light_green_account_003",
+   "why": "Light Green: age 13–24 eligibility"
+  },
+  {
+   "id": "doc_checking_accounts_light_green_account_013",
+   "why": "Light Green: tiered foreign ATM fees"
+  },
+  {
+   "id": "doc_checking_accounts_dark_green_account_002",
+   "why": "Dark Green: age 17–26, foreign fee 2.5% (max $6.00), $300 daily limit"
+  },
+  {
+   "id": "doc_checking_accounts_gold_years_account_002",
+   "why": "Gold Years: age 62+, $3.50 foreign fee waived at a $10,000 balance"
+  }
+ ],
+ "open_questions": [
+  "The documents do not say whether a withdrawal abroad at an out-of-network ATM is charged both the foreign ATM fee and the out-of-network fee. A business doc separates them: U.S. means the out-of-network fee, abroad means the foreign fee. Green Fee-Free has the lowest total ($0) under either reading. Purple and Bluest are also $0 if only foreign fees count.",
+  "The personal checking opening doc does not state the account_type argument for open_bank_account_4821. 'checking' is assumed by analogy with the savings docs ('savings').",
+  "The documents do not say how to see 'closed for cause' in the account records. Only status is returned.",
+  "Third-party ATM operator fees and the rebates (Purple up to $30/month, Bluest up to $50/month) depend on the operator and cannot be calculated in advance."
+ ]
+}

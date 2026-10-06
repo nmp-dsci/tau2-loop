@@ -1,0 +1,403 @@
+{
+ "jobs": [
+  {
+   "job": "checking_account_referral_recommendation",
+   "when": {
+    "quote": "Before giving any recommendations or information on referral terms, you must check that the user is eligible to submit referrals first",
+    "doc": "doc_bank_accounts_bank_accounts__general__047"
+   },
+   "info": [
+    {
+     "field": "verification_values",
+     "about": "Any 2 of these 4 values, which must match the records: date of birth, email, phone number, address",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me two of the following: your date of birth, email, phone number or address on file?",
+     "may_hold_back": false
+    },
+    {
+     "field": "referrer_referral_history",
+     "about": "Referrals the customer already made, with exact timestamps, statuses and account types",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "referrer_earliest_checking_open_date",
+     "about": "The date_opened of the customer's earliest checking account. Tenure is counted from this date.",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "referred_person_address",
+     "about": "The address where the referred person is registered, or whether they live at the referrer's address",
+     "from": "customer",
+     "ask": "Does the person you want to refer live with you, or at the same registered address as you?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referred_person_planned_deposit",
+     "about": "How much new money (not a transfer from another Rho-Bank account) the referred person will deposit after opening, and when",
+     "from": "customer",
+     "ask": "About how much will she deposit into the new account, and will it be new money such as a paycheck or an external transfer?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referred_person_age",
+     "about": "The referred person's age. They must be 18 or older, except for Light Green (ages 13-24). Gold Years requires 62 or older.",
+     "from": "customer",
+     "ask": "How old is the person you want to refer?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referred_person_prior_rho_accounts",
+     "about": "Whether the referred person has any Rho-Bank account now, or had one closed in the past 12 months",
+     "from": "customer",
+     "ask": "Has she ever had a Rho-Bank checking or savings account, including one closed in the last 12 months?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "identify",
+     "by": "model",
+     "do": "Ask for 2 of: DOB, email, phone, address. Look up the customer with get_user_information_by_name, by_email or by_id, and compare the values.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives"
+     },
+     "after": [],
+     "if": null,
+     "quote": "Before giving any recommendations or information on referral terms, you must check that the user is eligible to submit referrals first",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "time_verify",
+     "by": "harness",
+     "do": "Get the current time for the verification log and the rolling-window check",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "identify"
+     ],
+     "if": "2 of the 4 values match the records",
+     "quote": "A rolling 9-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "verified user's name",
+      "user_id": "verified user's id",
+      "address": "from records",
+      "email": "from records",
+      "phone_number": "from records",
+      "date_of_birth": "from records",
+      "time_verified": "current time"
+     },
+     "after": [
+      "time_verify"
+     ],
+     "if": "verified",
+     "quote": "Before giving any recommendations or information on referral terms, you must check that the user is eligible to submit referrals first",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "get_referrals",
+     "by": "harness",
+     "do": "Get the customer's referral history with timestamps",
+     "call": "get_referrals_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "This limit applies across all checking account types; referrals from different accounts count toward the same 9-day cap.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "window_check",
+     "by": "model",
+     "do": "Count referrals of any account type whose timestamp falls within 9 days before the current time. If 2 or more, a new referral would be auto-denied. Tell the customer this, and that they must wait until the oldest one is more than 9 days old. Give no account recommendation or bonus details, and stop.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_referrals"
+     ],
+     "if": null,
+     "quote": "If you attempt to receive more than 2 referrals in a single 9-day period, the third referral (and any subsequent referrals in that window) will be automatically denied.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "window_check"
+     ],
+     "if": "the rolling window is not full",
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's accounts. Find the earliest date_opened among checking accounts and compute tenure in days up to the current time.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": "the rolling window is not full",
+     "quote": "This threshold is calculated from when you first became a Rho-Bank checking customer—specifically, the date your earliest checking account was opened.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "ask_referred",
+     "by": "model",
+     "do": "Ask for the referred person's address (same as the customer's?), age, planned qualifying deposit, and any Rho-Bank accounts held or closed in the past 12 months",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": "the rolling window is not full",
+     "quote": "The referrer and referred person cannot be registered at the same address.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "ineligible_stop",
+     "by": "model",
+     "do": "Tell the customer the referral would be denied if any of these hold: same registered address, referred person not a new customer, or tenure below every program's minimum. Do not recommend an account.",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_referred"
+     ],
+     "if": "any eligibility restriction fails",
+     "quote": "The referred person must be a new Rho-Bank customer with no existing checking, savings, or closed accounts within the past 12 months.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Find every personal checking account where all of these hold: the referrer's tenure meets the account's tenure minimum; the planned deposit meets its qualifying deposit; the referred person's age fits; this year's referrals of that type are below the annual cap. Among them, recommend the one with the highest referrer + referred bonus and state both amounts.",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_referred"
+     ],
+     "if": "the customer is eligible",
+     "quote": "Each checking account type has its own referral bonus amounts and qualification requirements.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "id": "submit",
+     "by": "customer",
+     "do": "The customer submits the referral for the recommended account type, written with 'Account' at the end (e.g. 'Blue Account')",
+     "call": "submit_referral",
+     "args": {
+      "user_id": "the verified user's id",
+      "account_type": "the recommended account type, e.g. 'Blue Account'"
+     },
+     "after": [
+      "recommend"
+     ],
+     "if": "the customer wants to proceed",
+     "quote": "Each checking account type has its own referral bonus amounts and qualification requirements.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "At most 2 referral bonuses in any rolling 9-day window, across all checking account types. A third referral in the window is automatically denied.",
+     "quote": "You can receive at most 2 referral bonuses in any rolling 9-day window.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "rule": "After a rolling-window denial, the customer must wait until the oldest referral in the window is more than 9 days old",
+     "quote": "If your referral was rejected due to the rolling window limit, you must wait until your oldest qualifying referral is more than 9 days old.",
+     "doc": "doc_bank_accounts_bank_accounts__general__048"
+    },
+    {
+     "rule": "Referrer and referred person must not be registered at the same address",
+     "quote": "The referrer and referred person cannot be registered at the same address.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "rule": "The referred person must be 18 or older, except for Light Green (minors allowed with a guardian)",
+     "quote": "The referred person must be 18 years or older, except for the Light Green Account which allows minors with a guardian.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "rule": "Tenure is measured from the earliest checking account's open date, whatever account types the customer holds",
+     "quote": "This threshold is calculated from when you first became a Rho-Bank checking customer—specifically, the date your earliest checking account was opened.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "rule": "The qualifying deposit must be new money, not a transfer from another Rho-Bank account",
+     "quote": "The qualifying deposit must be new money and cannot be transferred from another Rho-Bank account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    },
+    {
+     "rule": "Blue: $35 referrer + $30 referred = $65 combined; deposit $500 within 60 days; tenure 30 days; 5 per calendar year",
+     "quote": "Yes. When you refer someone to open a Blue Account, you earn $35 for each successful referral. The person you refer receives $30 as a welcome bonus.",
+     "doc": "doc_checking_accounts_blue_account_010"
+    },
+    {
+     "rule": "Blue: deposit $500 within 60 days; tenure 30 days from the first checking account",
+     "quote": "The referred person must deposit at least $500 within 60 days of opening their account. A minimum banking relationship of 30 days is required to participate—this is measured from when you first opened any checking account with us.",
+     "doc": "doc_checking_accounts_blue_account_010"
+    },
+    {
+     "rule": "Green Fee-Free: $20 + $35 = $55; deposit $300 within 60 days; tenure 30 days; 4 per year",
+     "quote": "Your Rho-Bank checking relationship must span at least 30 days.",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "rule": "Green Fee-Free bonus amounts: $20 referrer, $35 referred",
+     "quote": "New member reward: $35 welcome bonus",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "rule": "Green (checking): $20 + $30 = $50; deposit $500 within 60 days; tenure 30 days; 5 per year",
+     "quote": "Account tenure requirement: 30 days since becoming a Rho-Bank checking customer.",
+     "doc": "doc_checking_accounts_green_account__checking__001"
+    },
+    {
+     "rule": "Light Blue: $30 + $20 = $50; deposit $500 within 60 days; tenure 30 days; 5 per calendar year",
+     "quote": "To qualify as a referrer, you must have been a Rho-Bank checking account holder for 30 days or longer.",
+     "doc": "doc_checking_accounts_light_blue_account_007"
+    },
+    {
+     "rule": "Light Green: $15 + $25 = $40; 3 per calendar year",
+     "quote": "They receive: $25 as a welcome bonus",
+     "doc": "doc_checking_accounts_light_green_account_001"
+    },
+    {
+     "rule": "Light Green: deposit $100 within 90 days; tenure 14 days",
+     "quote": "Referrer eligibility is based on account tenure: you must have opened your first Rho-Bank checking account at least 14 days ago.",
+     "doc": "doc_checking_accounts_light_green_account_002"
+    },
+    {
+     "rule": "Light Green: the account holder must be aged 13 to 24",
+     "quote": "You must be the primary account holder and be between 13 and 24 years old to open the account.",
+     "doc": "doc_checking_accounts_light_green_account_002"
+    },
+    {
+     "rule": "Evergreen: $35 + $25 = $60; deposit $750 within 60 days; tenure 45 days",
+     "quote": "The 45-day tenure threshold applies—calculated from the date you opened your first Rho-Bank checking account.",
+     "doc": "doc_checking_accounts_evergreen_account_007"
+    },
+    {
+     "rule": "Dark Green: $40 + $30 = $70; deposit $1,000 within 60 days; tenure 45 days",
+     "quote": "You must satisfy the 45-day minimum as a Rho-Bank checking customer.",
+     "doc": "doc_checking_accounts_dark_green_account_010"
+    },
+    {
+     "rule": "Purple: $45 + $35 = $80; deposit $1,000 within 60 days; tenure 45 days",
+     "quote": "Participation requires 45 days of checking account history with Rho-Bank.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    },
+    {
+     "rule": "Gold Years: $50 + $75 = $125; referred person must be 62 or older; deposit $1,000 within 90 days; tenure 30 days",
+     "quote": "The person you refer must be eligible for a Gold Years Account (age 62+)",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "rule": "Bluest: $75 + $50 = $125; deposit $2,000 within 90 days; tenure 60 days",
+     "quote": "Qualifying requirement: Referred person must deposit $2,000 within 90 days",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "rule": "A referral bonus cannot be combined with other new-account promotions",
+     "quote": "The referral bonus cannot be combined with other new account promotions or sign-up bonuses.",
+     "doc": "doc_bank_accounts_bank_accounts__general__047"
+    }
+   ],
+   "done_when": "The customer is verified and logged, and the referral history has been checked. Either (a) the customer was told the referral would be denied (rolling window full, same address, not a new customer, or not enough tenure) and given no recommendation, or (b) the customer was told the eligible account with the highest combined bonus, with both bonus amounts and the qualifying deposit, and submitted submit_referral with that account type ending in 'Account'."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__047",
+   "why": "Internal referral terms: check eligibility before recommending, the 9-day rolling cap, address, new-customer and age restrictions, tenure measured from the earliest checking account, deposit rules"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__048",
+   "why": "Referral FAQ: rejection reasons and how long to wait after a rolling-window denial"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "Names get_all_user_accounts_by_user_id_3847, which returns the date_opened values used to compute tenure"
+  },
+  {
+   "id": "doc_checking_accounts_blue_account_010",
+   "why": "Blue referral terms: $35/$30, $500 deposit, 30-day tenure, 5 per year"
+  },
+  {
+   "id": "doc_checking_accounts_green_fee-free_account_007",
+   "why": "Green Fee-Free referral terms: $20/$35, $300 deposit, 30 days, 4 per year"
+  },
+  {
+   "id": "doc_checking_accounts_green_account__checking__001",
+   "why": "Green checking referral terms: $20/$30, $500 deposit, 30 days"
+  },
+  {
+   "id": "doc_checking_accounts_light_blue_account_007",
+   "why": "Light Blue referral terms: $30/$20, $500 deposit, 30 days"
+  },
+  {
+   "id": "doc_checking_accounts_light_green_account_001",
+   "why": "Light Green bonuses: $15/$25, 3 per year"
+  },
+  {
+   "id": "doc_checking_accounts_light_green_account_002",
+   "why": "Light Green: $100 deposit, 14-day tenure, ages 13-24"
+  },
+  {
+   "id": "doc_checking_accounts_evergreen_account_001",
+   "why": "Evergreen bonuses: $35/$25"
+  },
+  {
+   "id": "doc_checking_accounts_evergreen_account_007",
+   "why": "Evergreen: $750 deposit, 45-day tenure"
+  },
+  {
+   "id": "doc_checking_accounts_dark_green_account_010",
+   "why": "Dark Green referral terms: $40/$30, $1,000 deposit, 45 days"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_011",
+   "why": "Purple referral terms: $45/$35, $1,000 deposit, 45 days"
+  },
+  {
+   "id": "doc_checking_accounts_gold_years_account_010",
+   "why": "Gold Years referral terms: $50/$75, age 62+, $1,000 deposit"
+  },
+  {
+   "id": "doc_checking_accounts_bluest_account_003",
+   "why": "Bluest referral terms: $75/$50, $2,000 deposit, 60-day tenure"
+  }
+ ],
+ "open_questions": [
+  "Does the 9-day cap count every referral in the history or only ones that earn bonuses (e.g. COMPLETE / IN_PROGRESS)? This research assumes REJECTED and ERROR referrals do not count and all others do.",
+  "Does a referral exactly 9 days old (to the timestamp) still count inside the window? Compare exact timestamps with get_current_time.",
+  "No document gives a rule for ties between accounts with the same combined bonus.",
+  "No document says how the agent should verify the referred person's address beyond the customer's statement."
+ ]
+}

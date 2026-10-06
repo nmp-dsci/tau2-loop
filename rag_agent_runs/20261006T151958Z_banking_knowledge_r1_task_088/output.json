@@ -1,0 +1,987 @@
+{
+ "jobs": [
+  {
+   "job": "debit_card_decline_diagnosis",
+   "when": {
+    "quote": "If your debit card was declined due to balance-related reasons, you may have encountered one of these codes:",
+    "doc": "doc_checking_accounts_checking_accounts__general__006"
+   },
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. These must match the records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me two of the following: your date of birth, email, phone number or address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "decline_code",
+     "about": "The decline code shown at the terminal, if the customer saw one",
+     "from": "customer",
+     "ask": "Did you see a decline code or message on the terminal?",
+     "may_hold_back": true
+    },
+    {
+     "field": "transaction_channel",
+     "about": "How the purchase was made: in store (chip, PIN or signature), online, or at an ATM",
+     "from": "customer",
+     "ask": "Were you paying in person, online, or at an ATM?",
+     "may_hold_back": true
+    },
+    {
+     "field": "attempted_amount",
+     "about": "Amount of the declined purchase",
+     "from": "customer",
+     "ask": "How much was the purchase you were trying to make?",
+     "may_hold_back": true
+    },
+    {
+     "field": "which_checking_account",
+     "about": "Which checking account or debit card was declined, if the customer has more than one",
+     "from": "customer",
+     "ask": "Which of your checking accounts is the card linked to?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_status_and_flags",
+     "about": "status, fraud_alert_active, alert_source, velocity_blocked, issue_reason, limits and date_issued for the card",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "account_balance_and_overdraft",
+     "about": "Checking account status, balance and overdraft_pos_enabled",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "pending_transactions_and_deposits",
+     "about": "Pending transactions and recent check or mobile deposits on the account",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "ask_identity",
+     "by": "model",
+     "do": "Greet the customer and ask for 2 of: DOB, email, phone, address",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address",
+     "doc": "policy"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's records",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave (or use get_user_information_by_email / _by_id)"
+     },
+     "after": [
+      "ask_identity"
+     ],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools",
+     "doc": "policy"
+    },
+    {
+     "id": "get_time_verif",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": "2 values match the records",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "verified user name",
+      "user_id": "verified user id",
+      "address": "from records",
+      "email": "from records",
+      "phone_number": "from records",
+      "date_of_birth": "from records",
+      "time_verified": "from get_current_time"
+     },
+     "after": [
+      "get_time_verif"
+     ],
+     "if": "2 values match the records",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "ask_decline_details",
+     "by": "model",
+     "do": "Ask for the decline code (if seen), the channel, the amount and which account or card was declined",
+     "call": null,
+     "args": {},
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+     "doc": "doc_checking_accounts_checking_accounts__general__003"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's accounts (status, balance, overdraft_pos_enabled)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user"
+      }
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": null,
+     "quote": "Look up the customer's accounts to get the checking account balance.",
+     "doc": "doc_checking_accounts_checking_accounts__general__006"
+    },
+    {
+     "id": "unlock_cards",
+     "by": "harness",
+     "do": "Unlock the debit card lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_cards_by_account_id_7823"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__028"
+    },
+    {
+     "id": "get_cards",
+     "by": "harness",
+     "do": "Get the debit cards for the checking account in question and check status, flags and issue_reason",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_cards_by_account_id_7823",
+      "arguments": {
+       "account_id": "the checking account in question"
+      }
+     },
+     "after": [
+      "unlock_cards",
+      "get_accounts",
+      "ask_decline_details"
+     ],
+     "if": null,
+     "quote": "Look up the debit card information and check the card's status field.",
+     "doc": "doc_checking_accounts_checking_accounts__general__003"
+    },
+    {
+     "id": "unlock_txns",
+     "by": "harness",
+     "do": "Unlock the account transaction history tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+     "doc": "doc_bank_accounts_bank_accounts__general__018"
+    },
+    {
+     "id": "get_txns",
+     "by": "harness",
+     "do": "Get account transactions and look for pending items and recent check/mobile deposits",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "arguments": {
+       "account_id": "the checking account in question"
+      }
+     },
+     "after": [
+      "unlock_txns",
+      "get_cards"
+     ],
+     "if": null,
+     "quote": "Review recent transaction history and look for transactions with status 'pending'.",
+     "doc": "doc_checking_accounts_checking_accounts__general__006"
+    },
+    {
+     "id": "route_by_code",
+     "by": "model",
+     "do": "Route by code or findings. Not-active status, fraud alert or velocity block: follow Code 05 / security alert rules. Card reported stolen: job reported_stolen_card_decline. Chip error: job chip_cvv_mismatch_card_review. Balance short: next step.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_cards",
+      "get_txns"
+     ],
+     "if": null,
+     "quote": "If status is ACTIVE → Continue to step 2.",
+     "doc": "doc_checking_accounts_checking_accounts__general__003"
+    },
+    {
+     "id": "explain_insufficient",
+     "by": "model",
+     "do": "Tell the customer their available balance. Explain that pending items and recently deposited checks may not be available yet: standard deposits are typically available within 1-2 business days, and some deposits get extended review. The expected availability date shows in the app.",
+     "call": null,
+     "args": {},
+     "after": [
+      "route_by_code"
+     ],
+     "if": "available balance is below the attempted amount",
+     "quote": "Pending card transactions and checks can decrease available funds before they appear as posted.",
+     "doc": "doc_checking_accounts_checking_accounts__general__006"
+    },
+    {
+     "id": "explain_availability",
+     "by": "model",
+     "do": "Give the deposit availability timeline",
+     "call": null,
+     "args": {},
+     "after": [
+      "explain_insufficient"
+     ],
+     "if": "a recent check or mobile deposit is part of the expected funds",
+     "quote": "Certain deposits may be subject to extended review. You will see the expected availability date in the app after submission.",
+     "doc": "doc_bank_accounts_bank_accounts__general__011"
+    },
+    {
+     "id": "offer_options",
+     "by": "model",
+     "do": "Offer to transfer funds from another of the customer's accounts, or to make a smaller transaction",
+     "call": null,
+     "args": {},
+     "after": [
+      "explain_insufficient"
+     ],
+     "if": "balance is genuinely insufficient",
+     "quote": "Offer options: 'Would you like to transfer funds from another account, or would you prefer to make a smaller transaction?'",
+     "doc": "doc_checking_accounts_checking_accounts__general__006"
+    },
+    {
+     "id": "transfer_funds",
+     "by": "harness",
+     "do": "Unlock, then call transfer_funds_between_bank_accounts_7291 from the customer's chosen source account to the declined checking account for the amount they confirm",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+      "arguments": {
+       "source_account_id": "customer-chosen own account",
+       "destination_account_id": "the declined checking account",
+       "amount": "customer-confirmed amount"
+      }
+     },
+     "after": [
+      "offer_options"
+     ],
+     "if": "customer asks to transfer funds from another Rho-Bank account that has the money available",
+     "quote": "If they want to transfer, help them do so.",
+     "doc": "doc_checking_accounts_checking_accounts__general__006"
+    },
+    {
+     "id": "overdraft_note",
+     "by": "model",
+     "do": "If the balance looked sufficient but overdraft_pos_enabled is FALSE, explain the overdraft opt-in options",
+     "call": null,
+     "args": {},
+     "after": [
+      "route_by_code"
+     ],
+     "if": "balance appears sufficient and overdraft_pos_enabled is FALSE",
+     "quote": "If overdraft_pos_enabled is FALSE: 'Your account isn't opted into overdraft coverage for debit card purchases. Would you like me to explain your options?'",
+     "doc": "doc_checking_accounts_checking_accounts__general__006"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Verify identity with 2 of DOB, email, phone or address before discussing account data, then log the verification.",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "rule": "Code 05 / unknown decline: check card status, then account status, then fraud alert, then velocity block, in that order.",
+     "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+     "doc": "doc_checking_accounts_checking_accounts__general__003"
+    },
+    {
+     "rule": "If the account status is SUSPENDED or RESTRICTED, do not give specifics. Refer the customer to a branch or 1-800-RHO-ACCT.",
+     "quote": "DO NOT provide specific details if status is SUSPENDED or RESTRICTED.",
+     "doc": "doc_checking_accounts_checking_accounts__general__003"
+    },
+    {
+     "rule": "Only a customer_initiated fraud alert can be cleared, after the customer confirms their transactions. A bank_initiated alert is not cleared; transfer the customer to the security team.",
+     "quote": "IMPORTANT: If fraud_alert_active is TRUE and alert_source is 'bank_initiated' → Do NOT clear it.",
+     "doc": "doc_checking_accounts_checking_accounts__general__003"
+    },
+    {
+     "rule": "A velocity block may be lifted early with clear_debit_card_fraud_alert_4892 (reason 'velocity_clear') after verification.",
+     "quote": "`'velocity_clear'`: Use when clearing a velocity block after verifying the customer's identity",
+     "doc": "doc_bank_accounts_bank_accounts__general__039"
+    },
+    {
+     "rule": "Never tell the customer that a card is fraud-flagged (codes 04/07/34/59).",
+     "quote": "This could tip off a fraudster who has stolen the card.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "rule": "Do not claim the card is broken or frozen when the cause is available balance. Explain the balance or hold.",
+     "quote": "Inform customer of their balance.",
+     "doc": "doc_checking_accounts_checking_accounts__general__006"
+    }
+   ],
+   "done_when": "The customer is verified and logged. The decline cause is identified from the card and account records and explained, with deposit availability timing where relevant. Any option the customer chose (transfer or smaller purchase) has been offered or completed.",
+   "documents_note": "see documents"
+  },
+  {
+   "job": "chip_cvv_mismatch_card_review",
+   "when": {
+    "quote": "The card's chip data or CVV code doesn't match what's on file. This could indicate card damage or potential fraud.",
+    "doc": "doc_checking_accounts_purple_account_007"
+   },
+   "info": [
+    {
+     "field": "which_checking_account",
+     "about": "Checking account whose card had chip errors",
+     "from": "customer",
+     "ask": "Which account is that card linked to?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_damaged",
+     "about": "Whether the chip or stripe is physically damaged",
+     "from": "customer",
+     "ask": "Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?",
+     "may_hold_back": true
+    },
+    {
+     "field": "unrecognized_transactions",
+     "about": "Which recent transactions the customer does not recognize",
+     "from": "customer",
+     "ask": "I'll read your recent transactions. Can you confirm each one was you?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_in_possession",
+     "about": "Whether the customer still has the physical card",
+     "from": "customer",
+     "ask": "Do you still have your physical debit card in your possession?",
+     "may_hold_back": true
+    },
+    {
+     "field": "pin_compromised",
+     "about": "One of: yes_shared, yes_observed, no, unknown",
+     "from": "customer",
+     "ask": "Do you believe your PIN may have been compromised?",
+     "may_hold_back": true
+    },
+    {
+     "field": "written_statement",
+     "about": "Whether the customer agrees that this conversation serves as their written statement",
+     "from": "customer",
+     "ask": "Are you willing to provide a written statement describing what happened? We can use this conversation as your written statement if you agree.",
+     "may_hold_back": true
+    },
+    {
+     "field": "police_report_filed",
+     "about": "Asked only for fraud disputes over $500",
+     "from": "customer",
+     "ask": "Have you filed a police report?",
+     "may_hold_back": true
+    },
+    {
+     "field": "delivery_and_design",
+     "about": "Delivery option (STANDARD/EXPEDITED/RUSH), card design (CLASSIC/PREMIUM/CUSTOM) and mailing address for the replacement",
+     "from": "customer",
+     "ask": "Which delivery option and card design would you like, and should we mail it to your address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "account_tier",
+     "about": "Tier of the checking account (Entry: Light Blue, Light Green, Green Fee-Free; Mid: Blue, Green (checking); Premium: Evergreen; Elite: Bluest)",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "ask_damage",
+     "by": "model",
+     "do": "Ask whether the card is physically damaged",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "Ask: 'Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?'",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "id": "damaged_replace",
+     "by": "model",
+     "do": "Explain the likely chip or stripe damage and offer a replacement (reason damaged)",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_damage"
+     ],
+     "if": "card is physically damaged",
+     "quote": "Offer / help them to order a replacement.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "id": "get_cards_82",
+     "by": "harness",
+     "do": "Look up the debit cards on that checking account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_cards_by_account_id_7823",
+      "arguments": {
+       "account_id": "the checking account in question"
+      }
+     },
+     "after": [
+      "ask_damage"
+     ],
+     "if": null,
+     "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__028"
+    },
+    {
+     "id": "review_txns",
+     "by": "model",
+     "do": "Say you'd like to review recent transactions for security. Pull the history and read recent transactions to the customer for confirmation.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "arguments": {
+       "account_id": "the checking account in question"
+      }
+     },
+     "after": [
+      "ask_damage"
+     ],
+     "if": "card appears undamaged",
+     "quote": "Say: 'For your security, I'd like to review some recent transactions with you.'",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "id": "liability_notice",
+     "by": "model",
+     "do": "Before filing, tell the customer their Reg E liability exposure ($50 / $500 / unlimited by reporting time)",
+     "call": null,
+     "args": {},
+     "after": [
+      "review_txns"
+     ],
+     "if": "customer denies one or more transactions",
+     "quote": "Before proceeding, inform the customer of their liability exposure based on when they noticed the unauthorized activity:",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "id": "gather_dispute_info",
+     "by": "model",
+     "do": "Ask about card possession, PIN compromise and the written statement. Ask about a police report if the fraud dispute is over $500.",
+     "call": null,
+     "args": {},
+     "after": [
+      "liability_notice"
+     ],
+     "if": "customer denies one or more transactions",
+     "quote": "For fraud disputes over $500, ask if customer has filed a police report. If not, recommend they do so.",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "id": "time_for_dispute",
+     "by": "harness",
+     "do": "Get the current date for discovery_date and the 60-day check",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "gather_dispute_info"
+     ],
+     "if": "customer denies one or more transactions",
+     "quote": "Transaction must be within 60 days old",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "id": "unlock_dispute",
+     "by": "harness",
+     "do": "Unlock the debit dispute tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_debit_card_transaction_dispute_6281"
+     },
+     "after": [
+      "time_for_dispute"
+     ],
+     "if": "customer denies one or more transactions",
+     "quote": "**Tool: file_debit_card_transaction_dispute_6281**",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "id": "file_dispute",
+     "by": "model",
+     "do": "File a dispute for each denied transaction. Category: card_present_fraud (in-store) or card_not_present_fraud (online/phone). card_action: close_and_reissue. provisional_credit_eligible: per the provisional credit guidelines.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_debit_card_transaction_dispute_6281",
+      "arguments": {
+       "transaction_id": "from transaction history",
+       "account_id": "the checking account",
+       "card_id": "the card from lookup",
+       "user_id": "the verified user",
+       "dispute_category": "card_present_fraud or card_not_present_fraud",
+       "transaction_date": "from history, MM/DD/YYYY",
+       "discovery_date": "today, MM/DD/YYYY",
+       "disputed_amount": "transaction amount",
+       "transaction_type": "pin_purchase / signature_purchase / online_purchase per circumstances",
+       "card_in_possession": "customer answer",
+       "pin_compromised": "customer answer",
+       "contacted_merchant": "customer answer or false",
+       "police_report_filed": "customer answer",
+       "written_statement_provided": "true if customer agrees",
+       "provisional_credit_eligible": "per doc_bank_accounts_bank_accounts__general__032",
+       "card_action": "close_and_reissue"
+      }
+     },
+     "after": [
+      "unlock_dispute"
+     ],
+     "if": "customer denies one or more transactions",
+     "quote": "'card_present_fraud': Physical card used fraudulently (not by customer) - USE THIS when fraud suspected and card was physically present",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "id": "unlock_close",
+     "by": "harness",
+     "do": "Unlock the debit card close tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_debit_card_4721"
+     },
+     "after": [
+      "file_dispute"
+     ],
+     "if": "fraud found",
+     "quote": "Use close_debit_card_4721 to close the card with parameters: card_id, reason",
+     "doc": "doc_bank_accounts_bank_accounts__general__025"
+    },
+    {
+     "id": "close_card",
+     "by": "harness",
+     "do": "Close the compromised card. This is the card action done after filing; it replaces freezing.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_debit_card_4721",
+      "arguments": {
+       "card_id": "the compromised card",
+       "reason": "fraud_suspected"
+      }
+     },
+     "after": [
+      "unlock_close"
+     ],
+     "if": "fraud found",
+     "quote": "the agent must separately perform the indicated card action after filing the dispute.",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "id": "explain_close",
+     "by": "model",
+     "do": "Confirm the card is permanently closed. Remind the customer to update recurring payments and to change their online banking password.",
+     "call": null,
+     "args": {},
+     "after": [
+      "close_card"
+     ],
+     "if": "fraud found",
+     "quote": "For fraud_suspected closures, recommend the customer also change their online banking password",
+     "doc": "doc_bank_accounts_bank_accounts__general__025"
+    },
+    {
+     "id": "ask_replacement",
+     "by": "model",
+     "do": "Ask if they want a replacement now. Ask for delivery option, design and mailing address, and state the tier fees that will be deducted from checking.",
+     "call": null,
+     "args": {},
+     "after": [
+      "close_card"
+     ],
+     "if": null,
+     "quote": "Always inform the customer that the fee will be deducted from their checking account balance before placing the order.",
+     "doc": "doc_bank_accounts_bank_accounts__general__029"
+    },
+    {
+     "id": "unlock_order",
+     "by": "harness",
+     "do": "Unlock the debit card ordering tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_debit_card_5739"
+     },
+     "after": [
+      "ask_replacement"
+     ],
+     "if": "customer wants a replacement and the tier allows ordering now",
+     "quote": "Use order_debit_card_5739 to order the card.",
+     "doc": "doc_bank_accounts_bank_accounts__general__023"
+    },
+    {
+     "id": "order_card",
+     "by": "model",
+     "do": "Order the replacement with the exact tier delivery_fee and design_fee and the customer's choices (use the parameter names the unlocked tool shows)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_debit_card_5739",
+      "arguments": {
+       "account_id": "the checking account",
+       "delivery_option": "customer choice",
+       "card_design": "customer choice",
+       "delivery_fee": "per tier table",
+       "design_fee": "per tier table"
+      }
+     },
+     "after": [
+      "unlock_order"
+     ],
+     "if": "customer wants a replacement",
+     "quote": "When using order_debit_card_5739, you must provide the exact delivery_fee and design_fee amounts based on the tier rules below.",
+     "doc": "doc_bank_accounts_bank_accounts__general__029"
+    },
+    {
+     "id": "confirm_order",
+     "by": "model",
+     "do": "Confirm the dispute(s), closure and replacement, with the delivery timeframe and any fees",
+     "call": null,
+     "args": {},
+     "after": [
+      "order_card"
+     ],
+     "if": null,
+     "quote": "8) Inform customer of expected delivery timeframe and any applicable fees",
+     "doc": "doc_bank_accounts_bank_accounts__general__023"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "An undamaged card with chip/CVV errors is a possible clone. Review transactions before simply replacing it.",
+     "quote": "SECURITY CONCERN: This could indicate a cloned or counterfeit card was used.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "rule": "Use fraud categories when fraud is suspected. Use 'unauthorized_transaction' only when fraud is not suspected.",
+     "quote": "Only use 'unauthorized_transaction' when fraud is NOT suspected",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "rule": "Fraud categories map to close_and_reissue.",
+     "quote": "'card_present_fraud' → 'close_and_reissue'",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    },
+    {
+     "rule": "Provisional credit is required when the report is timely, the category qualifies, a written statement was given and the account is OPEN with no holds.",
+     "quote": "**Provisional Credit is REQUIRED when ALL of these conditions are met:**",
+     "doc": "doc_bank_accounts_bank_accounts__general__032"
+    },
+    {
+     "rule": "Fraud/lost/stolen closures skip the 14-day minimum card age.",
+     "quote": "These reasons bypass the minimum card age requirement (requirement 6) for security purposes",
+     "doc": "doc_bank_accounts_bank_accounts__general__025"
+    },
+    {
+     "rule": "Entry tier: 48h wait after closure and standard shipping only. Mid: standard $0 / expedited $15. Premium: standard and expedited $0, rush $35. Elite: all $0. CLASSIC design is $0 for all tiers.",
+     "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+     "doc": "doc_bank_accounts_bank_accounts__general__029"
+    },
+    {
+     "rule": "Evergreen Account is Premium tier.",
+     "quote": "PREMIUM TIER (Evergreen Account)",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "rule": "Dispute open-count limits per account: Entry 2, Mid 3, Premium 4, Elite 5. The transaction must be at least $1.00.",
+     "quote": "Customer cannot exceed the maximum open disputes for their checking account tier: Entry Tier max 2, Mid Tier max 3, Premium Tier max 4, Elite Tier max 5.",
+     "doc": "doc_bank_accounts_bank_accounts__general__031"
+    }
+   ],
+   "done_when": "All recent transactions have been confirmed with the customer. A dispute is filed for each unauthorized one. The compromised card is closed with reason fraud_suspected. A replacement has been ordered with the customer's choices and the correct tier fees, or explained if the tier requires waiting. The customer has been told about recurring payments and changing their password."
+  },
+  {
+   "job": "reported_stolen_card_decline",
+   "when": {
+    "quote": "Card was reported stolen. This code requires EXTRA CAUTION.",
+    "doc": "doc_bank_accounts_bank_accounts__general__037"
+   },
+   "info": [
+    {
+     "field": "which_checking_account",
+     "about": "Account of the card that was declined as stolen",
+     "from": "customer",
+     "ask": "Which account is that card linked to?",
+     "may_hold_back": true
+    },
+    {
+     "field": "ssn_last4",
+     "about": "Last 4 of SSN for enhanced verification",
+     "from": "customer",
+     "ask": "For extra security, could you confirm the last 4 digits of your SSN?",
+     "may_hold_back": true
+    },
+    {
+     "field": "recent_txn_confirmation",
+     "about": "Customer confirms 2-3 recent transactions",
+     "from": "customer",
+     "ask": "Can you confirm these recent transactions?",
+     "may_hold_back": true
+    },
+    {
+     "field": "customer_reported_it",
+     "about": "Whether the customer reported the card stolen",
+     "from": "customer",
+     "ask": "I see this card was reported stolen. Did you report it?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup_card_43",
+     "by": "harness",
+     "do": "Look up the cards on the account and confirm the stolen issue_reason/status",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_cards_by_account_id_7823",
+      "arguments": {
+       "account_id": "the checking account in question"
+      }
+     },
+     "after": [],
+     "if": null,
+     "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__028"
+    },
+    {
+     "id": "no_reactivate",
+     "by": "model",
+     "do": "Do not offer to unfreeze, reactivate or remove the stolen status",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_card_43"
+     ],
+     "if": null,
+     "quote": "DO NOT immediately offer to unfreeze or reactivate.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "id": "enhanced_verif",
+     "by": "model",
+     "do": "Enhanced verification: full name, DOB, last 4 SSN, and 2-3 recent transactions from history",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "arguments": {
+       "account_id": "the checking account in question"
+      }
+     },
+     "after": [
+      "no_reactivate"
+     ],
+     "if": null,
+     "quote": "Recent transaction verification - review transaction history and ask about 2-3 recent transactions",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "id": "explain_stolen",
+     "by": "model",
+     "do": "Explain that stolen cards cannot be reactivated",
+     "call": null,
+     "args": {},
+     "after": [
+      "enhanced_verif"
+     ],
+     "if": null,
+     "quote": "After enhanced verification, explain: 'This card was reported stolen. For security, stolen cards cannot be reactivated. I can order you a replacement card with a new number.' Follow protocol to order a new one.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "id": "security_transfer_msg",
+     "by": "model",
+     "do": "If the customer says they never reported it: tell them they are being transferred to the security team",
+     "call": null,
+     "args": {},
+     "after": [
+      "explain_stolen"
+     ],
+     "if": "customer insists they never reported the card stolen",
+     "quote": "Say: 'I understand this is frustrating. For your protection, I need to transfer you to our security team who can investigate this further.'",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "id": "transfer_security",
+     "by": "harness",
+     "do": "Transfer to human agents (security team) with a summary. Do not order a replacement or resolve it yourself.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "Verified customer; debit card declined as reported stolen; customer states they never reported it; possible account compromise",
+      "reason": "security team investigation of unauthorized stolen report"
+     },
+     "after": [
+      "security_transfer_msg"
+     ],
+     "if": "customer insists they never reported the card stolen",
+     "quote": "Use transfer_to_human_agents. Do NOT attempt to resolve this yourself.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "id": "order_replacement_43",
+     "by": "model",
+     "do": "If the customer did report it, order a replacement following chip_cvv_mismatch_card_review's order steps (ask_replacement → order_card)",
+     "call": null,
+     "args": {},
+     "after": [
+      "explain_stolen"
+     ],
+     "if": "customer confirms they reported it stolen and wants a replacement",
+     "quote": "I can order you a replacement card with a new number.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "A stolen card can never be reactivated or un-flagged.",
+     "quote": "For security, stolen cards cannot be reactivated.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "rule": "If the customer denies reporting it stolen, transfer without first asking 4 times. This is scenario-specific transfer guidance.",
+     "quote": "This is a MAJOR security flag. Someone may have access to their account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    },
+    {
+     "rule": "Lost card (code 41) not reported by the customer: ask security questions, review transactions and follow the lost-card protocol. A lost card also cannot be reactivated.",
+     "quote": "The old card CANNOT be reactivated once reported lost.",
+     "doc": "doc_bank_accounts_bank_accounts__general__037"
+    }
+   ],
+   "done_when": "The stolen flag is not removed. Enhanced verification is attempted. The customer is transferred to the security team via transfer_to_human_agents if they deny reporting the card stolen; otherwise a replacement is ordered."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_checking_accounts_checking_accounts__general__006",
+   "why": "Code 51 insufficient funds diagnosis: balance, pending items, overdraft, options"
+  },
+  {
+   "id": "doc_checking_accounts_checking_accounts__general__003",
+   "why": "Code 05 generic decline order (card status, account status, fraud alert, velocity) plus codes 14/54/56"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__011",
+   "why": "Check deposit funds availability (1-2 business days, extended review)"
+  },
+  {
+   "id": "doc_checking_accounts_checking_accounts__general__004",
+   "why": "Authorization and deposit holds reduce available balance"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "get_all_user_accounts_by_user_id_3847 account lookup"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__028",
+   "why": "get_debit_cards_by_account_id_7823 card lookup and fields"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__018",
+   "why": "get_bank_account_transactions_9173 history and statuses"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_007",
+   "why": "Code 82 chip/CVV mismatch: damage check, transaction review, stolen protocol"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__031",
+   "why": "Debit dispute filing tool, arguments, categories, card action mapping"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__032",
+   "why": "Provisional credit eligibility"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__025",
+   "why": "Closing a debit card with close_debit_card_4721; fraud reason rules"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__023",
+   "why": "Ordering a debit card with order_debit_card_5739, eligibility and steps"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__029",
+   "why": "Replacement limits, wait periods and fees by tier"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__005",
+   "why": "Maps checking account classes to tiers"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__037",
+   "why": "Codes 41/43 lost/stolen handling, enhanced verification, security transfer, non-disclosure codes"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__039",
+   "why": "Fraud alert and velocity block clearing rules"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__026",
+   "why": "Freeze vs close distinction"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__030",
+   "why": "Cross-product credit card protection offer on lost/stolen debit card reports"
+  }
+ ],
+ "open_questions": [
+  "No document gives a specific check-hold or partial-availability schedule beyond 'Standard deposits are typically available within 1-2 business days' and 'extended review'. Do not invent a schedule.",
+  "Code 43 enhanced verification asks for the last 4 digits of the SSN, but the agent's read tools do not return an SSN. It is unclear how to check it. The transfer to security is required either way if the customer denies reporting.",
+  "Code 82 says to recommend freezing until the replacement arrives, while the fraud dispute mapping requires close_and_reissue. Closing appears to supersede freezing (a frozen card cannot then be closed per status rules?), but this is not stated.",
+  "close_debit_card_4721 requires no pending transactions, while fraud closures say pending transactions will still process. It is unclear whether pending items block a fraud closure.",
+  "doc_bank_accounts_bank_accounts__general__030 (offer to replace credit cards) is written for a reported lost/stolen debit card. It is unclear whether it applies to a suspected-clone fraud closure where the customer still has the card.",
+  "order_debit_card_5739's full parameter list is not documented beyond delivery_fee and design_fee. The agent must read it after unlocking.",
+  "Whether the cloned-card dispute should use card_present_fraud or card_not_present_fraud depends on how the merchant transaction was made; the transaction description may not say."
+ ]
+}

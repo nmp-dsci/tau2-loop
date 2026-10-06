@@ -1,0 +1,586 @@
+{
+ "jobs": [
+  {
+   "job": "opening_personal_savings_accounts",
+   "when": {
+    "quote": "Procedure for opening personal savings accounts.",
+    "doc": "doc_bank_accounts_bank_accounts__general__002"
+   },
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. These must match the records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me your full name and two of these: your date of birth, email, phone number or address?",
+     "may_hold_back": false
+    },
+    {
+     "field": "deposit_amount",
+     "about": "How much the customer will keep in savings and for how long. This decides which accounts' opening deposit and ongoing minimum balance they can meet.",
+     "from": "customer",
+     "ask": "How much do you plan to deposit in savings, and do you plan to make withdrawals or further deposits?",
+     "may_hold_back": true
+    },
+    {
+     "field": "credit_card_openness_and_requirements",
+     "about": "Whether the customer would take a credit card to raise the savings APY, and any must-have card feature, such as travel insurance",
+     "from": "customer",
+     "ask": "Some Rho-Bank credit cards add bonus APY to savings. Would you consider a card, and does it need any particular feature?",
+     "may_hold_back": true
+    },
+    {
+     "field": "checking_requirements",
+     "about": "Must-have checking features, such as early direct deposit, plus the customer's age, which limits some checking accounts",
+     "from": "customer",
+     "ask": "Does your new checking account need any particular feature, such as early direct deposit?",
+     "may_hold_back": true
+    },
+    {
+     "field": "existing_accounts",
+     "about": "The customer's checking and savings accounts: status, balance, date_opened and class",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "find_user",
+     "by": "model",
+     "do": "Ask for the customer's identity details and look up their record by name or email",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "name the customer gives"
+     },
+     "after": [],
+     "if": null,
+     "quote": "ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address",
+     "doc": "policy"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "find_user"
+     ],
+     "if": "2 values match",
+     "quote": "Get the current time. Use this to get the current timestamp for logging verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "from records",
+      "email": "from records",
+      "phone_number": "from records",
+      "date_of_birth": "from records",
+      "time_verified": "the time returned"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Retrieve all of the customer's bank accounts",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": null,
+     "quote": "Checking eligibility requirements for opening new accounts (existing account status, balances, account tenure, number of accounts)",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "explain_order",
+     "by": "model",
+     "do": "If the customer wants to close the old checking account first, explain why the savings account must come first. Savings needs an active checking account held at least 14 days, and a new checking account would not meet that. So: open savings while the old checking is still open, then open the new checking, then apply for the card, then close the old checking.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": "the customer also wants to close their only tenured checking account and open a new one",
+     "quote": "Confirm an active checking account exists and meets the 14-day tenure requirement.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "check_savings_elig",
+     "by": "model",
+     "do": "Confirm all savings eligibility rules from the records. Stop if any rule fails.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "Do not proceed if any item above is not met.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "gather_reqs",
+     "by": "model",
+     "do": "Ask for the deposit amount, whether the customer is open to a credit card and its must-have features, and the must-have checking features",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_savings_elig"
+     ],
+     "if": null,
+     "quote": "Discuss available personal savings account options with the customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Work out the single best combination of savings account, checking account and credit card with the APY rules, then recommend that one combination with its total APY (do not list several options). If a deposit between $10,000 and $49,999 needs a travel-insurance card and an early-direct-deposit checking account, recommend Gold Account (savings) 5.5% + Green Account (checking) boost +0.75% + Silver Rewards Card bonus +0.2% = 6.45% APY. Confirm that Silver Rewards Card includes travel insurance and that Green Account (checking) gets direct deposits up to 1 day early.",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_reqs"
+     ],
+     "if": null,
+     "quote": "The boost is additive to your savings account's base APY and any credit card APY bonuses you may already have.",
+     "doc": "doc_bank_accounts_bank_accounts__general__012"
+    },
+    {
+     "id": "unlock_open",
+     "by": "harness",
+     "do": "Unlock the account-opening tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821"
+     },
+     "after": [
+      "recommend"
+     ],
+     "if": "the customer accepts",
+     "quote": "Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "open_savings",
+     "by": "harness",
+     "do": "Open the savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": {
+       "user_id": "the verified user's id",
+       "account_type": "savings",
+       "account_class": "chosen savings class, e.g. 'Gold Account'"
+      }
+     },
+     "after": [
+      "unlock_open"
+     ],
+     "if": null,
+     "quote": "Use the open_bank_account_4821 tool with account_type set to 'savings' and the confirmed account_class.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "funding",
+     "by": "model",
+     "do": "Ask whether to transfer the opening deposit from checking. If the checking account lacks the funds, or the customer will deposit the money themselves, tell them they have 30 days to fund the account or it will be closed.",
+     "call": null,
+     "args": {},
+     "after": [
+      "open_savings"
+     ],
+     "if": null,
+     "quote": "If no: inform the customer they have 30 days to fund the account (via internal transfer or external deposit) or the account will be closed.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "transfer",
+     "by": "harness",
+     "do": "Transfer the opening deposit from checking to the new savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+      "arguments": {
+       "source_account_id": "customer's checking account id",
+       "destination_account_id": "new savings account id",
+       "amount": "the amount the customer confirms"
+      }
+     },
+     "after": [
+      "funding"
+     ],
+     "if": "the customer authorizes it and the checking account has enough funds (unlock the tool first)",
+     "quote": "If yes: use transfer_funds_between_bank_accounts_7291 to transfer the required amount from the customer’s checking account to the newly opened savings account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Savings requires the customer to be verified, to hold at least one active Rho-Bank checking account, to have held a checking account at least 14 days, to have fewer than 5 personal savings accounts, and to have no accounts in collections or with negative balances",
+     "quote": "Must have held their checking account for at least 14 days",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "rule": "account_class must be the full official name ending with 'Account'",
+     "quote": "Capture the exact account_class string. It must be the full official name ending with “Account” (for example, “Silver Plus Account”, “Gold Account”).",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "rule": "Effective savings APY = base APY + the single highest credit-card bonus + the single highest linked-checking boost (from listed pairings only)",
+     "quote": "Only the HIGHEST credit card APY bonus is applied to the customer's savings account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__045"
+    },
+    {
+     "rule": "Only listed pairings give a checking boost; Green Account (checking) + Gold Account (savings) is one of them",
+     "quote": "1. Green Account (checking) + Gold Account (savings)",
+     "doc": "doc_bank_accounts_bank_accounts__general__012"
+    },
+    {
+     "rule": "Exclude a savings account if the customer's balance is below its ongoing minimum. Platinum requires $50,000, Gold Plus $25,000 and Gold $10,000 (opening $5,000).",
+     "quote": "Ongoing minimum balance to maintain account benefits: $50,000",
+     "doc": "doc_savings_accounts_platinum_account_003"
+    },
+    {
+     "rule": "Gold Account base APY is 5.5%; its minimums are an opening deposit of $5,000 and an ongoing balance of $10,000",
+     "quote": "Your account earns an APY of 5.5% on the balance you maintain.",
+     "doc": "doc_savings_accounts_gold_account_001"
+    },
+    {
+     "rule": "Silver Rewards Card adds +0.2% to a Gold Account and +0.1% to a Gold Plus Account",
+     "quote": "Silver Rewards Card | +0.2%",
+     "doc": "doc_savings_accounts_gold_account_014"
+    },
+    {
+     "rule": "Green Account (checking) boosts a linked Gold Account by +0.75% and gives direct deposits up to 1 day early",
+     "quote": "Boost a linked savings account's APY: Gold +0.75% or Silver +0.25%",
+     "doc": "doc_checking_accounts_green_account__checking__001"
+    },
+    {
+     "rule": "Silver Rewards Card is the only personal credit card whose documents include travel insurance",
+     "quote": "Per-trip coverage limit: up to $15,000",
+     "doc": "doc_credit_cards_silver_rewards_card_005"
+    },
+    {
+     "rule": "Checking accounts without early direct deposit: Light Blue, Light Green and Green Fee-Free (0 days)",
+     "quote": "| Early direct deposit | 0 day(s) before payday |",
+     "doc": "doc_checking_accounts_green_fee-free_account_003"
+    },
+    {
+     "rule": "Gold Years needs age 62+; Dark Green has a maximum age of 26; Bluest needs a $75,000 opening deposit",
+     "quote": "Designed for customers aged 62 and older",
+     "doc": "doc_checking_accounts_gold_years_account_001"
+    },
+    {
+     "rule": "Other combinations score lower. Gold Plus 6.0% + Silver card 0.1% = 6.1% (its boosting checking accounts are Gold Years, which needs age 62+, and Green Fee-Free, which has no early direct deposit). Purple + Gold = 5.8%. Blue + Silver Plus = 5.0%. Evergreen + Green savings = 5.0%.",
+     "quote": "APY: 6.0% percent on eligible balances in this tier.",
+     "doc": "doc_savings_accounts_gold_plus_account_002"
+    }
+   ],
+   "done_when": "The chosen savings account is open, and it is either funded by transfer or the customer has been told about the 30-day funding window"
+  },
+  {
+   "job": "opening_personal_checking_accounts",
+   "when": {
+    "quote": "To open a personal checking account, ensure all of the following are true:",
+    "doc": "doc_bank_accounts_bank_accounts__general__001"
+   },
+   "info": [
+    {
+     "field": "checking_account_class",
+     "about": "The checking account chosen in the recommendation, e.g. 'Green Account (checking)'",
+     "from": "customer",
+     "ask": "Shall I open the recommended checking account for you?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "check_chk_elig",
+     "by": "model",
+     "do": "Check checking eligibility from the records: age 18+, no more than 4 personal checking accounts, and no checking account closed for cause in the past 6 months",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "The customer does not exceed 4 personal checking accounts.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "confirm_class",
+     "by": "model",
+     "do": "Confirm the checking account_class using the full official name",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_chk_elig"
+     ],
+     "if": null,
+     "quote": "Personal checking account_class options must use the full official name ending with 'Account' (e.g., 'Blue Account', 'Green Account (checking)').",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "id": "open_checking",
+     "by": "harness",
+     "do": "Open the checking account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": {
+       "user_id": "the verified user's id",
+       "account_type": "checking",
+       "account_class": "confirmed class, e.g. 'Green Account (checking)'"
+      }
+     },
+     "after": [
+      "confirm_class"
+     ],
+     "if": null,
+     "quote": "Use open_bank_account_4821 to open the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The customer must be verified and at least 18 years old",
+     "quote": "The customer is at least 18 years old.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    },
+    {
+     "rule": "The customer must have no checking accounts closed for cause in the past 6 months",
+     "quote": "The customer has no checking accounts closed for cause in the past 6 months.",
+     "doc": "doc_bank_accounts_bank_accounts__general__001"
+    }
+   ],
+   "done_when": "The new checking account is open"
+  },
+  {
+   "job": "credit_card_application",
+   "when": {
+    "quote": "Complete the online application with your personal information and income details",
+    "doc": "doc_credit_cards_silver_rewards_card_001"
+   },
+   "info": [
+    {
+     "field": "annual_income",
+     "about": "The customer's annual income",
+     "from": "customer",
+     "ask": "What is your annual income?",
+     "may_hold_back": true
+    },
+    {
+     "field": "rho_bank_subscription",
+     "about": "Whether the customer has a Rho-Bank+ subscription",
+     "from": "customer",
+     "ask": "Do you have a Rho-Bank+ subscription?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "customer_applies",
+     "by": "customer",
+     "do": "The customer applies for the recommended card themselves",
+     "call": "apply_for_credit_card",
+     "args": {
+      "card_type": "recommended card, e.g. 'Silver Rewards Card'",
+      "customer_name": "the customer's name",
+      "annual_income": "customer-stated",
+      "rho_bank_subscription": "customer-stated"
+     },
+     "after": [],
+     "if": "the customer accepts the recommendation",
+     "quote": "Complete the online application with your personal information and income details",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Silver Rewards Card: minimum credit score 680, $0 annual fee",
+     "quote": "Minimum credit score: $680",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    }
+   ],
+   "done_when": "The customer has submitted the card application"
+  },
+  {
+   "job": "closing_personal_checking_accounts",
+   "when": {
+    "quote": "Verify all of the following before closing:",
+    "doc": "doc_bank_accounts_bank_accounts__general__005"
+   },
+   "info": [
+    {
+     "field": "old_checking_account",
+     "about": "The account to close: its id, class, status, balance and date_opened",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "get_txns",
+     "by": "harness",
+     "do": "Check the account for pending transactions (unlock get_bank_account_transactions_9173 first)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "arguments": {
+       "account_id": "old checking account id"
+      }
+     },
+     "after": [],
+     "if": null,
+     "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+     "doc": "doc_bank_accounts_bank_accounts__general__018"
+    },
+    {
+     "id": "check_preclosure",
+     "by": "model",
+     "do": "Confirm the status is OPEN and there are no pending transactions. Work out the tier and fee: entry tier (Light Blue) is $15 if closed within 30 days, with 0 days' notice. Then check the balance is $0, or at least the fee if a fee applies.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_txns"
+     ],
+     "if": null,
+     "quote": "If an early closure fee applies, the account balance must be at least the fee amount; otherwise, account balance (current_holdings) must be $0.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "id": "close",
+     "by": "harness",
+     "do": "Close the account (unlock close_bank_account_7392 first)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_bank_account_7392",
+      "arguments": {
+       "account_id": "old checking account id"
+      }
+     },
+     "after": [
+      "check_preclosure"
+     ],
+     "if": "all pre-closure requirements are met",
+     "quote": "Use close_bank_account_7392 to close the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Entry tier covers Light Blue, Light Green and Green Fee-Free: $15 early closure fee within 30 days, 0-day notice",
+     "quote": "Early closure fee: $15 if closed within 30 days",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "rule": "The account status must be OPEN and the account must have no pending transactions",
+     "quote": "No pending transactions for this account",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    }
+   ],
+   "done_when": "The old checking account is closed, and the customer has been told that the savings account, the new checking account and the card application are in place"
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__002",
+   "why": "Procedure and eligibility for opening savings, including the 14-day checking tenure rule and the 30-day funding window"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__001",
+   "why": "Procedure for opening checking accounts"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__005",
+   "why": "Procedure for closing checking accounts, with tier fees"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "Account lookup tool"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__010",
+   "why": "Transfer tool"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__018",
+   "why": "Transaction lookup, used to check for pending transactions"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__012",
+   "why": "Checking and savings pairings that qualify for an APY boost"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__045",
+   "why": "Card bonuses do not stack with each other but do stack with checking boosts"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__046",
+   "why": "Only the highest checking boost applies"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_014",
+   "why": "Credit card bonuses for the Gold Account"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_001",
+   "why": "Gold Account APY 5.5%"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_003",
+   "why": "Gold Account minimums"
+  },
+  {
+   "id": "doc_checking_accounts_green_account__checking__001",
+   "why": "Green checking: Gold boost +0.75% and early direct deposit"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_005",
+   "why": "Silver Rewards Card travel insurance"
+  },
+  {
+   "id": "doc_savings_accounts_platinum_account_003",
+   "why": "Platinum's $50,000 ongoing minimum excludes it"
+  },
+  {
+   "id": "doc_savings_accounts_gold_plus_account_002",
+   "why": "Gold Plus APY, for comparison"
+  }
+ ],
+ "open_questions": [
+  "No document gives the exact argument names for close_bank_account_7392 or the account_type value for checking in open_bank_account_4821. The agent should read the parameters after unlocking each tool.",
+  "Green Account (checking) has a $22.50 monthly fee unless the daily balance is at least $1,350. The documents do not say whether the agent must point this out.",
+  "The agent cannot check the customer's credit score against the Silver Rewards Card's 680 minimum. Approval is decided by the application tool."
+ ]
+}

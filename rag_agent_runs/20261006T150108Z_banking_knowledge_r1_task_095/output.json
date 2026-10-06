@@ -1,0 +1,422 @@
+{
+ "jobs": [
+  {
+   "job": "submitting_interest_discrepancy_reports",
+   "when": {
+    "quote": "When a customer's savings account interest calculation is incorrect, agents must submit an interest discrepancy report to the backend team for investigation.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+   },
+   "info": [
+    {
+     "field": "identity_proofs",
+     "about": "Any 2 of: date of birth, email, phone number, address. These must match the records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of these: your date of birth, email, phone number or address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "customer_name_or_email",
+     "about": "The name or email used to look up the customer's record",
+     "from": "customer",
+     "ask": "Could you please tell me your full name or the email on your account?",
+     "may_hold_back": false
+    },
+    {
+     "field": "savings_account",
+     "about": "Which savings account has the interest problem, and its type. Confirm it against the accounts in the records.",
+     "from": "records",
+     "ask": "Which savings account is the interest question about?",
+     "may_hold_back": false
+    },
+    {
+     "field": "checking_accounts",
+     "about": "All checking accounts the customer holds, with their types and status",
+     "from": "records",
+     "ask": "Which checking accounts do you hold with us?",
+     "may_hold_back": true
+    },
+    {
+     "field": "credit_cards",
+     "about": "All Rho-Bank credit cards the customer holds. The records decide, not what the customer remembers. If the customer names a card the records do not show, ask them to clarify.",
+     "from": "records",
+     "ask": "Which Rho-Bank credit cards do you currently hold?",
+     "may_hold_back": true
+    },
+    {
+     "field": "interest_credit",
+     "about": "The interest_credit transaction on the savings account being questioned (amount and date)",
+     "from": "records",
+     "ask": "Which month's interest payment are you asking about?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "identify",
+     "by": "model",
+     "do": "Ask for the customer's name or email and 2 identity details, then look up the user",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "name the customer gives (or use get_user_information_by_email / get_user_information_by_id)"
+     },
+     "after": [],
+     "if": null,
+     "quote": "1) Verify the customer's identity and account ownership",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "identify"
+     ],
+     "if": "2 of DOB/email/phone/address match the records",
+     "quote": "1) Verify the customer's identity and account ownership",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "address from the records",
+      "email": "email from the records",
+      "phone_number": "phone from the records",
+      "date_of_birth": "DOB from the records",
+      "time_verified": "the time from get_current_time"
+     },
+     "after": [
+      "time"
+     ],
+     "if": "verified",
+     "quote": "1) Verify the customer's identity and account ownership",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "unlock_accounts",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "2) Look up the customer's accounts using get_all_user_accounts_by_user_id_3847",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get all of the customer's checking and savings accounts (type, status, balance)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": "{user_id: the verified user's id}"
+     },
+     "after": [
+      "unlock_accounts"
+     ],
+     "if": null,
+     "quote": "2) Look up the customer's accounts using get_all_user_accounts_by_user_id_3847",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "get_cards",
+     "by": "harness",
+     "do": "Get all of the customer's credit card accounts",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "4) Review documentation for the savings account type to determine all applicable APY components (base rate, tier rate, linked checking boost, credit card bonuses, relationship bonus)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "unlock_txn",
+     "by": "harness",
+     "do": "Unlock the transaction history tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173"
+     },
+     "after": [
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "3) Check transaction history using get_bank_account_transactions_9173 to find the interest credit",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "get_txn",
+     "by": "harness",
+     "do": "Get the savings account's transactions and find the interest_credit in question",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "arguments": "{account_id: the savings account id}"
+     },
+     "after": [
+      "unlock_txn"
+     ],
+     "if": null,
+     "quote": "3) Check transaction history using get_bank_account_transactions_9173 to find the interest credit",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "clarify_products",
+     "by": "model",
+     "do": "Compare the accounts and cards the customer mentioned with the records. If they differ (for example, a card they do not hold), ask the customer to clarify. Use only the products shown in the records.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts",
+      "get_cards"
+     ],
+     "if": "the customer's description of their products differs from the records",
+     "quote": "1. Identify all checking accounts the customer holds",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_046"
+    },
+    {
+     "id": "compute_expected",
+     "by": "model",
+     "do": "Look up the savings type's docs and add up the expected APY: base (and tier) rate + the HIGHEST linked-checking boost from a qualifying pairing + the HIGHEST credit card bonus + any relationship bonus. Example for a Gold Account savings: base 5.5%; Green checking +0.75%, Purple checking +0.1%; card bonuses from the Gold Account table, e.g. EcoCard +0.6%, Platinum Rewards +0.15%, Gold Rewards +0.025%; Gold Rewards Card relationship bonus +0.025%.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_txn",
+      "clarify_products"
+     ],
+     "if": null,
+     "quote": "5) Calculate the expected APY by adding all applicable components",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "compute_actual",
+     "by": "model",
+     "do": "Work out the APY that was actually applied from the interest credited and the balance. Find out which checking boost or card bonus the system used, for example a lower checking boost instead of the highest one.",
+     "call": null,
+     "args": {},
+     "after": [
+      "compute_expected"
+     ],
+     "if": null,
+     "quote": "3. Verify that the system is applying the highest boost, not a lower one",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_046"
+    },
+    {
+     "id": "explain",
+     "by": "model",
+     "do": "Explain to the customer which boost or bonus was wrong, the correct APY, and the difference in interest. Offer the interest correction credit and the discrepancy report.",
+     "call": null,
+     "args": {},
+     "after": [
+      "compute_actual"
+     ],
+     "if": "expected APY > actual APY",
+     "quote": "4. If the system selected the wrong checking account, calculate the correct APY and apply an interest correction",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_046"
+    },
+    {
+     "id": "unlock_credit",
+     "by": "harness",
+     "do": "Unlock the savings credit tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "apply_savings_account_credit_6831"
+     },
+     "after": [
+      "explain"
+     ],
+     "if": "a discrepancy exists and the customer agrees",
+     "quote": "7) If a discrepancy exists, first apply a credit using apply_savings_account_credit_6831 to correct the customer's account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "apply_credit",
+     "by": "harness",
+     "do": "Credit the interest difference to the savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "apply_savings_account_credit_6831",
+      "arguments": "{account_id: the savings account id, amount: expected interest minus actual interest, credit_type: 'interest_correction'}"
+     },
+     "after": [
+      "unlock_credit"
+     ],
+     "if": "a discrepancy exists",
+     "quote": "credit_type (string): Must be one of 'interest_correction', 'fee_refund', or 'goodwill_credit'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_043"
+    },
+    {
+     "id": "unlock_report",
+     "by": "harness",
+     "do": "Unlock the discrepancy report tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "submit_interest_discrepancy_report_7294"
+     },
+     "after": [
+      "apply_credit"
+     ],
+     "if": "a discrepancy exists",
+     "quote": "8) Then submit the discrepancy report using submit_interest_discrepancy_report_7294",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "submit_report",
+     "by": "harness",
+     "do": "Submit the interest discrepancy report",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "submit_interest_discrepancy_report_7294",
+      "arguments": "{account_id: the savings account id, user_id: the verified user's id, expected_apy: expected APY as a number, actual_apy: applied APY as a number, amount_difference: the credited difference}"
+     },
+     "after": [
+      "unlock_report"
+     ],
+     "if": "a discrepancy exists",
+     "quote": "Important: Always apply the credit to the customer's account BEFORE submitting the report.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Tell the customer the credit amount, the new balance, and that the report has been submitted",
+     "call": null,
+     "args": {},
+     "after": [
+      "submit_report"
+     ],
+     "if": null,
+     "quote": "6) Inform the customer of the applied credit and new account balance",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_043"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Checking account boosts do not stack: only the highest boost from a qualifying checking account counts for the savings type",
+     "quote": "Only the highest applicable checking account APY boost is applied to the customer's savings account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_046"
+    },
+    {
+     "rule": "Credit card bonuses do not stack: only the highest card bonus counts. It does stack with the checking boost and with relationship bonuses.",
+     "quote": "Only the highest applicable credit card APY bonus is applied to the customer's savings account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_045"
+    },
+    {
+     "rule": "Only listed checking and savings pairings earn a boost. Green checking + Gold savings and Purple checking + Gold savings both qualify.",
+     "quote": "Note: Only these specific pairings qualify for the linked checking account APY boost.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_012"
+    },
+    {
+     "rule": "Gold Account savings base APY is 5.5%",
+     "quote": "Your account earns an APY of 5.5% on the balance you maintain.",
+     "doc": "doc_savings_accounts_gold_account_001"
+    },
+    {
+     "rule": "Green checking boosts a Gold savings account by +0.75%",
+     "quote": "Savings APY boosts apply when you link an eligible Gold or Silver Savings Account: +0.75% or +0.25% respectively",
+     "doc": "doc_checking_accounts_green_account_(checking)_001"
+    },
+    {
+     "rule": "Purple checking boosts a Gold savings account by +0.1%",
+     "quote": "Gold Savings: +0.1% APY",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "rule": "Credit card bonuses on a Gold savings account: Bronze +0.15%, Silver +0.2%, Gold Rewards +0.025%, Platinum Rewards +0.15%, Diamond Elite +0.3%, EcoCard +0.6%, Green Rewards +0.35%, Crypto-Cash Back +0%",
+     "quote": "Holding certain Rho-Bank credit cards provides bonus APY on your Gold Account balance.",
+     "doc": "doc_savings_accounts_gold_account_014"
+    },
+    {
+     "rule": "Gold Rewards Card holders get a 0.025% relationship bonus on a Gold savings account, added to the base rate",
+     "quote": "As a Gold Rewards Card holder, you receive an additional 0.025% relationship bonus APY on top of the base rate.",
+     "doc": "doc_savings_accounts_gold_account_013"
+    },
+    {
+     "rule": "Gold savings interest compounds daily and is credited monthly",
+     "quote": "Interest is credited monthly.",
+     "doc": "doc_savings_accounts_gold_account_010"
+    },
+    {
+     "rule": "Apply the credit before submitting the report",
+     "quote": "Important: Always apply the credit to the customer's account BEFORE submitting the report.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_044"
+    }
+   ],
+   "done_when": "The customer is verified and logged. The interest_correction credit for the difference has been applied to the savings account. The interest discrepancy report has been submitted with the expected APY, actual APY and amount difference. The customer has been told the credit amount and the new balance."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_044",
+   "why": "Procedure, tools and parameters for the interest discrepancy report; credit comes before the report"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_043",
+   "why": "The savings credit tool, the interest_correction type, and telling the customer the result"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_046",
+   "why": "Only the highest checking boost applies; what to do if the system chose the wrong checking account"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_045",
+   "why": "Only the highest credit card bonus applies; it stacks with checking boosts and relationship bonuses"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_012",
+   "why": "Checking and savings pairings that qualify for a boost"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_009",
+   "why": "get_all_user_accounts_by_user_id_3847 returns accounts with type, balance and status"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_018",
+   "why": "get_bank_account_transactions_9173 fields, including the interest_credit type"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_001",
+   "why": "Gold savings base APY of 5.5%"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_010",
+   "why": "Daily compounding, monthly crediting"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_013",
+   "why": "Gold Rewards Card relationship bonus of 0.025%"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_014",
+   "why": "Table of credit card APY bonuses for a Gold savings account"
+  },
+  {
+   "id": "doc_checking_accounts_green_account_(checking)_001",
+   "why": "Green checking boost of +0.75% for Gold savings"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_001",
+   "why": "Purple checking boost of +0.1% for Gold savings"
+  }
+ ],
+ "open_questions": [
+  "No document gives the exact formula for a month's expected interest (balance × APY / 12 or a daily periodic rate). The Silver Account doc describes daily accrual, but the Gold docs only say interest compounds daily and is credited monthly.",
+  "For a Gold savings account, the Gold Rewards Card shows up both as a +0.025% credit card bonus (doc 014) and as a +0.025% relationship bonus (doc 013). It is unclear whether both can apply, for example when a higher card such as EcoCard already supplies the card bonus. Doc 013's example total of 6.0% does not match 5.5% + 0.025%.",
+  "No document says how to deal with a customer naming a card the records do not show. The records are treated as authoritative and the agent asks the customer to clarify."
+ ]
+}

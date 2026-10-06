@@ -1,0 +1,699 @@
+{
+ "jobs": [
+  {
+   "job": "filing_a_debit_card_transaction_dispute",
+   "when": {
+    "quote": "When a customer needs to file a dispute for a debit card transaction (unauthorized charges, ATM errors, merchant issues, or incorrect amounts), the agent must gather comprehensive information and follow Regulation E requirements.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+   },
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. Checked against the records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of these: your date of birth, email, phone number or address on file?",
+     "may_hold_back": false
+    },
+    {
+     "field": "disputes_list",
+     "about": "Every transaction the customer wants to dispute, with the card (last 4 digits or account name) it was made on",
+     "from": "customer",
+     "ask": "Which transactions would you like to dispute, and which debit card was each one made on?",
+     "may_hold_back": false
+    },
+    {
+     "field": "transaction_date",
+     "about": "Date of each disputed transaction (MM/DD/YYYY). Confirm it in the transaction records.",
+     "from": "customer",
+     "ask": "What date did this transaction happen, and what was the merchant and amount?",
+     "may_hold_back": false
+    },
+    {
+     "field": "discovery_date",
+     "about": "Date the customer first noticed each issue (MM/DD/YYYY)",
+     "from": "customer",
+     "ask": "When did you first notice this issue?",
+     "may_hold_back": true
+    },
+    {
+     "field": "disputed_amount",
+     "about": "The dollar amount in dispute. For an ATM cash shortfall, this is the amount not dispensed. For a duplicate charge, it is the amount of one duplicate charge.",
+     "from": "customer",
+     "ask": "How much are you disputing on this transaction? For an ATM shortfall, how much did you ask for and how much did you actually receive?",
+     "may_hold_back": true
+    },
+    {
+     "field": "atm_owner",
+     "about": "For ATM disputes only: whether the ATM was a Rho-Bank ATM or a third-party ATM",
+     "from": "customer",
+     "ask": "Was this a Rho-Bank ATM or a third-party/independent ATM?",
+     "may_hold_back": true
+    },
+    {
+     "field": "transaction_type",
+     "about": "pin_purchase, signature_purchase, online_purchase, atm_withdrawal, atm_deposit, recurring_payment or person_to_person",
+     "from": "customer",
+     "ask": "How was this transaction made: in store with a PIN, in store with a signature, online, or at an ATM?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_in_possession",
+     "about": "Whether the customer still has the physical debit card",
+     "from": "customer",
+     "ask": "Do you still have your physical debit card in your possession?",
+     "may_hold_back": true
+    },
+    {
+     "field": "pin_compromised",
+     "about": "yes_shared, yes_observed, no or unknown",
+     "from": "customer",
+     "ask": "Do you believe your PIN may have been compromised?",
+     "may_hold_back": true
+    },
+    {
+     "field": "fraud_suspected",
+     "about": "For an unauthorized transaction: whether it is fraud by a stranger, or not fraud (for example, a family member used the card without permission)",
+     "from": "customer",
+     "ask": "Do you know who made this transaction? Was it someone you know, such as a family member, or do you suspect fraud?",
+     "may_hold_back": true
+    },
+    {
+     "field": "contacted_merchant",
+     "about": "Whether the customer tried to resolve the issue directly with the merchant",
+     "from": "customer",
+     "ask": "Have you attempted to resolve this directly with the merchant?",
+     "may_hold_back": true
+    },
+    {
+     "field": "police_report_filed",
+     "about": "Asked only for fraud disputes over $500",
+     "from": "customer",
+     "ask": "Have you filed a police report about this?",
+     "may_hold_back": true
+    },
+    {
+     "field": "written_statement_agreed",
+     "about": "Whether the customer agrees to provide a written statement",
+     "from": "customer",
+     "ask": "Are you willing to provide a written statement describing what happened? We can use this conversation as your written statement if you agree.",
+     "may_hold_back": true
+    },
+    {
+     "field": "user_id",
+     "about": "The customer's Rho-Bank user id",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "account_id_and_tier",
+     "about": "Checking account linked to each card: its status, account_class (which gives the tier) and date_opened",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "card_id",
+     "about": "Debit card id and status, matched by last 4 digits",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "transaction_id",
+     "about": "Id of each disputed transaction. For duplicates, use the earliest (first) one.",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "open_disputes_per_account",
+     "about": "Number of the customer's debit disputes that are already open, counted per account",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer and ask what they need help with",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "1. Customer must be verified",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record by the name or email they gave",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the customer's stated full name (or use get_user_information_by_email with the stated email)"
+     },
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "1. Customer must be verified",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Check that 2 of DOB, email, phone and address match the record",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "1. Customer must be verified",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "3. Transaction must be within 60 days old",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "verified user's name",
+      "user_id": "verified user_id",
+      "address": "record address",
+      "email": "record email",
+      "phone_number": "record phone",
+      "date_of_birth": "record DOB",
+      "time_verified": "the time from get_current_time"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "1. Customer must be verified",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's bank accounts (status, account_class, date_opened)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "user_id": "the verified user_id"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": "after unlock_discoverable_agent_tool('get_all_user_accounts_by_user_id_3847')",
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "id": "get_cards",
+     "by": "harness",
+     "do": "Get the debit cards for each checking account involved and match the card_id by its last 4 digits",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_cards_by_account_id_7823",
+      "account_id": "each relevant checking account_id"
+     },
+     "after": [
+      "get_accounts"
+     ],
+     "if": "after unlocking get_debit_cards_by_account_id_7823",
+     "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+    },
+    {
+     "id": "get_txns",
+     "by": "harness",
+     "do": "Get the transactions for each account and find each disputed transaction_id. For duplicates, take the earliest one.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "account_id": "each relevant checking account_id"
+     },
+     "after": [
+      "get_accounts"
+     ],
+     "if": "after unlocking get_bank_account_transactions_9173",
+     "quote": "1. **transaction_id** (string) - ID of the transaction being disputed. Use get_bank_account_transactions_9173 to find it.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "get_open_disputes",
+     "by": "harness",
+     "do": "Count the customer's open debit disputes on each account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_debit_dispute_status_7483",
+      "user_id": "the verified user_id"
+     },
+     "after": [
+      "log_verif"
+     ],
+     "if": "after unlocking get_debit_dispute_status_7483",
+     "quote": "To retrieve a customer's debit card dispute history and check the status of open disputes, use the get_debit_dispute_status_7483 tool.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_035"
+    },
+    {
+     "id": "check_eligibility",
+     "by": "model",
+     "do": "For each dispute, check all of these. The amount is at least $1.00. The transaction is no more than 60 days old (compare with the current time). The linked account is OPEN. Adding the new disputes keeps each account within its tier's maximum of open disputes. If any check fails, tell the customer and do not file that dispute.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_cards",
+      "get_txns",
+      "get_open_disputes",
+      "time"
+     ],
+     "if": null,
+     "quote": "4. Customer cannot exceed the maximum open disputes for their checking account tier: Entry Tier max 2, Mid Tier max 3, Premium Tier max 4, Elite Tier max 5. Dispute limits are per account, not per customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "liability_notice",
+     "by": "model",
+     "do": "Before going further, tell the customer their liability exposure under Reg E: max $50 if reported within 2 business days, max $500 if within 60 days, unlimited after 60 days",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_eligibility"
+     ],
+     "if": null,
+     "quote": "Before proceeding, inform the customer of their liability exposure based on when they noticed the unauthorized activity:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "gather_details",
+     "by": "model",
+     "do": "For each dispute, ask for anything in info the customer has not given: discovery date, disputed amount, transaction type, card in possession, PIN compromised, merchant contact, and the ATM owner for ATM disputes",
+     "call": null,
+     "args": {},
+     "after": [
+      "liability_notice"
+     ],
+     "if": null,
+     "quote": "6. For ATM disputes, determine if it was a Rho-Bank ATM or third-party ATM (different processes apply)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "classify",
+     "by": "model",
+     "do": "Choose the dispute_category for each dispute. ATM gave out the wrong amount: atm_cash_discrepancy. Same charge appears twice: duplicate_charge. Paid but item never arrived: goods_services_not_received. Unauthorized with no fraud suspected (for example, a family member exceeded permission): unauthorized_transaction. Fraud suspected: card_present_fraud or card_not_present_fraud.",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_details"
+     ],
+     "if": null,
+     "quote": "Only use 'unauthorized_transaction' when fraud is NOT suspected (e.g., family member used card without permission, customer forgot about a transaction, etc.).",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "police_report",
+     "by": "model",
+     "do": "Ask whether a police report was filed, and recommend one if not",
+     "call": null,
+     "args": {},
+     "after": [
+      "classify"
+     ],
+     "if": "category is card_present_fraud or card_not_present_fraud AND amount over $500; otherwise police_report_filed = false (or the customer's answer)",
+     "quote": "13. **police_report_filed** (boolean) - For fraud disputes over $500, ask if customer has filed a police report. If not, recommend they do so.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "written_statement",
+     "by": "model",
+     "do": "Ask whether the customer will provide a written statement (this conversation can serve as it). Set the flag to true if they agree.",
+     "call": null,
+     "args": {},
+     "after": [
+      "classify"
+     ],
+     "if": null,
+     "quote": "Set to true if the customer agrees.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "atm_third_party_info",
+     "by": "model",
+     "do": "For a third-party ATM cash discrepancy, explain three things. A chargeback request goes to the ATM owner or network. The investigation can take up to 90 days. Provisional credit is still due within 10 business days.",
+     "call": null,
+     "args": {},
+     "after": [
+      "classify"
+     ],
+     "if": "dispute is atm_cash_discrepancy at a third-party ATM",
+     "quote": "2. Investigation timeline extends to 90 days",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_033"
+    },
+    {
+     "id": "atm_affidavit",
+     "by": "model",
+     "do": "Tell the customer an EFT Error Resolution Affidavit will be emailed to their registered email address. They have 10 business days to sign and return it. If they do not return it, the claim may be denied. Signing a false affidavit is a federal offense.",
+     "call": null,
+     "args": {},
+     "after": [
+      "classify"
+     ],
+     "if": "dispute is atm_cash_discrepancy AND disputed_amount exceeds $200",
+     "quote": "For ATM cash discrepancy disputes exceeding $200, the customer must sign an Electronic Fund Transfer Error Resolution Affidavit.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_033"
+    },
+    {
+     "id": "decide_pc",
+     "by": "model",
+     "do": "Decide provisional_credit_eligible for each dispute using the rules",
+     "call": null,
+     "args": {},
+     "after": [
+      "written_statement",
+      "police_report"
+     ],
+     "if": null,
+     "quote": "15. **provisional_credit_eligible** (boolean) - Agent must determine based on Debit Card Provisional Credit Guidelines.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "file_dispute",
+     "by": "harness",
+     "do": "File one dispute per transaction. Record card_action from that dispute's own category mapping.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_debit_card_transaction_dispute_6281",
+      "transaction_id": "from records (earliest for duplicates)",
+      "account_id": "linked checking account_id",
+      "card_id": "matched card_id",
+      "user_id": "verified user_id",
+      "dispute_category": "as classified",
+      "transaction_date": "MM/DD/YYYY",
+      "discovery_date": "MM/DD/YYYY",
+      "disputed_amount": "disputed amount",
+      "transaction_type": "as determined",
+      "card_in_possession": "customer answer",
+      "pin_compromised": "yes_shared | yes_observed | no | unknown",
+      "contacted_merchant": "customer answer",
+      "police_report_filed": "customer answer or false",
+      "written_statement_provided": "true if agreed",
+      "provisional_credit_eligible": "as decided",
+      "card_action": "mapped from category"
+     },
+     "after": [
+      "decide_pc",
+      "atm_third_party_info",
+      "atm_affidavit"
+     ],
+     "if": "after unlock_discoverable_agent_tool('file_debit_card_transaction_dispute_6281'); repeat for each eligible dispute",
+     "quote": "**Multiple Disputes on Same Card:** When filing multiple disputes for the same card, record each dispute's card_action based on its own category mapping (do NOT change individual dispute parameters).",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "explain_outcomes",
+     "by": "model",
+     "do": "Summarize each dispute: its category, whether provisional credit applies, and the expected timeline. Provisional credit comes within 10 business days. The investigation takes 45 business days, or 90 days for third-party ATM, international or new accounts. Mention the affidavit if it applies. Where no provisional credit applies, say why: the customer voluntarily shared the PIN, did not contact the merchant first, or the category is not a required one.",
+     "call": null,
+     "args": {},
+     "after": [
+      "file_dispute"
+     ],
+     "if": null,
+     "quote": "When provisional credit is issued, the bank has 45 business days to complete the investigation (extended from 10 days).",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Transaction amount must be at least $1.00",
+     "quote": "2. Transaction must be at least $1.00",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "The transaction must be no more than 60 days old as of get_current_time",
+     "quote": "3. Transaction must be within 60 days old",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "Open-dispute maximum per checking account: Entry 2, Mid 3, Premium 4, Elite 5. Existing open disputes plus new ones must not exceed it.",
+     "quote": "4. Customer cannot exceed the maximum open disputes for their checking account tier: Entry Tier max 2, Mid Tier max 3, Premium Tier max 4, Elite Tier max 5. Dispute limits are per account, not per customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "Tier by account: Entry = Light Blue, Light Green, Green Fee-Free",
+     "quote": "- ENTRY TIER (Light Blue Account, Light Green Account, Green Fee-Free Account)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_005"
+    },
+    {
+     "rule": "Tier by account: Mid = Blue Account, Green Account (checking). Premium = Evergreen. Elite = Bluest.",
+     "quote": "- MID TIER (Blue Account, Green Account (checking))",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_005"
+    },
+    {
+     "rule": "The debit card's linked checking account must be OPEN",
+     "quote": "5. The debit card must be linked to an OPEN checking account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "For a duplicate charge, dispute the earliest transaction_id of the duplicates, for the amount of one charge",
+     "quote": "Dispute the earliest (first) transaction when multiple duplicates exist.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "Unauthorized use by a family member who went beyond permission is 'unauthorized_transaction' (not fraud)",
+     "quote": "Only use 'unauthorized_transaction' when fraud is NOT suspected (e.g., family member used card without permission, customer forgot about a transaction, etc.).",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "Provisional credit is REQUIRED only when all of these hold: reported within 60 days of the statement; category is unauthorized_transaction, card_present_fraud, card_not_present_fraud, atm_cash_discrepancy or duplicate_charge; a written statement was given; the account is OPEN with no holds",
+     "quote": "**Provisional Credit is REQUIRED when ALL of these conditions are met:**",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+    },
+    {
+     "rule": "Provisional credit is not required when the category is goods_services_not_received, recurring_charge_after_cancellation, atm_deposit_not_credited or incorrect_amount",
+     "quote": "**Provisional Credit is NOT REQUIRED (but may be offered at discretion) when:**",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+    },
+    {
+     "rule": "Provisional credit is not required for a non-fraud dispute when the customer did not contact the merchant first. So for duplicate_charge with contacted_merchant=false, set provisional_credit_eligible=false.",
+     "quote": "2. Customer has not contacted merchant first (for non-fraud disputes)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+    },
+    {
+     "rule": "Provisional credit is not required when the customer voluntarily shared the PIN (pin_compromised='yes_shared'). Set provisional_credit_eligible=false.",
+     "quote": "3. Customer shared their PIN voluntarily (pin_compromised = 'yes_shared')",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+    },
+    {
+     "rule": "A third-party ATM cash discrepancy still requires provisional credit within 10 business days. Set provisional_credit_eligible=true when the written statement is given and the account is OPEN.",
+     "quote": "3. Provisional credit is still required within 10 business days",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_033"
+    },
+    {
+     "rule": "An ATM cash discrepancy over $200 (disputed amount) requires the emailed affidavit",
+     "quote": "4. Customer may be asked to sign an affidavit if disputed amount exceeds $200",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_033"
+    },
+    {
+     "rule": "Ask about a police report only for fraud categories over $500",
+     "quote": "13. **police_report_filed** (boolean) - For fraud disputes over $500, ask if customer has filed a police report. If not, recommend they do so.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "card_action mapping: card_present_fraud and card_not_present_fraud map to close_and_reissue. unauthorized_transaction maps to freeze_pending_investigation. atm_cash_discrepancy, atm_deposit_not_credited, duplicate_charge, incorrect_amount, goods_services_not_received and recurring_charge_after_cancellation map to keep_active.",
+     "quote": "- 'unauthorized_transaction' → 'freeze_pending_investigation'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    }
+   ],
+   "done_when": "Every eligible disputed transaction has been filed with file_debit_card_transaction_dispute_6281 using the correct per-dispute parameters. Any ineligible dispute has been explained. The customer has heard the liability notice, any affidavit notice, and the expected provisional credit and timeline for each dispute."
+  },
+  {
+   "job": "perform_card_action_after_disputes",
+   "when": {
+    "quote": "**Note:** This parameter records metadata only; the agent must separately perform the indicated card action after filing the dispute.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+   },
+   "info": [
+    {
+     "field": "card_actions_per_card",
+     "about": "The card_action recorded for each dispute, grouped by card_id",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "card_status",
+     "about": "Current status of each card (it must be ACTIVE to freeze)",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "pick_most_severe",
+     "by": "model",
+     "do": "For each card, pick the most severe action across its disputes: close_and_reissue, then freeze_pending_investigation, then keep_active",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "However, when performing the actual card action after filing all disputes, use the MOST SEVERE action across all disputes.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "inform_freeze",
+     "by": "model",
+     "do": "Before freezing, tell the customer four things. New transactions will be declined. Recurring payments will be declined. Pending authorized transactions may still process. They can unfreeze through customer service or the app.",
+     "call": null,
+     "args": {},
+     "after": [
+      "pick_most_severe"
+     ],
+     "if": "most severe action for the card is freeze_pending_investigation and the card status is ACTIVE",
+     "quote": "3. Inform customer of the following:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    },
+    {
+     "id": "freeze",
+     "by": "harness",
+     "do": "Freeze the card once",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "freeze_debit_card_3892",
+      "card_id": "the card whose most severe action is freeze_pending_investigation"
+     },
+     "after": [
+      "inform_freeze"
+     ],
+     "if": "after unlock_discoverable_agent_tool('freeze_debit_card_3892')",
+     "quote": "4. Use freeze_debit_card_3892 with the card_id",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    },
+    {
+     "id": "keep_active",
+     "by": "model",
+     "do": "Confirm that a card whose disputes all map to keep_active stays active, with no tool call",
+     "call": null,
+     "args": {},
+     "after": [
+      "pick_most_severe"
+     ],
+     "if": "most severe action for the card is keep_active",
+     "quote": "However, when performing the actual card action after filing all disputes, use the MOST SEVERE action across all disputes.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "id": "close_reissue",
+     "by": "harness",
+     "do": "Close the card (reason fraud_suspected), then offer a replacement through the debit card ordering process",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_debit_card_4721",
+      "card_id": "the card",
+      "reason": "fraud_suspected"
+     },
+     "after": [
+      "pick_most_severe"
+     ],
+     "if": "most severe action for the card is close_and_reissue",
+     "quote": "5. Use close_debit_card_4721 to close the card with parameters: card_id, reason",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Confirm the action taken on each card and give the final summary of all disputes",
+     "call": null,
+     "args": {},
+     "after": [
+      "freeze",
+      "keep_active",
+      "close_reissue"
+     ],
+     "if": null,
+     "quote": "5. Confirm the freeze was successful",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Severity order: close_and_reissue > freeze_pending_investigation > keep_active. Perform only the most severe action, once per card.",
+     "quote": "Severity order (highest to lowest): 'close_and_reissue' > 'freeze_pending_investigation' > 'keep_active'.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "rule": "Only an ACTIVE card can be frozen",
+     "quote": "3. Card must currently be in ACTIVE status (cannot freeze PENDING, CLOSED, or already FROZEN cards)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ],
+   "done_when": "Each card involved in a dispute has had its most severe mapped action carried out: frozen, closed or left active. The customer has been told the result."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_031",
+   "why": "Main debit dispute procedure: pre-filing requirements, tool arguments, category definitions, card_action mapping and the most-severe rule"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_032",
+   "why": "Provisional credit required and not-required conditions, amounts and timelines"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_033",
+   "why": "Third-party ATM dispute handling and the affidavit requirement over $200"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_035",
+   "why": "get_debit_dispute_status_7483, used to count existing open disputes"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_005",
+   "why": "Maps checking accounts to tiers (Green Fee-Free = Entry, Blue = Mid)"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_009",
+   "why": "get_all_user_accounts_by_user_id_3847, for account ids, status and class"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_028",
+   "why": "get_debit_cards_by_account_id_7823, for card ids and status"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_018",
+   "why": "get_bank_account_transactions_9173, for transaction ids"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_026",
+   "why": "Freeze procedure, requirements and customer notices"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_025",
+   "why": "Close debit card procedure, used for close_and_reissue"
+  }
+ ],
+ "open_questions": [
+  "Third-party ATM disputed amount: it is unclear whether disputed_amount is the full withdrawal or only the shortfall. The shortfall is assumed here, since the customer received part of the cash. This also decides whether the over-$200 affidavit applies.",
+  "For atm_cash_discrepancy where the customer did not contact the ATM owner, doc 032's 'not contacted merchant' exception may conflict with doc 033's 'Provisional credit is still required'. Third-party ATM is assumed eligible.",
+  "If the customer wants a new card number after an unauthorized_transaction (which maps to freeze), the KB only states the freeze. Closing and reissuing for a non-fraud case is not covered. A PIN change requires an ACTIVE card, so it cannot be done after a freeze.",
+  "The 60-day timely-reporting rule is measured from the statement date, but statement dates are not given in the tools. Transaction age from get_current_time is used as a proxy."
+ ]
+}

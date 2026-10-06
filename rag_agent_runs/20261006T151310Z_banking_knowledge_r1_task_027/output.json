@@ -1,0 +1,450 @@
+{
+ "jobs": [
+  {
+   "job": "submitting_a_cash_back_dispute",
+   "when": {
+    "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received.",
+    "doc": "doc_credit_cards_credit_cards_(general)_003"
+   },
+   "info": [
+    {
+     "field": "customer_name",
+     "about": "Customer's full name, used to look up the record",
+     "from": "customer",
+     "ask": "Could I have your full name, please?",
+     "may_hold_back": false
+    },
+    {
+     "field": "two_identity_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. They must match the record.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me two of these: date of birth, email, phone number or home address?",
+     "may_hold_back": true
+    },
+    {
+     "field": "user_id",
+     "about": "The verified customer's user id. The customer needs it to run the dispute tool.",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "card_accounts",
+     "about": "The customer's credit card accounts: card type and account opening date. The opening date decides whether a new-customer promo applies.",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "transactions",
+     "about": "Each transaction's transaction_id, card type, merchant, amount, category, date and rewards_earned",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup",
+     "by": "model",
+     "do": "Look up the customer by the full name they give",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives"
+     },
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Check that 2 of the values the customer gives (DOB, email, phone, address) match the record. Share no account details before this.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "time",
+     "by": "harness",
+     "do": "Get the current time for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "verified user's name",
+      "user_id": "verified user's id",
+      "address": "from record",
+      "email": "from record",
+      "phone_number": "from record",
+      "date_of_birth": "from record",
+      "time_verified": "from get_current_time"
+     },
+     "after": [
+      "time"
+     ],
+     "if": null,
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's credit card accounts: card types and opening dates",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log"
+     ],
+     "if": null,
+     "quote": "When you contact us, we'll look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "id": "get_txns",
+     "by": "harness",
+     "do": "Get all of the customer's credit card transactions",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "log"
+     ],
+     "if": null,
+     "quote": "When you contact us, we'll look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "id": "recalc",
+     "by": "model",
+     "do": "Work out the correct points for each transaction. Use the card's rate for the transaction's category (see rules), the merchant exclusions, and any promo active on the purchase date. Points = floor(amount × rate percent). Example: $100 at 2.5% = 250 points. Flag every transaction whose rewards_earned differs from the correct value.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts",
+      "get_txns"
+     ],
+     "if": null,
+     "quote": "All credit card rewards points are rounded down to the nearest whole number.",
+     "doc": "doc_credit_cards_credit_cards_(general)_007"
+    },
+    {
+     "id": "explain",
+     "by": "model",
+     "do": "Tell the customer which transactions look miscalculated, with merchant, amount, points received and correct points. Give them their user_id and each transaction_id to dispute, and confirm the transaction_ids are correct.",
+     "call": null,
+     "args": {},
+     "after": [
+      "recalc"
+     ],
+     "if": "at least one transaction is miscalculated",
+     "quote": "Confirm the customer has the correct transaction_id before they submit.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "id": "give_tool",
+     "by": "model",
+     "do": "Give the customer the cash back dispute tool",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "submit_cash_back_dispute_0589"
+     },
+     "after": [
+      "explain"
+     ],
+     "if": "at least one transaction is miscalculated",
+     "quote": "Tool to provide to the user: `submit_cash_back_dispute_0589(user_id: str, transaction_id: str)`",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "id": "customer_submits",
+     "by": "customer",
+     "do": "Customer runs submit_cash_back_dispute_0589 once for each miscalculated transaction",
+     "call": "call_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "submit_cash_back_dispute_0589",
+      "arguments": {
+       "user_id": "the verified user's id",
+       "transaction_id": "each miscalculated transaction's id"
+      }
+     },
+     "after": [
+      "give_tool"
+     ],
+     "if": "at least one transaction is miscalculated",
+     "quote": "Tell the customer to run the tool with their own user_id and the specific transaction_id for the purchase in question.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "id": "advise_review",
+     "by": "model",
+     "do": "Tell the customer the disputes go into review and that supporting context may be requested later",
+     "call": null,
+     "args": {},
+     "after": [
+      "customer_submits"
+     ],
+     "if": null,
+     "quote": "Advise the customer that supporting context (e.g., category or promotion expectations) may be requested later during review, but the submission itself is initiated with the tool above.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Silver Rewards Card: travel-category transactions earn 4.0%",
+     "quote": "You earn 4.0% back when the transaction is categorized as travel.",
+     "doc": "doc_credit_cards_silver_rewards_card_003"
+    },
+    {
+     "rule": "Silver Rewards Card: software/SaaS-category transactions earn 4.0%",
+     "quote": "Transactions must be categorized by the merchant as software or SaaS to earn 4.0% back.",
+     "doc": "doc_credit_cards_silver_rewards_card_004"
+    },
+    {
+     "rule": "Silver Rewards Card: all other categories earn 1.0%",
+     "quote": "Purchases outside top categories earn 1.0% back",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "rule": "Business Silver Rewards Card: travel and software earn 10.0%",
+     "quote": "Earn 10.0% cash back on eligible travel and software purchases",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+    },
+    {
+     "rule": "Business Silver Rewards Card: all other purchases earn 1.0%",
+     "quote": "Earn 1.0% cash back on all other purchases",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+    },
+    {
+     "rule": "Business Silver Rewards Card exclusions earn only 1.0%: Concur, SAP Concur, Expensify, Navan, Apple, Microsoft, Dell, Xbox Game Pass, PlayStation Plus, Nintendo Switch Online, Coursera, Udemy, LinkedIn Learning, Skillshare, Pluralsight",
+     "quote": "The following specific merchants do NOT earn the 10.0% bonus rate and instead earn the standard 1.0% rate:",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_005"
+    },
+    {
+     "rule": "Category 'Other' marks transactions that fall under card-specific exclusions. They earn the card's base rate.",
+     "quote": "Other (transactions that fall under card-specific exclusions or exceptions, do not list any examples here)",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "rule": "Business Silver double cash back applies only if the account was opened between 2024-11-14 and 2025-11-14, and only to purchases within 6 months of the opening date. The promo doubles the rate (10%→20%, 1%→2%).",
+     "quote": "New Business Silver Rewards Card customers can earn 2x cash back on all purchases for the first 6 months after opening their account.",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "rule": "The promo window counts from the account opening date, not the promo start date",
+     "quote": "The 6-month window begins on your account opening date, not the promotional start date",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "rule": "Under the double promo, excluded merchants still earn only the base rate, doubled (2%)",
+     "quote": "Merchant category exclusions continue to apply (see Exceptions and Exclusions)",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "rule": "Rewards are stored as points: 1 point = $0.01, so points = amount × rate percent",
+     "quote": "For example, 250 points equals $2.50 in cash back, which matches a 2.5% cash back rate on a $100 purchase.",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "rule": "Fractional points are always floored, never rounded up",
+     "quote": "All credit card rewards points are rounded down to the nearest whole number.",
+     "doc": "doc_credit_cards_credit_cards_(general)_007"
+    },
+    {
+     "rule": "The customer submits disputes. The agent only gives the tool and never submits on the customer's behalf.",
+     "quote": "Instead of a step-by-step workflow, instruct the customer to use the tool directly:",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    }
+   ],
+   "done_when": "The customer is verified and logged. Every transaction has been recalculated. The customer has been given submit_cash_back_dispute_0589 with their user_id and the transaction_id of every miscalculated transaction, and has submitted a dispute for each. They have been told the disputes will be reviewed."
+  },
+  {
+   "job": "applying_resolved_cash_back_dispute_corrections",
+   "when": {
+    "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+    "doc": "doc_credit_cards_credit_cards_(general)_004"
+   },
+   "info": [
+    {
+     "field": "resolved_dispute_transaction_ids",
+     "about": "transaction_ids of cash back disputes that bank records show as resolved and approved. The customer's word does not count.",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "check_resolution",
+     "by": "model",
+     "do": "Do not take the customer's word that disputes were approved. Corrections need resolved disputes in the cash_back_disputes records. Disputes the customer has only just submitted are still under review.",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": "the customer says their cash back disputes were approved and asks for the rewards to be updated",
+     "quote": "Look up the user’s resolved disputes in the cash_back_disputes database to find the transaction_id values that need rewards adjustments.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "id": "decline_update",
+     "by": "model",
+     "do": "Tell the customer politely that rewards can only be corrected after the bank resolves and approves the disputes, and that theirs are still in review. Do not unlock or call update_transaction_rewards_3847.",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_resolution"
+     ],
+     "if": "no record shows the disputes as resolved and approved",
+     "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "id": "unlock_update",
+     "by": "harness",
+     "do": "Unlock the rewards update tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "update_transaction_rewards_3847"
+     },
+     "after": [
+      "check_resolution"
+     ],
+     "if": "records show the dispute resolved and approved",
+     "quote": "Use `unlock_discoverable_agent_tool` to unlock the agent tool `update_transaction_rewards_3847`.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "id": "apply_update",
+     "by": "model",
+     "do": "Apply the independently recalculated points to each resolved transaction",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "update_transaction_rewards_3847",
+      "arguments": {
+       "transaction_id": "the resolved transaction's id",
+       "new_rewards_earned": "'X points' (the recalculated whole number)"
+      }
+     },
+     "after": [
+      "unlock_update"
+     ],
+     "if": "records show the dispute resolved and approved",
+     "quote": "Use `call_discoverable_agent_tool` to invoke `update_transaction_rewards_3847` with:",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "id": "confirm",
+     "by": "harness",
+     "do": "Re-read the transactions to confirm each update",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "after": [
+      "apply_update"
+     ],
+     "if": "an update was applied",
+     "quote": "Confirm the update in credit_card_transaction_history after the tool call completes.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Update rewards only for disputes that are resolved and approved",
+     "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "rule": "Never use an expected_rewards value or a customer's claimed amount. Recalculate from card rates, exclusions and promos.",
+     "quote": "Important: Do not rely on any expected_rewards field in the dispute record. Independently verify rates and eligibility.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "rule": "new_rewards_earned must be a whole number of points, written as 'X points'",
+     "quote": "new_rewards_earned: a string formatted as 'X points' where X is the correct whole-number point value",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    }
+   ],
+   "done_when": "Either rewards have been updated only for record-confirmed resolved disputes and the updates confirmed, or the customer has been told politely that their disputes are still under review and nothing was updated."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_003",
+   "why": "Internal procedure for submitting a cash back dispute: the user tool submit_cash_back_dispute_0589 and the agent's notes"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_004",
+   "why": "Internal procedure for applying resolved dispute corrections with update_transaction_rewards_3847. Applies only to resolved and approved disputes; requires independent recalculation."
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_021",
+   "why": "Customer-facing doc: the agent investigates transactions, merchant category and reward rates"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_007",
+   "why": "Points rounding: always floor"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_006",
+   "why": "Rewards stored as points, 1 point = $0.01 for cash back cards"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_005",
+   "why": "Valid categories; 'Other' marks card-specific exclusions"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_001",
+   "why": "Silver Rewards Card base rate of 1.0%"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_002",
+   "why": "Silver Rewards Card 4.0% on travel and software"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_003",
+   "why": "Silver Rewards Card travel qualification"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_004",
+   "why": "Silver Rewards Card software qualification"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_002",
+   "why": "Business Silver rates: 10.0% on travel/software, 1.0% on everything else"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_005",
+   "why": "Business Silver merchant exclusions that earn only 1.0%"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_012",
+   "why": "Business Silver double cash back promo: dates, 6-month window from account opening, exclusions still apply"
+  }
+ ],
+ "open_questions": [
+  "None of the answering agent's tools reads the cash_back_disputes database. get_user_dispute_history_7291 (doc_credit_cards_credit_cards_(general)_016) covers credit card transaction disputes, and the KB does not say it includes cash back disputes, so the agent has no documented way to confirm a cash back dispute is resolved. Until it can, it should not apply corrections.",
+  "The KB has no merchant exclusion list for the personal Silver Rewards Card. Its docs only say rewards follow the merchant's category: travel or software/SaaS earns 4.0%, everything else 1.0%.",
+  "The Silver Rewards Card promos ($500 signup credit, 0% APR) do not change cash back rates. No doubled-rewards promo is documented for that card."
+ ]
+}

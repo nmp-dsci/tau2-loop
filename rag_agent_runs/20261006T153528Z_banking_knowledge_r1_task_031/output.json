@@ -1,0 +1,443 @@
+{
+ "jobs": [
+  {
+   "job": "filing_a_credit_card_transaction_dispute",
+   "when": {
+    "quote": "When a customer needs to file a formal dispute for a credit card transaction (such as unauthorized charges, merchant issues, or billing errors), the agent must gather comprehensive information and call the file_credit_card_transaction_dispute_4829 tool.",
+    "doc": "doc_credit_cards_credit_cards_(general)_014"
+   },
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Any 2 of: date of birth, email, phone number, address. These are checked against the records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, email address, phone number or home address?",
+     "may_hold_back": true
+    },
+    {
+     "field": "disputed_transaction",
+     "about": "The merchant and the approximate amount or date, used to find the transaction_id and purchase_date in the card transaction records",
+     "from": "customer",
+     "ask": "Which charge would you like to dispute? Please tell me the merchant, and the approximate amount and date if you know them.",
+     "may_hold_back": false
+    },
+    {
+     "field": "dispute_reason",
+     "about": "One of: unauthorized_fraudulent_charge, duplicate_charge, incorrect_amount, goods_services_not_received, goods_services_not_as_described, canceled_subscription_still_charging, refund_never_processed. Getting something different from what was paid for (for example, a different or cheaper room or item) is goods_services_not_as_described.",
+     "from": "customer",
+     "ask": "Which of these best describes the problem: an unauthorized or fraudulent charge, a duplicate charge, an incorrect amount, goods or services not received, goods or services not as described, a cancelled subscription that is still charging, or a refund that was never processed?",
+     "may_hold_back": true
+    },
+    {
+     "field": "contacted_merchant",
+     "about": "Whether the customer tried to resolve the issue with the merchant first (true or false)",
+     "from": "customer",
+     "ask": "Did you try to resolve this with the merchant first?",
+     "may_hold_back": true
+    },
+    {
+     "field": "issue_noticed_date",
+     "about": "The date the customer noticed the issue, in MM/DD/YYYY format. If the customer says 'today', get the date from get_current_time.",
+     "from": "customer",
+     "ask": "When did you notice the issue?",
+     "may_hold_back": true
+    },
+    {
+     "field": "resolution_requested",
+     "about": "One of: full_refund, partial_refund (needs partial_refund_amount), reversal_of_charge",
+     "from": "customer",
+     "ask": "Which resolution would you like: a full refund, a partial refund (and how much), or a reversal of the charge?",
+     "may_hold_back": true
+    },
+    {
+     "field": "partial_refund_amount",
+     "about": "The dollar amount, needed only if resolution_requested is partial_refund",
+     "from": "customer",
+     "ask": "How much would you like refunded?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_action",
+     "about": "keep_active, or cancel_and_reissue if the customer wants the card replaced",
+     "from": "customer",
+     "ask": "Would you like to keep your card active, or cancel it and have a replacement issued?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_last_4_digits",
+     "about": "The last 4 digits of the card used for the disputed transaction",
+     "from": "customer",
+     "ask": "What are the last 4 digits of the card used for this charge?",
+     "may_hold_back": true
+    },
+    {
+     "field": "credit_card_account_id",
+     "about": "The credit card account ID: needed for get_card_last_4_digits, used to tell which card holds the transaction and its tier, and used to read the account's open date",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Ask for identifying details, then look up the customer by email, name or user id",
+     "call": "get_user_information_by_email",
+     "args": {
+      "email": "the email the customer gave"
+     },
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Confirm that at least 2 of date of birth, email, phone and address match the record. Share no account information before this.",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time for the verification log and for any date said as 'today'",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user id",
+      "address": "address on record",
+      "email": "email on record",
+      "phone_number": "phone on record",
+      "date_of_birth": "date of birth on record",
+      "time_verified": "the current time"
+     },
+     "after": [
+      "get_time"
+     ],
+     "if": "2 or more values matched",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the user's credit card accounts (card type/tier, account id, open date)",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user id"
+     },
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "1. Account Standing: The customer's credit card account has been open for at least 60 days",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "id": "get_transactions",
+     "by": "harness",
+     "do": "Get the card transactions and find the disputed one by merchant and amount. This gives transaction_id and purchase_date.",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user id"
+     },
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "1. transaction_id (string) - ID of the transaction being disputed. ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_reason",
+     "by": "model",
+     "do": "Have the customer choose the dispute reason from the allowed values",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "12. dispute_reason (string) - Ask user to select one. Must be exactly one of these values:",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_merchant",
+     "by": "model",
+     "do": "Ask whether the customer tried to resolve this with the merchant first",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "9. contacted_merchant (boolean) - Ask user: Did you try to resolve this with the merchant first? Pass true or false",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_noticed",
+     "by": "model",
+     "do": "Ask when the customer noticed the issue. Format it as MM/DD/YYYY, using get_current_time if they say 'today'.",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "11. issue_noticed_date (string, format MM/DD/YYYY) - Ask user when they noticed the issue. ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_resolution",
+     "by": "model",
+     "do": "Ask which resolution the customer wants, and the amount if it is a partial refund",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "13. resolution_requested (string) - Ask user what resolution they want. Must be exactly one of these values:",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_card_action",
+     "by": "model",
+     "do": "Ask whether to keep the card active or cancel and reissue it",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "   - 'keep_active': Keep the card active, just dispute this charge (use when user wants to continue using their current card)",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_last4",
+     "by": "model",
+     "do": "Ask for the last 4 digits of the card used for the transaction",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "3. card_last_4_digits (string) - Last 4 digits of the credit card under which the disputed transaction took place. \". ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "give_last4_tool",
+     "by": "model",
+     "do": "Give the customer the last-4 lookup tool and tell them to run it with their credit card account ID",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_card_last_4_digits"
+     },
+     "after": [
+      "ask_last4"
+     ],
+     "if": "the customer does not know or does not have the card's last 4 digits",
+     "quote": "- Tell the user to use the exact tool name and parameter: get_card_last_4_digits(credit_card_account_id: str).",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "run_last4_tool",
+     "by": "customer",
+     "do": "The customer runs get_card_last_4_digits with their credit card account ID and reports the digits",
+     "call": "call_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_card_last_4_digits",
+      "credit_card_account_id": "the customer's credit card account id"
+     },
+     "after": [
+      "give_last4_tool"
+     ],
+     "if": "the tool was given",
+     "quote": "- Call the tool with your credit card account ID:",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "check_dispute_history",
+     "by": "harness",
+     "do": "Unlock get_user_dispute_history_7291 and call it to count the disputes filed in the past 12 months",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "user_id": "the verified user id"
+     },
+     "after": [
+      "ask_reason",
+      "ask_merchant",
+      "get_accounts"
+     ],
+     "if": "only if all other provisional credit criteria are met (eligible reason category, account open at least 60 days, amount within limits, merchant contacted for non-fraud). Otherwise skip it, because the answer is already false.",
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "decide_provisional",
+     "by": "model",
+     "do": "Decide eligible_for_provisional_credit using the Provisional Credit Eligibility Guidelines (all criteria must hold)",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_reason",
+      "ask_merchant",
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "15. eligible_for_provisional_credit (boolean) - Agent must determine this based on the Provisional Credit Eligibility Guidelines article in this knowledge base. Pass true or false.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "unlock_file",
+     "by": "harness",
+     "do": "Unlock the dispute filing tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829"
+     },
+     "after": [
+      "decide_provisional",
+      "ask_resolution",
+      "ask_card_action",
+      "ask_noticed"
+     ],
+     "if": null,
+     "quote": "First unlock the tool, then call it using call_discoverable_agent_tool with the tool name and a JSON string containing all the required arguments.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "file_dispute",
+     "by": "model",
+     "do": "File the dispute with all the required arguments",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829",
+      "transaction_id": "the disputed transaction id from records",
+      "card_action": "keep_active or cancel_and_reissue, as the customer chose",
+      "card_last_4_digits": "the last 4 digits from the customer",
+      "full_name": "the verified user's name on record",
+      "user_id": "the verified user id",
+      "phone": "phone on record",
+      "email": "email on record",
+      "address": "address on record",
+      "contacted_merchant": "true or false, as the customer said",
+      "purchase_date": "the transaction date from records, MM/DD/YYYY",
+      "issue_noticed_date": "the date the customer gave, MM/DD/YYYY",
+      "dispute_reason": "the selected reason value",
+      "resolution_requested": "full_refund, partial_refund or reversal_of_charge",
+      "partial_refund_amount": "only if partial_refund",
+      "eligible_for_provisional_credit": "the decided boolean"
+     },
+     "after": [
+      "unlock_file",
+      "ask_last4"
+     ],
+     "if": null,
+     "quote": "When a customer needs to file a formal dispute for a credit card transaction (such as unauthorized charges, merchant issues, or billing errors), the agent must gather comprehensive information and call the file_credit_card_transaction_dispute_4829 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Confirm the dispute was filed and say whether provisional credit applies",
+     "call": null,
+     "args": {},
+     "after": [
+      "file_dispute"
+     ],
+     "if": null,
+     "quote": "When you file a dispute with our customer service team, they will let you know whether provisional credit applies to your situation.",
+     "doc": "doc_credit_cards_credit_cards_(general)_022"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Provisional credit is true only if ALL of these hold: the account has been open at least 60 days; the reason is unauthorized_fraudulent_charge, duplicate_charge, or goods_services_not_received with the purchase more than 30 days ago; the amount is at least $25.00 and no more than the tier maximum; no more than 2 disputes in the past 12 months; and, for non-fraud disputes, the merchant was contacted first",
+     "quote": "## Eligibility Criteria — Customer is ELIGIBLE for provisional credit if ALL of the following are true:",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "The reasons incorrect_amount, goods_services_not_as_described, canceled_subscription_still_charging and refund_never_processed are never eligible for provisional credit",
+     "quote": "- Dispute reason is 'incorrect_amount', 'goods_services_not_as_described', 'canceled_subscription_still_charging', or 'refund_never_processed'",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Mid tier cards (Silver Rewards, Business Silver Rewards, Green Rewards, Silver Zoom) have a provisional credit maximum of $5000.00. Other tiers: Entry $2500, Premium $10000, Elite $15000, Diamond Elite $25000.",
+     "quote": "- Mid Tier (Silver Rewards Card, Business Silver Rewards Card, Green Rewards Card, Silver Zoom Card): Maximum $5000.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Use cancel_and_reissue only when the customer wants the card replaced; otherwise use keep_active",
+     "quote": "   - 'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced - whether you've already ordered a replacement card via order_replacement_credit_card_7291 or the cancellation is happening as part of this dispute) ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "partial_refund_amount is passed only when resolution_requested is partial_refund",
+     "quote": "14. partial_refund_amount (number, optional) - Only required if resolution_requested is 'partial_refund'. The dollar amount for the partial refund.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "If the customer lacks the last 4 digits, give them the get_card_last_4_digits user tool instead of walking them through the steps",
+     "quote": "- Providing this tool replaces any step‑by‑step process for obtaining the last four digits.",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    }
+   ],
+   "done_when": "file_credit_card_transaction_dispute_4829 has been called successfully with all required arguments, including a correctly determined eligible_for_provisional_credit, and the customer has been told the dispute is filed and whether provisional credit applies."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_014",
+   "why": "The internal procedure for filing a credit card dispute and the arguments for file_credit_card_transaction_dispute_4829"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_015",
+   "why": "The rules for provisional credit eligibility and the per-tier maximums"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_013",
+   "why": "The get_card_last_4_digits user tool, for customers without their card digits"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_016",
+   "why": "get_user_dispute_history_7291, for checking the prior-dispute count criterion"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_022",
+   "why": "The customer-facing explanation of provisional credit and the duty to tell the customer whether it applies"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_018",
+   "why": "The customer-facing dispute overview, recommending merchant contact first"
+  }
+ ],
+ "open_questions": [
+  "Verification steps cite the agent policy text. It is not a KB document, so its doc id is given as 'policy'.",
+  "The documents do not say whether a non-fraud dispute may still be filed when the customer has not contacted the merchant. They only say provisional credit is then not eligible.",
+  "The documents do not say which disputes count toward 'not filed more than 2 disputes in the past 12 months' (for example, all statuses or only resolved ones)."
+ ]
+}

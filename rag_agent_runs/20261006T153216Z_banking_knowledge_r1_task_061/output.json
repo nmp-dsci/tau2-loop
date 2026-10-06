@@ -1,0 +1,697 @@
+{
+ "jobs": [
+  {
+   "job": "opening_personal_savings_accounts",
+   "when": {
+    "quote": "Procedure for opening personal savings accounts.",
+    "doc": "doc_bank_accounts_bank_accounts__general__002"
+   },
+   "info": [
+    {
+     "field": "identity_details",
+     "about": "Any 2 of date of birth, email, phone number, address, checked against the records",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of these: your date of birth, email, phone number or address on file?",
+     "may_hold_back": false
+    },
+    {
+     "field": "checking_account_to_close",
+     "about": "Which checking account the customer wants to close and which one they want to keep",
+     "from": "customer",
+     "ask": "Which checking account would you like to close, and which one would you like to keep?",
+     "may_hold_back": false
+    },
+    {
+     "field": "monthly_withdrawals",
+     "about": "How many withdrawals per month the customer expects to make from savings",
+     "from": "customer",
+     "ask": "About how many withdrawals or transfers out of savings do you expect to make each month?",
+     "may_hold_back": true
+    },
+    {
+     "field": "balance_they_can_keep",
+     "about": "The balance the customer can realistically keep in savings, to compare with each account's minimum opening deposit and ongoing minimum balance",
+     "from": "customer",
+     "ask": "Roughly how much can you keep in the savings account on an ongoing basis?",
+     "may_hold_back": true
+    },
+    {
+     "field": "feature_preferences",
+     "about": "The features the customer wants, such as a relationship or loyalty APY bonus, daily compounding, ATM fee rebates, built-in savings goals tracking, eco features or premium tier",
+     "from": "customer",
+     "ask": "Are there any features that matter to you, such as how interest compounds, ATM fee rebates, a bonus for existing customers, or tools for tracking savings goals?",
+     "may_hold_back": true
+    },
+    {
+     "field": "fund_opening_deposit_now",
+     "about": "Whether the customer wants the agent to transfer the opening deposit from checking now",
+     "from": "customer",
+     "ask": "Would you like me to transfer the opening deposit from your checking account now?",
+     "may_hold_back": true
+    },
+    {
+     "field": "accounts",
+     "about": "The customer's bank accounts with account_id, account_type, account_class, status, balance and date_opened",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Look up the customer by the name, email or user id they give",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives (or use get_user_information_by_email / get_user_information_by_id)"
+     },
+     "after": [],
+     "if": null,
+     "quote": "Authenticate the customer and confirm identity verification status on file.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Confirm the customer correctly gives 2 of: date of birth, email, phone, address. Share no account information before this",
+     "call": null,
+     "args": {},
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Authenticate the customer and confirm identity verification status on file.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time for the verification log and for checking account age",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "The customer’s checking account tenure is at least 14 days.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "from records",
+      "email": "from records",
+      "phone_number": "from records",
+      "date_of_birth": "from records",
+      "time_verified": "the time from get_current_time"
+     },
+     "after": [
+      "get_time"
+     ],
+     "if": null,
+     "quote": "Authenticate the customer and confirm identity verification status on file.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "unlock_accounts_tool",
+     "by": "harness",
+     "do": "Unlock the account lookup tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+     },
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get all of the customer's bank accounts (status, balance, class, date_opened)",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [
+      "unlock_accounts_tool"
+     ],
+     "if": null,
+     "quote": "Checking eligibility requirements for opening new accounts (existing account status, balances, account tenure, number of accounts)",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "decide_order",
+     "by": "model",
+     "do": "Use the current time and each checking account's date_opened to work out tenure. If the checking account the customer wants to close is the only active checking account open at least 14 days, open the savings account BEFORE closing it. Explain the reason (savings needs an active checking account held at least 14 days and the remaining one is too new) without exposing internal tool details. If the customer pushes back, repeat the reason",
+     "call": null,
+     "args": {},
+     "after": [
+      "get_accounts",
+      "get_time"
+     ],
+     "if": "the customer wants both to close a checking account and to open savings",
+     "quote": "Confirm an active checking account exists and meets the 14-day tenure requirement.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "check_eligibility",
+     "by": "model",
+     "do": "Check every eligibility item: an active checking account held at least 14 days, fewer than 5 personal savings accounts, no collections and no negative balances",
+     "call": null,
+     "args": {},
+     "after": [
+      "decide_order"
+     ],
+     "if": null,
+     "quote": "Do not proceed if any item above is not met.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "ineligible_tenure",
+     "by": "model",
+     "do": "Tell the customer the date they will become eligible (14 days after the earliest active checking account's date_opened) and do not open the account",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_eligibility"
+     ],
+     "if": "no active checking account has at least 14 days of tenure",
+     "quote": "Insufficient checking tenure: If the checking account has been open fewer than 14 days, advise the customer when they will become eligible.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "gather_needs",
+     "by": "model",
+     "do": "Ask about the customer's savings needs (withdrawals per month, balance they can keep, compounding, ATM rebates, relationship bonus, goals tracking) before you recommend anything",
+     "call": null,
+     "args": {},
+     "after": [
+      "check_eligibility"
+     ],
+     "if": "customer is eligible",
+     "quote": "Discuss available personal savings account options with the customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Compare every personal savings account against the customer's needs and recommend ONE that meets all of them. For these needs (12–15 withdrawals/month, a relationship bonus, $2,500–$4,000 balance and nothing near $10,000, daily compounding, ATM fee rebates, savings goals tracking) the only match is Silver Plus Account. Eco and premium requests are side wishes that don't fit the hard needs. Mention the $1,000 opening deposit, the $2,500 minimum balance and the $8.00 fee below that",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_needs"
+     ],
+     "if": null,
+     "quote": "Earn an additional relationship APY bonus of 0.025% when you qualify under the relationship criteria.",
+     "doc": "doc_savings_accounts_silver_plus_account_002"
+    },
+    {
+     "id": "confirm_class",
+     "by": "model",
+     "do": "Confirm the chosen account_class using the full official name ending with 'Account' (e.g. 'Silver Plus Account')",
+     "call": null,
+     "args": {},
+     "after": [
+      "recommend"
+     ],
+     "if": null,
+     "quote": "Capture the exact account_class string. It must be the full official name ending with “Account” (for example, “Silver Plus Account”, “Gold Account”).",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "unlock_open",
+     "by": "harness",
+     "do": "Unlock the account opening tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821"
+     },
+     "after": [
+      "confirm_class"
+     ],
+     "if": null,
+     "quote": "Use the open_bank_account_4821 tool with account_type set to 'savings' and the confirmed account_class.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "open_savings",
+     "by": "harness",
+     "do": "Open the savings account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "open_bank_account_4821",
+      "arguments": {
+       "user_id": "the verified user's id",
+       "account_type": "savings",
+       "account_class": "the confirmed account class, e.g. 'Silver Plus Account'"
+      }
+     },
+     "after": [
+      "unlock_open"
+     ],
+     "if": null,
+     "quote": "Use the open_bank_account_4821 tool with account_type set to 'savings' and the confirmed account_class.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "ask_funding",
+     "by": "model",
+     "do": "Ask whether the customer wants the opening deposit transferred from checking now",
+     "call": null,
+     "args": {},
+     "after": [
+      "open_savings"
+     ],
+     "if": null,
+     "quote": "Ask the customer if they want you to transfer the opening deposit from their checking account now.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "transfer_deposit",
+     "by": "harness",
+     "do": "Unlock and call transfer_funds_between_bank_accounts_7291 from an OPEN checking account with enough funds to the new savings account for the required opening deposit",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+      "arguments": {
+       "source_account_id": "the customer's checking account",
+       "destination_account_id": "the new savings account id",
+       "amount": "the required opening deposit"
+      }
+     },
+     "after": [
+      "ask_funding"
+     ],
+     "if": "customer says yes",
+     "quote": "If yes: use transfer_funds_between_bank_accounts_7291 to transfer the required amount from the customer’s checking account to the newly opened savings account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "funding_deadline",
+     "by": "model",
+     "do": "Tell the customer they have 30 days to fund the account (by internal transfer or external deposit) or it will be closed",
+     "call": null,
+     "args": {},
+     "after": [
+      "ask_funding"
+     ],
+     "if": "customer declines the transfer",
+     "quote": "If no: inform the customer they have 30 days to fund the account (via internal transfer or external deposit) or the account will be closed.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "id": "confirm_open",
+     "by": "model",
+     "do": "Give the new account details and the funding status or the funding deadline",
+     "call": null,
+     "args": {},
+     "after": [
+      "transfer_deposit",
+      "funding_deadline"
+     ],
+     "if": null,
+     "quote": "Provide the new account details and confirm the funding status or the funding deadline.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Opening savings requires: verified customer, at least one active checking account, fewer than 5 personal savings accounts, no collections or negative balances, and a checking account held at least 14 days",
+     "quote": "Must have held their checking account for at least 14 days.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "rule": "If closing the requested checking account would leave no active checking account with 14+ days of tenure, open savings first",
+     "quote": "Customer has at least one active Rho-Bank checking account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__002"
+    },
+    {
+     "rule": "Silver Plus: 15 free withdrawals per month; $1.00 per excess withdrawal",
+     "quote": "You have up to 15 free withdrawals each month.",
+     "doc": "doc_savings_accounts_silver_plus_account_001"
+    },
+    {
+     "rule": "Silver Plus: $1,000 opening deposit, $2,500 ongoing minimum balance",
+     "quote": "Keep your balance at or above $2,500 to meet the ongoing requirement.",
+     "doc": "doc_savings_accounts_silver_plus_account_001"
+    },
+    {
+     "rule": "Silver Plus: $8.00 monthly fee if the balance is below $2,500",
+     "quote": "A monthly maintenance fee of $8.00 may be charged if your balance is below $2,500.",
+     "doc": "doc_savings_accounts_silver_plus_account_004"
+    },
+    {
+     "rule": "Silver Plus compounds daily",
+     "quote": "Interest is compounded daily to help maximize earnings.",
+     "doc": "doc_savings_accounts_silver_plus_account_001"
+    },
+    {
+     "rule": "Silver Plus has ATM fee rebates of up to 25 per month",
+     "quote": "Receive ATM fee rebates up to 25 each month.",
+     "doc": "doc_savings_accounts_silver_plus_account_002"
+    },
+    {
+     "rule": "Silver Plus has built-in savings goals tracking",
+     "quote": "| Built-in savings goals tracking | Yes |",
+     "doc": "doc_savings_accounts_silver_plus_account_004"
+    },
+    {
+     "rule": "Silver Account allows only 10 free withdrawals per cycle, so it fails a need of 12+ per month",
+     "quote": "| Free withdrawals per statement cycle | 10 |",
+     "doc": "doc_savings_accounts_silver_account_001"
+    },
+    {
+     "rule": "Green Account (savings), the eco option, allows only 8 free withdrawals",
+     "quote": "| Maximum free withdrawals per month | 8 |",
+     "doc": "doc_savings_accounts_green_account__savings__001"
+    },
+    {
+     "rule": "Bronze allows only 6 free withdrawals",
+     "quote": "Free withdrawals per month: 6",
+     "doc": "doc_savings_accounts_bronze_account_002"
+    },
+    {
+     "rule": "Gold requires a $10,000 balance",
+     "quote": "Maintain at least $10,000 to keep your account in good standing.",
+     "doc": "doc_savings_accounts_gold_account_001"
+    },
+    {
+     "rule": "Gold Plus requires a $25,000 balance",
+     "quote": "Maintain a balance of at least $25,000 to keep account benefits active.",
+     "doc": "doc_savings_accounts_gold_plus_account_001"
+    },
+    {
+     "rule": "Platinum requires a $50,000 balance",
+     "quote": "Maintain at least $50,000 to preserve Platinum benefits.",
+     "doc": "doc_savings_accounts_platinum_account_001"
+    },
+    {
+     "rule": "Platinum Plus requires a $100,000 balance",
+     "quote": "Minimum balance to maintain the account: $100,000",
+     "doc": "doc_savings_accounts_platinum_plus_account_001"
+    },
+    {
+     "rule": "Diamond Elite requires a $250,000 balance",
+     "quote": "Minimum balance to maintain the account: $250,000.",
+     "doc": "doc_savings_accounts_diamond_elite_account_002"
+    }
+   ],
+   "done_when": "The customer is verified and logged, the chosen savings account is open, and the customer has been told its funding status or the 30-day funding deadline"
+  },
+  {
+   "job": "closing_personal_checking_accounts",
+   "when": {
+    "quote": "Verify all of the following before closing:",
+    "doc": "doc_bank_accounts_bank_accounts__general__005"
+   },
+   "info": [
+    {
+     "field": "account_to_close",
+     "about": "The checking account the customer wants to close (account_id, class, balance, date_opened, status)",
+     "from": "records",
+     "ask": "Which checking account would you like to close?",
+     "may_hold_back": false
+    },
+    {
+     "field": "funding_method_for_fee",
+     "about": "How the customer will put the early closure fee into the account if the balance is below the fee (e.g. depositing a check themselves)",
+     "from": "customer",
+     "ask": "The early closure fee has to be paid from the account balance. How would you like to add funds to cover it?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "determine_tier_fee",
+     "by": "model",
+     "do": "Use the account_class and date_opened against the current time to find the tier and whether the early closure fee applies (Green Account (checking) / Blue Account: $25 within 60 days)",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "Determine the account tier and applicable fees/notice period.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "id": "check_status",
+     "by": "model",
+     "do": "Confirm the account status is OPEN",
+     "call": null,
+     "args": {},
+     "after": [
+      "determine_tier_fee"
+     ],
+     "if": null,
+     "quote": "Account status is OPEN",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "id": "check_pending",
+     "by": "harness",
+     "do": "Unlock get_bank_account_transactions_9173 and check the account for pending transactions",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_bank_account_transactions_9173",
+      "arguments": {
+       "account_id": "the account to close"
+      }
+     },
+     "after": [
+      "check_status"
+     ],
+     "if": null,
+     "quote": "No pending transactions for this account",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "id": "explain_fee",
+     "by": "model",
+     "do": "Tell the customer the fee amount and that it is taken from the account balance with no other way to pay. The balance must be at least the fee (or $0 if no fee applies)",
+     "call": null,
+     "args": {},
+     "after": [
+      "determine_tier_fee"
+     ],
+     "if": "an early closure fee applies and the balance is below the fee",
+     "quote": "If an early closure fee applies, the account balance must be at least the fee amount; otherwise, account balance (current_holdings) must be $0. The fee is deducted directly from the account balance and there is no alternative payment method.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "id": "give_check_tool",
+     "by": "harness",
+     "do": "Give the customer the check deposit tool. Explain they call it with the account_id of the account to close and the check amount",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "deposit_check_3847"
+     },
+     "after": [
+      "explain_fee"
+     ],
+     "if": "customer wants to cover the fee by depositing a check",
+     "quote": "To help a customer deposit a check, give them the deposit_check_3847 tool.",
+     "doc": "doc_bank_accounts_bank_accounts__general__011"
+    },
+    {
+     "id": "customer_deposits",
+     "by": "customer",
+     "do": "Customer deposits the check into the account to close",
+     "call": "deposit_check_3847",
+     "args": {
+      "account_id": "the account to close",
+      "check_amount": "the check amount"
+     },
+     "after": [
+      "give_check_tool"
+     ],
+     "if": null,
+     "quote": "Have the user call deposit_check_3847(account_id, check_amount) where account_id is the ID of the account they want to deposit into and check_amount is the amount of the check in USD.",
+     "doc": "doc_bank_accounts_bank_accounts__general__011"
+    },
+    {
+     "id": "recheck_balance",
+     "by": "harness",
+     "do": "Look up the accounts again to confirm the balance now covers the fee",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+      "arguments": {
+       "user_id": "the verified user's id"
+      }
+     },
+     "after": [
+      "customer_deposits"
+     ],
+     "if": null,
+     "quote": "Verifying pre-closure requirements when closing accounts",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "id": "unlock_close",
+     "by": "harness",
+     "do": "Unlock the account closing tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_bank_account_7392"
+     },
+     "after": [
+      "check_pending",
+      "recheck_balance"
+     ],
+     "if": null,
+     "quote": "Use close_bank_account_7392 to close the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "id": "close_account",
+     "by": "harness",
+     "do": "Close the checking account",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "close_bank_account_7392",
+      "arguments": {
+       "account_id": "the account to close"
+      }
+     },
+     "after": [
+      "unlock_close"
+     ],
+     "if": "all pre-closure requirements are met",
+     "quote": "Use close_bank_account_7392 to close the account.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "id": "confirm_close",
+     "by": "model",
+     "do": "Confirm the closure and the fee that was deducted",
+     "call": null,
+     "args": {},
+     "after": [
+      "close_account"
+     ],
+     "if": null,
+     "quote": "Verify pre-closure requirements are met.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Green Account (checking) and Blue Account are MID TIER: a $25 early closure fee if closed within 60 days of opening, and a 3-day notice period",
+     "quote": "Early closure fee: $25 if closed within 60 days",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "rule": "Entry tier (Light Blue, Light Green, Green Fee-Free): $15 within 30 days; Premium (Evergreen): $50 within 90 days; Elite (Bluest): $100 within 180 days",
+     "quote": "Early closure fee: $15 if closed within 30 days",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "rule": "The balance must be at least the fee when a fee applies, otherwise exactly $0. The fee can only come out of the account balance",
+     "quote": "The fee is deducted directly from the account balance and there is no alternative payment method.",
+     "doc": "doc_bank_accounts_bank_accounts__general__005"
+    },
+    {
+     "rule": "The agent cannot deposit checks; the customer must do it",
+     "quote": "Note: The agent cannot deposit checks on behalf of the customer - this action must be performed by the customer themselves through the mobile app.",
+     "doc": "doc_bank_accounts_bank_accounts__general__011"
+    },
+    {
+     "rule": "Funds may be moved from another account to cover the balance before closure, but only with the customer's authorization",
+     "quote": "Consolidating balances prior to closing one of the customer’s accounts",
+     "doc": "doc_bank_accounts_bank_accounts__general__010"
+    }
+   ],
+   "done_when": "close_bank_account_7392 has succeeded for the requested checking account and the customer has been told it is closed, including any fee deducted"
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__002",
+   "why": "Internal procedure for opening personal savings: eligibility (14-day checking tenure, active checking), open_bank_account_4821, funding step"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__005",
+   "why": "Internal procedure for closing personal checking: balance and fee rule, tier fees, close_bank_account_7392"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__009",
+   "why": "get_all_user_accounts_by_user_id_3847 for accounts, balances, date_opened"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__010",
+   "why": "transfer_funds_between_bank_accounts_7291 rules"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__011",
+   "why": "deposit_check_3847 user tool for check deposits"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts__general__018",
+   "why": "get_bank_account_transactions_9173 for checking pending transactions"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_001",
+   "why": "Silver Plus specs: 15 withdrawals, $1,000 opening, $2,500 minimum, daily compounding"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_002",
+   "why": "Silver Plus ATM rebates and relationship bonus"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_003",
+   "why": "Silver Plus ATM rebates and $1.00 excess withdrawal fee"
+  },
+  {
+   "id": "doc_savings_accounts_silver_plus_account_004",
+   "why": "Silver Plus savings goals tracking and $8.00 fee below minimum"
+  },
+  {
+   "id": "doc_savings_accounts_silver_account_001",
+   "why": "Silver: only 10 withdrawals"
+  },
+  {
+   "id": "doc_savings_accounts_green_account__savings__001",
+   "why": "Green savings (eco): only 8 withdrawals"
+  },
+  {
+   "id": "doc_savings_accounts_bronze_account_002",
+   "why": "Bronze: only 6 withdrawals"
+  },
+  {
+   "id": "doc_savings_accounts_gold_account_001",
+   "why": "Gold: $10,000 minimum"
+  },
+  {
+   "id": "doc_savings_accounts_gold_plus_account_001",
+   "why": "Gold Plus: $25,000 minimum"
+  },
+  {
+   "id": "doc_savings_accounts_platinum_account_001",
+   "why": "Platinum: $50,000 minimum"
+  },
+  {
+   "id": "doc_savings_accounts_platinum_plus_account_001",
+   "why": "Platinum Plus: $100,000 minimum"
+  },
+  {
+   "id": "doc_savings_accounts_diamond_elite_account_002",
+   "why": "Diamond Elite: $250,000 minimum"
+  }
+ ],
+ "open_questions": [
+  "The Green Account (checking) has a 3-day notice period, but no document says how the notice period affects an immediate closure through close_bank_account_7392.",
+  "A newly deposited check might show as a pending transaction, which would conflict with the 'no pending transactions' requirement. The documents do not say whether a check deposit made through deposit_check_3847 counts as pending.",
+  "No document defines the 'relationship criteria' for the Silver Plus 0.025% relationship APY bonus."
+ ]
+}

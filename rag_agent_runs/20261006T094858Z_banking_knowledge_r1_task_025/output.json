@@ -1,0 +1,350 @@
+{
+ "jobs": [
+  {
+   "job": "recommend_business_credit_card_for_large_purchase",
+   "when": {
+    "quote": "Each credit card has its own bonus categories with higher reward rates.",
+    "doc": "doc_credit_cards_credit_cards_(general)_005"
+   },
+   "info": [
+    {
+     "field": "purchase_amount",
+     "about": "the dollar amount of the single purchase the customer plans to put on the new card",
+     "from": "customer",
+     "ask": "How much is the purchase you want to put on the new card?",
+     "may_hold_back": false
+    },
+    {
+     "field": "merchant_name",
+     "about": "the merchant who will bill the purchase. Some cards exclude certain merchants from bonus rates, so the agent needs the actual merchant name",
+     "from": "customer",
+     "ask": "Which merchant or company will bill you for this purchase?",
+     "may_hold_back": false
+    },
+    {
+     "field": "purchase_category",
+     "about": "the rewards category the purchase falls in. A streaming service counts as Media, and a software subscription or license counts as Software",
+     "from": "customer",
+     "ask": "What exactly are you buying, for example a software license, a streaming subscription or travel?",
+     "may_hold_back": false
+    },
+    {
+     "field": "business_type",
+     "about": "the customer's line of business. Silver Zoom is built for transportation and logistics businesses, and Green Rewards pays its bonus rate only at sustainable merchants",
+     "from": "customer",
+     "ask": "What kind of business do you run?",
+     "may_hold_back": true
+    },
+    {
+     "field": "current_date",
+     "about": "today's date, used to check whether each card's promotion window is open",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "customer_name",
+     "about": "the full legal name for the application",
+     "from": "customer",
+     "ask": "What is your full name for the application?",
+     "may_hold_back": true
+    },
+    {
+     "field": "annual_income",
+     "about": "annual income for the application",
+     "from": "customer",
+     "ask": "What is your annual income?",
+     "may_hold_back": true
+    },
+    {
+     "field": "rho_bank_subscription",
+     "about": "whether the customer has a Rho-Bank+ subscription",
+     "from": "customer",
+     "ask": "Do you currently have a Rho-Bank+ subscription?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely. Identity verification is not needed because no customer records are looked up or changed. The customer submits the application themselves",
+     "call": null,
+     "args": {},
+     "after": [],
+     "if": null,
+     "quote": "You should ONLY verify a user's identity if you need to access or modify their customer information in internal databases on their behalf.",
+     "doc": "policy"
+    },
+    {
+     "id": "gather_purchase",
+     "by": "model",
+     "do": "Ask for the purchase amount, the billing merchant, what is being bought (its category) and the type of business, if the customer has not said them",
+     "call": null,
+     "args": {},
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "Purchases in non-bonus categories earn the card’s default rate.",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get today's date to check the promotion windows",
+     "call": "get_current_time",
+     "args": {},
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "The fee waiver is reflected on your account during the first year of membership, provided your account is opened within the promotion dates.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_011"
+    },
+    {
+     "id": "rate_platinum",
+     "by": "model",
+     "do": "Business Platinum Rewards Card: travel, software and media earn 4.0% and everything else earns 1.5%. A streaming or software subscription counts as software or media. No merchant exclusion list applies. Credit limit can reach $400,000",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_purchase",
+      "get_time"
+     ],
+     "if": null,
+     "quote": "Travel, software, and media advertising purchases earn 4.0%.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_002"
+    },
+    {
+     "id": "rate_silver",
+     "by": "model",
+     "do": "Business Silver Rewards Card: software and travel earn 10.0% and other purchases earn 1.0%. Merchants on the exclusion list, including Apple, Microsoft and Dell, earn only 1.0%. The 2x promo counts only for accounts opened 2024-11-14 to 2025-11-14",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_purchase",
+      "get_time"
+     ],
+     "if": null,
+     "quote": "The following specific merchants do NOT earn the 10.0% bonus rate and instead earn the standard 1.0% rate:",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_005"
+    },
+    {
+     "id": "rate_others",
+     "by": "model",
+     "do": "Rate the other business cards. Gold: 2.5% on operations, 1.0% otherwise, $200 fee. Bronze: 1.0% plus a $500 credit for $10,000 spent in 2 months (offer runs 2025-10-01 to 2026-03-31), but the line tops out at $50,000. Green: 3.0% only at sustainable merchants, line up to $75,000. Silver Zoom: logistics card, 3x promo only if claimed by 2025-12-31",
+     "call": null,
+     "args": {},
+     "after": [
+      "gather_purchase",
+      "get_time"
+     ],
+     "if": null,
+     "quote": "Spend $10,000 in the first 2 months to receive a $500 statement credit.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_001"
+    },
+    {
+     "id": "compute_and_recommend",
+     "by": "model",
+     "do": "For each card, work out cash back = purchase_amount × rate (rounded down) plus any promo the customer qualifies for on today's date. Recommend exactly one card, the one with the highest total, and state the dollar breakdown: cash back + promo = total. Mention the annual fee separately. For a software or streaming purchase from an Apple-type merchant, this is the Business Platinum Rewards Card at 4.0%",
+     "call": null,
+     "args": {},
+     "after": [
+      "rate_platinum",
+      "rate_silver",
+      "rate_others"
+     ],
+     "if": null,
+     "quote": "All credit card rewards points are rounded down to the nearest whole number.",
+     "doc": "doc_credit_cards_credit_cards_(general)_007"
+    },
+    {
+     "id": "platinum_fee",
+     "by": "model",
+     "do": "Explain the Business Platinum annual fee: $0 the first year if the account is opened 2025-11-01 to 2026-02-28, otherwise $450.00",
+     "call": null,
+     "args": {},
+     "after": [
+      "compute_and_recommend"
+     ],
+     "if": "the recommended card is the Business Platinum Rewards Card",
+     "quote": "After the first year, the standard annual fee applies: $450.00",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_011"
+    },
+    {
+     "id": "customer_applies",
+     "by": "customer",
+     "do": "The customer applies for the recommended card using their own tool",
+     "call": "apply_for_credit_card",
+     "args": {
+      "card_type": "the recommended card, e.g. 'Business Platinum Rewards Card'",
+      "customer_name": "the customer's full name",
+      "annual_income": "the customer's stated annual income",
+      "rho_bank_subscription": "the customer's stated Rho-Bank+ status (true/false)"
+     },
+     "after": [
+      "compute_and_recommend"
+     ],
+     "if": "the customer confirms the recommendation",
+     "quote": "Submit the application through your online dashboard or with assistance from a commercial lending specialist; include accurate contact information for follow-up.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "A streaming service purchase falls in the Media category",
+     "quote": "Media (advertising spend, streaming services)",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "rule": "Software subscriptions and licenses fall in the Software category",
+     "quote": "Software (subscriptions, licenses, cloud services)",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "rule": "Business Platinum earns 1.5% on purchases outside travel, software and media",
+     "quote": "Purchases outside those categories earn 1.5%.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_002"
+    },
+    {
+     "rule": "Business Platinum earns 4.0% on enterprise software licenses billed by the software provider",
+     "quote": "SaaS subscriptions and enterprise software licenses billed by software providers.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_007"
+    },
+    {
+     "rule": "Business Platinum credit line can reach $400,000",
+     "quote": "Maximum available credit limit: $400,000",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_001"
+    },
+    {
+     "rule": "Business Platinum's first-year fee waiver applies only to accounts opened 2025-11-01 to 2026-02-28",
+     "quote": "Offer start date: 2025-11-01",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_011"
+    },
+    {
+     "rule": "Business Silver earns 10.0% on travel and software purchases and 1.0% on everything else",
+     "quote": "Earn 10.0% cash back on eligible travel and software purchases",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+    },
+    {
+     "rule": "Business Silver's 2x promo applies only to accounts opened during the promo period (2024-11-14 to 2025-11-14), and merchant exclusions still apply",
+     "quote": "You must open your account during the promotional period to qualify",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "rule": "Business Gold earns 2.5% on operations spend and 1.0% on everything else",
+     "quote": "Operations spending earns cash back at 2.5%.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_001"
+    },
+    {
+     "rule": "Business Bronze earns 1.0% and its credit line tops out at $50,000",
+     "quote": "Your initial credit line will be at least $10,000 and may be as high as $50,000 based on underwriting.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_005"
+    },
+    {
+     "rule": "Business Bronze's $500 promo is available 2025-10-01 through 2026-03-31",
+     "quote": "This offer is available from 2025-10-01 through 2026-03-31.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_010"
+    },
+    {
+     "rule": "Green Rewards earns 3.0% only at sustainable merchants and 1.0% on everything else",
+     "quote": "Purchases at qualifying sustainable merchants earn 3.0%, while all other eligible purchases earn 1.0%.",
+     "doc": "doc_business_credit_cards_green_rewards_card_004"
+    },
+    {
+     "rule": "Silver Zoom's triple cash back must be claimed between 2024-01-01 and 2025-12-31. Non-logistics purchases earn 3 × 1.0% during the promo",
+     "quote": "All other eligible purchases earn 3 × 1.0% during the promo period",
+     "doc": "doc_business_credit_cards_silver_zoom_card_012"
+    },
+    {
+     "rule": "Silver Zoom is built for transportation and logistics operators",
+     "quote": "Established transportation and logistics operators that can meet both personal and business credit criteria",
+     "doc": "doc_business_credit_cards_silver_zoom_card_001"
+    },
+    {
+     "rule": "Cash back points convert at 1 point = $0.01",
+     "quote": "these 'points' should be interpreted as cash back with a conversion rate of 1 point = $0.01 when redeemed as a statement credit or as a credit to the user's Rho-Bank checking account.",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    }
+   ],
+   "done_when": "The agent has recommended exactly one business card with a dollar breakdown of the return on the purchase (cash back + any promo = total, with the annual fee stated separately), the customer has confirmed, and the customer has applied for that card with apply_for_credit_card"
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_005",
+   "why": "Rewards categories; streaming counts as Media and subscriptions/licenses as Software"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_006",
+   "why": "Points-to-cash conversion rate and list of cash back cards"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_007",
+   "why": "Rewards are rounded down"
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_001",
+   "why": "Business Platinum credit limits and how to apply"
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_002",
+   "why": "Business Platinum rates: 4.0% on travel, software and media, 1.5% on everything else"
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_007",
+   "why": "Business Platinum: software licenses qualify"
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_011",
+   "why": "Business Platinum first-year fee waiver window and $450 standard fee"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_002",
+   "why": "Business Silver rates: 10% / 1%"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_005",
+   "why": "Business Silver merchant exclusions, including Apple"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_012",
+   "why": "Business Silver 2x promo window"
+  },
+  {
+   "id": "doc_business_credit_cards_business_gold_rewards_card_001",
+   "why": "Business Gold rates and fee"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_001",
+   "why": "Business Bronze rate and $500 promo"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_005",
+   "why": "Business Bronze credit line tops out at $50,000"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_010",
+   "why": "Business Bronze promo window"
+  },
+  {
+   "id": "doc_business_credit_cards_green_rewards_card_004",
+   "why": "Green Rewards rates"
+  },
+  {
+   "id": "doc_business_credit_cards_silver_zoom_card_001",
+   "why": "Silver Zoom target market and rates"
+  },
+  {
+   "id": "doc_business_credit_cards_silver_zoom_card_012",
+   "why": "Silver Zoom triple promo terms and claim window"
+  }
+ ],
+ "open_questions": [
+  "No document gives the exact card_type string for apply_for_credit_card. The likely value is 'Business Platinum Rewards Card', but doc _001 is titled 'Platinum Rewards Card: Elite Business Credit Card Application'.",
+  "The documents do not say whether 'money back' should be counted net of the annual fee. Business Platinum gives the most back either way.",
+  "The documents do not say how Apple bills a streaming or software subscription (Media, Software or another merchant category). The Business Silver list treats Apple as a hardware/electronics merchant. Business Platinum has no merchant exclusion list, and its 4.0% depends on the merchant's category code.",
+  "No document covers how credit limits interact with a purchase larger than the approved line. The Business Platinum line starts at $75,000."
+ ]
+}
