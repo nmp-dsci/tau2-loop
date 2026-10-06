@@ -97,6 +97,8 @@ data/judge/<domain>*      s11 tool judge: J0 labels (<domain>.json) · golden an
 judges/<domain>/plan/jN/  the plan judge: judge.md (rubric; J3 edits only its numbered lessons) · judge.yaml
                           (model, effort, threshold) · changes.json (the optimiser's record);  ledger.jsonl · registry.json
 judge_runs/<ts>_<domain>_<jN>_train/  a judge replay: run.json · verdicts.jsonl · summary.json (immutable)
+rag_agents/<domain>/rN/  workflow_rag (banking's second agent): rag_agent.md · rag_agent.yaml (frozen);
+                          rag_agent_runs/ its train-question sessions, live_runs/ live demo conversations (immutable)
 src/tau2_loop/
   config.py               paths, Settings (boots keyless), DOMAINS, split seed
   llm/                    core (sealed: models, billing check, env allow-list, one SDK answer) · prompting (contract)
@@ -104,7 +106,7 @@ src/tau2_loop/
                           __init__ (the harness's side: prefix, dotenv scrub, the optimiser's env, redaction)
   agent/                  versions (per domain, fingerprint) · factory (LoopAgent, registered as "tau2_loop")
   data/                   splits (cut, extract, read) · leaderboard (ingest the published board) · pg (central Postgres)
-  eval/                   runner (tau2 run_tasks → run folder) · results · profile (the cost distribution)
+  eval/                   live (a train task played live on the Agent tab) · runner (tau2 run_tasks → run folder) · results · profile (the cost distribution)
                           compare (the gate: pass fractions, sign test) · rescore (offline replay) · review
   loop/                   run (cycle, challenge) · optimiser (Opus session, hooks) · ledger
                           history (every version per domain: how made, the gate's runs, the reigns)
@@ -113,6 +115,7 @@ src/tau2_loop/
                           from the read half, gated on the gate half) · view · tracking (experiment tau2-loop/judge)
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
+  workflows/              workflow_rag: rag_agent (r1 sessions) · library (find_workflow lookup) · golden (RULES)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
 infra/roles.sql           schema tau2_loop on the central Postgres: review · submission (app state only)
 frontend/                 Vite + React; routes.tsx is the address table, lib/url.ts the grammar,

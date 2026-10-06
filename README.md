@@ -166,6 +166,7 @@ halved verdict is kept in the ledger under `superseded`.
 | v2 · cycle 1 | 17/60 `20261003T005018Z_banking_knowledge_v2_train` | 5/37 `20261003T051036Z_banking_knowledge_v2_test` | hold on test: fixed 3, broke 4, p = 0.773 |
 | v3 · v1's prompt, AllTools retrieval, native calls (4 Oct 2026) | 12/60 `20261004T023602Z_banking_knowledge_v3_train` | 6/37 `20261004T023605Z_banking_knowledge_v3_test` | champion by the person's call (`tool change`); held on test 6 → 6, p = 0.688 |
 | v4 · `make optimise` from v3, Sonnet at high effort, parallel calls (5 Oct 2026) | **29/60** `20261004T222002Z_banking_knowledge_v4_train` | **14/37** `20261004T113341Z_banking_knowledge_v4_test` | **champion**: fixed 8, broke 0, p = 0.004 |
+| v7 · v6 (v4 + `find_workflow` / `request_workflow` from workflow_rag r1's train library) at Sonnet medium (7 Oct 2026) | 37/60 | 12/37 | held experiment, never gated: v4 stays champion |
 
 Every run folder under `runs/` holds `run.json`, `results.jsonl`, one trace per
 conversation and the agent version it ran; `tau2loop gate` replays them through
