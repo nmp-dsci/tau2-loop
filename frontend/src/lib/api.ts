@@ -697,7 +697,9 @@ export function fmtPct(x: number | null | undefined, digits = 0): string {
   return x == null ? '—' : `${(x * 100).toFixed(digits)}%`;
 }
 export function fmtS(ms: number | null | undefined): string {
-  return ms == null ? '—' : ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(0)}s`;
+  if (ms == null) return '—';
+  // a run's summed conversation time passes an hour: 17.2h, not 1031.0m
+  return ms >= 3600000 ? `${(ms / 3600000).toFixed(1)}h` : ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(0)}s`;
 }
 export function fmtK(n: number | null | undefined): string {
   if (n == null) return '—';

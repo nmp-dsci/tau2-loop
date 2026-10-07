@@ -354,31 +354,36 @@ export function Runs() {
               <th className="num">turns / conv</th>
               <th className="num">tokens / conv</th>
               <th className="num">time</th>
-              <th>note</th>
             </tr>
           </thead>
           <tbody>
             {real.map((r) => (
               <tr key={r.run_id}>
+                {/* three lines a cell at most, so no one cell sets the row's height; the note is
+                    the run link's title, still found by the search */}
                 <td className="sub">
-                  <Link to={runPath(r.run_id)}>{breakable(shortRun(r.run_id))}</Link>
+                  <Link to={runPath(r.run_id)} title={r.note || undefined}>
+                    {breakable(shortRun(r.run_id))}
+                  </Link>
                   <span className="path nw">{when(r.started_at)}</span>
-                  <span className="path">
-                    {shortModel(r.model)}
-                    {r.agent_route?.startsWith('service') ? ' via service' : ''}
-                  </span>
-                  <span className="path">user {shortModel(r.user_model)}</span>
                 </td>
-                <td className="mono">
+                <td className="mono nw">
                   {r.agent}
+                  {r.agent_route?.startsWith('service') ? (
+                    <span className="aside" title={`answered through the agent service (${r.agent_route})`}>
+                      {'\u2009·\u2009service'}
+                    </span>
+                  ) : null}
                   <span className="path">{r.fingerprint}</span>
+                  <span className="path">{shortModel(r.model)}</span>
                 </td>
-                <td className="sub">
+                <td className="sub nw">
                   {r.split}
-                  <span className="path nw">
+                  {r.split_version ? <span className="aside"> · cut v{r.split_version}</span> : null}
+                  <span className="path">
                     {r.n_tasks} × {r.trials} trial{r.trials > 1 ? 's' : ''}
                   </span>
-                  {r.split_version ? <span className="path">cut v{r.split_version}</span> : null}
+                  <span className="path">user {shortModel(r.user_model)}</span>
                 </td>
                 {ks.map((k) => (
                   <PassK key={k} r={r} k={k} />
@@ -408,7 +413,6 @@ export function Runs() {
                   {fmtK(r.tokens_per_conversation?.all)}
                 </td>
                 <td className="num">{fmtS(r.summary?.duration_ms)}</td>
-                <td className="wrap small muted">{r.note}</td>
               </tr>
             ))}
           </tbody>
