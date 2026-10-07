@@ -96,6 +96,13 @@
   (the person's call): Evals shows each test question's workflows as `golden.RULES` map them,
   and `test_counts.json` stays counts only. v7 (v6 at Sonnet medium) is a held experiment:
   train 37/60 and test 12/37 against v4's 29 and 14 (`.lavish/s17_…`); v4 stays champion.
+  r2 (s20, 7 Oct 2026, the person's calls) merges instead of replacing: seeded with r1's 64
+  workflows, `make rag-build` runs the train questions one at a time in id order, each researched
+  then merged into the jobs it shares (`merge.md`); `workflows/rubric.py` checks every merge
+  without a model (nothing lost that the changelog does not name, no quote not found), a failure
+  is sent back once, and a merge that still fails keeps the previous version. The rubric is in
+  r2's prompt; no reviewer yet (saved for optimising), and no gold or v7 outcome reaches r2.
+  v8 = v7 with `workflows: r2` only (`make fork FROM=v7 WORKFLOWS=r2`).
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

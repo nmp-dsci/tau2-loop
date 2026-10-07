@@ -474,3 +474,17 @@ def test_a_tool_change_is_a_promotion_kind_and_never_a_held_challenger_to_reuse(
     monkeypatch.setattr(optimiser, "read_ledger", lambda d: ledger)
     held = optimiser.held_challengers("banking_knowledge", "v3")
     assert [h["cycle"] for h in held] == [1]  # v2's edits, never v3 as its own held challenger
+
+
+def test_a_fork_may_look_up_another_workflow_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = versions.AGENTS_DIR
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path)
+    shutil.copytree(real / "banking_knowledge" / "v7", tmp_path / "banking_knowledge" / "v7")
+    v = versions.fork_version("banking_knowledge", "v7", workflows="r2")
+    src = versions.load_version("banking_knowledge", "v7")
+    assert v.config.workflows == "r2" and v.system_prompt == src.system_prompt
+    assert (v.config.model, v.config.effort) == (src.config.model, src.config.effort)
+    d = json.loads((v.path / "diagnosis.json").read_text())
+    assert d["kind"] == "workflow tools" and d["agent_yaml"] == ["workflows: r1 → r2"]

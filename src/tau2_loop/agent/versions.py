@@ -232,6 +232,7 @@ def fork_version(
     tool_mode: str | None = None,
     identity_note: bool | None = None,
     parallel_calls: bool | None = None,
+    workflows: str | None = None,
 ) -> AgentVersion:
     """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`.
 
@@ -251,12 +252,13 @@ def fork_version(
         retrieval=retrieval or cfg.retrieval,
         identity_note=cfg.identity_note if identity_note is None else identity_note,
         parallel_calls=cfg.parallel_calls if parallel_calls is None else parallel_calls,
-        workflows=cfg.workflows,  # s16: a fork keeps the workflow_rag version its source looks up
+        # s16: a fork keeps the workflow_rag version its source looks up, unless given another
+        workflows=workflows or cfg.workflows,
     )
     if new == cfg:
         raise ValueError(
             f"a fork of {domain}/{source} needs a different model, effort, retrieval, tool mode, "
-            "identity note or parallel calls"
+            "identity note, parallel calls or workflows"
         )
     name = next_version_name(domain)
     dest = version_dir(domain, name)
@@ -267,12 +269,25 @@ def fork_version(
     (dest / "agent.yaml").write_text(AGENT_YAML_HEADER + new.yaml())
     changed = [
         f"{k}: {getattr(cfg, k)} → {getattr(new, k)}"
-        for k in ("model", "effort", "retrieval", "tool_mode", "identity_note", "parallel_calls")
+        for k in (
+            "model",
+            "effort",
+            "retrieval",
+            "tool_mode",
+            "identity_note",
+            "parallel_calls",
+            "workflows",
+        )
         if getattr(cfg, k) != getattr(new, k)
     ]
     tools_only = cfg.model == new.model and cfg.effort == new.effort
+    only_workflows = changed == [f"workflows: {cfg.workflows} → {new.workflows}"]
     diagnosis: dict[str, Any] = {
-        "kind": "tool change" if tools_only else "model swap",
+        "kind": "workflow tools"
+        if only_workflows
+        else "tool change"
+        if tools_only
+        else "model swap",
         "forked_from": source,
         "agent_yaml": changed,
         "prompt_diff_summary": f"none: {source}'s system.md, unchanged",

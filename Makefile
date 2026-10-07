@@ -31,8 +31,14 @@ splits: ## cut each domain's base set in half, train / test (seed 300) → data/
 documents: ## index banking's knowledge base (title and size per document) → data/tasks, for Evals
 	uv run tau2loop documents
 
-fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true or PARALLEL_CALLS=true, by hand
-	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls)
+fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true, PARALLEL_CALLS=true or WORKFLOWS=rN, by hand
+	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(WORKFLOWS),--workflows $(WORKFLOWS))
+
+rag-build: ## s20: build a merging workflow_rag version's library, RAG= (default r2): train questions in id order, one at a time, resumable (TASKS= some, LIMIT=)
+	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT))
+
+rag-rubric: ## s20: the rubric's checks over RAG='s whole library (default r2), no model
+	uv run tau2loop rag-rubric --domain banking_knowledge --rag $(or $(RAG),r2)
 
 agent-service: ## the agent's model call as a container on 127.0.0.1:$(AGENT_PORT); runs reach it with AGENT_SERVICE_URL
 	uv run tau2loop agent-service --docker --port $(AGENT_PORT)
@@ -141,4 +147,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: rag-build rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

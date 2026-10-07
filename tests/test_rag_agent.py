@@ -266,3 +266,154 @@ def test_the_demo_image_starts_no_session(monkeypatch: pytest.MonkeyPatch) -> No
     assert (
         c.post(f"/api/workflows/{D}/rag/sessions", json={"task_id": "task_019"}).status_code == 503
     )
+
+
+# ── s20: r2 merges each question into the library r1 left ──
+OLD = {
+    "job": "cash_back_dispute",
+    "when": {"quote": WHEN, "doc": CASH_BACK_DOC},
+    "info": [],
+    "steps": [
+        {"id": "verify", "by": "harness", "call": "log_verification"},
+        {
+            "id": "give",
+            "by": "harness",
+            "call": "give_discoverable_user_tool",
+            "if": "a discrepancy",
+        },
+    ],
+    "rules": [],
+    "done_when": "every dispute submitted",
+}
+DRAFT = {"jobs": [{**OLD, "job": "submitting_a_cash_back_dispute", "steps": OLD["steps"][:1]}]}
+
+
+def seed_r1(root: Path) -> None:
+    d = root / "20261006T010000Z_banking_knowledge_r1_task_018"
+    d.mkdir(parents=True)
+    meta = {"id": d.name, "domain": D, "agent": "r1", "status": "done", "source": "question"}
+    (d / "run.json").write_text(json.dumps({**meta, "task_id": "task_018"}))
+    (d / "output.json").write_text(json.dumps({"jobs": [OLD]}))
+
+
+def merged(steps: list[dict[str, Any]], changelog: list[dict[str, Any]] | None = None) -> str:
+    job = {
+        **OLD,
+        "into": ["cash_back_dispute"],
+        "aliases": ["submitting_a_cash_back_dispute"],
+        "steps": steps,
+        "changelog": changelog or [],
+    }
+    return json.dumps({"jobs": [job], "documents": [], "open_questions": []})
+
+
+def test_r2_merges_a_question_into_the_job_the_library_holds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tau2_loop.workflows import library
+
+    monkeypatch.setattr(rag_agent, "RAG_RUNS_DIR", tmp_path)
+    seed_r1(tmp_path)
+    assert [e["job"] for e in library.entries(D, "r2")] == ["cash_back_dispute"]  # r1's, seeded
+    branch = {"id": "explain", "by": "model", "if": "no discrepancy", "do": "explain the rate"}
+    ask, _ = scripted(
+        [
+            Reply(json.dumps(DRAFT)),  # the draft, under another name
+            Reply(merged([*OLD["steps"], branch], [{"change": "added", "what": "explain"}])),
+        ]
+    )
+    meta = rag_agent.start(
+        D, "task_019", "r2", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    assert meta.status == "done" and meta.steps == 2
+    out = rag_agent.session(D, meta.id)
+    # the merge message offered r1's job as the drafted job's match, in full
+    merge_ev = next(e for e in out["events"] if e["kind"] == "merge")
+    assert merge_ev["candidates"] == {"submitting_a_cash_back_dispute": ["cash_back_dispute"]}
+    rec = out["output"]["merge"][0]
+    assert rec["taken"] and rec["into"] == ["cash_back_dispute"] and not rec["failed"]
+    assert rec["changelog"] == [{"change": "added", "what": "explain"}]
+    job = out["output"]["jobs"][0]
+    assert "changelog" not in job and "into" not in job
+    assert job["aliases"] == ["submitting_a_cash_back_dispute"]
+    # the library's next version contains the old one; the draft's name now finds it
+    lib = library.entries(D, "r2")
+    assert [e["job"] for e in lib] == ["cash_back_dispute"] and lib[0]["session"] == meta.id
+    assert [s["id"] for s in lib[0]["workflow"]["steps"]] == ["verify", "give", "explain"]
+    assert library.by_name(lib, "submitting_a_cash_back_dispute") is lib[0]
+    assert "Workflow cash_back_dispute" in library.find(
+        D, "r2", "", job="submitting_a_cash_back_dispute"
+    )
+    # r1's own library is untouched
+    assert [s["id"] for s in library.entries(D, "r1")[0]["workflow"]["steps"]] == ["verify", "give"]
+
+
+def test_a_merge_that_drops_a_step_is_sent_back_then_the_library_keeps_its_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tau2_loop.workflows import library
+
+    monkeypatch.setattr(rag_agent, "RAG_RUNS_DIR", tmp_path)
+    seed_r1(tmp_path)
+    dropped = merged(OLD["steps"][:1])  # "give" gone, and no changelog says why
+    ask, _ = scripted([Reply(json.dumps(DRAFT)), Reply(dropped), Reply(dropped)])
+    seen: list[list[dict[str, Any]]] = []
+
+    def watch(messages, tools, model, effort, tool_mode):  # type: ignore[no-untyped-def]
+        seen.append(list(messages))
+        return ask(messages, tools, model, effort, tool_mode)
+
+    meta = rag_agent.start(
+        D, "task_019", "r2", ask=watch, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    assert meta.status == "done" and meta.steps == 3
+    sent_back = seen[-1][-1]["content"]
+    assert "lost steps the changelog does not name: give" in sent_back
+    # no gold in anything the model was shown
+    assert all("evaluation_criteria" not in json.dumps(m) for m in seen[-1])
+    out = rag_agent.session(D, meta.id)["output"]
+    assert out["jobs"] == [] and out["rejected"][0]["job"] == "cash_back_dispute"
+    assert out["merge"][0]["taken"] is False
+    lib = library.entries(D, "r2")
+    assert [s["id"] for s in lib[0]["workflow"]["steps"]] == ["verify", "give"]  # r1's version
+
+
+def test_a_removal_the_changelog_names_passes_the_gate() -> None:
+    from tau2_loop.workflows import rubric
+
+    job = {
+        **OLD,
+        "steps": OLD["steps"][:1],
+        "changelog": [{"change": "removed", "what": "give", "why": "the doc says so"}],
+    }
+    assert rubric.lost(job, [OLD]) == {"steps": [], "tools": [], "quotes": []}
+    assert rubric.lost({**job, "changelog": []}, [OLD])["steps"] == ["give"]
+
+
+def test_the_build_queue_is_train_in_id_order_and_resumes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(rag_agent, "RAG_RUNS_DIR", tmp_path)
+    train = split_ids(D, "train")
+    q = rag_agent.build_queue(D, "r2")
+    assert sorted(q) == sorted(train) and q == sorted(q, key=lambda t: int(t.split("_")[1]))
+    d = tmp_path / f"20261007T010000Z_banking_knowledge_r2_{q[0]}"
+    d.mkdir()
+    meta = {"id": d.name, "domain": D, "agent": "r2", "status": "done", "source": "question"}
+    (d / "run.json").write_text(json.dumps({**meta, "task_id": q[0]}))
+    assert rag_agent.build_queue(D, "r2")[0] == q[1]  # a finished question is not redone
+    with pytest.raises(rag_agent.RagAgentError, match="sealed"):
+        rag_agent.build_queue(D, "r2", [split_ids(D, "test")[0]])
+
+
+def test_a_conversation_request_is_never_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(rag_agent, "RAG_RUNS_DIR", tmp_path)
+    seed_r1(tmp_path)
+    ask, _ = scripted([Reply(json.dumps(DRAFT))])
+    meta = rag_agent.start_request(
+        D, "my cash back looks wrong", "r2", ask=ask, run_tool=lambda n, a: "", env=FakeEnv()
+    )
+    out = rag_agent.session(D, meta.id)
+    assert meta.status == "done" and meta.steps == 1 and "merge" not in out["output"]

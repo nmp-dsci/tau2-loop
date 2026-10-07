@@ -58,9 +58,12 @@ def fork(
             help="native only: keep every tool call of a reply",
         ),
     ] = None,
+    workflows: Annotated[
+        str | None, typer.Option(help="the workflow_rag version whose library it looks up, e.g. r2")
+    ] = None,
 ) -> None:
     """A new version with the champion's surfaces and a different model, effort, retrieval,
-    tool mode, identity note or parallel calls."""
+    tool mode, identity note, parallel calls or workflow library."""
     from tau2_loop.agent.versions import fork_version
     from tau2_loop.tracking.registry import champion_name
 
@@ -80,13 +83,58 @@ def fork(
         tool_mode=tool_mode,
         identity_note=identity_note,
         parallel_calls=parallel_calls,
+        workflows=workflows,
     )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "
         f"effort {v.config.effort} · tool mode {v.config.tool_mode} · retrieval "
         f"{v.retrieval or 'none'} · identity note {v.config.identity_note} · parallel calls "
-        f"{v.config.parallel_calls} · fingerprint {v.fingerprint}"
+        f"{v.config.parallel_calls} · workflows {v.config.workflows or 'none'} · "
+        f"fingerprint {v.fingerprint}"
     )
+
+
+@app.command("rag-build")
+def rag_build(
+    domain: str = "banking_knowledge",
+    rag: str = "r2",
+    task: Annotated[list[str] | None, typer.Option(help="only these train questions")] = None,
+    limit: Annotated[int | None, typer.Option(help="stop after this many sessions")] = None,
+) -> None:
+    """Build a merging workflow_rag version's library (s20): its train questions in id order, one
+    session at a time, each merged into the library the last one left. Resumable: a question with
+    a finished session of this version is skipped."""
+    from tau2_loop.workflows import rag_agent
+
+    agent = rag_agent.load(domain, rag)
+    if agent.merge != "sequential":
+        raise typer.BadParameter(f"{rag} does not merge; its sessions run one by one in the viewer")
+    todo = rag_agent.build_queue(domain, rag, task or None)
+    console.print(f"{rag}: {len(todo)} train questions to research and merge, one at a time")
+    for n, tid in enumerate(todo[:limit] if limit else todo, 1):
+        meta = rag_agent.start(domain, tid, rag, background=False)
+        out = rag_agent.session(domain, meta.id).get("output") or {}
+        taken = [r["job"] for r in out.get("merge") or [] if r.get("taken")]
+        kept = [r["job"] for r in out.get("merge") or [] if not r.get("taken")]
+        console.print(
+            f"[{n}/{len(todo)}] {tid} {meta.status} in {meta.duration_ms / 60000:.1f} min · "
+            f"took {', '.join(taken) or 'nothing'}"
+            + (f" · kept the previous {', '.join(kept)}" if kept else "")
+            + (f" · {meta.error}" if meta.error else ""),
+            highlight=False,
+            soft_wrap=True,
+        )
+
+
+@app.command("rag-rubric")
+def rag_rubric(domain: str = "banking_knowledge", rag: str = "r2") -> None:
+    """The rubric's checks over a workflow_rag version's whole library (s20), no model."""
+    import json
+
+    from tau2_loop.workflows import rubric
+
+    rep = rubric.library_report(domain, rag)
+    typer.echo(json.dumps({k: rep[k] for k in ("rag", "n", "mean", "below")}))
 
 
 @app.command()

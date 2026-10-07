@@ -97,7 +97,8 @@ data/judge/<domain>*      s11 tool judge: J0 labels (<domain>.json) · golden an
 judges/<domain>/plan/jN/  the plan judge: judge.md (rubric; J3 edits only its numbered lessons) · judge.yaml
                           (model, effort, threshold) · changes.json (the optimiser's record);  ledger.jsonl · registry.json
 judge_runs/<ts>_<domain>_<jN>_train/  a judge replay: run.json · verdicts.jsonl · summary.json (immutable)
-rag_agents/<domain>/rN/  workflow_rag (banking's second agent): rag_agent.md · rag_agent.yaml (frozen);
+rag_agents/<domain>/rN/  workflow_rag (banking's second agent): rag_agent.md · rag_agent.yaml (frozen); r2 adds
+                          merge.md (s20: seeded with r1's library, each question merged in, never replaced);
                           rag_agent_runs/ its train-question sessions, live_runs/ live demo conversations (immutable)
 src/tau2_loop/
   config.py               paths, Settings (boots keyless), DOMAINS, split seed
@@ -115,7 +116,8 @@ src/tau2_loop/
                           from the read half, gated on the gate half) · view · tracking (experiment tau2-loop/judge)
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
-  workflows/              workflow_rag: rag_agent (r1 sessions) · library (find_workflow lookup) · golden (RULES)
+  workflows/              workflow_rag: rag_agent (sessions; r2's merge) · library (find_workflow lookup, seed,
+                          aliases) · rubric (s20: D1–D8 without a model, the merge gate) · golden (RULES)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
 infra/roles.sql           schema tau2_loop on the central Postgres: review · submission (app state only)
 frontend/                 Vite + React; routes.tsx is the address table, lib/url.ts the grammar,

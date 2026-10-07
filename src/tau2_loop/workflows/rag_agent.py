@@ -16,6 +16,13 @@ best-effort sandbox, so a command that names the task files is refused here as w
 A version lives in `rag_agents/<domain>/<rN>/` (prompt + frozen settings, like `agents/`); each
 session in `rag_agent_runs/<id>/` (`run.json`, `events.jsonl`, `output.json`, `score.json`), kept
 like a run folder: never edited once it ends.
+
+s20 (r2): a version with `merge: sequential` follows its draft with a merge. The harness shows it
+the library's current version of each drafted job (`merge.md`), it writes the next versions with a
+changelog, and `rubric.gate` checks each without a model (nothing lost that the changelog does not
+name, no quote that is not found); a failure is sent back once, and a merge that still fails is not
+taken, so the library keeps the version it had. `make rag-build` runs the train questions one at
+a time in id order. Gold stays out of every message the model sees.
 """
 
 from __future__ import annotations
@@ -68,6 +75,11 @@ class RagAgent:
     max_steps: int
     result_chars: int
     prompt: str  # rag_agent.md, unformatted
+    # s20: r2 starts from r1's library (`seed`) and merges each question into it (`merge`)
+    seed: str | None = None
+    merge: str | None = None  # "sequential": one question at a time, merged into the library
+    merge_steps: int = 12  # model turns for the merge, its research included
+    merge_prompt: str = ""  # merge.md, unformatted: the harness's message after the draft
 
 
 def versions(domain: str) -> list[str]:
@@ -95,6 +107,10 @@ def load(domain: str, name: str) -> RagAgent:
         max_steps=int(cfg.get("max_steps", 30)),
         result_chars=int(cfg.get("result_chars", 20000)),
         prompt=(d / "rag_agent.md").read_text(),
+        seed=cfg.get("seed"),
+        merge=cfg.get("merge"),
+        merge_steps=int(cfg.get("merge_steps", 12)),
+        merge_prompt=(d / "merge.md").read_text() if (d / "merge.md").is_file() else "",
     )
 
 
@@ -445,18 +461,17 @@ def run_session(
         },
     ]
     emit({"kind": "start", "question": question})
-    wf: dict[str, Any] | None = None
-    nudged = retried = False
-    try:
-        while meta.steps < agent.max_steps + 3:
-            over = meta.steps >= agent.max_steps
+
+    def turns(budget: int, write_now: str) -> dict[str, Any] | None:
+        """Ask, run every tool call and feed the results back until the model writes the JSON;
+        past `budget` model turns it is told to write with no tools, and asked once more if its
+        reply is not the JSON."""
+        first = meta.steps
+        nudged = retried = False
+        while meta.steps - first < budget + 3:
+            over = meta.steps - first >= budget
             if over and not nudged:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "Your research steps are used up. Write the workflow JSON now from what you have.",
-                    }
-                )
+                messages.append({"role": "user", "content": write_now})
                 nudged = True
             ans = ask(messages, None if over else tools, meta.model, meta.effort, agent.tool_mode)
             meta.steps += 1
@@ -528,9 +543,9 @@ def run_session(
                 _write_meta(d, meta)
                 continue
             messages.append({"role": "assistant", "content": ans.content or ""})
-            wf = parse_workflow(ans.content)
-            if wf is not None or retried:
-                break
+            got = parse_workflow(ans.content)
+            if got is not None or retried:
+                return got
             retried = True  # one more chance to write it as JSON
             emit({"kind": "note", "text": "The reply was not the workflow JSON; asked once more."})
             messages.append(
@@ -539,6 +554,16 @@ def run_session(
                     "content": "Reply with the workflow as one JSON object only, in the shape the instructions give.",
                 }
             )
+        return None
+
+    wf: dict[str, Any] | None = None
+    try:
+        wf = turns(
+            agent.max_steps,
+            "Your research steps are used up. Write the workflow JSON now from what you have.",
+        )
+        if wf is not None and agent.merge and meta.source == "question":
+            wf = _merge(meta, agent, wf, messages, turns, emit, policy)
         meta.status = "done" if wf is not None else "failed"
         if wf is None:
             meta.error = "no workflow JSON in the final reply"
@@ -557,6 +582,168 @@ def run_session(
     emit({"kind": "done", "status": meta.status})
     _write_meta(d, meta)
     return meta
+
+
+# ── s20: the merge (r2) ──
+
+MERGE_CANDIDATES = 4  # library jobs offered for each drafted job
+
+
+def merge_candidates(
+    draft: dict[str, Any], lib: list[dict[str, Any]]
+) -> dict[str, list[dict[str, Any]]]:
+    """For each drafted job, the library jobs it may be: its own name or an alias first, then the
+    lookup's best matches by name (no model, so a rerun offers the same)."""
+    from tau2_loop.workflows import library
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for job in draft.get("jobs") or []:
+        if not isinstance(job, dict) or not job.get("job"):
+            continue
+        name = str(job["job"])
+        picks: list[dict[str, Any]] = []
+        same = library.by_name(lib, name)
+        if same is not None:
+            picks.append(same)
+        when = job.get("when") or {}
+        request = (
+            f"{name.replace('_', ' ')} {when.get('quote', '') if isinstance(when, dict) else ''}"
+        )
+        for _, named, e in library.rank(request, lib):
+            if len(picks) >= MERGE_CANDIDATES:
+                break
+            if named and e not in picks:
+                picks.append(e)
+        out[name] = picks
+    return out
+
+
+def merge_message(agent: RagAgent, cands: dict[str, list[dict[str, Any]]]) -> str:
+    """The harness's message after the draft: the library's candidates in full."""
+    seen: dict[str, dict[str, Any]] = {}
+    for es in cands.values():
+        for e in es:
+            seen.setdefault(e["job"], e)
+    pairs = "\n".join(
+        f"- {name}: {', '.join(e['job'] for e in es) or 'no library job matches'}"
+        for name, es in cands.items()
+    )
+    current = "\n\n".join(
+        f"### {e['job']} (current version, session {e['session']})\n"
+        + json.dumps(e["workflow"], ensure_ascii=False, indent=1)
+        for e in seen.values()
+    )
+    return agent.merge_prompt.format(pairs=pairs, current=current or "(none)")
+
+
+def _merge(
+    meta: SessionMeta,
+    agent: RagAgent,
+    draft: dict[str, Any],
+    messages: list[dict[str, Any]],
+    turns: Callable[[int, str], dict[str, Any] | None],
+    emit: Callable[[dict[str, Any]], None],
+    policy: str,
+) -> dict[str, Any]:
+    """Merge the drafted jobs into the library's current versions, check each merge without a
+    model, send failures back once, and take only what passes (s20). A merged job that still
+    fails keeps the library's previous version; a new job is taken as written."""
+    from tau2_loop.workflows import library, rubric
+
+    lib = library.entries(meta.domain, agent.name)  # as the last session left it
+    cands = merge_candidates(draft, lib)
+    emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
+    messages.append({"role": "user", "content": merge_message(agent, cands)})
+    write_now = "Your merge steps are used up. Write the merged workflow JSON now."
+    merged = turns(agent.merge_steps, write_now)
+
+    def assess(out: dict[str, Any]) -> list[dict[str, Any]]:
+        rows = []
+        for job in out.get("jobs") or []:
+            if not isinstance(job, dict) or not job.get("job"):
+                continue
+            names = [str(job["job"]), *library.merged_names(job)]
+            prev = []
+            for n in names:
+                e = library.by_name(lib, n)
+                if e is not None and e not in prev:
+                    prev.append(e)
+            c = rubric.check(meta.domain, job, [e["workflow"] for e in prev], policy)
+            why = (
+                rubric.gate(c)
+                if prev
+                else [
+                    f"quotes not found in the documents they cite: {' | '.join(c['D1']['new_unfound'][:4])}"
+                ]
+                if c["D1"]["new_unfound"]
+                else []
+            )
+            rows.append({"job": job, "previous": prev, "checks": c, "why": why})
+        return rows
+
+    rows = assess(merged) if merged is not None else []
+    failing = [r for r in rows if r["why"]]
+    if merged is not None and failing:
+        lines = "\n".join(f"- {r['job']['job']}: {'; '.join(r['why'])}" for r in failing)
+        emit({"kind": "note", "text": f"The merge failed its checks; sent back once.\n{lines}"})
+        messages.append(
+            {
+                "role": "user",
+                "content": "The harness checked your merge and these jobs fail:\n"
+                f"{lines}\n\nA merged job keeps every step, tool and quote of the versions it "
+                "merged unless its changelog names the change (removed or changed, with why), and "
+                "every quote is copied from the document it cites. Reply with the whole JSON again, "
+                "fixed.",
+            }
+        )
+        again = turns(max(agent.merge_steps // 2, 4), write_now)
+        if again is not None:
+            merged, rows = again, assess(again)
+    if merged is None:  # no merge written: keep only the draft's jobs no library job matches
+        merged = {
+            **draft,
+            "jobs": [j for j in draft.get("jobs") or [] if not cands.get(str(j.get("job")))],
+        }
+        rows = assess(merged)
+    taken: list[dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    for r in rows:
+        job = dict(r["job"])
+        prev_names = [e["job"] for e in r["previous"]]
+        keep = not (r["why"] and r["previous"])  # a failing merge keeps the previous version
+        aliases = [n for n in [*library.merged_names(job), *prev_names] if n != job["job"]]
+        records.append(
+            {
+                "job": job["job"],
+                "into": prev_names,
+                "previous_sessions": [e["session"] for e in r["previous"]],
+                "changelog": job.get("changelog") or [],
+                "checks": r["checks"],
+                "failed": r["why"],
+                "taken": keep,
+            }
+        )
+        job.pop("changelog", None)
+        job.pop("into", None)
+        if aliases:
+            job["aliases"] = sorted(set(aliases))
+        (taken if keep else rejected).append(job)
+    emit(
+        {
+            "kind": "merged",
+            "taken": [j["job"] for j in taken],
+            "rejected": [j["job"] for j in rejected],
+        }
+    )
+    return {
+        "jobs": taken,
+        "documents": merged.get("documents") or draft.get("documents") or [],
+        "open_questions": merged.get("open_questions") or draft.get("open_questions") or [],
+        "merge": records,
+        "rejected": rejected,
+        "draft": draft.get("jobs") or [],
+    }
 
 
 def _launch(
@@ -661,6 +848,27 @@ def start(
     )
 
 
+def build_queue(domain: str, agent_name: str, only: list[str] | None = None) -> list[str]:
+    """The train questions a merging version still has to research, in id order (s20): each
+    question once, so a stopped build resumes where it was. A test id is refused."""
+    train = split_ids(domain, "train")
+    want = list(only) if only else list(train)
+    bad = [t for t in want if t not in set(train)]
+    if bad:
+        raise RagAgentError(f"not train questions: {', '.join(bad)}: test is sealed")
+    done = {
+        m.get("task_id")
+        for m in sessions(domain)
+        if m.get("agent") == agent_name
+        and m.get("status") == "done"
+        and m.get("source", "question") == "question"
+    }
+    return sorted(
+        (t for t in dict.fromkeys(want) if t not in done),
+        key=lambda t: int(re.sub(r"\D", "", t) or 0),
+    )
+
+
 def start_request(
     domain: str,
     request: str,
@@ -756,6 +964,8 @@ def describe(domain: str, name: str) -> dict[str, Any]:
         "tool_mode": agent.tool_mode,
         "max_steps": agent.max_steps,
         "result_chars": agent.result_chars,
+        "seed": agent.seed,
+        "merge": agent.merge,
         "prompt": agent.prompt,
         "tools": variant_tool_rows(agent.retrieval),
     }
