@@ -14,6 +14,10 @@ model, so the same request always gets the same answer) and gives the best match
 Since s20 a version may name a `seed` (r2: r1): its library starts from the seed's, and each of
 its sessions merges the question into the jobs it shares, so a later version contains the
 earlier one instead of replacing it; a merged job's `aliases` retire the names it absorbed.
+
+Since s21 a version with `merge: concurrent` (r3) is built by several workers at once, so the
+order sessions started is not the order their merges landed: its library is its store's commit
+log (`store.FileStore`, `rag_library/<domain>/<rag>/`), started from the seed's library.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from tau2_loop.workflows import rag_agent
+from tau2_loop.workflows import rag_agent, store
 
 STOP = frozenset(
     [
@@ -117,6 +121,8 @@ def entries(domain: str, rag_version: str, root: Path | None = None) -> list[dic
     wrote merged versions: a job replaces its own name and every name it lists in `aliases`
     or merged `into` it, so two names for one procedure become one job."""
     root = root or rag_agent.RAG_RUNS_DIR
+    if _concurrent(domain, rag_version):
+        return store_for(domain, rag_version).entries()
     seed = _seed(domain, rag_version)
     out: dict[str, dict[str, Any]] = (
         {e["job"]: e for e in entries(domain, seed, root)} if seed and seed != rag_version else {}
@@ -147,6 +153,35 @@ def entries(domain: str, rag_version: str, root: Path | None = None) -> list[dic
                     "task_id": meta.get("task_id"),
                 }
     return list(out.values())
+
+
+def _concurrent(domain: str, rag_version: str) -> bool:
+    try:
+        return rag_agent.load(domain, rag_version).merge == "concurrent"
+    except rag_agent.RagAgentError:
+        return False
+
+
+def _session_job(session: str, job: str) -> dict[str, Any] | None:
+    """One job as a finished session wrote it: how a pinned seed entry is read back."""
+    p = rag_agent.RAG_RUNS_DIR / session / "output.json"
+    if not p.is_file():
+        return None
+    for j in json.loads(p.read_text()).get("jobs") or []:
+        if isinstance(j, dict) and j.get("job") == job:
+            return j
+    return None
+
+
+def store_for(domain: str, rag_version: str) -> store.FileStore:
+    """The store a concurrent version's library lives in, seeded with its seed's library."""
+    seed = _seed(domain, rag_version)
+    return store.FileStore(
+        domain,
+        rag_version,
+        seed=(lambda: entries(domain, seed)) if seed and seed != rag_version else None,
+        load=_session_job,
+    )
 
 
 def merged_names(job: dict[str, Any]) -> list[str]:

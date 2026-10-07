@@ -100,30 +100,136 @@ def rag_build(
     rag: str = "r2",
     task: Annotated[list[str] | None, typer.Option(help="only these train questions")] = None,
     limit: Annotated[int | None, typer.Option(help="stop after this many sessions")] = None,
+    workers: Annotated[int | None, typer.Option(help="a concurrent version's workers")] = None,
 ) -> None:
-    """Build a merging workflow_rag version's library (s20): its train questions in id order, one
-    session at a time, each merged into the library the last one left. Resumable: a question with
-    a finished session of this version is skipped."""
-    from tau2_loop.workflows import rag_agent
+    """Build a merging workflow_rag version's library. `merge: sequential` (s20, r2): its train
+    questions in id order, one session at a time, each merged into the library the last one left.
+    `merge: concurrent` (s21, r3): several at once, each locking the jobs it writes; a second
+    build of the same version is refused. Resumable: a question with a finished session of this
+    version (or, with `queue: after_seed`, of its seed) is skipped."""
+    import queue as queues
+    import threading
+
+    from tau2_loop.workflows import library, rag_agent
 
     agent = rag_agent.load(domain, rag)
-    if agent.merge != "sequential":
+    if agent.merge not in ("sequential", "concurrent"):
         raise typer.BadParameter(f"{rag} does not merge; its sessions run one by one in the viewer")
     todo = rag_agent.build_queue(domain, rag, task or None)
-    console.print(f"{rag}: {len(todo)} train questions to research and merge, one at a time")
-    for n, tid in enumerate(todo[:limit] if limit else todo, 1):
+    todo = todo[:limit] if limit else todo
+    n_workers = 1 if agent.merge == "sequential" else max(1, workers or agent.workers)
+    console.print(
+        f"{rag}: {len(todo)} train questions to research and merge, "
+        + ("one at a time" if n_workers == 1 else f"{n_workers} workers, {agent.order} order"),
+        highlight=False,
+    )
+    say = threading.Lock()
+    done = [0]
+
+    def run(tid: str) -> None:
         meta = rag_agent.start(domain, tid, rag, background=False)
         out = rag_agent.session(domain, meta.id).get("output") or {}
         taken = [r["job"] for r in out.get("merge") or [] if r.get("taken")]
         kept = [r["job"] for r in out.get("merge") or [] if not r.get("taken")]
+        lk = out.get("lock") or {}
+        with say:
+            done[0] += 1
+            console.print(
+                f"[{done[0]}/{len(todo)}] {tid} {meta.status} in {meta.duration_ms / 60000:.1f} min · "
+                f"took {', '.join(taken) or 'nothing'}"
+                + (f" · kept the previous {', '.join(kept)}" if kept else "")
+                + (
+                    f" · waited {lk['waited_ms'] / 1000:.0f} s for a lock"
+                    if lk.get("waited_ms", 0) >= 1000
+                    else ""
+                )
+                + (f" · {meta.error}" if meta.error else "")
+                + (f" · {lk['error']}" if lk.get("error") else ""),
+                highlight=False,
+                soft_wrap=True,
+            )
+
+    if n_workers == 1:
+        for tid in todo:
+            run(tid)
+        return
+    jobs: queues.Queue[str] = queues.Queue()
+    for tid in todo:
+        jobs.put(tid)
+
+    def worker() -> None:
+        while True:
+            try:
+                tid = jobs.get_nowait()
+            except queues.Empty:
+                return
+            try:
+                run(tid)
+            except Exception as e:  # noqa: BLE001 - one question's failure must not stop the build
+                with say:
+                    console.print(
+                        f"{tid} failed to start: {type(e).__name__}: {e}", highlight=False
+                    )
+
+    with library.store_for(domain, rag).build_guard():
+        threads = [
+            threading.Thread(target=worker, name=f"{rag}-w{i + 1}") for i in range(n_workers)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+
+@app.command("rag-locks")
+def rag_locks(domain: str = "banking_knowledge", rag: str = "r3") -> None:
+    """Who is updating which workflow (s21): a concurrent version's held and waiting locks."""
+    from tau2_loop.workflows import library
+
+    st = library.store_for(domain, rag).locks()
+    if not st["held"] and not st["waiting"]:
+        console.print(f"{rag}: no worker holds or waits for a workflow")
+    for h in st["held"]:
         console.print(
-            f"[{n}/{len(todo)}] {tid} {meta.status} in {meta.duration_ms / 60000:.1f} min · "
-            f"took {', '.join(taken) or 'nothing'}"
-            + (f" · kept the previous {', '.join(kept)}" if kept else "")
-            + (f" · {meta.error}" if meta.error else ""),
+            f"held    {h['task']:<9} {', '.join(h['jobs'])} · {h['held_s']:.0f} s · token {h['token']}",
             highlight=False,
             soft_wrap=True,
         )
+    for w in st["waiting"]:
+        console.print(
+            f"waiting {w['task']:<9} {', '.join(w['jobs'])} · {w['waited_s']:.0f} s",
+            highlight=False,
+            soft_wrap=True,
+        )
+
+
+@app.command("rag-replay")
+def rag_replay(
+    domain: str = "banking_knowledge",
+    rag: str = "r3",
+    at: Annotated[
+        int | None, typer.Option(help="the commit to stop at; default every commit")
+    ] = None,
+) -> None:
+    """A concurrent version's library as of any commit (s21): each job, its version, and the
+    question that wrote it, as JSON."""
+    import json
+
+    from tau2_loop.workflows import library
+
+    st = library.store_for(domain, rag)
+    rows = [
+        {
+            "job": e["job"],
+            "version": e["version"],
+            "session": e["session"],
+            "task": e.get("task_id"),
+        }
+        for e in st.entries(upto=at)
+    ]
+    typer.echo(
+        json.dumps({"rag": rag, "at": at, "commits": len(st.commits()), "jobs": rows}, indent=1)
+    )
 
 
 @app.command("rag-rubric")

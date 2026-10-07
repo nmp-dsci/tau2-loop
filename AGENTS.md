@@ -99,7 +99,10 @@ judges/<domain>/plan/jN/  the plan judge: judge.md (rubric; J3 edits only its nu
 judge_runs/<ts>_<domain>_<jN>_train/  a judge replay: run.json · verdicts.jsonl · summary.json (immutable)
 rag_agents/<domain>/rN/  workflow_rag (banking's second agent): rag_agent.md · rag_agent.yaml (frozen); r2 adds
                           merge.md (s20: seeded with r1's library, each question merged in, never replaced);
+                          r3 adds decide.md (s21: several workers at once, each locking the jobs it writes);
                           rag_agent_runs/ its train-question sessions, live_runs/ live demo conversations (immutable)
+rag_library/<domain>/rN/  a concurrent version's library (s21): commits.jsonl (append-only, kept) · versions/ ·
+                          seed.json (pinned); locks.json is runtime only (git-ignored)
 src/tau2_loop/
   config.py               paths, Settings (boots keyless), DOMAINS, split seed
   llm/                    core (sealed: models, billing check, env allow-list, one SDK answer) · prompting (contract)
@@ -116,8 +119,9 @@ src/tau2_loop/
                           from the read half, gated on the gate half) · view · tracking (experiment tau2-loop/judge)
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
-  workflows/              workflow_rag: rag_agent (sessions; r2's merge) · library (find_workflow lookup, seed,
-                          aliases) · rubric (s20: D1–D8 without a model, the merge gate) · golden (RULES)
+  workflows/              workflow_rag: rag_agent (sessions; r2's merge, r3's merge under locks) · library
+                          (find_workflow lookup, seed, aliases) · store (s21: locks, leases, commits) · rubric
+                          (s20: D1–D8 without a model, the merge gate) · golden (RULES)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
 infra/roles.sql           schema tau2_loop on the central Postgres: review · submission (app state only)
 frontend/                 Vite + React; routes.tsx is the address table, lib/url.ts the grammar,

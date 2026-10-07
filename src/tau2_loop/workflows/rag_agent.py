@@ -23,6 +23,13 @@ changelog, and `rubric.gate` checks each without a model (nothing lost that the 
 name, no quote that is not found); a failure is sent back once, and a merge that still fails is not
 taken, so the library keeps the version it had. `make rag-build` runs the train questions one at
 a time in id order. Gold stays out of every message the model sees.
+
+s21 (r3): a version with `merge: concurrent` is built by several workers at once. Research takes
+no lock; after the draft one short turn names the library jobs it will write (`decide.md`), the
+store locks them all at once (`store.FileStore`: a worker waits, and logs who holds what), the
+merge reads their newest versions, and the commit is refused unless every version it read is
+still the head. Every message the harness sends is saved as a `user` event, so a session's
+conversation rebuilds turn for turn.
 """
 
 from __future__ import annotations
@@ -53,6 +60,7 @@ REQUEST_OPENING = (
 )
 RAG_RUNS_DIR = ROOT / "rag_agent_runs"
 QUOTE_CHARS = 300
+WRITE_AGAIN = "Reply with the workflow as one JSON object only, in the shape the instructions give."
 # a shell command may not reach for the task files, whatever tau2's sandbox allows
 SHELL_REFUSED = re.compile(r"task|evaluation_criteria|\.\.|~|^\s*/|\s/", re.I)
 DOC_ID = re.compile(r"\bdoc_[A-Za-z0-9_()\-]+")
@@ -77,9 +85,15 @@ class RagAgent:
     prompt: str  # rag_agent.md, unformatted
     # s20: r2 starts from r1's library (`seed`) and merges each question into it (`merge`)
     seed: str | None = None
-    merge: str | None = None  # "sequential": one question at a time, merged into the library
+    merge: str | None = None  # "sequential" (r2) or "concurrent" (s21, r3): merged into the library
     merge_steps: int = 12  # model turns for the merge, its research included
     merge_prompt: str = ""  # merge.md, unformatted: the harness's message after the draft
+    # s21: a concurrent build's workers, the order it takes questions in, and which it skips
+    workers: int = 1
+    order: str = "id"  # "id" or "shuffled" (by `order_seed`, so the order can be rebuilt)
+    order_seed: int = 0
+    queue: str = ""  # "after_seed": skip every question the seed version already merged
+    decide_prompt: str = ""  # decide.md, unformatted: which library jobs it will write
 
 
 def versions(domain: str) -> list[str]:
@@ -111,6 +125,11 @@ def load(domain: str, name: str) -> RagAgent:
         merge=cfg.get("merge"),
         merge_steps=int(cfg.get("merge_steps", 12)),
         merge_prompt=(d / "merge.md").read_text() if (d / "merge.md").is_file() else "",
+        workers=int(cfg.get("workers", 1)),
+        order=str(cfg.get("order", "id")),
+        order_seed=int(cfg.get("order_seed", 0)),
+        queue=str(cfg.get("queue") or ""),
+        decide_prompt=(d / "decide.md").read_text() if (d / "decide.md").is_file() else "",
     )
 
 
@@ -197,8 +216,8 @@ def shell_refusal(command: str) -> str | None:
     return None
 
 
-def parse_workflow(text: str | None) -> dict[str, Any] | None:
-    """The JSON object in a final reply: the whole text, else the outermost {...}."""
+def _json_object(text: str | None, ok: Callable[[dict[str, Any]], bool]) -> dict[str, Any] | None:
+    """The JSON object in a reply that `ok` accepts: the whole text, else the outermost {...}."""
     if not text:
         return None
     s = text.strip()
@@ -208,9 +227,14 @@ def parse_workflow(text: str | None) -> dict[str, Any] | None:
             v = json.loads(cand)
         except (TypeError, ValueError):
             continue
-        if isinstance(v, dict) and isinstance(v.get("jobs"), list):
+        if isinstance(v, dict) and ok(v):
             return v
     return None
+
+
+def parse_workflow(text: str | None) -> dict[str, Any] | None:
+    """The workflow JSON in a final reply: an object with a `jobs` list."""
+    return _json_object(text, lambda v: isinstance(v.get("jobs"), list))
 
 
 def _norm_id(s: str) -> str:
@@ -414,10 +438,16 @@ def default_ask(
     return core.answer(messages, tools, model, effort=effort, tool_mode=tool_mode)
 
 
+_env_run_locks: dict[int, threading.Lock] = {}
+
+
 def env_runner(env: Any) -> RunTool:
+    """Run a knowledge tool in `env`. Sessions share one environment, and several run at once in
+    a concurrent build (s21), so its calls take one lock per environment, not one per session."""
     from tau2.data_model.message import ToolCall
 
-    lock = threading.Lock()
+    with _env_lock:
+        lock = _env_run_locks.setdefault(id(env), threading.Lock())
 
     def run(name: str, args: dict[str, Any]) -> str:
         with lock:
@@ -462,16 +492,26 @@ def run_session(
     ]
     emit({"kind": "start", "question": question})
 
-    def turns(budget: int, write_now: str) -> dict[str, Any] | None:
+    def say(text: str) -> None:
+        """A message from the harness: in the conversation and, in full, in the events (s21)."""
+        messages.append({"role": "user", "content": text})
+        emit({"kind": "user", "step": meta.steps + 1, "text": text})
+
+    def turns(
+        budget: int,
+        write_now: str,
+        parse: Callable[[str | None], Any] = parse_workflow,
+        again: str = WRITE_AGAIN,
+    ) -> Any:
         """Ask, run every tool call and feed the results back until the model writes the JSON;
         past `budget` model turns it is told to write with no tools, and asked once more if its
-        reply is not the JSON."""
+        reply is not the JSON. With `budget` 0, `write_now` is the question itself."""
         first = meta.steps
         nudged = retried = False
         while meta.steps - first < budget + 3:
             over = meta.steps - first >= budget
             if over and not nudged:
-                messages.append({"role": "user", "content": write_now})
+                say(write_now)
                 nudged = True
             ans = ask(messages, None if over else tools, meta.model, meta.effort, agent.tool_mode)
             meta.steps += 1
@@ -543,17 +583,12 @@ def run_session(
                 _write_meta(d, meta)
                 continue
             messages.append({"role": "assistant", "content": ans.content or ""})
-            got = parse_workflow(ans.content)
+            got = parse(ans.content)
             if got is not None or retried:
                 return got
             retried = True  # one more chance to write it as JSON
-            emit({"kind": "note", "text": "The reply was not the workflow JSON; asked once more."})
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Reply with the workflow as one JSON object only, in the shape the instructions give.",
-                }
-            )
+            emit({"kind": "note", "text": "The reply was not the JSON asked for; asked once more."})
+            say(again)
         return None
 
     wf: dict[str, Any] | None = None
@@ -563,7 +598,8 @@ def run_session(
             "Your research steps are used up. Write the workflow JSON now from what you have.",
         )
         if wf is not None and agent.merge and meta.source == "question":
-            wf = _merge(meta, agent, wf, messages, turns, emit, policy)
+            merge = _merge_concurrent if agent.merge == "concurrent" else _merge
+            wf = merge(meta, agent, wf, messages, turns, say, emit, policy)
         meta.status = "done" if wf is not None else "failed"
         if wf is None:
             meta.error = "no workflow JSON in the final reply"
@@ -584,9 +620,13 @@ def run_session(
     return meta
 
 
-# ── s20: the merge (r2) ──
+# ── s20: the merge (r2); s21: the merge under locks (r3) ──
 
 MERGE_CANDIDATES = 4  # library jobs offered for each drafted job
+MERGE_WRITE_NOW = "Your merge steps are used up. Write the merged workflow JSON now."
+DECIDE_AGAIN = (
+    'Reply with one JSON object only: {"decision": {"<drafted job>": ["<library job>", ...]}}.'
+)
 
 
 def merge_candidates(
@@ -618,100 +658,160 @@ def merge_candidates(
     return out
 
 
-def merge_message(agent: RagAgent, cands: dict[str, list[dict[str, Any]]]) -> str:
-    """The harness's message after the draft: the library's candidates in full."""
+def _versions_text(entries: list[dict[str, Any]], changed: dict[str, str] | None = None) -> str:
+    changed = changed or {}
+    return "\n\n".join(
+        f"### {e['job']} (current version, session {e['session']})"
+        + (f" · {changed[e['job']]}" if e["job"] in changed else "")
+        + "\n"
+        + json.dumps(e["workflow"], ensure_ascii=False, indent=1)
+        for e in entries
+    )
+
+
+def _unique(cands: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
     seen: dict[str, dict[str, Any]] = {}
     for es in cands.values():
         for e in es:
             seen.setdefault(e["job"], e)
+    return list(seen.values())
+
+
+def merge_message(agent: RagAgent, cands: dict[str, list[dict[str, Any]]]) -> str:
+    """The harness's message after the draft: the library's candidates in full."""
     pairs = "\n".join(
         f"- {name}: {', '.join(e['job'] for e in es) or 'no library job matches'}"
         for name, es in cands.items()
     )
-    current = "\n\n".join(
-        f"### {e['job']} (current version, session {e['session']})\n"
-        + json.dumps(e["workflow"], ensure_ascii=False, indent=1)
-        for e in seen.values()
+    return agent.merge_prompt.format(
+        pairs=pairs, current=_versions_text(_unique(cands)) or "(none)"
     )
-    return agent.merge_prompt.format(pairs=pairs, current=current or "(none)")
 
 
-def _merge(
-    meta: SessionMeta,
-    agent: RagAgent,
-    draft: dict[str, Any],
-    messages: list[dict[str, Any]],
-    turns: Callable[[int, str], dict[str, Any] | None],
-    emit: Callable[[dict[str, Any]], None],
+def decide_message(agent: RagAgent, cands: dict[str, list[dict[str, Any]]]) -> str:
+    """s21: before it merges, the candidates in full and the question which it will write."""
+    pairs = "\n".join(
+        f"- {name}: {', '.join(e['job'] for e in es) or 'no library job matches'}"
+        for name, es in cands.items()
+    )
+    return agent.decide_prompt.format(
+        pairs=pairs, current=_versions_text(_unique(cands)) or "(none)"
+    )
+
+
+def parse_decision(text: str | None, drafted: list[str]) -> dict[str, list[str]] | None:
+    """The decide turn's reply, {"decision": {drafted job: [library jobs]}}, for every drafted
+    job (one it left out is new); None when the reply holds no such object."""
+    obj = _json_object(
+        text, lambda v: isinstance(v.get("decision"), dict) or any(k in v for k in drafted)
+    )
+    if obj is None:
+        return None
+    dec = obj["decision"] if isinstance(obj.get("decision"), dict) else obj
+    out: dict[str, list[str]] = {}
+    for name in drafted:
+        v = dec.get(name, [])
+        v = [v] if isinstance(v, str) else v if isinstance(v, list) else []
+        out[name] = [str(n) for n in v if isinstance(n, str) and n.strip()]
+    return out
+
+
+def _assess(
+    domain: str,
+    merged: dict[str, Any],
+    lib: list[dict[str, Any]],
     policy: str,
-) -> dict[str, Any]:
-    """Merge the drafted jobs into the library's current versions, check each merge without a
-    model, send failures back once, and take only what passes (s20). A merged job that still
-    fails keeps the library's previous version; a new job is taken as written."""
+    held: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Each merged job with the library versions it merged and its checks; `why` lists what
+    stops it being taken. Under locks (`held`), a job may merge only library jobs it holds."""
     from tau2_loop.workflows import library, rubric
 
-    lib = library.entries(meta.domain, agent.name)  # as the last session left it
-    cands = merge_candidates(draft, lib)
-    emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
-    messages.append({"role": "user", "content": merge_message(agent, cands)})
-    write_now = "Your merge steps are used up. Write the merged workflow JSON now."
-    merged = turns(agent.merge_steps, write_now)
-
-    def assess(out: dict[str, Any]) -> list[dict[str, Any]]:
-        rows = []
-        for job in out.get("jobs") or []:
-            if not isinstance(job, dict) or not job.get("job"):
-                continue
-            names = [str(job["job"]), *library.merged_names(job)]
-            prev = []
-            for n in names:
-                e = library.by_name(lib, n)
-                if e is not None and e not in prev:
-                    prev.append(e)
-            c = rubric.check(meta.domain, job, [e["workflow"] for e in prev], policy)
-            why = (
-                rubric.gate(c)
-                if prev
-                else [
-                    f"quotes not found in the documents they cite: {' | '.join(c['D1']['new_unfound'][:4])}"
-                ]
-                if c["D1"]["new_unfound"]
-                else []
-            )
-            rows.append({"job": job, "previous": prev, "checks": c, "why": why})
-        return rows
-
-    rows = assess(merged) if merged is not None else []
-    failing = [r for r in rows if r["why"]]
-    if merged is not None and failing:
-        lines = "\n".join(f"- {r['job']['job']}: {'; '.join(r['why'])}" for r in failing)
-        emit({"kind": "note", "text": f"The merge failed its checks; sent back once.\n{lines}"})
-        messages.append(
+    rows: list[dict[str, Any]] = []
+    claimed: dict[str, str] = {}
+    for job in merged.get("jobs") or []:
+        if not isinstance(job, dict) or not job.get("job"):
+            continue
+        names = [str(job["job"]), *library.merged_names(job)]
+        prev: list[dict[str, Any]] = []
+        for n in names:
+            e = library.by_name(lib, n)
+            if e is not None and e not in prev:
+                prev.append(e)
+        c = rubric.check(domain, job, [e["workflow"] for e in prev], policy)
+        why = (
+            rubric.gate(c)
+            if prev
+            else [
+                f"quotes not found in the documents they cite: {' | '.join(c['D1']['new_unfound'][:4])}"
+            ]
+            if c["D1"]["new_unfound"]
+            else []
+        )
+        blocked = []
+        if held is not None:
+            outside = sorted({e["job"] for e in prev} - held)
+            if outside:
+                blocked.append(
+                    f"merges {', '.join(outside)}, which it did not name, so the library is not "
+                    f"holding it; it holds {', '.join(sorted(held)) or 'nothing'}"
+                )
+            twice = [e["job"] for e in prev if e["job"] in claimed]
+            if twice:
+                blocked.append(
+                    f"{', '.join(twice)} is merged by {claimed[twice[0]]} in this reply too: "
+                    "write one version of it"
+                )
+            for e in prev:
+                claimed.setdefault(e["job"], str(job["job"]))
+        rows.append(
             {
-                "role": "user",
-                "content": "The harness checked your merge and these jobs fail:\n"
-                f"{lines}\n\nA merged job keeps every step, tool and quote of the versions it "
-                "merged unless its changelog names the change (removed or changed, with why), and "
-                "every quote is copied from the document it cites. Reply with the whole JSON again, "
-                "fixed.",
+                "job": job,
+                "previous": prev,
+                "checks": c,
+                "why": [*why, *blocked],
+                "blocked": bool(blocked),
             }
         )
-        again = turns(max(agent.merge_steps // 2, 4), write_now)
-        if again is not None:
-            merged, rows = again, assess(again)
-    if merged is None:  # no merge written: keep only the draft's jobs no library job matches
-        merged = {
-            **draft,
-            "jobs": [j for j in draft.get("jobs") or [] if not cands.get(str(j.get("job")))],
-        }
-        rows = assess(merged)
+    return rows
+
+
+def _send_back(
+    agent: RagAgent,
+    rows: list[dict[str, Any]],
+    turns: Callable[..., Any],
+    say: Callable[[str], None],
+    emit: Callable[[dict[str, Any]], None],
+) -> dict[str, Any] | None:
+    failing = [r for r in rows if r["why"]]
+    lines = "\n".join(f"- {r['job']['job']}: {'; '.join(r['why'])}" for r in failing)
+    emit({"kind": "note", "text": f"The merge failed its checks; sent back once.\n{lines}"})
+    say(
+        "The harness checked your merge and these jobs fail:\n"
+        f"{lines}\n\nA merged job keeps every step, tool and quote of the versions it "
+        "merged unless its changelog names the change (removed or changed, with why), and "
+        "every quote is copied from the document it cites. Reply with the whole JSON again, "
+        "fixed."
+    )
+    again: dict[str, Any] | None = turns(max(agent.merge_steps // 2, 4), MERGE_WRITE_NOW)
+    return again
+
+
+def _take(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """What the library takes: a merge that still fails keeps the previous version; a new job is
+    taken as written unless it was blocked (s21: outside its lock). Returns taken, the merge
+    records and the rejected."""
+    from tau2_loop.workflows import library
+
     taken: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for r in rows:
         job = dict(r["job"])
         prev_names = [e["job"] for e in r["previous"]]
-        keep = not (r["why"] and r["previous"])  # a failing merge keeps the previous version
+        keep = not r.get("blocked") and not (r["why"] and r["previous"])
         aliases = [n for n in [*library.merged_names(job), *prev_names] if n != job["job"]]
         records.append(
             {
@@ -729,6 +829,41 @@ def _merge(
         if aliases:
             job["aliases"] = sorted(set(aliases))
         (taken if keep else rejected).append(job)
+    return taken, records, rejected
+
+
+def _merge(
+    meta: SessionMeta,
+    agent: RagAgent,
+    draft: dict[str, Any],
+    messages: list[dict[str, Any]],
+    turns: Callable[..., Any],
+    say: Callable[[str], None],
+    emit: Callable[[dict[str, Any]], None],
+    policy: str,
+) -> dict[str, Any]:
+    """Merge the drafted jobs into the library's current versions, check each merge without a
+    model, send failures back once, and take only what passes (s20). A merged job that still
+    fails keeps the library's previous version; a new job is taken as written."""
+    from tau2_loop.workflows import library
+
+    lib = library.entries(meta.domain, agent.name)  # as the last session left it
+    cands = merge_candidates(draft, lib)
+    emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
+    say(merge_message(agent, cands))
+    merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
+    rows = _assess(meta.domain, merged, lib, policy) if merged is not None else []
+    if merged is not None and any(r["why"] for r in rows):
+        again = _send_back(agent, rows, turns, say, emit)
+        if again is not None:
+            merged, rows = again, _assess(meta.domain, again, lib, policy)
+    if merged is None:  # no merge written: keep only the draft's jobs no library job matches
+        merged = {
+            **draft,
+            "jobs": [j for j in draft.get("jobs") or [] if not cands.get(str(j.get("job")))],
+        }
+        rows = _assess(meta.domain, merged, lib, policy)
+    taken, records, rejected = _take(rows)
     emit(
         {
             "kind": "merged",
@@ -743,6 +878,190 @@ def _merge(
         "merge": records,
         "rejected": rejected,
         "draft": draft.get("jobs") or [],
+    }
+
+
+def _holds(decision: dict[str, list[str]], lib: list[dict[str, Any]]) -> set[str]:
+    """The jobs a decision writes, as the library names them now: every library job it named
+    (through an alias if it was renamed), a library job with the drafted job's own name, and a
+    new job's own name."""
+    from tau2_loop.workflows import library
+
+    out: set[str] = set()
+    for drafted, names in decision.items():
+        hits = {e["job"] for e in (library.by_name(lib, n) for n in [*names, drafted]) if e}
+        out |= hits or {drafted}
+    return out
+
+
+def _merge_concurrent(
+    meta: SessionMeta,
+    agent: RagAgent,
+    draft: dict[str, Any],
+    messages: list[dict[str, Any]],
+    turns: Callable[..., Any],
+    say: Callable[[str], None],
+    emit: Callable[[dict[str, Any]], None],
+    policy: str,
+) -> dict[str, Any]:
+    """s21 (r3): the merge while other workers merge too. Name the jobs it will write, lock them
+    all at once (waiting, and logging who holds them, if another worker does), read their newest
+    versions, merge and check as r2 does, and commit under the version check. Only the jobs it
+    holds may be merged; a merge of another is sent back once, then not taken."""
+    from tau2_loop.workflows import library, store
+
+    st = library.store_for(meta.domain, agent.name)
+    snap = st.entries()
+    cands = merge_candidates(draft, snap)
+    emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
+    drafted = list(cands)
+    decision = turns(
+        0,
+        decide_message(agent, cands),
+        parse=lambda t: parse_decision(t, drafted),
+        again=DECIDE_AGAIN,
+    )
+    if decision is None:  # no usable answer: hold every candidate, which r2 would have shown it
+        decision = {k: [e["job"] for e in v] for k, v in cands.items()}
+        emit({"kind": "note", "text": "No usable decision; the library holds every candidate."})
+    emit({"kind": "decided", "decision": decision})
+
+    want = _holds(decision, snap)
+    asked = time.time()
+
+    def waiting(way: list[dict[str, Any]]) -> None:
+        emit(
+            {
+                "kind": "wait",
+                "jobs": sorted(want),
+                "in_the_way": [
+                    {
+                        "task": w.get("task"),
+                        "session": w["holder"],
+                        "state": w["state"],
+                        "jobs": w["jobs"],
+                    }
+                    for w in way
+                ],
+            }
+        )
+
+    lock = st.lock(sorted(want), meta.id, meta.task_id, on_wait=waiting)
+    for _ in range(3):  # a job renamed or created while it waited joins the lock
+        more = _holds(decision, st.entries()) - set(lock.jobs)
+        if not more:
+            break
+        st.release(lock)
+        want |= more
+        emit(
+            {
+                "kind": "note",
+                "text": f"The library changed while it waited; it also holds {', '.join(sorted(more))}.",
+            }
+        )
+        lock = st.lock(sorted(want), meta.id, meta.task_id, on_wait=waiting)
+    waited_ms = int((time.time() - asked) * 1000)
+    committed: dict[str, int] = {}
+    error = None
+    with st.holding(lock) as hold:
+        heads = st.entries()
+        mine = [e for e in heads if e["job"] in set(lock.jobs)]
+        before = {e["job"]: e["version"] for e in snap}
+        changed = {
+            e[
+                "job"
+            ]: f"changed since you read it above: version {e['version']}, from {e.get('task_id')}"
+            for e in mine
+            if before.get(e["job"]) != e["version"]
+        }
+        emit(
+            {
+                "kind": "locked",
+                "token": lock.token,
+                "jobs": list(lock.jobs),
+                "versions": {e["job"]: e["version"] for e in mine},
+                "changed": sorted(changed),
+                "waited_ms": waited_ms,
+            }
+        )
+        pairs = "\n".join(
+            f"- {name}: {', '.join(n for n in names) or 'a new job'}"
+            for name, names in decision.items()
+        )
+        say(
+            agent.merge_prompt.format(
+                pairs=pairs, current=_versions_text(mine, changed) or "(none)"
+            )
+        )
+        held = set(lock.jobs)
+        merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
+        rows = _assess(meta.domain, merged, heads, policy, held) if merged is not None else []
+        if merged is not None and any(r["why"] for r in rows):
+            again = _send_back(agent, rows, turns, say, emit)
+            if again is not None:
+                merged, rows = again, _assess(meta.domain, again, heads, policy, held)
+        if merged is None:  # nothing written: only the draft's new jobs, and only those it holds
+            merged = {
+                **draft,
+                "jobs": [
+                    j
+                    for j in draft.get("jobs") or []
+                    if not cands.get(str(j.get("job"))) and j.get("job") in held
+                ],
+            }
+            rows = _assess(meta.domain, merged, heads, policy, held)
+        taken, records, rejected = _take(rows)
+        writes = [
+            {
+                "job": j["job"],
+                "workflow": j,
+                "reads": {e["job"]: e["version"] for e in r["previous"]},
+                "session": meta.id,
+                "task": meta.task_id,
+            }
+            for j, r in zip(
+                taken,
+                [r for r, rec in zip(rows, records, strict=True) if rec["taken"]],
+                strict=True,
+            )
+        ]
+        try:
+            if hold.lost:
+                raise store.LockLostError(f"lock {lock.token} expired while it merged")
+            committed = st.commit(hold.lock, writes) if writes else {}
+        except (
+            store.LockLostError,
+            store.CommitRefusedError,
+        ) as e:  # nothing written; the library is as it was
+            error = f"{type(e).__name__}: {e}"
+            emit({"kind": "error", "text": f"commit refused, nothing written: {error}"})
+            rejected, taken = [*rejected, *taken], []
+            for rec in records:
+                rec["taken"] = False
+    emit({"kind": "committed", "token": lock.token, "versions": committed})
+    emit(
+        {
+            "kind": "merged",
+            "taken": [j["job"] for j in taken],
+            "rejected": [j["job"] for j in rejected],
+        }
+    )
+    return {
+        "jobs": taken,
+        "documents": merged.get("documents") or draft.get("documents") or [],
+        "open_questions": merged.get("open_questions") or draft.get("open_questions") or [],
+        "merge": records,
+        "rejected": rejected,
+        "draft": draft.get("jobs") or [],
+        "decision": decision,
+        "lock": {
+            "token": lock.token,
+            "jobs": list(lock.jobs),
+            "waited_ms": waited_ms,
+            "read": {e["job"]: e["version"] for e in mine},
+            "committed": committed,
+            "error": error,
+        },
     }
 
 
@@ -849,24 +1168,33 @@ def start(
 
 
 def build_queue(domain: str, agent_name: str, only: list[str] | None = None) -> list[str]:
-    """The train questions a merging version still has to research, in id order (s20): each
-    question once, so a stopped build resumes where it was. A test id is refused."""
+    """The train questions a merging version still has to research (s20): each question once, so
+    a stopped build resumes where it was. A test id is refused. In id order, or (s21) shuffled by
+    the version's `order_seed`, the same order on every resume; a version with `queue:
+    after_seed` also skips every question its seed already merged (r3: r2's)."""
     train = split_ids(domain, "train")
     want = list(only) if only else list(train)
     bad = [t for t in want if t not in set(train)]
     if bad:
         raise RagAgentError(f"not train questions: {', '.join(bad)}: test is sealed")
+    agent = load(domain, agent_name)
+    by = {agent_name}
+    if agent.queue == "after_seed" and agent.seed:
+        by.add(agent.seed)
     done = {
         m.get("task_id")
         for m in sessions(domain)
-        if m.get("agent") == agent_name
+        if m.get("agent") in by
         and m.get("status") == "done"
         and m.get("source", "question") == "question"
     }
-    return sorted(
-        (t for t in dict.fromkeys(want) if t not in done),
-        key=lambda t: int(re.sub(r"\D", "", t) or 0),
-    )
+    ordered = sorted(train, key=lambda t: int(re.sub(r"\D", "", t) or 0))
+    if agent.order == "shuffled":
+        import random
+
+        random.Random(agent.order_seed).shuffle(ordered)
+    rank = {t: i for i, t in enumerate(ordered)}
+    return sorted((t for t in dict.fromkeys(want) if t not in done), key=lambda t: rank[t])
 
 
 def start_request(
@@ -908,12 +1236,21 @@ def start_request(
     )
 
 
+STALE_S = 900  # a session another process runs (`make rag-build`) that has written nothing for this long has stopped
+
+
 def _read_meta(d: Path) -> dict[str, Any]:
     meta: dict[str, Any] = json.loads((d / "run.json").read_text())
     with _live_lock:
         live = meta["id"] in _live
     if meta["status"] == "running" and not live:
-        meta["status"] = "interrupted"  # the server restarted under it
+        # another process may be running it (s20: the build); it is running while it still writes
+        last = max(
+            (p.stat().st_mtime for p in (d / "events.jsonl", d / "run.json") if p.is_file()),
+            default=0,
+        )
+        if time.time() - last > STALE_S:
+            meta["status"] = "interrupted"  # the server restarted under it
     return meta
 
 
@@ -966,6 +1303,9 @@ def describe(domain: str, name: str) -> dict[str, Any]:
         "result_chars": agent.result_chars,
         "seed": agent.seed,
         "merge": agent.merge,
+        "workers": agent.workers,
+        "order": agent.order,
+        "queue": agent.queue,
         "prompt": agent.prompt,
         "tools": variant_tool_rows(agent.retrieval),
     }

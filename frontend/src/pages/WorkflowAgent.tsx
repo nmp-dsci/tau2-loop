@@ -4,6 +4,8 @@ import {
   type GoldenSet,
   type RagEvent,
   type RagJob,
+  type RagLibrary,
+  type RagLock,
   type RagPayload,
   type RagScore,
   type RagSession,
@@ -103,6 +105,139 @@ function ToolBlock({ e }: { e: RagEvent }) {
   );
 }
 
+/** s21: what a concurrent merge decided, waited for, held and committed, one line each. */
+const LOCK_KINDS = new Set(['decided', 'wait', 'locked', 'committed']);
+function lockLine(e: RagEvent): string {
+  if (e.kind === 'decided')
+    return `Decided what it writes: ${Object.entries(e.decision ?? {})
+      .map(([k, v]) => `${k} → ${v.join(', ') || 'a new job'}`)
+      .join(' · ')}`;
+  if (e.kind === 'wait')
+    return `Waiting for ${(e.jobs ?? []).join(', ')}: ${(e.in_the_way ?? [])
+      .map((w) => `${w.task ?? w.session} ${w.state === 'held' ? 'is merging' : 'is ahead in line for'} ${w.jobs.join(', ')}`)
+      .join('; ')}`;
+  if (e.kind === 'locked')
+    return `Holds ${(e.jobs ?? []).join(', ')} (lock ${e.token}) after waiting ${fmtS(e.waited_ms ?? 0)} · read ${Object.entries(e.versions ?? {})
+      .map(([j, v]) => `${j} v${v}`)
+      .join(', ') || 'no library job'}${e.changed?.length ? ` · changed since it first read them: ${e.changed.join(', ')}` : ''}`;
+  const wrote = Object.entries(e.versions ?? {});
+  return `Committed ${wrote.map(([j, v]) => `${j} v${v}`).join(', ') || 'nothing'} under lock ${e.token}, then released it`;
+}
+
+/** s21: who is updating which workflow in a concurrent version's library, read every 3 s. */
+function LibraryPanel({ domain, version, open }: { domain: string; version: string; open: (session: string, q: string | null) => void }) {
+  const [lib, setLib] = useState<RagLibrary | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let timer: number | undefined;
+    const tick = () =>
+      get<RagLibrary>(`/api/workflows/${enc(domain)}/rag/library?version=${enc(version)}`)
+        .then((d) => {
+          if (!alive) return;
+          setLib(d);
+          setErr(null);
+          timer = window.setTimeout(tick, 3000);
+        })
+        .catch((e: Error) => alive && setErr(e.message));
+    tick();
+    return () => {
+      alive = false;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [domain, version]);
+  if (err) return <p className="empty">Could not read {version}’s library: {err}</p>;
+  if (!lib) return null;
+  const heldBy = new Map<string, RagLock>();
+  lib.held.forEach((h) => h.jobs.forEach((j) => heldBy.set(j, h)));
+  const waitFor = new Map<string, RagLock[]>();
+  lib.waiting.forEach((w) => w.jobs.forEach((j) => waitFor.set(j, [...(waitFor.get(j) ?? []), w])));
+  const busy = (j: string) => heldBy.has(j) || waitFor.has(j);
+  const rows = [...lib.jobs].sort(
+    (a, b) => Number(busy(b.job)) - Number(busy(a.job)) || (b.version ?? 0) - (a.version ?? 0) || a.job.localeCompare(b.job),
+  );
+  const fresh = [...new Set([...heldBy.keys(), ...waitFor.keys()])].filter((j) => !lib.jobs.some((x) => x.job === j));
+  const active = rows.filter((r) => busy(r.job) || (r.version ?? 0) > 0);
+  const rest = rows.filter((r) => !active.includes(r));
+  const now = (j: string) => {
+    const h = heldBy.get(j);
+    const w = waitFor.get(j) ?? [];
+    return (
+      <span className="chips flat">
+        {h && <span className="chip lock">merging · {h.task} · {fmtS((h.held_s ?? 0) * 1000)}</span>}
+        {w.length > 0 && (
+          <span className="chip warn">
+            {w.length} waiting · {w.map((x) => x.task).join(', ')}
+          </span>
+        )}
+        {!h && !w.length && <span className="chip ok">free</span>}
+      </span>
+    );
+  };
+  const row = (r: RagLibrary['jobs'][number]) => (
+    <tr key={r.job}>
+      <td className="mono small">{r.job}</td>
+      <td className="num">{r.version === 0 ? 'seed' : `v${r.version}`}</td>
+      <td className="small">
+        <button type="button" className="linkish" onClick={() => open(r.session, r.task)}>
+          {r.task ?? r.session}
+        </button>
+      </td>
+      <td>{now(r.job)}</td>
+    </tr>
+  );
+  const changed = lib.jobs.filter((j) => (j.version ?? 0) > 0).length;
+  return (
+    <div className="agent-panel rag-library">
+      <h3>
+        Library · {lib.version} · {lib.jobs.length} workflows
+      </h3>
+      <p className="small muted">
+        {lib.held.length} of {lib.workers} workers merging · {lib.waiting.length} waiting · {lib.commits ?? 0} commits · {changed} of {lib.jobs.length} workflows
+        changed since the seed. Research takes no lock; a worker locks only the workflows its merge writes.
+      </p>
+      {fresh.length + active.length === 0 && <p className="small muted">No worker is merging and nothing has been committed yet.</p>}
+      {fresh.length + active.length > 0 && (
+      <div className="tw flat">
+        <table>
+          <thead>
+            <tr>
+              <th>workflow</th>
+              <th className="num">version</th>
+              <th>last change</th>
+              <th>now</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fresh.map((j) => (
+              <tr key={j}>
+                <td className="mono small">{j}</td>
+                <td className="num">new</td>
+                <td />
+                <td>{now(j)}</td>
+              </tr>
+            ))}
+            {active.map(row)}
+          </tbody>
+        </table>
+      </div>
+      )}
+      {rest.length > 0 && (
+        <details className="part">
+          <summary>
+            {rest.length} more, unchanged since the seed <span className="muted">· {lib.version} starts from them</span>
+          </summary>
+          <div className="tw flat">
+            <table>
+              <tbody>{rest.map(row)}</tbody>
+            </table>
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 /** The research, one block per model turn, with each tool call it made and what came back. */
 function Research({ s }: { s: RagSession }) {
   const start = s.events.find((e) => e.kind === 'start');
@@ -123,9 +258,20 @@ function Research({ s }: { s: RagSession }) {
       )}
       {turns.map((m) => {
         const tools = s.events.filter((e) => e.kind === 'tool' && e.step === m.step);
+        const said = s.events.filter((e) => e.kind === 'user' && e.step === m.step);
         const final = !m.calls?.length;
         return (
           <div key={m.step} className="step">
+            {said.map((e, i) => (
+              <details key={i} className="part">
+                <summary>
+                  The harness’s message <span className="muted">· before step {m.step}</span>
+                </summary>
+                <div className="blk">
+                  <pre className="tall">{e.text}</pre>
+                </div>
+              </details>
+            ))}
             <div className="hd">
               <span>
                 step {m.step}
@@ -150,10 +296,10 @@ function Research({ s }: { s: RagSession }) {
         );
       })}
       {s.events
-        .filter((e) => e.kind === 'note' || e.kind === 'error')
+        .filter((e) => e.kind === 'note' || e.kind === 'error' || LOCK_KINDS.has(e.kind))
         .map((e, i) => (
-          <p key={i} className={`small ${e.kind === 'error' ? 'v-warn' : 'muted'}`}>
-            {e.text}
+          <p key={i} className={`small ${e.kind === 'error' ? 'v-warn' : e.kind === 'wait' ? 'v-warn' : 'muted'}`}>
+            {LOCK_KINDS.has(e.kind) ? lockLine(e) : e.text}
           </p>
         ))}
       {running && (
@@ -523,6 +669,7 @@ export function WorkflowAgent() {
         </div>
       )}
 
+      {v.merge === 'concurrent' && <LibraryPanel domain={domain} version={v.name} open={(session, task) => setLens({ session, q: task ?? q })} />}
       {err && <p className="empty">Could not load this session: {err}</p>}
       {sid && !s && !err && <Loading error={null} />}
       {s && (

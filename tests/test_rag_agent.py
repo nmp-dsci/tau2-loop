@@ -6,6 +6,8 @@ No model is called: each test drives the loop with a scripted model and scripted
 from __future__ import annotations
 
 import json
+import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -417,3 +419,191 @@ def test_a_conversation_request_is_never_merged(
     )
     out = rag_agent.session(D, meta.id)
     assert meta.status == "done" and meta.steps == 1 and "merge" not in out["output"]
+
+
+def test_a_session_another_process_runs_shows_running_until_it_goes_quiet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import time
+
+    monkeypatch.setattr(rag_agent, "RAG_RUNS_DIR", tmp_path)
+    d = tmp_path / "20261007T010000Z_banking_knowledge_r2_task_041"
+    d.mkdir()
+    meta = {"id": d.name, "domain": D, "agent": "r2", "status": "running", "task_id": "task_041"}
+    (d / "run.json").write_text(json.dumps(meta))
+    (d / "events.jsonl").write_text("{}\n")
+    assert rag_agent.sessions(D)[0]["status"] == "running"  # the build is writing it
+    old = time.time() - rag_agent.STALE_S - 60
+    for f in ("run.json", "events.jsonl"):
+        os.utime(d / f, (old, old))
+    assert rag_agent.sessions(D)[0]["status"] == "interrupted"
+
+
+# ── s21: r3 builds the library with several workers; each locks the jobs it writes ──
+DECIDED = json.dumps({"decision": {"submitting_a_cash_back_dispute": ["cash_back_dispute"]}})
+BRANCH_A = {"id": "explain_a", "by": "model", "if": "no discrepancy", "do": "explain the rate"}
+BRANCH_B = {"id": "refund_b", "by": "model", "if": "a posted refund", "do": "explain the reversal"}
+
+
+@pytest.fixture
+def r3_library(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    from tau2_loop.workflows import store
+
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    monkeypatch.setattr(rag_agent, "RAG_RUNS_DIR", runs)
+    monkeypatch.setattr(store, "LIBRARY_DIR", tmp_path / "library")
+    monkeypatch.setattr(store, "POLL_S", 0.02)
+    seed_r1(runs)  # r2 has merged nothing here, so r3 starts from r1's one job
+    return runs
+
+
+def test_two_r3_workers_on_one_job_keep_both_cases(r3_library: Path) -> None:
+    from tau2_loop.workflows import library
+
+    st = library.store_for(D, "r3")
+    a_locked = threading.Event()
+    b_saw: list[list[dict[str, Any]]] = []
+
+    def ask_a(messages, tools, model, effort, tool_mode):  # type: ignore[no-untyped-def]
+        n = len([m for m in messages if m["role"] == "assistant"])
+        if n == 0:
+            return Reply(json.dumps(DRAFT))
+        if n == 1:
+            return Reply(DECIDED)
+        a_locked.set()  # A holds the job and is merging: B arrives now
+        deadline = time.time() + 10
+        while not st.locks()["waiting"] and time.time() < deadline:
+            time.sleep(0.02)
+        return Reply(merged([*OLD["steps"], BRANCH_A], [{"change": "added", "what": "explain_a"}]))
+
+    def ask_b(messages, tools, model, effort, tool_mode):  # type: ignore[no-untyped-def]
+        n = len([m for m in messages if m["role"] == "assistant"])
+        if n < 2:
+            return Reply(json.dumps(DRAFT) if n == 0 else DECIDED)
+        b_saw.append(list(messages))
+        return Reply(
+            merged([*OLD["steps"], BRANCH_A, BRANCH_B], [{"change": "added", "what": "refund_b"}])
+        )
+
+    out: dict[str, rag_agent.SessionMeta] = {}
+
+    def go(tid: str, ask: rag_agent.Ask) -> None:
+        out[tid] = rag_agent.start(
+            D, tid, "r3", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+        )
+
+    ta = threading.Thread(target=go, args=("task_019", ask_a))
+    ta.start()
+    assert a_locked.wait(10)
+    tb = threading.Thread(target=go, args=("task_020", ask_b))
+    tb.start()
+    ta.join(20)
+    tb.join(20)
+    a, b = (rag_agent.session(D, out[t].id) for t in ("task_019", "task_020"))
+    assert a["meta"]["status"] == b["meta"]["status"] == "done"
+    assert a["output"]["lock"]["committed"] == {"cash_back_dispute": 1}
+    assert b["output"]["lock"]["committed"] == {"cash_back_dispute": 2}
+    # B waited for A, and its log says who it waited for
+    wait = next(e for e in b["events"] if e["kind"] == "wait")
+    assert wait["in_the_way"][0]["task"] == "task_019" and b["output"]["lock"]["waited_ms"] > 0
+    # B merged A's version, the newer one, and was told it changed since B read it
+    shown = b_saw[0][-1]["content"]
+    assert (
+        "explain_a" in shown
+        and "changed since you read it above: version 1, from task_019" in shown
+    )
+    head = library.entries(D, "r3")[0]
+    assert (head["job"], head["version"]) == ("cash_back_dispute", 2)
+    assert [s["id"] for s in head["workflow"]["steps"]] == [
+        "verify",
+        "give",
+        "explain_a",
+        "refund_b",
+    ]
+    # every message the harness sent is in the log, in full: the decision asked, then the merge
+    said = [e["text"] for e in b["events"] if e["kind"] == "user"]
+    assert "name the library jobs you will write" in said[0] and shown == said[1]
+    # r2's library is not touched, and the commit log names both questions in order
+    assert [s["id"] for s in library.entries(D, "r2")[0]["workflow"]["steps"]] == ["verify", "give"]
+    assert [c["task"] for c in st.commits()] == ["task_019", "task_020"]
+    assert st.locks() == {"held": [], "waiting": []}
+
+
+def test_an_r3_merge_into_a_job_it_did_not_name_is_sent_back_then_not_taken(
+    r3_library: Path,
+) -> None:
+    from tau2_loop.workflows import library
+
+    new = json.dumps({"decision": {"submitting_a_cash_back_dispute": []}})  # "a new job"
+    into_old = merged([*OLD["steps"], BRANCH_A], [{"change": "added", "what": "explain_a"}])
+    ask, _ = scripted([Reply(json.dumps(DRAFT)), Reply(new), Reply(into_old), Reply(into_old)])
+    meta = rag_agent.start(
+        D, "task_019", "r3", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    out = rag_agent.session(D, meta.id)["output"]
+    assert out["lock"]["jobs"] == ["submitting_a_cash_back_dispute"]
+    rec = out["merge"][0]
+    assert rec["taken"] is False and any("did not name" in w for w in rec["failed"])
+    assert out["lock"]["committed"] == {} and out["jobs"] == []
+    head = library.entries(D, "r3")[0]
+    assert (head["job"], head["version"]) == ("cash_back_dispute", 0)  # r1's, as seeded
+
+
+def test_r3_keeps_what_r2_merged_and_queues_the_rest_shuffled(r3_library: Path) -> None:
+    import random
+
+    d = r3_library / "20261007T010000Z_banking_knowledge_r2_task_001"
+    d.mkdir()
+    meta = {"id": d.name, "domain": D, "agent": "r2", "status": "done", "source": "question"}
+    (d / "run.json").write_text(json.dumps({**meta, "task_id": "task_001"}))
+    train = sorted(split_ids(D, "train"), key=lambda t: int(t.split("_")[1]))
+    random.Random(rag_agent.load(D, "r3").order_seed).shuffle(train)
+    q = rag_agent.build_queue(D, "r3")
+    assert "task_001" not in q and q == [t for t in train if t != "task_001"]
+    assert rag_agent.build_queue(D, "r3") == q  # the same order on every resume
+
+
+def test_the_r3_build_runs_its_questions_on_several_workers(
+    r3_library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from tau2_loop.cli import app
+
+    running, peak, started = [0], [0], []
+    guard = threading.Lock()
+
+    def fake_start(
+        domain: str, tid: str, rag: str, background: bool = True
+    ) -> rag_agent.SessionMeta:
+        with guard:
+            running[0] += 1
+            peak[0] = max(peak[0], running[0])
+            started.append(tid)
+        time.sleep(0.2)
+        with guard:
+            running[0] -= 1
+        return rag_agent.SessionMeta(
+            id=f"x_{tid}",
+            domain=domain,
+            agent=rag,
+            task_id=tid,
+            model="m",
+            effort="e",
+            retrieval="r",
+            started="s",
+            status="done",
+            duration_ms=60000,
+        )
+
+    monkeypatch.setattr(rag_agent, "start", fake_start)
+    monkeypatch.setattr(
+        rag_agent, "session", lambda d, sid: {"output": {"merge": [], "lock": {"waited_ms": 0}}}
+    )
+    r = CliRunner().invoke(app, ["rag-build", "--rag", "r3", "--workers", "3", "--limit", "6"])
+    assert r.exit_code == 0, r.output
+    assert "6 train questions to research and merge, 3 workers, shuffled order" in r.output
+    assert len(started) == len(set(started)) == 6 and peak[0] == 3  # each once, three at a time
+    assert sorted(started) == sorted(rag_agent.build_queue(D, "r3")[:6])  # the queue's first six

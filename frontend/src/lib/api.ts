@@ -343,6 +343,23 @@ export type RagVersion = {
   result_chars: number;
   prompt: string;
   tools: { name: string; description: string | null; type: string; mutates: boolean }[];
+  /** s20/s21: the version whose library it starts from, and how it merges into it */
+  seed?: string | null;
+  merge?: 'sequential' | 'concurrent' | null;
+  workers?: number;
+  order?: string;
+  queue?: string;
+};
+/** s21: a RAG version's library now; a concurrent one also shows who holds or waits for which jobs. */
+export type RagLock = { jobs: string[]; holder: string; task: string; token?: number; held_s?: number; waited_s?: number };
+export type RagLibrary = {
+  version: string;
+  concurrent: boolean;
+  workers: number;
+  commits: number | null;
+  jobs: { job: string; version: number | null; session: string; task: string | null }[];
+  held: RagLock[];
+  waiting: RagLock[];
 };
 export type RagSessionMeta = {
   id: string;
@@ -364,7 +381,7 @@ export type RagSessionMeta = {
 /** One line of a session's `events.jsonl`: the model's turn, one tool call and its result, or a note. */
 export type RagEvent = {
   t: number;
-  kind: 'start' | 'model' | 'tool' | 'note' | 'error' | 'done';
+  kind: 'start' | 'model' | 'tool' | 'note' | 'error' | 'done' | 'user' | 'merge' | 'merged' | 'decided' | 'wait' | 'locked' | 'committed';
   step?: number;
   text?: string | null;
   calls?: { id: string; name: string; args: Record<string, unknown> }[];
@@ -380,6 +397,16 @@ export type RagEvent = {
   cut?: boolean;
   question?: string;
   status?: string;
+  /** s21: the lock a concurrent merge waited for, took and committed under */
+  jobs?: string[];
+  in_the_way?: { task: string | null; session: string; state: 'held' | 'waiting'; jobs: string[] }[];
+  token?: number;
+  versions?: Record<string, number>;
+  changed?: string[];
+  waited_ms?: number;
+  decision?: Record<string, string[]>;
+  taken?: string[];
+  rejected?: string[];
 };
 export type RagQuote = { quote: string; doc: string };
 export type RagStep = {

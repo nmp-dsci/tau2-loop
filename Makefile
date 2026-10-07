@@ -34,8 +34,14 @@ documents: ## index banking's knowledge base (title and size per document) → d
 fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true, PARALLEL_CALLS=true or WORKFLOWS=rN, by hand
 	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(WORKFLOWS),--workflows $(WORKFLOWS))
 
-rag-build: ## s20: build a merging workflow_rag version's library, RAG= (default r2): train questions in id order, one at a time, resumable (TASKS= some, LIMIT=)
-	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT))
+rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (default r2): r2 one at a time in id order, r3 with WORKERS= (default its own 4); resumable (TASKS= some, LIMIT=)
+	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS))
+
+rag-locks: ## s21: who is updating which workflow in RAG='s library (default r3): held and waiting locks
+	uv run tau2loop rag-locks --domain banking_knowledge --rag $(or $(RAG),r3)
+
+rag-replay: ## s21: RAG='s library (default r3) as of commit AT= (default the latest), as JSON
+	uv run tau2loop rag-replay --domain banking_knowledge --rag $(or $(RAG),r3) $(if $(AT),--at $(AT))
 
 rag-rubric: ## s20: the rubric's checks over RAG='s whole library (default r2), no model
 	uv run tau2loop rag-rubric --domain banking_knowledge --rag $(or $(RAG),r2)
@@ -147,4 +153,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: rag-build rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: rag-build rag-locks rag-replay rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

@@ -102,7 +102,14 @@
   without a model (nothing lost that the changelog does not name, no quote not found), a failure
   is sent back once, and a merge that still fails keeps the previous version. The rubric is in
   r2's prompt; no reviewer yet (saved for optimising), and no gold or v7 outcome reaches r2.
-  v8 = v7 with `workflows: r2` only (`make fork FROM=v7 WORKFLOWS=r2`).
+  v8 = v7 with `workflows: r2` only (`make fork FROM=v7 WORKFLOWS=r2`). r2's build was paused at
+  34 of 60 (the person's call, 7 Oct 2026) for r3 (s21): r2's library as its seed (pinned in
+  `rag_library/…/seed.json`), the other 26 questions only (`queue: after_seed`), shuffled, 4
+  workers. Research takes no lock; a decide turn names the jobs a merge writes, `workflows/store.py`
+  locks them all at once (a lease with a fencing token), the merge reads their newest versions,
+  and a commit is refused unless every version it read is still the head. r3's library is its
+  commit log, not session order; `make rag-locks` and the Agent tab show who holds what. Every
+  message the harness sends is saved as a `user` event, so a session replays turn for turn.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.
