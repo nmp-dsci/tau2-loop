@@ -412,8 +412,17 @@ export function AgentGraph({ t, agent, meta, node, onPick }: GraphProps) {
 }
 
 // ── the node panel ────────────────────────────────────────────────────────
+/** eval/user.py's check_customer rules, in words */
+const CUSTOMER_RULE: Record<string, string> = {
+  as_ai: 'it spoke as an AI assistant',
+  as_text: 'it wrote a tool call, the reply format or the agent\'s turn as text',
+  denied: 'it said it lacked a tool the agent had given it',
+  invented: 'it quoted an id it was never shown',
+};
+
 /** What the version's code surfaces did on one reply (s09): the reminder it rode with, and a
- *  write a check blocked before this reply, which is the retry. */
+ *  write a check blocked before this reply, which is the retry. On a customer's turn (s18): the
+ *  turns its check sent back before this one. */
 function Harness({ m }: { m: TraceMessage }) {
   const h = m.harness;
   if (!h) return null;
@@ -429,6 +438,16 @@ function Harness({ m }: { m: TraceMessage }) {
           <code>guidance.py</code> added to this call: {h.guidance}
         </p>
       )}
+      {h.customer_sent_back?.map((s, k) => (
+        <p key={`c${k}`} className="small">
+          <span className="status warn">sent back</span> the customer check withheld a turn the agent never saw ({CUSTOMER_RULE[s.rule] ?? s.rule}): <q>{s.content}</q>
+        </p>
+      ))}
+      {h.customer_sent_back?.length ? (
+        <p className="small muted">
+          {h.fixed ? 'This reply is the retry, and it passed the check.' : `Still broken after ${h.customer_sent_back.length} retries: this reply went through as it is.`}
+        </p>
+      ) : null}
     </>
   );
 }

@@ -24,8 +24,14 @@
   CLI tells every session today's date; the customer (`eval/user.py`, a subclass
   of tau2's) is told the world's time and to ignore it, the agent's prompt ends
   with `compose.CLOCK_NOTE`. The customer also holds a stop sent with words until
-  the agent's turn. Runs record `sim_rules`; the loop never compares runs across
-  it, so bump `runner.SIM_RULES` when these rules change.
+  the agent's turn, and (s18, `tau2_loop/2`, 7 Oct 2026) a text turn of its that
+  speaks as an AI, writes a call out as text, denies a tool the agent gave it (read
+  from the environment) or quotes an id it was never shown is withheld and asked
+  again, twice at most (`user.check_customer`, deterministic). The customer is
+  Sonnet since s18 (`runner.USER_MODEL`, the person's call; Haiku before). Runs
+  record `sim_rules` and the customer; the loop never compares runs across either,
+  so bump `runner.SIM_RULES` when these rules change. Every run before /2 (v4's and
+  v7's included) is re-played before a gate.
 - **Banking's champion is v4** (5 Oct 2026, promoted by the gate): written by `make optimise`
   from v3 under banking's s14 guide (routing: all five surfaces), Sonnet at high effort with
   `parallel_calls: true`. Test 6 → 14 (fixed 8, broke 0, p = 0.004); train 12 → 29 of 60

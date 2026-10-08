@@ -43,15 +43,19 @@ from tau2_loop.llm import EFFORT, HARNESS, redact_tree, resolve_model, sdk_model
 
 console = Console()
 
-USER_MODEL = (
-    "haiku"  # the customer every run uses unless `run_eval(user_model=)` says otherwise (s16)
-)
+# the customer every run uses unless `run_eval(user_model=)` says otherwise (s16). Sonnet since
+# s18 (7 Oct 2026, the person's call): Haiku's customers wrote calls out as text in 88 of 665
+# banking conversations; Sonnet's few failures (as Claude, a given tool denied) are what the
+# customer check sends back. Haiku before; the loop never reuses a run with another customer.
+USER_MODEL = "sonnet"
 USER_EFFORT = EFFORT
 # The simulation's rules beyond tau2's own: our customer (`eval.user`) holds a stop sent with words
 # until the agent's turn, and neither side may take the real date the Claude CLI tells every
 # session (the customer is told the world's time, the agent `compose.CLOCK_NOTE`). Bump it when
-# they change; the loop compares only runs that share it.
-SIM_RULES = "tau2_loop/1"
+# they change; the loop compares only runs that share it. /2 (s18, 7 Oct 2026): a customer text
+# turn that speaks as an AI, writes a call out as text, denies a given tool or quotes an unseen id
+# is sent back (`user.check_customer`).
+SIM_RULES = "tau2_loop/2"
 JUDGE_MODEL = "haiku"
 JUDGE_EFFORT = EFFORT
 

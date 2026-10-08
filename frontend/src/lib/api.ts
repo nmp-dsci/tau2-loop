@@ -617,7 +617,14 @@ export type TraceMessage = {
   error: boolean;
   /** s09: what the version's code surfaces did on this reply — `guidance.py`'s reminder, and a
    *  write `checks.py` blocked before this retry. Absent on versions without them. */
-  harness?: { guidance?: string; blocked?: { name: string; arguments: Record<string, unknown>; check: string }[]; retried?: boolean } | null;
+  harness?: {
+    guidance?: string;
+    blocked?: { name: string; arguments: Record<string, unknown>; check: string }[];
+    retried?: boolean;
+    /** s18, the customer's turns: what eval/user.py's check withheld from the agent, and whether the retry passed */
+    customer_sent_back?: { rule: 'as_ai' | 'as_text' | 'denied' | 'invented'; content: string; why?: string }[];
+    fixed?: boolean;
+  } | null;
 };
 export type ExpectedAction = { action_id: string; name: string; arguments: Record<string, unknown>; requestor?: string };
 export type RewardInfo = {

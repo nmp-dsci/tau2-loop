@@ -581,7 +581,7 @@ def test_a_fork_inherits_its_sources_held_challengers_and_names_its_model(
     prompt = build_prompt(v3, "v4", meta.run_id, failures)
     assert (
         "The agent is Claude Sonnet 5" in prompt
-        and "Claude Haiku 4.5) plays the customer" in prompt
+        and "Claude Sonnet 5) plays the customer" in prompt  # the loop's customer since s18
     )
     assert "a fork of `v0`" in prompt and "agents/airline/v2/" in prompt
     assert "breaks none" in prompt
@@ -614,7 +614,8 @@ def _write_run(
     from dataclasses import asdict
 
     from tau2_loop.eval.results import summarise, write_results
-    from tau2_loop.eval.runner import SIM_RULES
+    from tau2_loop.eval.runner import SIM_RULES, USER_MODEL
+    from tau2_loop.llm import sdk_model
 
     ids = TRAIN if split == "train" else TEST
     rows = _rows(PASSES[(agent.name, split)], ids)
@@ -626,7 +627,7 @@ def _write_run(
         agent=agent.name,
         fingerprint=agent.fingerprint,
         model="claude-sdk/" + agent.config.model,
-        user_model="claude-sdk/claude-haiku-4-5",  # the loop reuses only runs with its customer (s16)
+        user_model=sdk_model(USER_MODEL),  # the loop reuses only runs with its customer (s16)
         judge_model="j",
         split=split,
         n_tasks=len(ids),
@@ -1160,7 +1161,14 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
             meta.composed_of == [old, added.run_id]
             and added.task_ids == s[split][len(s["v2"][split]) :]
         )
-        assert loop_run._runs_of(d, "v1", split, split_ids(d, split), 1)[0].run_id == run
+        # reused under the rules and customer it ran with; under tau2_loop/2 and a Sonnet customer
+        # (s18) the loop plays v1 again rather than compare across them
+        assert (meta.sim_rules, meta.user_model) == ("tau2_loop/1", "claude-sdk/claude-haiku-4-5")
+        assert loop_run._runs_of(d, "v1", split, split_ids(d, split), 1) == []
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(loop_run, "SIM_RULES", meta.sim_rules)
+            mp.setattr(loop_run, "USER_MODEL", "haiku")
+            assert loop_run._runs_of(d, "v1", split, split_ids(d, split), 1)[0].run_id == run
     meta, results = load_run(BANKING_V1_V3[0])
     v1 = load_version(d, "v1")
     # v1's one run of split v3 and v2's, over all 60 train tasks; v2's test ids stay out

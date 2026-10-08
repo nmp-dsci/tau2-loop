@@ -14,7 +14,7 @@ MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
 AGENT_PORT ?= 8091
 KIND ?= gate
-# USER_MODEL unset: the customer is Haiku (eval/runner.USER_MODEL); another makes the run an experiment the loop never reuses
+# USER_MODEL unset: the customer is Sonnet (eval/runner.USER_MODEL, s18); another makes the run an experiment the loop never reuses
 USER_MODEL ?=
 
 help: ## list targets
