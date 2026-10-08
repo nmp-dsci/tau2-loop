@@ -322,12 +322,17 @@ class FileStore:
                     raise CommitRefusedError(f"{w['job']} exists and the write did not read it")
             log = self.commits()
             seq = log[-1]["seq"] + 1 if log else 1
+            logged: dict[str, int] = {}
+            for c in log:
+                logged[c["job"]] = max(logged.get(c["job"], 0), c["version"])
             out: dict[str, int] = {}
             lines = []
             for w in writes:
                 reads = dict(w.get("reads") or {})
-                version = 1 + max(reads.values(), default=0)
+                version = 1 + max([*reads.values(), logged.get(w["job"], 0)])
                 d = self.dir / "versions" / w["job"]
+                if (d / f"{version}.json").exists():
+                    raise CommitRefusedError(f"{w['job']} version {version} is already on disk")
                 d.mkdir(parents=True, exist_ok=True)
                 (d / f"{version}.json").write_text(
                     json.dumps(w["workflow"], indent=1, ensure_ascii=False) + "\n"
@@ -346,6 +351,7 @@ class FileStore:
                     }
                 )
                 out[w["job"]] = version
+                logged[w["job"]] = version
                 seq += 1
             with (self.dir / "commits.jsonl").open("a", encoding="utf-8") as f:
                 for line in lines:

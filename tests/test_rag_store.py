@@ -159,6 +159,24 @@ def test_the_library_replays_from_its_log_and_a_merged_name_retires(tmp_path: Pa
     assert (c["version"], c["retired"], c["task"]) == (1, ["retention_b"], "task_046")
 
 
+def test_a_retired_name_recreated_gets_a_new_version_and_keeps_the_old_file(
+    tmp_path: Path,
+) -> None:
+    st = seeded(tmp_path, "a")
+    lk = st.lock(["b"], "A", "task_001")
+    write(st, lk, "b", {}, "first")
+    st.release(lk)
+    lk = st.lock(["a", "b"], "A", "task_002")
+    write(st, lk, "a", {"a": 0, "b": 1}, "verify", "merged")
+    st.release(lk)
+    first = st.commits()[0]["seq"]
+    lk = st.lock(["b"], "A", "task_003")
+    assert write(st, lk, "b", {}, "second") == {"b": 2}
+    assert [s["id"] for s in st.entries(upto=first)[-1]["workflow"]["steps"]] == ["first"]
+    assert [e["job"] for e in st.entries(upto=first)] == ["a", "b"]
+    assert [s["id"] for s in st.entries()[-1]["workflow"]["steps"]] == ["second"]
+
+
 def test_the_seed_is_pinned_the_first_time_it_is_read(tmp_path: Path) -> None:
     seed = [
         {"job": "dispute", "workflow": job("dispute", "verify"), "session": "s1", "task_id": "t"}
