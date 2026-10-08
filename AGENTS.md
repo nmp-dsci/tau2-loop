@@ -100,6 +100,7 @@ judge_runs/<ts>_<domain>_<jN>_train/  a judge replay: run.json · verdicts.jsonl
 rag_agents/<domain>/rN/  workflow_rag (banking's second agent): rag_agent.md · rag_agent.yaml (frozen); r2 adds
                           merge.md (s20: seeded with r1's library, each question merged in, never replaced);
                           r3 adds decide.md (s21: several workers at once, each locking the jobs it writes);
+                          r4 is r3 at less cost (8 Oct): write turns keep the tools, merges may be edits;
                           rag_agent_runs/ its train-question sessions, live_runs/ live demo conversations (immutable)
 rag_library/<domain>/rN/  a concurrent version's library (s21): commits.jsonl (append-only, kept) · versions/ ·
                           seed.json (pinned); locks.json is runtime only (git-ignored)
@@ -120,7 +121,8 @@ src/tau2_loop/
   tracking/               registry · mlflow_log (runs, required tags, preflight) · tracing (a trace per
                           conversation) · prompts (the prompt registry) · snapshot · gate (CI)
   workflows/              workflow_rag: rag_agent (sessions; r2's merge, r3's merge under locks) · library
-                          (find_workflow lookup, seed, aliases) · store (s21: locks, leases, commits) · rubric
+                          (find_workflow lookup, seed, aliases) · store (s21: locks, leases, commits) · edits
+                          (r4: a merge as edits on one job's newest version) · rubric
                           (s20: D1–D8 without a model, the merge gate) · golden (RULES)
   serving/app.py          FastAPI + SPA; one write route (POST /api/review/…)
 infra/roles.sql           schema tau2_loop on the central Postgres: review · submission (app state only)

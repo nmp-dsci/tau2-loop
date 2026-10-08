@@ -109,7 +109,21 @@
   locks them all at once (a lease with a fencing token), the merge reads their newest versions,
   and a commit is refused unless every version it read is still the head. r3's library is its
   commit log, not session order; `make rag-locks` and the Agent tab show who holds what. Every
-  message the harness sends is saved as a `user` event, so a session replays turn for turn.
+  message the harness sends is saved as a `user` event, so a session replays turn for turn. r4 (8 Oct
+  2026, the person's call, not run) is r3 at less cost, since r3 cost 1.6× r2 a question: a turn
+  that must write keeps the tools listed and refuses a call (`keep_tools`; dropping them changed the
+  prompt's first block, so r3's decide turns read 3% from cache), and a merge into one library job
+  may be written as edits on its newest version (`merge_write: edits`, `workflows/edits.py`), which
+  the harness applies before the same rubric. Seeded with r3, it queues nothing r3's library merged.
+  **r3 also researches test** (8 Oct 2026, the person's call, `make rag-build RAG=r3 SPLIT=test`;
+  the default stays train only, and the viewer still refuses a test question): each test question
+  gets the same step before answering that each train question had, a workflow researched from its
+  customer's script, never from gold, and v8 reads the library on test exactly as on train (one
+  `find_workflow` over the whole library, no split or task filter). Test stays held out of
+  optimisation: no test outcome reaches a prompt. The script is more than the customer's opening
+  words (their details and how they will react), so a version without this step, v4 or v7, is a
+  different pipeline, not the same agent with less data. v8's train run is its smoke (14/20, run
+  `20261007T224313Z`, on r3 before test went in) extended by the other 40 (`make extend NOTE=`).
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

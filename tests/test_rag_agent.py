@@ -551,6 +551,61 @@ def test_an_r3_merge_into_a_job_it_did_not_name_is_sent_back_then_not_taken(
     assert (head["job"], head["version"]) == ("cash_back_dispute", 0)  # r1's, as seeded
 
 
+def test_an_r3_job_that_keeps_its_new_name_while_it_merges_an_old_one_is_committed(
+    r3_library: Path,
+) -> None:
+    from tau2_loop.workflows import library
+
+    # task_089's shape: the draft is new, the decision merges an old job into it, and the merge
+    # keeps the draft's name and retires the old one
+    kept = json.loads(merged([*OLD["steps"], BRANCH_A], [{"change": "added", "what": "explain_a"}]))
+    kept["jobs"][0] = {
+        **kept["jobs"][0],
+        "job": "submitting_a_cash_back_dispute",
+        "aliases": ["cash_back_dispute"],
+    }
+    ask, _ = scripted([Reply(json.dumps(DRAFT)), Reply(DECIDED), Reply(json.dumps(kept))])
+    meta = rag_agent.start(
+        D, "task_089", "r3", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    out = rag_agent.session(D, meta.id)["output"]
+    assert out["lock"]["jobs"] == ["cash_back_dispute", "submitting_a_cash_back_dispute"]
+    assert out["lock"]["error"] is None
+    assert out["lock"]["committed"] == {"submitting_a_cash_back_dispute": 1}
+    [head] = library.entries(D, "r3")
+    assert (head["job"], head["version"]) == ("submitting_a_cash_back_dispute", 1)
+    assert library.store_for(D, "r3").commits()[0]["retired"] == ["cash_back_dispute"]
+
+
+def test_an_r3_merge_that_renames_its_job_is_sent_back_then_not_taken(r3_library: Path) -> None:
+    from tau2_loop.workflows import library
+
+    renamed = json.loads(merged([*OLD["steps"], BRANCH_A], [{"change": "added", "what": "a"}]))
+    renamed["jobs"][0]["job"] = "cash_back_disputes_all_cards"  # neither name the lock holds
+    again = json.dumps(renamed)
+    ask, _ = scripted([Reply(json.dumps(DRAFT)), Reply(DECIDED), Reply(again), Reply(again)])
+    meta = rag_agent.start(
+        D, "task_089", "r3", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    out = rag_agent.session(D, meta.id)["output"]
+    rec = out["merge"][0]
+    assert rec["taken"] is False and any("a name it did not name" in w for w in rec["failed"])
+    assert out["lock"]["error"] is None and out["lock"]["committed"] == {}
+    [head] = library.entries(D, "r3")
+    assert (head["job"], head["version"]) == ("cash_back_dispute", 0)
+
+
+def test_an_r3_question_whose_commit_was_refused_is_queued_again(r3_library: Path) -> None:
+    for tid, error in (("task_089", "CommitRefusedError: x not locked"), ("task_094", None)):
+        d = r3_library / f"20261007T105040Z_banking_knowledge_r3_{tid}"
+        d.mkdir()
+        meta = {"id": d.name, "domain": D, "agent": "r3", "status": "done", "source": "question"}
+        (d / "run.json").write_text(json.dumps({**meta, "task_id": tid}))
+        (d / "output.json").write_text(json.dumps({"jobs": [], "lock": {"error": error}}))
+    q = rag_agent.build_queue(D, "r3")
+    assert "task_089" in q and "task_094" not in q  # nothing of 089's was written
+
+
 def test_r3_keeps_what_r2_merged_and_queues_the_rest_shuffled(r3_library: Path) -> None:
     import random
 
@@ -576,7 +631,7 @@ def test_the_r3_build_runs_its_questions_on_several_workers(
     guard = threading.Lock()
 
     def fake_start(
-        domain: str, tid: str, rag: str, background: bool = True
+        domain: str, tid: str, rag: str, background: bool = True, split: str = "train"
     ) -> rag_agent.SessionMeta:
         with guard:
             running[0] += 1
@@ -607,3 +662,123 @@ def test_the_r3_build_runs_its_questions_on_several_workers(
     assert "6 train questions to research and merge, 3 workers, shuffled order" in r.output
     assert len(started) == len(set(started)) == 6 and peak[0] == 3  # each once, three at a time
     assert sorted(started) == sorted(rag_agent.build_queue(D, "r3")[:6])  # the queue's first six
+
+
+# ── r4: r3 at less cost: write turns keep the tools (the cache holds), merges may be edits ──
+def edited(*ops: dict[str, Any]) -> str:
+    job = {
+        "job": "cash_back_dispute",
+        "into": ["cash_back_dispute"],
+        "aliases": ["submitting_a_cash_back_dispute"],
+        "edits": list(ops),
+    }
+    return json.dumps({"jobs": [job], "documents": [], "open_questions": []})
+
+
+def test_an_r4_merge_written_as_edits_becomes_the_next_version(r3_library: Path) -> None:
+    from tau2_loop.workflows import library
+
+    add = {"op": "add", "list": "steps", "item": BRANCH_A, "why": "the no-discrepancy case"}
+    ask, seen = scripted([Reply(json.dumps(DRAFT)), Reply(DECIDED), Reply(edited(add))])
+    meta = rag_agent.start(
+        D, "task_019", "r4", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    out = rag_agent.session(D, meta.id)["output"]
+    assert out["lock"]["committed"] == {"cash_back_dispute": 1}
+    rec = out["merge"][0]
+    assert rec["taken"] is True and rec["written"]["edits"] == 1
+    assert rec["changelog"][0]["change"] == "added" and "explain_a" in rec["changelog"][0]["what"]
+    [head] = library.entries(D, "r4")
+    assert [s["id"] for s in head["workflow"]["steps"]] == ["verify", "give", "explain_a"]
+    assert head["workflow"]["done_when"] == OLD["done_when"]  # what it did not edit is r3's
+    assert out["jobs"][0]["steps"] == head["workflow"]["steps"]  # the output holds the whole job
+    # every turn offered the tools, the decide turn too, so the prompt cache reads it back
+    assert len(seen) == 3 and all(t for t in seen)
+    # r3's library is not touched
+    assert [s["id"] for s in library.entries(D, "r3")[0]["workflow"]["steps"]] == ["verify", "give"]
+
+
+def test_an_r4_write_turn_refuses_a_tool_call_instead_of_running_it(r3_library: Path) -> None:
+    ran: list[str] = []
+    ask, _ = scripted(
+        [
+            Reply(json.dumps(DRAFT)),
+            Reply(None, [call("KB_search_bm25", query="cash back")]),  # in the decide turn
+            Reply(DECIDED),
+            Reply(edited({"op": "add", "list": "steps", "item": BRANCH_A, "why": "x"})),
+        ]
+    )
+    meta = rag_agent.start(
+        D,
+        "task_019",
+        "r4",
+        ask=ask,
+        run_tool=lambda n, a: ran.append(n) or "",
+        env=FakeEnv(),
+        background=False,
+    )
+    s = rag_agent.session(D, meta.id)
+    assert ran == []  # nothing ran
+    tool = next(e for e in s["events"] if e["kind"] == "tool")
+    assert tool["refused"] and "no more tool calls" in tool["content"]
+    assert s["output"]["decision"] == {"submitting_a_cash_back_dispute": ["cash_back_dispute"]}
+    assert s["output"]["lock"]["committed"] == {"cash_back_dispute": 1}
+
+
+def test_r4_edits_that_name_nothing_are_sent_back_then_not_taken(r3_library: Path) -> None:
+    from tau2_loop.workflows import library
+
+    bad = edited({"op": "remove", "list": "steps", "key": "explain", "why": "x"})
+    ask, _ = scripted([Reply(json.dumps(DRAFT)), Reply(DECIDED), Reply(bad), Reply(bad)])
+    meta = rag_agent.start(
+        D, "task_019", "r4", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    s = rag_agent.session(D, meta.id)
+    rec = s["output"]["merge"][0]
+    assert rec["taken"] is False and "no single item of steps is 'explain'" in rec["failed"][0]
+    said = [e["text"] for e in s["events"] if e["kind"] == "user"]
+    assert "applied again to the library's newest version" in said[-1]  # the send-back
+    assert s["output"]["lock"]["error"] is None and s["output"]["lock"]["committed"] == {}
+    [head] = library.entries(D, "r4")
+    assert (head["job"], head["version"]) == ("cash_back_dispute", 0)
+
+
+def test_r4_queues_nothing_r3s_library_already_merged(r3_library: Path) -> None:
+    for agent, tid in (("r2", "task_001"), ("r3", "task_005")):
+        d = r3_library / f"20261007T010000Z_banking_knowledge_{agent}_{tid}"
+        d.mkdir()
+        meta = {"id": d.name, "domain": D, "agent": agent, "status": "done", "source": "question"}
+        (d / "run.json").write_text(json.dumps({**meta, "task_id": tid}))
+    q = rag_agent.build_queue(D, "r4")
+    assert "task_001" not in q and "task_005" not in q  # r2's and r3's merges are r4's seed
+    assert "task_018" in q  # r1 researched it but merged nothing
+    assert "task_018" in rag_agent.build_queue(D, "r3")  # r3's own queue is as it was
+
+
+# ── r3 on test (8 Oct 2026, the person's call): only when the build names the test split ──
+def test_a_build_on_the_test_split_queues_test_questions_and_records_the_split(
+    r3_library: Path,
+) -> None:
+    import random
+
+    test = sorted(split_ids(D, "test"), key=lambda t: int(t.split("_")[1]))
+    random.Random(rag_agent.load(D, "r3").order_seed).shuffle(test)
+    assert rag_agent.build_queue(D, "r3", split="test") == test
+    train_id = split_ids(D, "train")[0]
+    with pytest.raises(rag_agent.RagAgentError, match="not test questions"):
+        rag_agent.build_queue(D, "r3", [train_id], split="test")
+    with pytest.raises(rag_agent.RagAgentError, match="test is sealed"):
+        rag_agent.build_queue(D, "r3", [test[0]])  # the default is still train only
+    ask, _ = scripted([Reply(json.dumps(DRAFT)), Reply(DECIDED), Reply(merged(OLD["steps"]))])
+    meta = rag_agent.start(
+        D,
+        test[0],
+        "r3",
+        ask=ask,
+        run_tool=lambda n, a: "",
+        env=FakeEnv(),
+        background=False,
+        split="test",
+    )
+    assert rag_agent.session(D, meta.id)["meta"]["split"] == "test"
+    assert test[0] not in rag_agent.build_queue(D, "r3", split="test")  # done: not queued again

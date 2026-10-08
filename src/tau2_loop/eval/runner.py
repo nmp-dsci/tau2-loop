@@ -334,7 +334,9 @@ def _finish(
     return meta, results
 
 
-def extend_run(base_run_id: str, concurrency: int = 3) -> tuple[RunMeta, list[TaskResult]]:
+def extend_run(
+    base_run_id: str, concurrency: int = 3, note: str = ""
+) -> tuple[RunMeta, list[TaskResult]]:
     """Bring a scored run up to its split's current tasks without replaying what it scored: play
     only the tasks the split has gained (a custom run of them), then join the two into one run of
     the whole split (`compose_runs`). Refused unless the version's bytes, the simulation rules
@@ -366,7 +368,8 @@ def extend_run(base_run_id: str, concurrency: int = 3) -> tuple[RunMeta, list[Ta
         base.trials,
         concurrency,
         task_ids=missing,
-        note=f"the {len(missing)} {base.split} tasks split v{split_version(base.domain)} added "
+        note=note
+        or f"the {len(missing)} {base.split} tasks split v{split_version(base.domain)} added "
         f"to {base_run_id}",
     )
     return compose_runs(base_run_id, ext.run_id)

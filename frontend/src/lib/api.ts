@@ -349,6 +349,9 @@ export type RagVersion = {
   workers?: number;
   order?: string;
   queue?: string;
+  /** r4: write turns keep the tools listed, so the prompt cache holds; merges may be written as edits */
+  keep_tools?: boolean;
+  merge_write?: 'full' | 'edits';
 };
 /** s21: a RAG version's library now; a concurrent one also shows who holds or waits for which jobs. */
 export type RagLock = { jobs: string[]; holder: string; task: string; token?: number; held_s?: number; waited_s?: number };

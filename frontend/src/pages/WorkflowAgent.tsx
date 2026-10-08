@@ -580,6 +580,7 @@ export function WorkflowAgent() {
     <>
       <p className="label">
         Agent · workflow_rag · {domainLabel(domain)} · {v.name} · {shortModel(v.model)} · {v.effort} effort · {v.retrieval} retrieval · max {v.max_steps} steps
+        {v.merge_write === 'edits' && ' · merges written as edits'}
       </p>
       <h1>
         workflow_rag {v.name} researches one train question with the answering agent’s own search tools, and writes its <em>workflow</em>

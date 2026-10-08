@@ -101,12 +101,17 @@ def rag_build(
     task: Annotated[list[str] | None, typer.Option(help="only these train questions")] = None,
     limit: Annotated[int | None, typer.Option(help="stop after this many sessions")] = None,
     workers: Annotated[int | None, typer.Option(help="a concurrent version's workers")] = None,
+    split: Annotated[
+        str, typer.Option(help="train; test only by the person's call (r3, 8 Oct 2026)")
+    ] = "train",
 ) -> None:
     """Build a merging workflow_rag version's library. `merge: sequential` (s20, r2): its train
     questions in id order, one session at a time, each merged into the library the last one left.
     `merge: concurrent` (s21, r3): several at once, each locking the jobs it writes; a second
     build of the same version is refused. Resumable: a question with a finished session of this
-    version (or, with `queue: after_seed`, of its seed) is skipped."""
+    version (or, with `queue: after_seed`, of its seed) is skipped. `--split test` researches the
+    test questions into the same library, from each customer's script as on train and never from
+    gold (r3, the person's call, 8 Oct 2026), so an answering agent reads it on test as on train."""
     import queue as queues
     import threading
 
@@ -115,19 +120,25 @@ def rag_build(
     agent = rag_agent.load(domain, rag)
     if agent.merge not in ("sequential", "concurrent"):
         raise typer.BadParameter(f"{rag} does not merge; its sessions run one by one in the viewer")
-    todo = rag_agent.build_queue(domain, rag, task or None)
+    todo = rag_agent.build_queue(domain, rag, task or None, split)
     todo = todo[:limit] if limit else todo
     n_workers = 1 if agent.merge == "sequential" else max(1, workers or agent.workers)
     console.print(
-        f"{rag}: {len(todo)} train questions to research and merge, "
+        f"{rag}: {len(todo)} {split} questions to research and merge, "
         + ("one at a time" if n_workers == 1 else f"{n_workers} workers, {agent.order} order"),
         highlight=False,
     )
+    if split == "test":
+        console.print(
+            f"test questions go into {rag}'s library, each researched from its customer's script "
+            "as a train question is (no gold): the answering agent reads it on test as on train",
+            highlight=False,
+        )
     say = threading.Lock()
     done = [0]
 
     def run(tid: str) -> None:
-        meta = rag_agent.start(domain, tid, rag, background=False)
+        meta = rag_agent.start(domain, tid, rag, background=False, split=split)
         out = rag_agent.session(domain, meta.id).get("output") or {}
         taken = [r["job"] for r in out.get("merge") or [] if r.get("taken")]
         kept = [r["job"] for r in out.get("merge") or [] if not r.get("taken")]
@@ -294,14 +305,15 @@ def score(run_id: str) -> None:
 
 
 @app.command()
-def extend(run_id: str, concurrency: int = 3) -> None:
-    """Play only the tasks a run's split has gained since it was scored, and join them to it: one
-    run of the whole split. A champion's train run extended this way stays its record."""
+def extend(run_id: str, concurrency: int = 3, note: str = "") -> None:
+    """Play only the tasks of the run's split it has not scored (the tasks the split has gained
+    since, or the rest of a run of some of them, as a smoke), and join them to it: one run of the
+    whole split. A champion's train run extended this way stays its record."""
     from tau2_loop.eval.runner import extend_run
     from tau2_loop.tracking.registry import promote as _promote
     from tau2_loop.tracking.registry import read_registry
 
-    meta, _ = extend_run(run_id, concurrency)
+    meta, _ = extend_run(run_id, concurrency, note=note)
     if (read_registry(meta.domain).get("champion") or {}).get("run_id") == run_id:
         _promote(meta.run_id, kind="re-baseline")  # the same bytes on the split's new cut
         console.print(f"{meta.domain}'s champion {meta.agent} is now scored on runs/{meta.run_id}")
