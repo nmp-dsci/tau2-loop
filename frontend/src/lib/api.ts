@@ -343,6 +343,26 @@ export type RagVersion = {
   result_chars: number;
   prompt: string;
   tools: { name: string; description: string | null; type: string; mutates: boolean }[];
+  /** s20/s21: the version whose library it starts from, and how it merges into it */
+  seed?: string | null;
+  merge?: 'sequential' | 'concurrent' | null;
+  workers?: number;
+  order?: string;
+  queue?: string;
+  /** r4: write turns keep the tools listed, so the prompt cache holds; merges may be written as edits */
+  keep_tools?: boolean;
+  merge_write?: 'full' | 'edits';
+};
+/** s21: a RAG version's library now; a concurrent one also shows who holds or waits for which jobs. */
+export type RagLock = { jobs: string[]; holder: string; task: string; token?: number; held_s?: number; waited_s?: number };
+export type RagLibrary = {
+  version: string;
+  concurrent: boolean;
+  workers: number;
+  commits: number | null;
+  jobs: { job: string; version: number | null; session: string; task: string | null }[];
+  held: RagLock[];
+  waiting: RagLock[];
 };
 export type RagSessionMeta = {
   id: string;
@@ -364,7 +384,7 @@ export type RagSessionMeta = {
 /** One line of a session's `events.jsonl`: the model's turn, one tool call and its result, or a note. */
 export type RagEvent = {
   t: number;
-  kind: 'start' | 'model' | 'tool' | 'note' | 'error' | 'done';
+  kind: 'start' | 'model' | 'tool' | 'note' | 'error' | 'done' | 'user' | 'merge' | 'merged' | 'decided' | 'wait' | 'locked' | 'committed';
   step?: number;
   text?: string | null;
   calls?: { id: string; name: string; args: Record<string, unknown> }[];
@@ -380,6 +400,16 @@ export type RagEvent = {
   cut?: boolean;
   question?: string;
   status?: string;
+  /** s21: the lock a concurrent merge waited for, took and committed under */
+  jobs?: string[];
+  in_the_way?: { task: string | null; session: string; state: 'held' | 'waiting'; jobs: string[] }[];
+  token?: number;
+  versions?: Record<string, number>;
+  changed?: string[];
+  waited_ms?: number;
+  decision?: Record<string, string[]>;
+  taken?: string[];
+  rejected?: string[];
 };
 export type RagQuote = { quote: string; doc: string };
 export type RagStep = {
@@ -587,7 +617,14 @@ export type TraceMessage = {
   error: boolean;
   /** s09: what the version's code surfaces did on this reply — `guidance.py`'s reminder, and a
    *  write `checks.py` blocked before this retry. Absent on versions without them. */
-  harness?: { guidance?: string; blocked?: { name: string; arguments: Record<string, unknown>; check: string }[]; retried?: boolean } | null;
+  harness?: {
+    guidance?: string;
+    blocked?: { name: string; arguments: Record<string, unknown>; check: string }[];
+    retried?: boolean;
+    /** s18, the customer's turns: what eval/user.py's check withheld from the agent, and whether the retry passed */
+    customer_sent_back?: { rule: 'as_ai' | 'as_text' | 'denied' | 'invented'; content: string; why?: string }[];
+    fixed?: boolean;
+  } | null;
 };
 export type ExpectedAction = { action_id: string; name: string; arguments: Record<string, unknown>; requestor?: string };
 export type RewardInfo = {
@@ -697,7 +734,9 @@ export function fmtPct(x: number | null | undefined, digits = 0): string {
   return x == null ? '—' : `${(x * 100).toFixed(digits)}%`;
 }
 export function fmtS(ms: number | null | undefined): string {
-  return ms == null ? '—' : ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(0)}s`;
+  if (ms == null) return '—';
+  // a run's summed conversation time passes an hour: 17.2h, not 1031.0m
+  return ms >= 3600000 ? `${(ms / 3600000).toFixed(1)}h` : ms >= 60000 ? `${(ms / 60000).toFixed(1)}m` : `${(ms / 1000).toFixed(0)}s`;
 }
 export function fmtK(n: number | null | undefined): string {
   if (n == null) return '—';

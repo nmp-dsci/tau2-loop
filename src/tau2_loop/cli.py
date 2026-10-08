@@ -58,9 +58,12 @@ def fork(
             help="native only: keep every tool call of a reply",
         ),
     ] = None,
+    workflows: Annotated[
+        str | None, typer.Option(help="the workflow_rag version whose library it looks up, e.g. r2")
+    ] = None,
 ) -> None:
     """A new version with the champion's surfaces and a different model, effort, retrieval,
-    tool mode, identity note or parallel calls."""
+    tool mode, identity note, parallel calls or workflow library."""
     from tau2_loop.agent.versions import fork_version
     from tau2_loop.tracking.registry import champion_name
 
@@ -80,13 +83,175 @@ def fork(
         tool_mode=tool_mode,
         identity_note=identity_note,
         parallel_calls=parallel_calls,
+        workflows=workflows,
     )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "
         f"effort {v.config.effort} · tool mode {v.config.tool_mode} · retrieval "
         f"{v.retrieval or 'none'} · identity note {v.config.identity_note} · parallel calls "
-        f"{v.config.parallel_calls} · fingerprint {v.fingerprint}"
+        f"{v.config.parallel_calls} · workflows {v.config.workflows or 'none'} · "
+        f"fingerprint {v.fingerprint}"
     )
+
+
+@app.command("rag-build")
+def rag_build(
+    domain: str = "banking_knowledge",
+    rag: str = "r2",
+    task: Annotated[list[str] | None, typer.Option(help="only these train questions")] = None,
+    limit: Annotated[int | None, typer.Option(help="stop after this many sessions")] = None,
+    workers: Annotated[int | None, typer.Option(help="a concurrent version's workers")] = None,
+    split: Annotated[
+        str, typer.Option(help="train; test only by the person's call (r3, 8 Oct 2026)")
+    ] = "train",
+) -> None:
+    """Build a merging workflow_rag version's library. `merge: sequential` (s20, r2): its train
+    questions in id order, one session at a time, each merged into the library the last one left.
+    `merge: concurrent` (s21, r3): several at once, each locking the jobs it writes; a second
+    build of the same version is refused. Resumable: a question with a finished session of this
+    version (or, with `queue: after_seed`, of its seed) is skipped. `--split test` researches the
+    test questions into the same library, from each customer's script as on train and never from
+    gold (r3, the person's call, 8 Oct 2026), so an answering agent reads it on test as on train."""
+    import queue as queues
+    import threading
+
+    from tau2_loop.workflows import library, rag_agent
+
+    agent = rag_agent.load(domain, rag)
+    if agent.merge not in ("sequential", "concurrent"):
+        raise typer.BadParameter(f"{rag} does not merge; its sessions run one by one in the viewer")
+    todo = rag_agent.build_queue(domain, rag, task or None, split)
+    todo = todo[:limit] if limit else todo
+    n_workers = 1 if agent.merge == "sequential" else max(1, workers or agent.workers)
+    console.print(
+        f"{rag}: {len(todo)} {split} questions to research and merge, "
+        + ("one at a time" if n_workers == 1 else f"{n_workers} workers, {agent.order} order"),
+        highlight=False,
+    )
+    if split == "test":
+        console.print(
+            f"test questions go into {rag}'s library, each researched from its customer's script "
+            "as a train question is (no gold): the answering agent reads it on test as on train",
+            highlight=False,
+        )
+    say = threading.Lock()
+    done = [0]
+
+    def run(tid: str) -> None:
+        meta = rag_agent.start(domain, tid, rag, background=False, split=split)
+        out = rag_agent.session(domain, meta.id).get("output") or {}
+        taken = [r["job"] for r in out.get("merge") or [] if r.get("taken")]
+        kept = [r["job"] for r in out.get("merge") or [] if not r.get("taken")]
+        lk = out.get("lock") or {}
+        with say:
+            done[0] += 1
+            console.print(
+                f"[{done[0]}/{len(todo)}] {tid} {meta.status} in {meta.duration_ms / 60000:.1f} min · "
+                f"took {', '.join(taken) or 'nothing'}"
+                + (f" · kept the previous {', '.join(kept)}" if kept else "")
+                + (
+                    f" · waited {lk['waited_ms'] / 1000:.0f} s for a lock"
+                    if lk.get("waited_ms", 0) >= 1000
+                    else ""
+                )
+                + (f" · {meta.error}" if meta.error else "")
+                + (f" · {lk['error']}" if lk.get("error") else ""),
+                highlight=False,
+                soft_wrap=True,
+            )
+
+    if n_workers == 1:
+        for tid in todo:
+            run(tid)
+        return
+    jobs: queues.Queue[str] = queues.Queue()
+    for tid in todo:
+        jobs.put(tid)
+
+    def worker() -> None:
+        while True:
+            try:
+                tid = jobs.get_nowait()
+            except queues.Empty:
+                return
+            try:
+                run(tid)
+            except Exception as e:  # noqa: BLE001 - one question's failure must not stop the build
+                with say:
+                    console.print(
+                        f"{tid} failed to start: {type(e).__name__}: {e}", highlight=False
+                    )
+
+    with library.store_for(domain, rag).build_guard():
+        threads = [
+            threading.Thread(target=worker, name=f"{rag}-w{i + 1}") for i in range(n_workers)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+
+@app.command("rag-locks")
+def rag_locks(domain: str = "banking_knowledge", rag: str = "r3") -> None:
+    """Who is updating which workflow (s21): a concurrent version's held and waiting locks."""
+    from tau2_loop.workflows import library
+
+    st = library.store_for(domain, rag).locks()
+    if not st["held"] and not st["waiting"]:
+        console.print(f"{rag}: no worker holds or waits for a workflow")
+    for h in st["held"]:
+        console.print(
+            f"held    {h['task']:<9} {', '.join(h['jobs'])} · {h['held_s']:.0f} s · token {h['token']}",
+            highlight=False,
+            soft_wrap=True,
+        )
+    for w in st["waiting"]:
+        console.print(
+            f"waiting {w['task']:<9} {', '.join(w['jobs'])} · {w['waited_s']:.0f} s",
+            highlight=False,
+            soft_wrap=True,
+        )
+
+
+@app.command("rag-replay")
+def rag_replay(
+    domain: str = "banking_knowledge",
+    rag: str = "r3",
+    at: Annotated[
+        int | None, typer.Option(help="the commit to stop at; default every commit")
+    ] = None,
+) -> None:
+    """A concurrent version's library as of any commit (s21): each job, its version, and the
+    question that wrote it, as JSON."""
+    import json
+
+    from tau2_loop.workflows import library
+
+    st = library.store_for(domain, rag)
+    rows = [
+        {
+            "job": e["job"],
+            "version": e["version"],
+            "session": e["session"],
+            "task": e.get("task_id"),
+        }
+        for e in st.entries(upto=at)
+    ]
+    typer.echo(
+        json.dumps({"rag": rag, "at": at, "commits": len(st.commits()), "jobs": rows}, indent=1)
+    )
+
+
+@app.command("rag-rubric")
+def rag_rubric(domain: str = "banking_knowledge", rag: str = "r2") -> None:
+    """The rubric's checks over a workflow_rag version's whole library (s20), no model."""
+    import json
+
+    from tau2_loop.workflows import rubric
+
+    rep = rubric.library_report(domain, rag)
+    typer.echo(json.dumps({k: rep[k] for k in ("rag", "n", "mean", "below")}))
 
 
 @app.command()
@@ -140,14 +305,15 @@ def score(run_id: str) -> None:
 
 
 @app.command()
-def extend(run_id: str, concurrency: int = 3) -> None:
-    """Play only the tasks a run's split has gained since it was scored, and join them to it: one
-    run of the whole split. A champion's train run extended this way stays its record."""
+def extend(run_id: str, concurrency: int = 3, note: str = "") -> None:
+    """Play only the tasks of the run's split it has not scored (the tasks the split has gained
+    since, or the rest of a run of some of them, as a smoke), and join them to it: one run of the
+    whole split. A champion's train run extended this way stays its record."""
     from tau2_loop.eval.runner import extend_run
     from tau2_loop.tracking.registry import promote as _promote
     from tau2_loop.tracking.registry import read_registry
 
-    meta, _ = extend_run(run_id, concurrency)
+    meta, _ = extend_run(run_id, concurrency, note=note)
     if (read_registry(meta.domain).get("champion") or {}).get("run_id") == run_id:
         _promote(meta.run_id, kind="re-baseline")  # the same bytes on the split's new cut
         console.print(f"{meta.domain}'s champion {meta.agent} is now scored on runs/{meta.run_id}")

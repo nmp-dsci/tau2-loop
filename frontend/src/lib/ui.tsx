@@ -40,8 +40,9 @@ export function Rate({
       <span className="track">
         <i className={r < 0.1 ? 'warn' : ''} style={{ width: `${Math.max(1, r * 100)}%` }} />
       </span>
+      {/* breaks only after the ·, where a .tw.fit column is too narrow for one line */}
       <span className="mono">
-        {fmtPct(r, digits)} · {passed}/{n}
+        {fmtPct(r, digits)}&nbsp;· {passed}/{n}
       </span>
     </span>
   );
@@ -57,7 +58,7 @@ export function ActionsDone({ frac, count, title }: { frac: number | null | unde
         <i className={frac < 0.5 ? 'warn' : ''} style={{ width: `${Math.max(1, frac * 100)}%` }} />
       </span>
       <span className="mono">
-        {frac.toFixed(2)} · {count}
+        {frac.toFixed(2)}&nbsp;· {count.replace(/ /g, '\u00a0')}
       </span>
     </span>
   );

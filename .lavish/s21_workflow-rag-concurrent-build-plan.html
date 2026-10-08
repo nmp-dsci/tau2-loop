@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>workflow_rag concurrent build</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap">
+<style>
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7;
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8;
+  --judge:#5B3A8C; --judge-soft:#EEE9F6;
+  --agent:#235A8C; --agent-soft:#E7EFF8;
+  --user:#6E5A2E; --user-soft:#F5F0E1;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  color-scheme:dark;
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink-2);font:400 var(--t0)/1.6 var(--sans)}
+a{color:var(--accent);text-underline-offset:.18em}
+a:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:.92em;overflow-wrap:anywhere}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top span{font:400 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+header.top .r{margin-left:auto}
+main{max-width:var(--w);margin:0 auto;padding:var(--s7) var(--s4) var(--s9)}
+.label,.fig-title,thead th,.eyebrow{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+h1{font:400 var(--t4)/1.2 var(--serif);color:var(--ink);margin:var(--s3) 0 0;max-width:30ch;text-wrap:balance}
+h1 em{font-style:italic;font-weight:400;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);color:var(--ink);margin:var(--s8) 0 0;text-wrap:balance}
+h3{font:600 var(--t1)/1.3 var(--sans);color:var(--ink);margin:0 0 var(--s2)}
+p{max-width:var(--measure);text-wrap:pretty}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure);margin-top:var(--s4)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch;margin-top:var(--s3)}
+.path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:2px;overflow-wrap:anywhere}
+nav.toc{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin-top:var(--s5);font:400 var(--t-1)/1.4 var(--sans)}
+.fig-title{display:block;margin-top:var(--s5)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{text-align:left;padding:var(--s3) var(--s3);border-bottom:1px solid var(--line-2);white-space:normal;vertical-align:bottom}
+thead th.num{text-align:right}
+thead tr.grp th{border-bottom:0;padding-bottom:0;color:var(--ink-2)}
+td{padding:var(--s3);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+th:first-child,td:first-child{padding-left:var(--s4)}
+th:last-child,td:last-child{padding-right:var(--s4)}
+td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.sub{color:var(--ink);font-weight:500;min-width:16ch}
+td.sub.mono{font-weight:400;font-size:var(--t-1)}
+td.wrap{min-width:20ch;max-width:48ch}
+td.small,.small{font-size:var(--t-1)}
+td.split{border-left:1px solid var(--line)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+tr.pro td{background:var(--band)}
+.muted{color:var(--faint)}
+.v-ok{color:var(--ok);font-weight:500}
+.v-no{color:var(--accent);font-weight:500}
+.v-warn{color:var(--amber);font-weight:500}
+td.num .path{text-align:right}
+/* fig 2: bars as table cells, so labels stay legible at any width */
+td.barcell{min-width:15ch;width:38%}
+.track{display:block;height:12px;border-radius:var(--r-sm);background:var(--band);overflow:hidden}
+.fill{display:block;height:100%;border-radius:var(--r-sm)}
+.fill.v7{background:var(--ink-2)}
+.fill.v4{background:var(--line-3)}
+.val{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--ink-2);margin-top:var(--s1)}
+td.who{font:500 var(--t-1)/1.4 var(--mono);color:var(--ink);white-space:nowrap}
+tr.first td{border-bottom:0;padding-bottom:var(--s1)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);min-width:0}
+.card ul,.card ol{margin:0;padding-left:1.2em}
+.card li{margin-top:var(--s2)}
+ol.qa{padding-left:1.2em;max-width:84ch}
+ol.qa li{margin-top:var(--s3)}
+section.band{background:var(--band);margin:var(--s8) calc(-1 * var(--s4)) 0;padding:var(--s2) var(--s4) var(--s7);border-radius:var(--r)}
+section.band h2{margin-top:var(--s5)}
+section.band .tw,section.band .card{background:var(--panel)}
+@media (max-width:640px){h1{font-size:var(--t3)} main{padding-top:var(--s5)}
+/* a phone stacks each row into labelled lines (data-label), so no column is scrolled off */
+.tw.stack{overflow-x:visible}
+.tw.stack table,.tw.stack tbody,.tw.stack tr,.tw.stack td{display:block;width:auto;min-width:0;max-width:none}
+.tw.stack thead{display:none}
+.tw.stack tr{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+.tw.stack tr:last-child{border-bottom:0}
+.tw.stack td,.tw.stack td:first-child,.tw.stack td:last-child{padding:var(--s1) 0;border:0;text-align:left;white-space:normal}
+.tw.stack td[data-label]{position:relative;padding-left:7.5rem}
+.tw.stack td[data-label]::before{content:attr(data-label);position:absolute;left:0;top:var(--s1);width:7rem;font:500 var(--t-2)/1.6 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.tw.stack td.num .path{text-align:left}
+.tw.stack tr.first{padding-bottom:0}
+.tw.stack td.barcell{width:auto}
+.tw.stack td:empty{display:none}
+}
+
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink);margin-top:var(--s3)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.us{fill:var(--user-soft);stroke:var(--user)}
+.dia .nd.ag{fill:var(--agent-soft);stroke:var(--agent)}
+.dia .nd.ok{fill:var(--ok-soft);stroke:var(--ok)}
+.dia .nd.warn{fill:var(--amber-soft);stroke:var(--amber)}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.no{stroke:var(--accent)}
+.dia .ed.ok{stroke:var(--ok)}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 13px var(--sans);fill:var(--muted)}
+.dia .tx.m{font:400 13px var(--mono);fill:var(--ink-2)}
+.dia .tx.k{font:500 13px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia marker path{fill:var(--line-3)}
+.figwrap{overflow-x:auto}
+.figwrap .dia{min-width:640px}
+q.said{display:block;font:400 var(--t-1)/1.5 var(--mono);color:var(--ink);background:var(--user-soft);border-left:3px solid var(--user);border-radius:var(--r-sm);padding:var(--s2) var(--s3);quotes:none;overflow-wrap:anywhere}
+.mech{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.mech .card h3 .k{display:block;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-bottom:var(--s1)}
+.mech .card p{font-size:var(--t-1);margin:var(--s2) 0 0}
+.opt3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.opt3 .card{border-top:3px solid var(--line-2)}
+.opt3 .card.built{border-top-color:var(--ok)}
+.opt3 .card.rec{border-top-color:var(--accent)}
+.opt3 .card .tag{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.opt3 .card dl{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s1);margin:var(--s3) 0 0}
+.opt3 .card dt{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s2)}
+.opt3 .card dd{margin:0;color:var(--ink-2);font-size:var(--t-1)}
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+pre.snip{font:400 var(--t-1)/1.5 var(--mono);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4);overflow-x:auto;margin-top:var(--s3);color:var(--ink-2)}
+
+.codewrap{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);margin-top:var(--s3);overflow:hidden;min-width:0}
+.codewrap .hd{overflow-wrap:anywhere;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+.codewrap .bd{min-height:120px;overflow-x:auto}
+.codewrap pre.fallback{margin:0;padding:var(--s4);font:400 var(--t-1)/1.5 var(--mono);color:var(--ink-2);white-space:pre-wrap}
+.dia .lane{fill:var(--band)}
+.dia .sg-r{fill:var(--agent-soft);stroke:var(--agent);stroke-width:1}
+.dia .sg-d{fill:var(--judge-soft);stroke:var(--judge);stroke-width:1}
+.dia .sg-w{fill:var(--amber);stroke:var(--amber);stroke-width:1}
+.dia .sg-m{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}
+.dia .tick{stroke:var(--line);stroke-width:1}
+.dia .life{stroke:var(--line-2);stroke-width:1.25;stroke-dasharray:4 4}
+.dia .ed.warn{stroke:var(--amber)}
+.dia .tx.w{fill:var(--amber)}
+.dia .tx.a{fill:var(--accent)}
+.dia .tx.o{fill:var(--ok)}
+.dia .tx.sm{font:400 11px var(--mono);fill:var(--ink-2)}
+.rec-card{border-left:4px solid var(--ok)}
+.chip{display:inline-block;font:500 var(--t-2)/1.5 var(--mono);padding:1px var(--s2);border-radius:var(--r-sm);background:var(--band);color:var(--muted);white-space:nowrap}
+.chip.lock{background:var(--accent-soft);color:var(--accent)}
+.chip.wait{background:var(--amber-soft);color:var(--amber)}
+.chip.free{background:var(--ok-soft);color:var(--ok)}
+.mock{margin-top:var(--s3);border:1px solid var(--line-2);border-radius:var(--r);background:var(--bg);padding:var(--s4);min-width:0}
+.mock .hdr{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);align-items:baseline;justify-content:space-between}
+.mock .hdr h3{margin:0}
+.kvs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:var(--s3);margin-top:var(--s4)}
+.kvs .card{padding:var(--s4)}
+.kvs .k{display:block;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.kvs .v{display:block;font:500 var(--t2)/1.2 var(--mono);color:var(--ink);margin-top:var(--s1);font-variant-numeric:tabular-nums}
+.kvs .n{display:block;font-size:var(--t-1);color:var(--muted);margin-top:var(--s1)}
+td.barcell .track{position:relative}
+.fill.d{background:var(--ok)}
+.fill.x{background:var(--line-3)}
+.fill.s{background:var(--ink-2)}
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0}
+form.q h3{margin:0 0 var(--s3)}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span>banking · workflow_rag · building the library with several workers</span><span class="r">S21 · 7 Oct 2026</span></div></header>
+<main>
+<p class="eyebrow">Plan · decided and built 7 Oct · r2 paused at 34 of 60 · r3 not run yet · train questions only</p>
+<h1>Research together; <em>lock</em> only the workflows a merge writes</h1>
+<p class="lead">r2 builds its library one question at a time, because each merge must start from the version the last one left. A real deployment takes questions as they come, several at once. Your idea holds, with two refinements. Research never reads the library (4.5 minutes, the median of 30 sessions), so it needs no lock. A worker locks only the workflows it is about to write. It holds the lock while it merges (2.9 minutes), and it merges into the newest version, so a commit made while it worked is picked up, not overwritten. A shared lock table tells every worker, and you in the viewer, who is updating which workflow. Replayed on the 30 sessions with 4 workers and a shuffled queue, the build takes 1.21 hours against 4.22 one at a time.</p>
+<nav class="toc"><a href="#s1">the split</a><a href="#s2">collisions</a><a href="#s3">designs</a><a href="#s4">one worker</a><a href="#s5">two workers</a><a href="#s6">who is updating</a><a href="#s7">failures</a><a href="#s8">state</a><a href="#s9">replay</a><a href="#s10">a simulated build</a><a href="#s11">steps</a><a href="#s12">risks</a><a href="#s13">decisions</a><a href="#s14">sources</a></nav>
+
+<section id="s1">
+<h2>01 · The split — research needs no library; merging does</h2>
+<span class="fig-title">Fig 1 · one r2 session at the medians of 30, to scale</span>
+<div class="figwrap"><svg class="dia" viewBox="0 0 960 190" role="img" aria-label="One r2 session at the medians of 30: 4.5 minutes of research that never reads the library, then 2.9 minutes of merging that reads and writes it">
+<g id="split-axis"><title>Minutes, to scale</title>
+<line class="tick" x1="40" y1="44" x2="40" y2="54"/><text class="tx sm" x="36" y="38">0</text><line class="tick" x1="120" y1="44" x2="120" y2="54"/><text class="tx sm" x="116" y="38">1</text><line class="tick" x1="200" y1="44" x2="200" y2="54"/><text class="tx sm" x="196" y="38">2</text><line class="tick" x1="280" y1="44" x2="280" y2="54"/><text class="tx sm" x="276" y="38">3</text><line class="tick" x1="360" y1="44" x2="360" y2="54"/><text class="tx sm" x="356" y="38">4</text><line class="tick" x1="440" y1="44" x2="440" y2="54"/><text class="tx sm" x="436" y="38">5</text><line class="tick" x1="520" y1="44" x2="520" y2="54"/><text class="tx sm" x="516" y="38">6</text><line class="tick" x1="600" y1="44" x2="600" y2="54"/><text class="tx sm" x="596" y="38">7</text><line class="tick" x1="680" y1="44" x2="680" y2="54"/><text class="tx sm" x="676" y="38">8</text>
+<text class="tx k" x="760" y="38">minutes</text></g>
+<g id="split-research"><title>Research: the knowledge-base tools only; the draft is written before the library is shown</title>
+<rect class="sg-r" x="40" y="56" width="361" height="44" rx="6"/>
+<text class="tx" x="52" y="83">research · 4.5 min</text>
+<text class="tx s" x="40" y="128">reads the knowledge base only</text><text class="tx s" x="40" y="148">no lock needed, any number at once</text></g>
+<g id="split-merge"><title>Merge: the current versions of up to four library jobs per drafted job, then a new version of each job it shares</title>
+<rect class="sg-m" x="401" y="56" width="232" height="44" rx="6"/>
+<text class="tx" x="413" y="83">merge · 2.9 min</text>
+<text class="tx s" x="401" y="128">reads and writes the library</text><text class="tx s" x="401" y="148">the only part two workers can collide in</text></g>
+</svg></div>
+<div class="tw stack"><table>
+<thead><tr><th>phase</th><th class="num">median</th><th class="num">p90</th><th class="num">of the 30 sessions' 4.22 h</th><th>reads the library</th><th>writes it</th></tr></thead>
+<tbody>
+<tr><td class="sub" data-label="phase">research</td><td class="num" data-label="median">4.5 min</td><td class="num" data-label="p90">10.5 min</td><td class="num" data-label="share">2.65 h · 63%</td><td class="wrap" data-label="reads">no: the knowledge-base tools only; the library is shown after the draft</td><td data-label="writes">no</td></tr>
+<tr><td class="sub" data-label="phase">merge</td><td class="num" data-label="median">2.9 min</td><td class="num" data-label="p90">5.4 min</td><td class="num" data-label="share">1.56 h · 37%</td><td class="wrap" data-label="reads">yes: up to 4 candidate jobs per drafted job, in full</td><td class="wrap" data-label="writes">yes: the next version of every job it shares</td></tr>
+</tbody></table></div>
+<p class="cap">From each session's <code>events.jsonl</code>: research runs from the start to the <code>merge</code> event, and the merge from there to <code>merged</code>, send-backs included (6 in 30 sessions). Sessions task_001 to task_059, the first 30 of r2's build in id order.<span class="path">rag_agent_runs/*_banking_knowledge_r2_*/events.jsonl · r2/rag_agent.md (“After your draft, the harness shows you the library's current version”)</span></p>
+<p class="insight">Research is most of the time, as you said, but the merge is not a short tail: 37% of the hours, and a lock held across it is held for about three minutes. So what gets locked decides how long others wait.</p>
+</section>
+
+<section id="s2" class="band">
+<h2>02 · Collisions — 43 of 435 question pairs write one workflow</h2>
+<div class="kvs">
+<div class="card"><span class="k">pairs sharing a workflow it reads</span><span class="v">238 of 435</span><span class="n">a merge is shown a median 4 candidates</span></div>
+<div class="card"><span class="k">pairs sharing a workflow it writes</span><span class="v">43 of 435</span><span class="n">a merge writes a median 2 jobs</span></div>
+<div class="card"><span class="k">new workflows created</span><span class="v">1 of 30</span><span class="n">sessions; the rest merged into existing jobs</span></div>
+</div>
+<span class="fig-title">Fig 2 · the workflows written most often in the 30 sessions</span>
+<div class="tw stack"><table>
+<thead><tr><th>workflow</th><th class="num">written by</th></tr></thead>
+<tbody>
+<tr><td class="sub mono" data-label="workflow">submitting_a_cash_back_dispute</td><td class="num" data-label="written by">7 of 30</td></tr>
+<tr><td class="sub mono" data-label="workflow">applying_resolved_cash_back_dispute_corrections</td><td class="num" data-label="written by">6 of 30</td></tr>
+<tr><td class="sub mono" data-label="workflow">filing_a_credit_card_transaction_dispute</td><td class="num" data-label="written by">4 of 30</td></tr>
+<tr><td class="sub mono" data-label="workflow">credit_card_retention_protocol</td><td class="num" data-label="written by">4 of 30</td></tr>
+<tr><td class="sub mono" data-label="workflow">recommend_personal_credit_card</td><td class="num" data-label="written by">3 of 30</td></tr>
+<tr><td class="sub mono" data-label="workflow">processing_cli_approvals_and_denials</td><td class="num" data-label="written by">3 of 30</td></tr>
+</tbody></table></div>
+<p class="cap">“Written” counts a session's merged job and the names it merged into. All 7 sessions that wrote <code>submitting_a_cash_back_dispute</code> are train questions task_018 to task_029: ids come in topic runs, so taking them in id order puts the colliding ones side by side.</p>
+<p class="insight">Lock what a merge reads and more than half of all pairs wait on each other. Lock what it writes and one pair in ten does.</p>
+</section>
+
+<section id="s3">
+<h2>03 · Five designs — replayed on the 30 measured sessions</h2>
+<span class="fig-title">Fig 3 · hours to build the 30, waits and re-merges · bars to scale against one at a time</span>
+<div class="tw stack"><table>
+<thead><tr><th>design</th><th>4 workers</th><th class="num">2 · 8 workers</th><th class="num">waited · 4 workers</th><th class="num">re-merged · 4 workers</th><th>cost</th></tr></thead>
+<tbody>
+<tr><td class="sub" data-label="design">A · One at a time (today)<span class="path">every question waits for the last</span></td><td class="barcell" data-label="4 workers"><span class="track"><span class="fill s" style="width:100.0%"></span></span><span class="val">4.22 h · 253 min</span><span class="path">1 worker</span></td><td class="num" data-label="2 · 8">—</td><td class="num" data-label="waited">—</td><td class="num" data-label="re-merged">—</td><td class="wrap small" data-label="cost">r2's build now. Nothing to coordinate, nothing faster.</td></tr>
+<tr><td class="sub" data-label="design">B · One merge at a time<span class="path">every merge waits for any merge</span></td><td class="barcell" data-label="4 workers"><span class="track"><span class="fill x" style="width:39.1%"></span></span><span class="val">1.65 h · 99 min</span></td><td class="num" data-label="2 · 8">2.3 · 1.6 h</td><td class="num" data-label="waited">28 of 30<span class="path">122 min in all</span></td><td class="num" data-label="re-merged">0 of 30</td><td class="wrap small" data-label="cost">Research runs together, merges queue. Past 4 workers the merges are the floor: 1.56 h of merging in 30 sessions.</td></tr>
+<tr><td class="sub" data-label="design">C · Lock every workflow it reads<span class="path">a merge waits for any of its 4 candidates</span></td><td class="barcell" data-label="4 workers"><span class="track"><span class="fill x" style="width:37.9%"></span></span><span class="val">1.6 h · 96 min</span></td><td class="num" data-label="2 · 8">2.28 · 1.26 h</td><td class="num" data-label="waited">24 of 30<span class="path">110 min in all</span></td><td class="num" data-label="re-merged">0 of 30</td><td class="wrap small" data-label="cost">Safe, but 238 of 435 question pairs share a candidate, so most merges wait.</td></tr>
+<tr class=pro><td class="sub" data-label="design">D · Lock the workflows it writes<span class="path">a merge waits only for the jobs it will write</span></td><td class="barcell" data-label="4 workers"><span class="track"><span class="fill d" style="width:32.2%"></span></span><span class="val">1.36 h · 82 min</span><span class="path">shuffled queue: 1.21 h, median of 50 orders</span></td><td class="num" data-label="2 · 8">2.35 · 0.76 h</td><td class="num" data-label="waited">10 of 30<span class="path">30 min in all</span><span class="path">shuffled: 3 of 30, 5 min</span></td><td class="num" data-label="re-merged">0 of 30</td><td class="wrap small" data-label="cost">Your idea, refined: 43 of 435 pairs write a common workflow. Needs one short decide turn (costed at 0.5 min).</td></tr>
+<tr><td class="sub" data-label="design">E · Merge first, lock to commit<span class="path">no wait to merge; re-merge if the head moved</span></td><td class="barcell" data-label="4 workers"><span class="track"><span class="fill x" style="width:29.6%"></span></span><span class="val">1.25 h · 75 min</span><span class="path">shuffled queue: 1.15 h, median of 50 orders</span></td><td class="num" data-label="2 · 8">2.26 · 0.66 h</td><td class="num" data-label="waited">3 of 30<span class="path">5 min in all</span></td><td class="num" data-label="re-merged">11 of 30<span class="path">shuffled: 4 of 30</span></td><td class="wrap small" data-label="cost">As fast as D, but a moved head means another model turn merging three versions (base, theirs, yours): a new prompt to get right.</td></tr>
+</tbody></table></div>
+<p class="cap">An event-driven replay: each session keeps its measured research and merge minutes and the jobs it read and wrote in r2's build; N workers take the questions in id order unless shuffled. Assumed, not measured: D's decide turn at 0.5 min (at 1 min, D in id order takes 0.05 h longer at 4 workers), a re-merge at half a merge, no subscription throttling, and each session writing the same jobs it wrote when it ran alone.<span class="path">scratchpad s21/des.py · data.py</span></p>
+<div class="cards">
+<div class="card rec-card"><h3>Recommended: D, with a shuffled queue</h3><p>Every merge reads the newest version after it holds the lock, so r2's merge prompt and its D8 gate apply unchanged and nothing is ever re-merged. It is within 4 minutes of E at 4 workers. The lock table it needs is also the answer to “is another worker updating this workflow?”.</p></div>
+<div class="card"><h3>Why not E</h3><p>E skips the decide turn but merges against a version that may be gone by the time it commits: 11 of 30 in id order, about 4 of 30 shuffled. Each re-merge is a model merging three versions it half wrote, a new failure mode for D8 to catch. Worth it only if waits grow, at 8 workers and beyond.</p></div>
+</div>
+</section>
+
+<section id="s4" class="band">
+<h2>04 · One worker — research free, lock late, merge newest</h2>
+<span class="fig-title">Fig 4 · one worker's turn on one question · hover a stage for its rule</span>
+<div class="figwrap"><svg class="dia" viewBox="0 0 960 360" role="img" aria-label="One worker's turn: research with no lock, decide which workflows it will write, lock them all at once or wait, read their newest versions, merge, check, commit with a version check, release">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<g id="w-1"><title>Research as r2 does today: the knowledge-base tools, the customer&#x27;s script, never the library</title><rect class="nd ag" x="20" y="40" width="200" height="74" rx="10"/><text class="tx k" x="34" y="64">1 · research</text><text class="tx" x="34" y="88">draft its jobs</text><text class="tx s" x="34" y="106">no lock: KB tools only</text></g>
+<g id="w-2"><title>One turn: for each drafted job, the library jobs it is (from the snapshot&#x27;s candidates) or none, so the worker knows what to lock</title><rect class="nd " x="260" y="40" width="200" height="74" rx="10"/><text class="tx k" x="274" y="64">2 · decide</text><text class="tx" x="274" y="88">name what it writes</text><text class="tx s" x="274" y="106">one short turn, on a snapshot</text></g>
+<g id="w-3"><title>Ask for every job it will write in one call; if any is held, hold nothing, wait in line and write who holds it into the session log</title><rect class="nd warn" x="500" y="40" width="200" height="74" rx="10"/><text class="tx k" x="514" y="64">3 · lock</text><text class="tx" x="514" y="88">all its jobs at once</text><text class="tx s" x="514" y="106">held: wait, log the holder</text></g>
+<g id="w-4"><title>After the lock, read each job&#x27;s newest committed version: if another worker committed while this one researched or waited, this is its version</title><rect class="nd " x="740" y="40" width="200" height="74" rx="10"/><text class="tx k" x="754" y="64">4 · read newest</text><text class="tx" x="754" y="88">current version of each</text><text class="tx s" x="754" y="106">the newer file, if one landed</text></g>
+<g id="w-5"><title>r2&#x27;s merge.md with the newest versions: one version per job, every step kept unless the changelog names it</title><rect class="nd hi" x="740" y="230" width="200" height="74" rx="10"/><text class="tx k" x="754" y="254">5 · merge</text><text class="tx" x="754" y="278">newest + draft → next</text><text class="tx s" x="754" y="296">r2's merge prompt, unchanged</text></g>
+<g id="w-6"><title>rubric.gate against the newest versions; a job outside its lock is refused here too</title><rect class="nd " x="500" y="230" width="200" height="74" rx="10"/><text class="tx k" x="514" y="254">6 · check</text><text class="tx" x="514" y="278">D8 and D1, no model</text><text class="tx s" x="514" y="296">fail: sent back once</text></g>
+<g id="w-7"><title>Each version&#x27;s parent must still be the head and the lock&#x27;s token still current, or the store refuses the commit</title><rect class="nd ok" x="260" y="230" width="200" height="74" rx="10"/><text class="tx k" x="274" y="254">7 · commit</text><text class="tx" x="274" y="278">parent = head? token current?</text><text class="tx s" x="274" y="296">else refused</text></g>
+<g id="w-8"><title>Release every lock; the first waiter for each job gets it</title><rect class="nd " x="20" y="230" width="200" height="74" rx="10"/><text class="tx k" x="34" y="254">8 · release</text><text class="tx" x="34" y="278">next worker in line</text><text class="tx s" x="34" y="296">then the next question</text></g>
+<path class="ed" d="M220,77 L256,77"/><path class="ed" d="M460,77 L496,77"/><path class="ed" d="M700,77 L736,77"/>
+<path class="ed" d="M840,114 L840,226"/><path class="ed" d="M740,267 L704,267"/><path class="ed" d="M500,267 L464,267"/><path class="ed" d="M260,267 L224,267"/>
+<path class="ed warn" d="M560,40 C560,4 660,4 660,36"/><text class="tx w" x="672" y="24">wait</text>
+<path class="ed no" d="M560,304 C560,340 660,340 660,308"/><text class="tx a" x="572" y="352">send back once</text>
+<path class="ed no" d="M340,226 C340,170 560,170 580,118"/><text class="tx a" x="470" y="204">refused: lock again</text>
+<path class="ed" d="M120,226 L120,118"/><text class="tx s" x="128" y="176">next question</text>
+</svg></div>
+<ol class="qa">
+<li><b>Research</b> as r2 does now: no lock, any number of workers at once.</li>
+<li><b>Decide</b>: one short turn with the snapshot's candidates in front of it, replying <code>{"drafted job": ["library job", …] or []}</code>. A new job's own name is locked too, so two workers cannot create one procedure twice.</li>
+<li><b>Lock</b> every job it will write in one call, sorted. If any is held it holds nothing, joins each job's line, and logs who is in the way (<code>wait</code> event). A heartbeat thread renews the lease every 30 s while it holds it: one merge turn can run 7.9 minutes without a single event (the longest of 30).</li>
+<li><b>Read newest</b>: each locked job's head now, so a version committed while it researched or waited is the one it merges. This is the “update with the new file” step, and it is free: nothing has been written yet.</li>
+<li><b>Merge</b> with r2's <code>merge.md</code>, unchanged, showing the newest versions.</li>
+<li><b>Check</b>: <code>rubric.gate</code> against the newest versions (D8, D1). A job outside its lock is refused here and sent back once with the others.</li>
+<li><b>Commit</b>: each version's parent must still be the head and the lock's token still current, or the store refuses it. Only a holder whose lease expired can hit this; it then locks again from step 3.</li>
+<li><b>Release</b> in a <code>finally</code>, so an error never leaves a job locked.</li>
+</ol>
+</section>
+
+<section id="s5">
+<h2>05 · Two workers, one workflow — the second merges the newer version</h2>
+<span class="fig-title">Fig 5 · task_019 and task_020 both write submitting_a_cash_back_dispute · versions illustrative</span>
+<div class="figwrap"><svg class="dia" viewBox="0 0 960 470" role="img" aria-label="Two workers, task_019 and task_020, both write submitting_a_cash_back_dispute: task_019 locks version 5, task_020 waits, task_019 commits version 6, task_020 then reads version 6 and commits version 7 with both cases kept">
+<defs><marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--line-3)"/></marker></defs>
+<style>.dia .e3{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr3)} .dia .e3.w{stroke:var(--amber)} .dia .e3.o{stroke:var(--ok)}</style>
+<g id="q-a"><title>Worker A on task_019, a cash-back question</title><rect class="nd ag" x="30" y="20" width="200" height="50" rx="10"/><text class="tx" x="46" y="50">worker A · task_019</text></g>
+<g id="q-lib"><title>The library's submitting_a_cash_back_dispute: its head version and its lock</title><rect class="nd" x="380" y="20" width="200" height="50" rx="10"/><text class="tx" x="396" y="42">library</text><text class="tx s" x="396" y="60">submitting_a_cash_back…</text></g>
+<g id="q-b"><title>Worker B on task_020, another cash-back question</title><rect class="nd ag" x="730" y="20" width="200" height="50" rx="10"/><text class="tx" x="746" y="50">worker B · task_020</text></g>
+<line class="life" x1="130" y1="70" x2="130" y2="456"/><line class="life" x1="480" y1="70" x2="480" y2="456"/><line class="life" x1="830" y1="70" x2="830" y2="456"/>
+<g id="q-1"><title>A finishes research, decides, and is granted the lock with token 41; the head is version 5</title>
+<path class="e3" d="M130,104 L476,104"/><text class="tx s" x="150" y="96">lock(cash-back dispute)</text>
+<path class="e3 o" d="M480,124 L134,124"/><text class="tx o" x="300" y="140">granted · token 41 · head v5</text></g>
+<g id="q-2"><title>B asks for the same job while A holds it: B holds nothing, waits first in line, and logs who holds it</title>
+<path class="e3" d="M830,170 L484,170"/><text class="tx s" x="640" y="162">lock(cash-back dispute)</text>
+<path class="e3 w" d="M480,190 L826,190"/><text class="tx w" x="500" y="208">held by task_019 · B waits</text></g>
+<g id="q-3"><title>A merges its draft into version 5 and commits version 6; the parent check passes</title>
+<rect class="nd hi" x="40" y="226" width="180" height="40" rx="8"/><text class="tx" x="52" y="251">merge v5 + draft</text>
+<path class="e3" d="M130,290 L476,290"/><text class="tx s" x="150" y="282">commit v6 (parent v5 ✓) · release</text></g>
+<g id="q-4"><title>The lock passes to B, first in line, with token 42</title>
+<path class="e3 o" d="M480,320 L826,320"/><text class="tx o" x="560" y="338">granted · token 42 · head v6</text></g>
+<g id="q-5"><title>B reads version 6, the newer file with A's change, merges its draft into it and commits version 7</title>
+<rect class="nd hi" x="740" y="352" width="180" height="40" rx="8"/><text class="tx" x="752" y="377">merge v6 + draft</text>
+<path class="e3" d="M830,420 L484,420"/><text class="tx s" x="560" y="412">commit v7 (parent v6 ✓)</text></g>
+<g id="q-note"><title>Without the lock, B would have merged into version 5, and its version would have replaced A's: a lost update</title>
+<text class="tx a" x="140" y="446">without the lock: B merges v5, and its v6 replaces A's</text></g>
+</svg></div>
+<p class="cap">Both questions wrote this workflow in r2's build, one after the other. With two workers they finish research within minutes of each other. B waits for A's merge (about two minutes), then merges into v6, which already has A's case, so v7 holds both. Without the lock, B merges into v5 and its version replaces A's: the lost update r1 had, where the latest session won whole.</p>
+</section>
+
+<section id="s6" class="band">
+<h2>06 · Who is updating — one lock table, read by everyone</h2>
+<p>Every lock is a record in the store. Workers read it to wait in line, the session log records it, and the viewer shows it. Below is a mock of the Agent tab's Library panel during a 4-worker build, in the viewer's own style.</p>
+<span class="fig-title">Fig 6 · mock · Agent → workflow_rag → Library, r3, during a build</span>
+<div class="mock">
+<div class="hdr"><h3>Library · r3 · 58 workflows</h3><span class="chip">build · 4 workers · 23 of 60 questions</span></div>
+<div class="tw stack"><table>
+<thead><tr><th>workflow</th><th class="num">version</th><th>last change</th><th>now</th></tr></thead>
+<tbody>
+<tr><td class="sub mono" data-label="workflow">submitting_a_cash_back_dispute</td><td class="num" data-label="version">v6</td><td class="small" data-label="last change">task_019 · 1 min ago</td><td data-label="now"><span class="chip lock">merging · task_020 · 0:52</span></td></tr>
+<tr><td class="sub mono" data-label="workflow">applying_resolved_cash_back_dispute_corrections</td><td class="num" data-label="version">v5</td><td class="small" data-label="last change">task_019 · 1 min ago</td><td data-label="now"><span class="chip lock">merging · task_020 · 0:52</span> <span class="chip wait">1 waiting · task_027</span></td></tr>
+<tr><td class="sub mono" data-label="workflow">credit_card_retention_protocol</td><td class="num" data-label="version">v3</td><td class="small" data-label="last change">task_046 · 9 min ago</td><td data-label="now"><span class="chip free">free</span></td></tr>
+<tr><td class="sub mono" data-label="workflow">recommend_personal_credit_card</td><td class="num" data-label="version">v4</td><td class="small" data-label="last change">task_006 · 22 min ago</td><td data-label="now"><span class="chip free">free</span></td></tr>
+</tbody></table></div>
+<p class="cap">Mock: questions, versions and times invented to show the states. A held lock shows its holder and how long; a waiting worker shows in the same row; “last change” links to the session that committed the version.</p>
+</div>
+<span class="fig-title">Fig 7 · a lock record, and the lines a waiting session writes to its log</span>
+<div class="tw"><pre class="fallback" style="margin:0;padding:var(--s4);font:400 var(--t-1)/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink-2)">{
+ &quot;jobs&quot;: [
+  &quot;applying_resolved_cash_back_dispute_corrections&quot;,
+  &quot;submitting_a_cash_back_dispute&quot;
+ ],
+ &quot;holder&quot;: &quot;20261007T…_banking_knowledge_r3_task_020&quot;,
+ &quot;task&quot;: &quot;task_020&quot;,
+ &quot;token&quot;: 42,
+ &quot;base&quot;: {
+  &quot;submitting_a_cash_back_dispute&quot;: 6
+ },
+ &quot;since&quot;: &quot;…T10:41:07Z&quot;,
+ &quot;expires&quot;: &quot;…T10:43:07Z (renewed every 30 s)&quot;,
+ &quot;waiting&quot;: [
+  &quot;task_027&quot;
+ ]
+}
+
+events.jsonl of task_027:
+{"kind": "wait",      "held": ["task_020"], "jobs": ["applying_resolved_cash_back_dispute_corrections"]}
+{"kind": "locked",    "jobs": [...], "versions": {"applying_resolved_cash_back_dispute_corrections": 6}}
+{"kind": "committed", "jobs": [...]}</pre></div>
+</section>
+
+<section id="s7">
+<h2>07 · Failures — crashes expire; stale holders cannot commit</h2>
+<div class="cards">
+<div class="card"><h3>A worker dies holding locks</h3><p>Its lease runs out within 120 s of its last heartbeat and the next worker in line takes the jobs. If the dead worker comes back and tries to commit, its token is stale and the store refuses it (a fencing token).</p></div>
+<div class="card"><h3>Deadlock</h3><p>None: a worker asks for all its jobs in one call and holds none while it waits, so no two workers can each hold what the other needs.</p></div>
+<div class="card"><h3>Starvation</h3><p>Each job serves its waiters first come, first served, so a worker that needs two busy jobs is not overtaken forever by workers that need one.</p></div>
+<div class="card"><h3>Renamed while waiting</h3><p>A merges <code>X</code> into <code>Y</code> and retires <code>X</code>; B was waiting for <code>X</code>. On the grant, B resolves <code>X</code> through its alias to <code>Y</code>, sees it does not hold <code>Y</code>, and asks for both again in one call.</p></div>
+<div class="card"><h3>A merge writes a job it did not lock</h3><p>The gate refuses that job and sends the merge back once, naming the jobs it holds. Refused again, that job keeps its version, as r2 keeps the previous version today; the question's case waits for a later merge.</p></div>
+<div class="card"><h3>Two new jobs for one procedure</h3><p>A new name is locked like any other. After the grant, the worker ranks its new job against jobs committed since its snapshot; a match sends it to merge into that job instead. Rare: 1 new job in 30 sessions.</p></div>
+<div class="card"><h3>The answering agent reads mid-build</h3><p><code>find_workflow</code> reads committed heads only. A merge in progress is invisible until its commit, so v6–v8 never read a half-written workflow.</p></div>
+</div>
+</section>
+
+<section id="s8" class="band">
+<h2>08 · Shared state — files now, Postgres for many machines</h2>
+<div class="cards">
+<div class="card rec-card"><h3>FileStore · one machine</h3><ul>
+<li><code>rag_library/&lt;domain&gt;/&lt;rag&gt;/commits.jsonl</code>: one line per committed version (job, version, parent, session, task, retired names, time). Append-only, in git, like <code>rag_agent_runs/</code>; the library replays from it.</li>
+<li><code>…/locks.json</code>: held and waiting locks. Runtime only, git-ignored.</li>
+<li>Each call takes <code>fcntl.flock</code> on <code>…/library.lock</code> plus a thread lock, for milliseconds: enough for the build's threads, a second build process, and the viewer's own sessions.</li>
+</ul></div>
+<div class="card"><h3>PgStore · many machines</h3><ul>
+<li><code>workflow_versions</code> (job, version, parent, body, session) and <code>workflow_heads</code>, moved by <code>UPDATE … SET version = $new WHERE job = $j AND version = $parent</code>: a compare-and-swap.</li>
+<li>Lock rows with an expiry and a token from a sequence; or <code>pg_advisory_xact_lock</code> for the short commit itself.</li>
+<li>The question queue taken with <code>SELECT … FOR UPDATE SKIP LOCKED</code>.</li>
+<li>Per the platform contract, a tau2-loop database is declared in nmp-central-ai's <code>registry/projects.yaml</code> and made by <code>make db-init</code> first. None exists today.</li>
+</ul></div>
+</div>
+<span class="fig-title">Fig 8 · the store, sketched · workflows/store.py</span>
+<div class="codewrap"><div class="hd">src/tau2_loop/workflows/store.py · new · the interface both stores keep</div><div class="bd" id="code-store"><pre class="fallback" hidden></pre></div></div>
+<span class="fig-title">Fig 9 · the merge phase, sketched · workflows/rag_agent.py</span>
+<div class="codewrap"><div class="hd">src/tau2_loop/workflows/rag_agent.py · _merge, s21 shape · research before it is unchanged</div><div class="bd" id="code-merge"><pre class="fallback" hidden></pre></div></div>
+</section>
+
+<section id="s9">
+<h2>09 · Replay — every write is kept; two gaps to close</h2>
+<p>You asked whether every write the researcher makes is saved, so the process can be replayed. Nearly all of it is. A session's folder is never changed after it ends, and it holds everything below. I checked all 34 finished r2 sessions.</p>
+<span class="fig-title">Fig 11 · what one r2 session saves, and whether a replay can use it</span>
+<div class="tw stack"><table>
+<thead><tr><th>what</th><th>where</th><th class="num">saved</th><th>replay</th></tr></thead>
+<tbody>
+<tr><td class="wrap" data-label="what">The prompt it ran with</td><td class="mono small" data-label="where">system.md</td><td class="num" data-label="saved">34 of 34</td><td data-label="replay"><span class="v-ok">● as is</span></td></tr>
+<tr><td class="wrap" data-label="what">Every model reply in full: the draft, the merged workflows, a resent merge</td><td class="mono small" data-label="where">events.jsonl · model</td><td class="num" data-label="saved">34 of 34</td><td data-label="replay"><span class="v-ok">● as is</span></td></tr>
+<tr><td class="wrap" data-label="what">Every tool call and the result the model saw (27 of 637 cut at the length limit, saved cut, as the model saw them)</td><td class="mono small" data-label="where">events.jsonl · tool</td><td class="num" data-label="saved">34 of 34</td><td data-label="replay"><span class="v-ok">● as is</span></td></tr>
+<tr><td class="wrap" data-label="what">The draft before merging; the versions taken and kept back; each merge's changelog, checks and send-back reasons</td><td class="mono small" data-label="where">output.json · events.jsonl · note</td><td class="num" data-label="saved">34 of 34</td><td data-label="replay"><span class="v-ok">● as is</span></td></tr>
+<tr><td class="wrap" data-label="what">Which library versions the merge was shown</td><td class="mono small" data-label="where">events.jsonl · merge (names)</td><td class="num" data-label="saved">names only</td><td class="wrap" data-label="replay"><span class="v-warn">◐ rebuilt</span> from the sessions before it</td></tr>
+<tr><td class="wrap" data-label="what">The harness's own messages: the merge message with those versions in full, the “write it now” nudge</td><td class="mono small" data-label="where">—</td><td class="num" data-label="saved">not saved</td><td class="wrap" data-label="replay"><span class="v-no">○ gap 1</span></td></tr>
+<tr><td class="wrap" data-label="what">The order the library took the writes</td><td class="mono small" data-label="where">session ids, by start time</td><td class="num" data-label="saved">implied</td><td class="wrap" data-label="replay"><span class="v-no">○ gap 2</span> once workers overlap</td></tr>
+</tbody></table></div>
+<div class="cards">
+<div class="card"><h3>Gap 1 · the harness's messages</h3><p>Write each message the harness sends as a <code>user</code> event: the merge message in full and every nudge. Then a session's conversation rebuilds turn for turn, with nothing inferred. It is a few lines in <code>run_session</code> and <code>_merge</code>.</p></div>
+<div class="card"><h3>Gap 2 · the order of writes</h3><p>One at a time, start order is commit order. With several workers it is not, so <code>commits.jsonl</code> (C1) records every write: job, version, parent, session and lock token. The library as of any write is the log up to that line.</p></div>
+</div>
+<span class="fig-title">What a replay is for</span>
+<div class="cards">
+<div class="card"><h3>The library at any write</h3><p>Rebuild the library as of any commit; read a job's history version by version, with the question and the changelog behind each change.</p></div>
+<div class="card"><h3>Merge again, research once</h3><p>Take a session's research, its events up to the draft, and merge it against another library state: another order, the concurrent build, a new merge prompt. That costs one merge (median 2.9 min) instead of a whole session (median 7.7 min).</p></div>
+<div class="card"><h3>r1's saved work</h3><p>The same re-merge folds r1's 118 saved workflows (from 62 sessions) into one per job, with no research. That is the question you asked in chat; it needs no locks, since different jobs never touch.</p></div>
+</div>
+<p class="cap">What a replay cannot do is make the model repeat itself: a re-run is a new sample. Replay means rebuilding exactly what happened, then asking again from any point.<span class="path">rag_agent.py run_session (model and tool events) · _merge (merge, note, merged events) · output.json draft</span></p>
+</section>
+
+<section id="s10" class="band">
+<h2>10 · A simulated build — four workers, 30 questions, 73 minutes</h2>
+<span class="fig-title">Fig 10 · the 30 sessions replayed on 4 workers, design D, shuffled queue (seed 15) · minutes to scale · hover a block</span>
+<div class="figwrap"><svg class="dia" viewBox="0 0 960 300" role="img" aria-label="Replay of the 30 measured sessions on four workers with a shuffled queue: done in 73 minutes; 3 of 30 merges wait, 4 minutes in all">
+<line class="tick" x1="70.0" y1="32" x2="70.0" y2="256"/><text class="tx sm" x="64.0" y="26">0</text><line class="tick" x1="184.7" y1="32" x2="184.7" y2="256"/><text class="tx sm" x="178.7" y="26">10</text><line class="tick" x1="299.3" y1="32" x2="299.3" y2="256"/><text class="tx sm" x="293.3" y="26">20</text><line class="tick" x1="414.0" y1="32" x2="414.0" y2="256"/><text class="tx sm" x="408.0" y="26">30</text><line class="tick" x1="528.7" y1="32" x2="528.7" y2="256"/><text class="tx sm" x="522.7" y="26">40</text><line class="tick" x1="643.3" y1="32" x2="643.3" y2="256"/><text class="tx sm" x="637.3" y="26">50</text><line class="tick" x1="758.0" y1="32" x2="758.0" y2="256"/><text class="tx sm" x="752.0" y="26">60</text><line class="tick" x1="872.7" y1="32" x2="872.7" y2="256"/><text class="tx sm" x="866.7" y="26">70</text><rect class="lane" x="70" y="40" width="860" height="40" rx="4"/><text class="tx k" x="12" y="65">w1</text><rect class="sg-r" x="70.0" y="44" width="49.4" height="32" rx="3"><title>task_019 research 4.3 min</title></rect><rect class="sg-d" x="119.4" y="44" width="5.7" height="32" rx="3"><title>task_019 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="125.1" y="44" width="21.3" height="32" rx="3"><title>task_019 merge 1.9 min, holding its locks</title></rect><text class="tx sm" x="74.0" y="65">019</text><rect class="sg-r" x="146.4" y="44" width="51.3" height="32" rx="3"><title>task_018 research 4.5 min</title></rect><rect class="sg-d" x="197.7" y="44" width="5.7" height="32" rx="3"><title>task_018 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="203.5" y="44" width="24.0" height="32" rx="3"><title>task_018 merge 2.1 min, holding its locks</title></rect><text class="tx sm" x="150.4" y="65">018</text><rect class="sg-r" x="227.5" y="44" width="73.6" height="32" rx="3"><title>task_056 research 6.4 min</title></rect><rect class="sg-d" x="301.1" y="44" width="5.7" height="32" rx="3"><title>task_056 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="306.9" y="44" width="44.3" height="32" rx="3"><title>task_056 merge 3.9 min, holding its locks</title></rect><text class="tx sm" x="231.5" y="65">056</text><rect class="sg-r" x="351.2" y="44" width="30.2" height="32" rx="3"><title>task_031 research 2.6 min</title></rect><rect class="sg-d" x="381.3" y="44" width="5.7" height="32" rx="3"><title>task_031 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="387.1" y="44" width="25.2" height="32" rx="3"><title>task_031 merge 2.2 min, holding its locks</title></rect><text class="tx sm" x="355.2" y="65">031</text><rect class="sg-r" x="412.2" y="44" width="102.2" height="32" rx="3"><title>task_044 research 8.9 min</title></rect><rect class="sg-d" x="514.5" y="44" width="5.7" height="32" rx="3"><title>task_044 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="520.2" y="44" width="51.5" height="32" rx="3"><title>task_044 merge 4.5 min, holding its locks</title></rect><text class="tx sm" x="416.2" y="65">044</text><rect class="sg-r" x="571.7" y="44" width="29.5" height="32" rx="3"><title>task_021 research 2.6 min</title></rect><rect class="sg-d" x="601.2" y="44" width="5.7" height="32" rx="3"><title>task_021 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="606.9" y="44" width="21.1" height="32" rx="3"><title>task_021 merge 1.8 min, holding its locks</title></rect><rect class="sg-r" x="628.1" y="44" width="46.1" height="32" rx="3"><title>task_022 research 4.0 min</title></rect><rect class="sg-d" x="674.2" y="44" width="5.7" height="32" rx="3"><title>task_022 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="679.9" y="44" width="31.4" height="32" rx="3"><title>task_022 merge 2.7 min, holding its locks</title></rect><text class="tx sm" x="632.1" y="65">022</text><rect class="sg-r" x="711.3" y="44" width="132.8" height="32" rx="3"><title>task_047 research 11.6 min</title></rect><rect class="sg-d" x="844.1" y="44" width="5.7" height="32" rx="3"><title>task_047 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-w" x="849.8" y="44" width="17.7" height="32" rx="3"><title>task_047 waits 1.5 min for a workflow another worker is merging</title></rect><rect class="sg-m" x="867.5" y="44" width="34.7" height="32" rx="3"><title>task_047 merge 3.0 min, holding its locks</title></rect><text class="tx sm" x="715.3" y="65">047</text><rect class="lane" x="70" y="96" width="860" height="40" rx="4"/><text class="tx k" x="12" y="121">w2</text><rect class="sg-r" x="70.0" y="100" width="77.4" height="32" rx="3"><title>task_001 research 6.7 min</title></rect><rect class="sg-d" x="147.4" y="100" width="5.7" height="32" rx="3"><title>task_001 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="153.1" y="100" width="39.6" height="32" rx="3"><title>task_001 merge 3.5 min, holding its locks</title></rect><text class="tx sm" x="74.0" y="121">001</text><rect class="sg-r" x="192.7" y="100" width="26.4" height="32" rx="3"><title>task_020 research 2.3 min</title></rect><rect class="sg-d" x="219.1" y="100" width="5.7" height="32" rx="3"><title>task_020 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-w" x="224.8" y="100" width="2.7" height="32" rx="3"><title>task_020 waits 0.2 min for a workflow another worker is merging</title></rect><rect class="sg-m" x="227.5" y="100" width="21.3" height="32" rx="3"><title>task_020 merge 1.9 min, holding its locks</title></rect><rect class="sg-r" x="248.8" y="100" width="46.8" height="32" rx="3"><title>task_016 research 4.1 min</title></rect><rect class="sg-d" x="295.6" y="100" width="5.7" height="32" rx="3"><title>task_016 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="301.4" y="100" width="15.0" height="32" rx="3"><title>task_016 merge 1.3 min, holding its locks</title></rect><text class="tx sm" x="252.8" y="121">016</text><rect class="sg-r" x="316.3" y="100" width="47.2" height="32" rx="3"><title>task_008 research 4.1 min</title></rect><rect class="sg-d" x="363.5" y="100" width="5.7" height="32" rx="3"><title>task_008 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="369.2" y="100" width="14.8" height="32" rx="3"><title>task_008 merge 1.3 min, holding its locks</title></rect><text class="tx sm" x="320.3" y="121">008</text><rect class="sg-r" x="384.0" y="100" width="25.5" height="32" rx="3"><title>task_041 research 2.2 min</title></rect><rect class="sg-d" x="409.6" y="100" width="5.7" height="32" rx="3"><title>task_041 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="415.3" y="100" width="56.0" height="32" rx="3"><title>task_041 merge 4.9 min, holding its locks</title></rect><rect class="sg-r" x="471.4" y="100" width="75.6" height="32" rx="3"><title>task_029 research 6.6 min</title></rect><rect class="sg-d" x="546.9" y="100" width="5.7" height="32" rx="3"><title>task_029 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="552.7" y="100" width="30.1" height="32" rx="3"><title>task_029 merge 2.6 min, holding its locks</title></rect><text class="tx sm" x="475.4" y="121">029</text><rect class="sg-r" x="582.7" y="100" width="41.5" height="32" rx="3"><title>task_033 research 3.6 min</title></rect><rect class="sg-d" x="624.3" y="100" width="5.7" height="32" rx="3"><title>task_033 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="630.0" y="100" width="20.7" height="32" rx="3"><title>task_033 merge 1.8 min, holding its locks</title></rect><text class="tx sm" x="586.7" y="121">033</text><rect class="sg-r" x="650.8" y="100" width="120.0" height="32" rx="3"><title>task_046 research 10.5 min</title></rect><rect class="sg-d" x="770.8" y="100" width="5.7" height="32" rx="3"><title>task_046 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="776.5" y="100" width="91.0" height="32" rx="3"><title>task_046 merge 7.9 min, holding its locks</title></rect><text class="tx sm" x="654.8" y="121">046</text><rect class="lane" x="70" y="152" width="860" height="40" rx="4"/><text class="tx k" x="12" y="177">w3</text><rect class="sg-r" x="70.0" y="156" width="17.8" height="32" rx="3"><title>task_034 research 1.6 min</title></rect><rect class="sg-d" x="87.8" y="156" width="5.7" height="32" rx="3"><title>task_034 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="93.6" y="156" width="10.1" height="32" rx="3"><title>task_034 merge 0.9 min, holding its locks</title></rect><rect class="sg-r" x="103.7" y="156" width="60.6" height="32" rx="3"><title>task_002 research 5.3 min</title></rect><rect class="sg-d" x="164.3" y="156" width="5.7" height="32" rx="3"><title>task_002 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-w" x="170.0" y="156" width="22.6" height="32" rx="3"><title>task_002 waits 2.0 min for a workflow another worker is merging</title></rect><rect class="sg-m" x="192.7" y="156" width="37.9" height="32" rx="3"><title>task_002 merge 3.3 min, holding its locks</title></rect><text class="tx sm" x="107.7" y="177">002</text><rect class="sg-r" x="230.6" y="156" width="32.7" height="32" rx="3"><title>task_051 research 2.9 min</title></rect><rect class="sg-d" x="263.3" y="156" width="5.7" height="32" rx="3"><title>task_051 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="269.0" y="156" width="27.7" height="32" rx="3"><title>task_051 merge 2.4 min, holding its locks</title></rect><text class="tx sm" x="234.6" y="177">051</text><rect class="sg-r" x="296.7" y="156" width="41.5" height="32" rx="3"><title>task_053 research 3.6 min</title></rect><rect class="sg-d" x="338.2" y="156" width="5.7" height="32" rx="3"><title>task_053 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="343.9" y="156" width="42.5" height="32" rx="3"><title>task_053 merge 3.7 min, holding its locks</title></rect><text class="tx sm" x="300.7" y="177">053</text><rect class="sg-r" x="386.4" y="156" width="33.1" height="32" rx="3"><title>task_050 research 2.9 min</title></rect><rect class="sg-d" x="419.5" y="156" width="5.7" height="32" rx="3"><title>task_050 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="425.2" y="156" width="18.6" height="32" rx="3"><title>task_050 merge 1.6 min, holding its locks</title></rect><text class="tx sm" x="390.4" y="177">050</text><rect class="sg-r" x="443.8" y="156" width="98.7" height="32" rx="3"><title>task_059 research 8.6 min</title></rect><rect class="sg-d" x="542.6" y="156" width="5.7" height="32" rx="3"><title>task_059 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="548.3" y="156" width="38.2" height="32" rx="3"><title>task_059 merge 3.3 min, holding its locks</title></rect><text class="tx sm" x="447.8" y="177">059</text><rect class="sg-r" x="586.5" y="156" width="52.2" height="32" rx="3"><title>task_006 research 4.6 min</title></rect><rect class="sg-d" x="638.7" y="156" width="5.7" height="32" rx="3"><title>task_006 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="644.5" y="156" width="61.6" height="32" rx="3"><title>task_006 merge 5.4 min, holding its locks</title></rect><text class="tx sm" x="590.5" y="177">006</text><rect class="sg-r" x="706.1" y="156" width="70.5" height="32" rx="3"><title>task_055 research 6.2 min</title></rect><rect class="sg-d" x="776.6" y="156" width="5.7" height="32" rx="3"><title>task_055 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="782.4" y="156" width="37.9" height="32" rx="3"><title>task_055 merge 3.3 min, holding its locks</title></rect><text class="tx sm" x="710.1" y="177">055</text><rect class="lane" x="70" y="208" width="860" height="40" rx="4"/><text class="tx k" x="12" y="233">w4</text><rect class="sg-r" x="70.0" y="212" width="128.5" height="32" rx="3"><title>task_048 research 11.2 min</title></rect><rect class="sg-d" x="198.5" y="212" width="5.7" height="32" rx="3"><title>task_048 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="204.2" y="212" width="47.7" height="32" rx="3"><title>task_048 merge 4.2 min, holding its locks</title></rect><text class="tx sm" x="74.0" y="233">048</text><rect class="sg-r" x="252.0" y="212" width="52.8" height="32" rx="3"><title>task_025 research 4.6 min</title></rect><rect class="sg-d" x="304.7" y="212" width="5.7" height="32" rx="3"><title>task_025 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="310.5" y="212" width="26.3" height="32" rx="3"><title>task_025 merge 2.3 min, holding its locks</title></rect><text class="tx sm" x="256.0" y="233">025</text><rect class="sg-r" x="336.8" y="212" width="61.2" height="32" rx="3"><title>task_024 research 5.3 min</title></rect><rect class="sg-d" x="398.0" y="212" width="5.7" height="32" rx="3"><title>task_024 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="403.8" y="212" width="47.3" height="32" rx="3"><title>task_024 merge 4.1 min, holding its locks</title></rect><text class="tx sm" x="340.8" y="233">024</text><rect class="sg-r" x="451.1" y="212" width="38.7" height="32" rx="3"><title>task_027 research 3.4 min</title></rect><rect class="sg-d" x="489.8" y="212" width="5.7" height="32" rx="3"><title>task_027 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="495.5" y="212" width="31.6" height="32" rx="3"><title>task_027 merge 2.8 min, holding its locks</title></rect><text class="tx sm" x="455.1" y="233">027</text><rect class="sg-r" x="527.2" y="212" width="68.7" height="32" rx="3"><title>task_036 research 6.0 min</title></rect><rect class="sg-d" x="595.8" y="212" width="5.7" height="32" rx="3"><title>task_036 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="601.6" y="212" width="67.6" height="32" rx="3"><title>task_036 merge 5.9 min, holding its locks</title></rect><text class="tx sm" x="531.2" y="233">036</text><rect class="sg-r" x="669.2" y="212" width="92.1" height="32" rx="3"><title>task_038 research 8.0 min</title></rect><rect class="sg-d" x="761.3" y="212" width="5.7" height="32" rx="3"><title>task_038 decide 0.5 min (costed, not measured)</title></rect><rect class="sg-m" x="767.1" y="212" width="39.5" height="32" rx="3"><title>task_038 merge 3.4 min, holding its locks</title></rect><text class="tx sm" x="673.2" y="233">038</text>
+<text class="tx k" x="12" y="26">min</text>
+<rect class="sg-r" x="70" y="276" width="18" height="12" rx="2"/><text class="tx s" x="94" y="287">research</text><rect class="sg-d" x="210" y="276" width="18" height="12" rx="2"/><text class="tx s" x="234" y="287">decide</text><rect class="sg-w" x="330" y="276" width="18" height="12" rx="2"/><text class="tx s" x="354" y="287">wait</text><rect class="sg-m" x="430" y="276" width="18" height="12" rx="2"/><text class="tx s" x="454" y="287">merge, locks held</text>
+</svg></div>
+<p class="cap">3 of 30 merges wait, 3.8 minutes in all, the longest 2.0. One at a time, the same 30 took 253 minutes. This order sits at the median of 50 shuffles (1.21 h). The labels are train question numbers.</p>
+</section>
+
+<section id="s11">
+<h2>11 · Build steps — nine, each with files and tests</h2>
+<div class="tw stack"><table>
+<thead><tr><th>step</th><th>what</th><th>files</th><th>proved by</th></tr></thead>
+<tbody>
+<tr><td class="sub" data-label="step">C1 · the store<span class="path"><span class="v-ok">● built</span></span></td><td class="wrap" data-label="what">Heads from an append-only <code>commits.jsonl</code>; locks all-or-none, first come first served per job; 120 s leases renewed every 30 s; fencing tokens; commit refused on a stale parent or token; held and waiting locks listed. <code>fcntl.flock</code> on one file around each call (milliseconds) plus a thread lock.</td><td class="wrap mono small" data-label="files">workflows/store.py · rag_library/&lt;domain&gt;/&lt;rag&gt;/</td><td class="wrap" data-label="proved by">threads on one job: the second waits and reads v+1; a stale parent refused; an expired holder's commit refused; random lock sets on 8 threads all finish</td></tr>
+<tr><td class="sub" data-label="step">C2 · the library reads commits<span class="path"><span class="v-ok">● built</span></span></td><td class="wrap" data-label="what"><code>library.entries()</code> takes a concurrent version's heads from the store, in commit order; r1 and r2 keep today's session order, unchanged.</td><td class="wrap mono small" data-label="files">workflows/library.py</td><td class="wrap" data-label="proved by">r2's library identical before and after; r3 heads follow commit order, not start order</td></tr>
+<tr><td class="sub" data-label="step">C3 · decide, lock, merge<span class="path"><span class="v-ok">● built</span></span></td><td class="wrap" data-label="what">The decide turn (<code>decide.md</code>); the lock with <code>wait</code>, <code>locked</code> and <code>committed</code> events; the newest versions into r2's <code>merge.md</code>; D8 against them; a write outside the lock sent back once; release in <code>finally</code>; the heartbeat thread.</td><td class="wrap mono small" data-label="files">workflows/rag_agent.py · r3/decide.md</td><td class="wrap" data-label="proved by">model stubbed: two sessions interleaved on one job keep both cases; a session killed mid-merge frees its jobs after the lease; two new jobs for one procedure end as one</td></tr>
+<tr><td class="sub" data-label="step">C4 · the r3 version<span class="path"><span class="v-ok">● built</span></span></td><td class="wrap" data-label="what">r2's prompt and <code>merge.md</code> plus <code>decide.md</code>; <code>merge: concurrent</code>, <code>workers: 4</code>, <code>order: shuffled</code>, <code>order_seed</code>, <code>seed: r2</code>, <code>queue: after_seed</code> (skip every question r2 merged). r2 is not touched.</td><td class="wrap mono small" data-label="files">rag_agents/banking_knowledge/r3/</td><td class="wrap" data-label="proved by">a session on one question</td></tr>
+<tr><td class="sub" data-label="step">C5 · the parallel build<span class="path"><span class="v-ok">● built</span></span></td><td class="wrap" data-label="what"><code>make rag-build RAG=r3 WORKERS=4</code>: a thread pool over the shuffled queue; a claim per question so a second build or the viewer never takes the same one; resumable; each progress line says what it waited for.</td><td class="wrap mono small" data-label="files">cli.py · Makefile</td><td class="wrap" data-label="proved by">a dry run with the model stubbed and 4 workers</td></tr>
+<tr><td class="sub" data-label="step">C6 · seeing who is updating<span class="path"><span class="v-ok">● built</span></span></td><td class="wrap" data-label="what"><code>GET /api/workflows/&lt;domain&gt;/rag/library?version=r3</code> (heads, held, waiting); the Library panel (Fig 6); wait and lock lines in the session's research log; <code>make rag-locks</code>.</td><td class="wrap mono small" data-label="files">api routes · frontend WorkflowAgent.tsx</td><td class="wrap" data-label="proved by">a browser check during a build</td></tr>
+<tr><td class="sub" data-label="step">C7 · replay<span class="path"><span class="v-warn">◐ events and replay built; re-merge next</span></span></td><td class="wrap" data-label="what">A <code>user</code> event for every harness message (gap 1). <code>make rag-replay RAG= AT=</code> writes the library as of a commit or session; <code>make rag-remerge SESSION= ON=</code> merges a saved draft again against another library state, no research.</td><td class="wrap mono small" data-label="files">rag_agent.py · library.py · cli.py · Makefile</td><td class="wrap" data-label="proved by">r2 rebuilt as of each of its sessions offers the same candidates that session was shown; a re-merge with the model stubbed reproduces the stored merged workflow</td></tr>
+<tr class=pro><td class="sub" data-label="step">C8 · run and compare<span class="path"><span class="v-warn">◐ waits for your go-ahead</span></span></td><td class="wrap" data-label="what">r3's build: the questions r2 has not merged (task_064 onward), shuffled, 4 workers. Against r2's one-at-a-time build: hours, waits, send-backs, kept-previous; the rubric r2 against r3; D8 along every job's commit chain. Then, if wanted, v9 = v8 reading r3, smoke 20. Runs only on your go-ahead.</td><td class="wrap mono small" data-label="files">runs only</td><td class="wrap" data-label="proved by">the comparison table; nothing lost along any chain</td></tr>
+<tr><td class="sub" data-label="step">C9 · later: many machines<span class="path"><span class="muted">○ later</span></span></td><td class="wrap" data-label="what">PgStore: <code>workflow_versions</code>, heads moved by <code>UPDATE … WHERE version = $parent</code>, lease rows with a token sequence, the question queue taken with <code>FOR UPDATE SKIP LOCKED</code>. Needs a tau2-loop database declared in nmp-central-ai's registry first.</td><td class="wrap mono small" data-label="files">workflows/store_pg.py</td><td class="wrap" data-label="proved by">C1's tests against the central Postgres</td></tr>
+</tbody></table></div>
+<p class="cap">C1 to C7 call no model; their tests stub it. A concurrent build is a new RAG version (r3) because it adds a turn and a different order: r2's sessions stay immutable and its library stays what its build made.</p>
+</section>
+
+<section id="s12" class="band">
+<h2>12 · Risks — order, the decide turn, throughput, the pause</h2>
+<div class="cards">
+<div class="card"><h3>The library depends on order</h3><p>r2 merged in id order; r3 merges in whatever order commits land. <code>commits.jsonl</code> records it and the shuffle seed is kept, so a library can be rebuilt and two orders compared. C7 compares r3's library with r2's on the rubric.</p></div>
+<div class="card"><h3>The decide turn can be wrong</h3><p>If the merge wants a job it did not lock, the gate sends it back once. How often that happens is a number C7 reports; often would mean deciding on full versions instead of the snapshot's.</p></div>
+<div class="card"><h3>Subscription throughput</h3><p>4 Opus sessions at once is about the load of v7's train and test runs side by side (6 conversations). The replay assumes no throttling; C7 measures it.</p></div>
+<div class="card"><h3>The paused build</h3><p>r2 stopped at 34 of 60 on your call, and v8 has not run. Nothing runs from this checkout now, so the work can go on this branch. task_064's session was stopped two minutes in; the library ignores it and the question runs again.</p></div>
+<div class="card"><h3>The replay is an estimate</h3><p>It reuses what each session wrote alone. Run together, a session sees a different library and may write other jobs. It is good enough to rank the designs, not to promise minutes.</p></div>
+</div>
+</section>
+
+<section id="s13">
+<h2>13 · Decisions — made 7 Oct: D, 4 workers, shuffled</h2>
+<div class="tw stack"><table>
+<thead><tr><th>question</th><th>your answer</th><th>what it means for the build</th></tr></thead>
+<tbody>
+<tr><td class="sub" data-label="question">Q1 · the design</td><td data-label="answer">D · lock the workflows it writes</td><td class="wrap" data-label="meaning">Research with no lock; one decide turn names the jobs; lock them all at once; merge the newest versions; commit with the version check (§04).</td></tr>
+<tr><td class="sub" data-label="question">Q2 · workers</td><td data-label="answer">4</td><td class="wrap" data-label="meaning"><code>workers: 4</code> in r3's settings; <code>WORKERS=</code> overrides on the command line.</td></tr>
+<tr><td class="sub" data-label="question">Q3 · order</td><td data-label="answer">Shuffled</td><td class="wrap" data-label="meaning">The queue is shuffled with a seed kept in r3's settings, so the order can be rebuilt.</td></tr>
+<tr><td class="sub" data-label="question">Q4 · shared state</td><td data-label="answer">Not answered: the default</td><td class="wrap" data-label="meaning">Files and file locks now (<code>rag_library/</code>); Postgres when a second machine is needed. Say if you want Postgres now.</td></tr>
+<tr><td class="sub" data-label="question">Q5 · the paused build</td><td data-label="answer">Keep the 34; run only the 26 not done, with workers</td><td class="wrap" data-label="meaning">From your message. The 34 finished r2 sessions are kept and never re-run: they are already in r2's library. The 26 left run as <b>r3</b>, which starts from r2's library and whose queue skips every question r2 merged. It is a new version, not r2 continued, because r2's settings are frozen and the decide turn changes its prompt.</td></tr>
+<tr class="pro"><td class="sub" data-label="question">then</td><td data-label="answer">The answering agent reads r3</td><td class="wrap" data-label="meaning">v8 (v7 reading r2) has never run. Either point it at r3 before its first run, or fork v9 = v7 reading r3: your call when r3 is built.</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="s14" class="band">
+<h2>14 · Sources — sessions, code, and four classic results</h2>
+<p class="cap">Sessions: the first 30 finished r2 sessions (task_001–task_059), from <code>rag_agent_runs/</code>. Code: <code>workflows/rag_agent.py</code> (<code>run_session</code>, <code>_merge</code>, <code>build_queue</code>), <code>workflows/library.py</code> (<code>entries</code>, <code>by_name</code>), <code>workflows/rubric.py</code> (<code>gate</code>, <code>lost</code>), <code>r2/rag_agent.md</code>, <code>r2/merge.md</code>. Replay: scratchpad s21 <code>phases.py</code>, <code>des.py</code>, <code>data.py</code>.</p>
+<ul class="cap">
+<li>Gray and Cheriton, <a href="https://dl.acm.org/doi/10.1145/74850.74870">Leases: an efficient fault-tolerant mechanism for distributed file cache consistency</a> (SOSP 1989): a lock that expires, so a dead holder cannot block forever.</li>
+<li>Kleppmann, <a href="https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html">How to do distributed locking</a> (2016): fencing tokens, so a holder whose lease expired cannot write.</li>
+<li>Kung and Robinson, <a href="https://dl.acm.org/doi/10.1145/319566.319567">On optimistic methods for concurrency control</a> (ACM TODS 1981): work first, check for conflicts at commit. That is design E.</li>
+<li>PostgreSQL, <a href="https://www.postgresql.org/docs/current/explicit-locking.html">Explicit locking</a>: row locks, advisory locks, and <code>SKIP LOCKED</code> for a work queue.</li>
+</ul>
+</section>
+</main>
+<script type="application/json" id="src-store">"\"\"\"The workflow library's shared state (s21): versions, locks and commits, so several workers\ncan build one library. FileStore serves one machine (the build's threads and the viewer's\nsessions); PgStore serves many. Every method is atomic and none calls a model.\"\"\"\n\nfrom dataclasses import dataclass\nfrom typing import Callable, Iterable, Protocol\n\n\n@dataclass(frozen=True)\nclass Head:\n    job: str          # canonical name; a retired name resolves here through `aliases`\n    version: int      # 1, 2, 3 ... per job\n    session: str      # the rag_agent_runs/ session whose output holds this version\n\n\n@dataclass(frozen=True)\nclass Lock:\n    jobs: tuple[str, ...]   # every job the holder will write, sorted\n    holder: str             # session id\n    task: str               # train question, for the viewer\n    token: int              # fencing token: rises with every grant, checked at commit\n    expires: float          # lease: 120 s, renewed every 30 s by a heartbeat thread\n\n\nclass LibraryStore(Protocol):\n    def heads(self) -> dict[str, Head]: ...\n    def lock(self, jobs: Iterable[str], holder: str, task: str, *,\n             on_wait: Callable[[list[Lock]], None]) -> Lock:\n        \"\"\"All the jobs or none: a worker never holds one while waiting for another (no\n        deadlock). Waiters are served first come, first served per job (no starvation).\n        `on_wait` gets the locks in the way, so the session can log who holds them.\"\"\"\n    def heartbeat(self, lock: Lock) -> Lock: ...\n    def commit(self, lock: Lock, versions: list[tuple[str, int, dict]]) -> list[Head]:\n        \"\"\"(job, parent version, workflow) per job. Refused unless the token is still\n        current and every parent is still the head: an expired holder cannot overwrite.\"\"\"\n    def release(self, lock: Lock) -> None: ...\n    def locks(self) -> tuple[list[Lock], list[Lock]]:\n        \"\"\"Held and waiting, for the viewer and `make rag-locks`.\"\"\"\n"</script>
+<script type="application/json" id="src-merge">"def _merge(meta, agent, draft, messages, turns, emit, policy, store):\n    \"\"\"s21: research ran with no lock; decide what to write, lock it, merge the newest versions.\"\"\"\n    snap = store.heads()                                    # what the library holds now\n    cands = merge_candidates(draft, library.entries_from(snap))\n    plan = decide(messages, cands, turns)                   # one turn: drafted job -> library jobs | []\n    want = sorted({j for js in plan.values() for j in js} | new_names(plan))\n    lock = store.lock(want, meta.id, meta.task_id,\n                      on_wait=lambda held: emit({\"kind\": \"wait\", \"held\": [l.task for l in held]}))\n    with heartbeat(store, lock):                            # a thread renews the lease every 30 s\n        try:\n            heads = store.heads()                           # newest: a commit may have landed\n            emit({\"kind\": \"locked\", \"jobs\": want, \"versions\": {j: heads[j].version for j in want if j in heads}})\n            merged = merge_turns(messages, agent, {j: heads[j] for j in want if j in heads}, turns)\n            taken = gate(merged, heads, allowed=want)       # D8 and D1; outside the lock: sent back once\n            store.commit(lock, [(j[\"job\"], heads.get(j[\"job\"]).version if j[\"job\"] in heads else 0, j) for j in taken])\n            emit({\"kind\": \"committed\", \"jobs\": [j[\"job\"] for j in taken]})\n        finally:\n            store.release(lock)\n"</script>
+<script type="module">
+const txt = (id) => JSON.parse(document.getElementById(id).textContent);
+const dark = () => document.documentElement.dataset.theme === 'dark' || (document.documentElement.dataset.theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+function fallback(id, text) { const p = document.querySelector('#' + id + ' pre.fallback'); p.textContent = text; p.hidden = false; }
+try {
+  const { File } = await import('https://esm.sh/@pierre/diffs@1.2.10?bundle');
+  const options = { theme: { light: 'vitesse-light', dark: 'vitesse-dark' }, themeType: dark() ? 'dark' : 'light', overflow: 'wrap' };
+  new File(options).render({ containerWrapper: document.querySelector('#code-store'), file: { name: 'src/tau2_loop/workflows/store.py', contents: txt('src-store') } });
+  new File(options).render({ containerWrapper: document.querySelector('#code-merge'), file: { name: 'src/tau2_loop/workflows/rag_agent.py', contents: txt('src-merge') } });
+} catch (e) {
+  fallback('code-store', txt('src-store'));
+  fallback('code-merge', txt('src-merge'));
+}
+</script>
+</body>
+</html>

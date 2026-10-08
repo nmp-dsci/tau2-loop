@@ -1,0 +1,825 @@
+{
+ "job": "closing_personal_checking_accounts",
+ "aliases": [
+  "checking account closure",
+  "close Light Blue after opening Gold savings and Blue checking",
+  "close checking account",
+  "close checking and split balance across accounts",
+  "close empty Light Blue after opening Evergreen and Green savings",
+  "close empty Light Blue checking after opening new accounts",
+  "close my checking account",
+  "close old checking after opening savings and new checking for APY",
+  "close old checking after upgrading",
+  "close one of two checking accounts",
+  "close_personal_checking_account",
+  "closing_bank_accounts"
+ ],
+ "when": {
+  "quote": "Verify all of the following before closing:",
+  "doc": "doc_bank_accounts_bank_accounts__general__005"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "Start only when the customer explicitly asks to close a checking account. If they also asked to open savings and the account being closed is their only checking account with 14+ days of tenure, run opening_personal_savings_accounts first. If they also asked to open business checking, run that first, because a CLOSED account blocks it. If they want the balance moved into accounts being opened, open those first. If they also asked to open a new personal checking account, open it before closing the old one.",
+  "quote": "Customer is explicitly requesting to close their account",
+  "doc": "doc_bank_accounts_bank_accounts__general__042"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "c_lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "c_lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "c_lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "c_get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "c_log_verification",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_close",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "close_account",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts_close",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "check_pending",
+   "not_used": null
+  },
+  {
+   "tool": "give_discoverable_user_tool",
+   "who": "agent",
+   "step": "give_check_tool",
+   "not_used": null
+  },
+  {
+   "tool": "deposit_check_3847",
+   "who": "customer",
+   "step": "customer_deposits",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_user_tool",
+   "who": "customer",
+   "step": "customer_deposits",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_funds_between_bank_accounts_7291",
+   "who": "agent",
+   "step": "move_balance",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_debit_cards",
+   "not_used": null
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": "close_debit_cards",
+   "not_used": null
+  },
+  {
+   "tool": "close_bank_account_7392",
+   "who": "agent",
+   "step": "close_account",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "failure_transfer_close",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_details",
+   "about": "Any 2 of date of birth, email, phone number and address, checked against the records (only if not already verified in this conversation)",
+   "from": "customer",
+   "ask": "To verify your identity, could you please give me two of these: your date of birth, email, phone number or address on file?",
+   "may_hold_back": false
+  },
+  {
+   "field": "account_to_close",
+   "about": "The checking account the customer wants to close (account_id, class, balance, date_opened, status)",
+   "from": "records",
+   "ask": "Which checking account would you like to close?",
+   "may_hold_back": false
+  },
+  {
+   "field": "funding_method_for_fee",
+   "about": "How the customer will put the early closure fee into the account if the balance is below the fee: depositing a check themselves, or an internal transfer from another of their accounts",
+   "from": "customer",
+   "ask": "The early closure fee has to be paid from the account balance. How would you like to add funds to cover it?",
+   "may_hold_back": true
+  },
+  {
+   "field": "fee_transfer_source",
+   "about": "Which of the customer's other OPEN accounts to transfer the fee amount from, and their authorization",
+   "from": "customer",
+   "ask": "Which of your accounts should I transfer the fee amount from, and do you authorize that transfer?",
+   "may_hold_back": true
+  },
+  {
+   "field": "remaining_balance_destination",
+   "about": "Which of the customer's open accounts should receive the balance left above the requirement before closure",
+   "from": "customer",
+   "ask": "Your account still has a balance. Which of your accounts should I move it to before closing?",
+   "may_hold_back": false
+  },
+  {
+   "field": "split_amounts",
+   "about": "If the customer wants the balance split across several of their accounts: each destination and the amount for it",
+   "from": "customer",
+   "ask": "How much should go to each account?",
+   "may_hold_back": true
+  },
+  {
+   "field": "terms_accepted",
+   "about": "Whether the customer accepts the early closure fee (if any) and the notice period",
+   "from": "customer",
+   "ask": "Would you like to proceed with the closure on these terms?",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "c_lookup_user",
+   "by": "model",
+   "do": "Look up the customer by the name (case sensitive), email or user id they give.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gives (or use get_user_information_by_email / get_user_information_by_id)"
+   },
+   "lookup": [],
+   "after": [],
+   "if": "the customer has not already been verified in this conversation",
+   "quote": "Authenticate the customer and confirm identity verification status on file.",
+   "doc": "doc_bank_accounts_bank_accounts__general__002"
+  },
+  {
+   "id": "c_verify",
+   "by": "model",
+   "do": "Confirm the customer correctly gives 2 of: date of birth, email, phone, address. Share no account information before this. If fewer than 2 match, do not proceed.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "c_lookup_user"
+   ],
+   "after": [
+    "c_lookup_user"
+   ],
+   "if": "the customer has not already been verified in this conversation",
+   "quote": "Authenticate the customer and confirm identity verification status on file.",
+   "doc": "doc_bank_accounts_bank_accounts__general__002"
+  },
+  {
+   "id": "c_get_time",
+   "by": "harness",
+   "do": "Get the current time for the verification log and to work out the account's age.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "c_verify"
+   ],
+   "if": null,
+   "quote": "Determine the account tier and applicable fees/notice period.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "c_log_verification",
+   "by": "harness",
+   "do": "Log the verification record.",
+   "call": "log_verification",
+   "args": {
+    "name": "the verified user's name",
+    "user_id": "the verified user's id",
+    "address": "from records",
+    "email": "from records",
+    "phone_number": "from records",
+    "date_of_birth": "from records",
+    "time_verified": "the time from c_get_time"
+   },
+   "lookup": [],
+   "after": [
+    "c_get_time"
+   ],
+   "if": "the customer was verified in c_verify and has not been logged in this conversation",
+   "quote": "Authenticate the customer and confirm identity verification status on file.",
+   "doc": "doc_bank_accounts_bank_accounts__general__002"
+  },
+  {
+   "id": "get_accounts_close",
+   "by": "harness",
+   "do": "Unlock get_all_user_accounts_by_user_id_3847 if needed. Read the accounts again for the target account's current account_id, account_class, status, balance and date_opened.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the verified user's id"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "c_log_verification"
+   ],
+   "if": null,
+   "quote": "Verifying pre-closure requirements when closing accounts",
+   "doc": "doc_bank_accounts_bank_accounts__general__009"
+  },
+  {
+   "id": "explain_close_order",
+   "by": "model",
+   "do": "If the customer asks to close this checking account before a savings account they also want is opened, and it is their only active checking account held at least 14 days, explain the reason instead of just insisting: a savings account needs an active checking account held at least 14 days, and a newly opened checking account does not count yet. Open the savings account (and any new checking account) first, then come back to this closure.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_close",
+    "c_get_time"
+   ],
+   "after": [
+    "get_accounts_close"
+   ],
+   "if": "the customer also wants a new savings account that is not yet open and this account is their only active checking account with 14+ days of tenure",
+   "quote": "Must have held their checking account for at least 14 days",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+  },
+  {
+   "id": "determine_tier_fee",
+   "by": "model",
+   "do": "Find the tier from the account_class, and compare date_opened with the current time to see whether the early closure fee applies. Entry tier (Light Blue, Light Green, Green Fee-Free): $15 within 30 days, 0-day notice. Mid tier (Green Account (checking), Blue Account): $25 within 60 days, 3-day notice. Premium tier (Evergreen): $50 within 90 days, 7-day notice. Elite tier (Bluest): $100 within 180 days, 14-day notice.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_close",
+    "c_get_time"
+   ],
+   "after": [
+    "get_accounts_close"
+   ],
+   "if": null,
+   "quote": "Determine the account tier and applicable fees/notice period.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "check_status",
+   "by": "model",
+   "do": "Confirm the account status is OPEN. If it is not, tell the customer the account cannot be closed in its current status and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_close"
+   ],
+   "after": [
+    "determine_tier_fee"
+   ],
+   "if": null,
+   "quote": "Account status is OPEN",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "check_pending",
+   "by": "harness",
+   "do": "Unlock get_bank_account_transactions_9173 and check the account for pending transactions.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_bank_account_transactions_9173",
+    "arguments": {
+     "account_id": "the account to close"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "check_status"
+   ],
+   "if": null,
+   "quote": "No pending transactions for this account",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "pending_block",
+   "by": "model",
+   "do": "Tell the customer the account has pending transactions that must clear before it can be closed. Do not close it, and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_pending"
+   ],
+   "after": [
+    "check_pending"
+   ],
+   "if": "check_pending shows any transaction with status 'pending'",
+   "quote": "Additionally, there cannot be any pending transactions on the account, as these need to clear first.",
+   "doc": "doc_bank_accounts_bank_accounts__general__020"
+  },
+  {
+   "id": "zero_balance_ready",
+   "by": "model",
+   "do": "If no early closure fee applies and get_accounts_close shows the balance is exactly $0, no transfer is needed: skip explain_fee, move_balance and move_balance_split and go to explain_terms.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_close",
+    "determine_tier_fee"
+   ],
+   "after": [
+    "check_pending"
+   ],
+   "if": "no early closure fee applies and the balance is exactly $0",
+   "quote": "If an early closure fee applies, the account balance must be at least the fee amount; otherwise, account balance (current_holdings) must be $0.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "explain_fee",
+   "by": "model",
+   "do": "Tell the customer the fee amount, and that it is taken from the account balance with no other way to pay. The balance must be at least the fee (or $0 if no fee applies). Ask how they want to add the funds: deposit a check themselves, or have you transfer from another of their OPEN accounts.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "determine_tier_fee",
+    "get_accounts_close"
+   ],
+   "after": [
+    "determine_tier_fee"
+   ],
+   "if": "an early closure fee applies and the balance is below the fee",
+   "quote": "If an early closure fee applies, the account balance must be at least the fee amount; otherwise, account balance (current_holdings) must be $0. The fee is deducted directly from the account balance and there is no alternative payment method.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "give_check_tool",
+   "by": "harness",
+   "do": "Give the customer the check deposit tool. Explain that they call it with the account_id of the account to close and the check amount.",
+   "call": "give_discoverable_user_tool",
+   "args": {
+    "discoverable_tool_name": "deposit_check_3847"
+   },
+   "lookup": [
+    "explain_fee"
+   ],
+   "after": [
+    "explain_fee"
+   ],
+   "if": "the customer wants to cover the fee by depositing a check",
+   "quote": "To help a customer deposit a check, give them the deposit_check_3847 tool.",
+   "doc": "doc_bank_accounts_bank_accounts__general__011"
+  },
+  {
+   "id": "customer_deposits",
+   "by": "customer",
+   "do": "The customer deposits the check into the account to close.",
+   "call": "deposit_check_3847",
+   "args": {
+    "account_id": "the account to close",
+    "check_amount": "the check amount"
+   },
+   "lookup": [],
+   "after": [
+    "give_check_tool"
+   ],
+   "if": null,
+   "quote": "Have the user call deposit_check_3847(account_id, check_amount) where account_id is the ID of the account they want to deposit into and check_amount is the amount of the check in USD.",
+   "doc": "doc_bank_accounts_bank_accounts__general__011"
+  },
+  {
+   "id": "transfer_fee_in",
+   "by": "model",
+   "do": "Unlock transfer_funds_between_bank_accounts_7291 if needed. Transfer the amount still missing to reach the fee (fee minus current balance) from the OPEN account the customer chose into the account to close. Before calling, confirm the source is OPEN/ACTIVE and its balance covers the amount. On insufficient funds, offer another amount or source.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+    "arguments": {
+     "source_account_id": "the customer-chosen OPEN account from get_accounts_close",
+     "destination_account_id": "the account to close",
+     "amount": "the early closure fee minus the current balance"
+    }
+   },
+   "lookup": [
+    "determine_tier_fee",
+    "get_accounts_close"
+   ],
+   "after": [
+    "explain_fee"
+   ],
+   "if": "the customer chooses to cover the fee by an internal transfer and authorizes it",
+   "quote": "Moving funds between a customer’s checking and savings accounts at their request",
+   "doc": "doc_bank_accounts_bank_accounts__general__010"
+  },
+  {
+   "id": "recheck_balance",
+   "by": "harness",
+   "do": "Look up the accounts again to confirm the balance now covers the fee. If it does not, explain what is still missing and do not close.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the verified user's id"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "customer_deposits",
+    "transfer_fee_in"
+   ],
+   "if": "the customer deposited or transferred funds to cover the fee",
+   "quote": "Verifying pre-closure requirements when closing accounts",
+   "doc": "doc_bank_accounts_bank_accounts__general__009"
+  },
+  {
+   "id": "move_balance",
+   "by": "harness",
+   "do": "Unlock transfer_funds_between_bank_accounts_7291 and move the excess balance to another OPEN account of the customer's that they choose. Move the balance minus any applicable fee, or the full balance if no fee applies. If the customer declines, explain that the closure cannot go ahead until the balance requirement is met.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+    "arguments": {
+     "source_account_id": "the account to close",
+     "destination_account_id": "another OPEN account of the customer, chosen by the customer",
+     "amount": "the balance minus any applicable early closure fee"
+    }
+   },
+   "lookup": [
+    "determine_tier_fee",
+    "get_accounts_close"
+   ],
+   "after": [
+    "check_pending"
+   ],
+   "if": "the balance is above $0 with no fee (or above the fee when one applies), and the customer authorizes moving it",
+   "quote": "Consolidating balances prior to closing one of the customer’s accounts",
+   "doc": "doc_bank_accounts_bank_accounts__general__010"
+  },
+  {
+   "id": "move_balance_split",
+   "by": "harness",
+   "do": "Unlock transfer_funds_between_bank_accounts_7291 if needed and make one transfer per destination the customer named (for example, part to a new savings account and part to a new business checking account). First check that every destination is OPEN or ACTIVE in get_accounts_close and belongs to the customer, and that the amounts add up to the balance minus any applicable fee (or the full balance if no fee applies). If the amounts do not add up, ask the customer to adjust them before transferring.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "transfer_funds_between_bank_accounts_7291",
+    "arguments": {
+     "source_account_id": "the account to close",
+     "destination_account_id": "each customer-named OPEN account from get_accounts_close",
+     "amount": "the amount the customer named for that destination"
+    }
+   },
+   "lookup": [
+    "determine_tier_fee",
+    "get_accounts_close"
+   ],
+   "after": [
+    "check_pending"
+   ],
+   "if": "the customer asks to split the balance across several of their accounts and authorizes each transfer",
+   "quote": "3) Consolidating balances before account closure.",
+   "doc": "doc_bank_accounts_bank_accounts__general__010"
+  },
+  {
+   "id": "split_transfer_error",
+   "by": "model",
+   "do": "If a transfer returns an error: on insufficient funds, offer to adjust the amount after re-checking the balance. If either account is not ACTIVE or OPEN, stop and resolve that first. Do not close the account until the balance requirement is met.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "move_balance",
+    "move_balance_split"
+   ],
+   "after": [
+    "move_balance",
+    "move_balance_split"
+   ],
+   "if": "transfer_funds_between_bank_accounts_7291 returned an error",
+   "quote": "If either account is not ACTIVE or OPEN, do not proceed; resolve the account status first",
+   "doc": "doc_bank_accounts_bank_accounts__general__010"
+  },
+  {
+   "id": "recheck_after_move",
+   "by": "harness",
+   "do": "Read the accounts again to confirm the balance of the account to close is now $0, or exactly the fee if one applies.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the verified user's id"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "move_balance",
+    "move_balance_split"
+   ],
+   "if": "funds were moved out in move_balance or move_balance_split",
+   "quote": "Verify the transfer posted as expected between the specified accounts",
+   "doc": "doc_bank_accounts_bank_accounts__general__010"
+  },
+  {
+   "id": "explain_terms",
+   "by": "model",
+   "do": "Tell the customer any early closure fee that applies and the tier's notice period (entry tier: 0 days; mid tier: 3 days; premium tier: 7 days; elite tier: 14 days), and get their confirmation to proceed.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "determine_tier_fee",
+    "get_accounts_close"
+   ],
+   "after": [
+    "check_pending"
+   ],
+   "if": "status is OPEN and there are no pending transactions",
+   "quote": "Determine the account tier and applicable fees/notice period.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "get_debit_cards",
+   "by": "harness",
+   "do": "Unlock get_debit_cards_by_account_id_7823 and list the debit cards on the account to close.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "arguments": {
+     "account_id": "the account to close"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "explain_terms"
+   ],
+   "if": "the customer confirmed the closure",
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts__general__028"
+  },
+  {
+   "id": "check_cards",
+   "by": "model",
+   "do": "For each ACTIVE or PENDING card, check three things. (1) No pending transactions on the card (check_pending). (2) No pending refunds. (3) The card has been active at least 14 days (date_issued compared with c_get_time). The account_closing reason does not bypass the age rule. If a card fails, tell the customer what must be resolved, give the earliest date when age is the problem, and do not close the card or the account.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_debit_cards",
+    "check_pending",
+    "c_get_time"
+   ],
+   "after": [
+    "get_debit_cards"
+   ],
+   "if": "get_debit_cards returns a card in ACTIVE or PENDING status",
+   "quote": "Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+   "doc": "doc_bank_accounts_bank_accounts__general__025"
+  },
+  {
+   "id": "close_debit_cards",
+   "by": "harness",
+   "do": "For each ACTIVE or PENDING card, tell the customer it must be closed before the account. Then unlock close_debit_card_4721 and close it with reason 'account_closing'. If a card cannot be closed (pending transactions or refunds), explain what must be resolved and do not close the account.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "close_debit_card_4721",
+    "arguments": {
+     "card_id": "each ACTIVE/PENDING card_id from get_debit_cards",
+     "reason": "account_closing"
+    }
+   },
+   "lookup": [
+    "get_debit_cards",
+    "check_cards"
+   ],
+   "after": [
+    "get_debit_cards",
+    "check_cards"
+   ],
+   "if": "get_debit_cards returns a card in ACTIVE or PENDING status, the card passed check_cards, and the customer confirmed the closure",
+   "quote": "If the linked checking account is being closed, all associated debit cards must be closed first",
+   "doc": "doc_bank_accounts_bank_accounts__general__025"
+  },
+  {
+   "id": "unlock_close",
+   "by": "harness",
+   "do": "Unlock the account closing tool.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "close_bank_account_7392"
+   },
+   "lookup": [],
+   "after": [
+    "check_pending",
+    "recheck_balance",
+    "explain_terms",
+    "close_debit_cards"
+   ],
+   "if": "the tool is not already unlocked in this conversation",
+   "quote": "Use close_bank_account_7392 to close the account.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "close_account",
+   "by": "harness",
+   "do": "Close the checking account.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "close_bank_account_7392",
+    "arguments": {
+     "account_id": "the account to close"
+    }
+   },
+   "lookup": [
+    "check_status",
+    "check_pending",
+    "determine_tier_fee",
+    "get_accounts_close",
+    "get_debit_cards",
+    "recheck_after_move"
+   ],
+   "after": [
+    "unlock_close"
+   ],
+   "if": "all pre-closure requirements are met: status OPEN, no pending transactions, balance requirement met, linked debit cards closed, and the customer confirmed after hearing the fee and notice terms",
+   "quote": "Use close_bank_account_7392 to close the account.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "confirm_close",
+   "by": "model",
+   "do": "Confirm the closure and the fee deducted.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "close_account"
+   ],
+   "after": [
+    "close_account"
+   ],
+   "if": null,
+   "quote": "Verify pre-closure requirements are met.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "id": "close_error_903",
+   "by": "model",
+   "do": "Tell the customer the closure request was blocked and that they should wait 48 hours and try again.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "close_account"
+   ],
+   "after": [
+    "close_account"
+   ],
+   "if": "close_bank_account_7392 returned error 903",
+   "quote": "This can occur when attempting to close an account. Instruct the customer to wait 48 hours and try again.",
+   "doc": "doc_checking_accounts_checking_accounts__general__003"
+  },
+  {
+   "id": "failure_transfer_close",
+   "by": "model",
+   "do": "If the closure fails with another error you cannot resolve, tell the customer and ask whether they want a human agent. Transfer only if they agree, using reason account_closure_request.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the closure request and the error that blocked it",
+    "reason": "account_closure_request"
+   },
+   "lookup": [
+    "close_account"
+   ],
+   "after": [
+    "close_account"
+   ],
+   "if": "close_bank_account_7392 returned an error other than 903 and the customer agrees to a transfer",
+   "quote": "Customer is explicitly requesting to close their account",
+   "doc": "doc_bank_accounts_bank_accounts__general__042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Green Account (checking) and Blue Account are MID TIER: $25 early closure fee within 60 days of opening; 3-day notice period",
+   "quote": "Early closure fee: $25 if closed within 60 days",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "Entry tier (Light Blue, Light Green, Green Fee-Free): $15 within 30 days. Premium (Evergreen): $50 within 90 days. Elite (Bluest): $100 within 180 days.",
+   "quote": "Early closure fee: $15 if closed within 30 days",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "Evergreen Account is PREMIUM tier: $50 early closure fee if closed within 90 days of opening; 7-day notice period",
+   "quote": "Early closure fee: $50 if closed within 90 days",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "Bluest Account is ELITE tier: $100 early closure fee if closed within 180 days of opening",
+   "quote": "Early closure fee: $100 if closed within 180 days",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "Elite tier notice period is 14 days",
+   "quote": "Notice period: 14 days",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "The balance must be at least the fee when a fee applies; otherwise it must be exactly $0. The fee can only come out of the account balance.",
+   "quote": "The fee is deducted directly from the account balance and there is no alternative payment method.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "The account must be OPEN",
+   "quote": "Account status is OPEN",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "The account must have no pending transactions",
+   "quote": "No pending transactions for this account",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "The agent cannot deposit checks; the customer must do it",
+   "quote": "Note: The agent cannot deposit checks on behalf of the customer - this action must be performed by the customer themselves through the mobile app.",
+   "doc": "doc_bank_accounts_bank_accounts__general__011"
+  },
+  {
+   "rule": "Funds may be moved between accounts before closure, but only with the customer's authorization",
+   "quote": "Consolidating balances prior to closing one of the customer’s accounts",
+   "doc": "doc_bank_accounts_bank_accounts__general__010"
+  },
+  {
+   "rule": "An internal transfer needs the customer's authorization, both accounts ACTIVE/OPEN, and enough funds in the source",
+   "quote": "Ensure the two accounts belong to the same customer and the customer has authorized the transfer",
+   "doc": "doc_bank_accounts_bank_accounts__general__010"
+  },
+  {
+   "rule": "Debit cards on a checking account being closed must be closed first",
+   "quote": "If the linked checking account is being closed, all associated debit cards must be closed first",
+   "doc": "doc_bank_accounts_bank_accounts__general__025"
+  },
+  {
+   "rule": "A debit card must have been active at least 14 days before it can be closed. Only lost, stolen or fraud_suspected reasons bypass this.",
+   "quote": "Minimum card age: The debit card must have been active for at least 14 days.",
+   "doc": "doc_bank_accounts_bank_accounts__general__025"
+  },
+  {
+   "rule": "Error 903 on closure: wait 48 hours and try again",
+   "quote": "This can occur when attempting to close an account. Instruct the customer to wait 48 hours and try again.",
+   "doc": "doc_checking_accounts_checking_accounts__general__003"
+  },
+  {
+   "rule": "Closing an account leaves it with status CLOSED, which blocks opening business checking, so open any requested business checking first",
+   "quote": "The customer has no accounts with status CLOSED.",
+   "doc": "doc_bank_accounts_bank_accounts__general__003"
+  },
+  {
+   "rule": "Light Blue Account is ENTRY tier",
+   "quote": "ENTRY TIER (Light Blue Account, Light Green Account, Green Fee-Free Account)",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "Entry tier notice period is 0 days",
+   "quote": "Notice period: 0 days",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  },
+  {
+   "rule": "A savings account needs a checking account held at least 14 days, so close the only such checking account only after the requested savings account is open",
+   "quote": "Must have held their checking account for at least 14 days",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_002"
+  },
+  {
+   "rule": "An account past its early-closure window (e.g. Light Blue held more than 30 days) has no fee, so its balance must be exactly $0; an already-empty account needs no transfer",
+   "quote": "If an early closure fee applies, the account balance must be at least the fee amount; otherwise, account balance (current_holdings) must be $0.",
+   "doc": "doc_bank_accounts_bank_accounts__general__005"
+  }
+ ],
+ "done_when": "close_bank_account_7392 has succeeded for the requested checking account, and the customer has been told it is closed, including any fee deducted and where the balance went (split across accounts if asked). Or the customer has been told which pre-closure requirement blocks the closure (status, pending transactions, balance, a debit card, error 903) and what to resolve, or why the closure waits until the requested savings account is open."
+}

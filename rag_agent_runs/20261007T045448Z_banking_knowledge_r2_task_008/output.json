@@ -1,0 +1,978 @@
+{
+ "jobs": [
+  {
+   "job": "handle_unverified_promotional_offer_request",
+   "aliases": [
+    "claim_promotion_from_letter_email_or_flyer",
+    "redeem_flyer_promotional_offer",
+    "redeem_mailed_offer",
+    "unavailable_offer_refusal_and_transfer"
+   ],
+   "when": {
+    "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "Starts only when the customer asks to redeem or claim an offer they saw in a letter, email, flyer or ad. The agent never offers a credit, fee waiver or fee exemption that the knowledge base does not list.",
+    "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+   },
+   "tools": [
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_bm25",
+     "who": "agent",
+     "step": "search_kb_for_offer",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_dense",
+     "who": "agent",
+     "step": "search_kb_for_offer",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "transfer_after_persistent_demand",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "verify_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "verify_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "verify_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "verify_log",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "read_accounts",
+     "not_used": null
+    },
+    {
+     "tool": "apply_statement_credit_8472",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used in this job. Do not use it for an offer the knowledge base does not list, for a promo whose window has closed, or for a customer who is not eligible. A flyer, letter or email alone is not grounds for a 'promotional_credit'. Documented promos post on their own after qualification, so the agent never applies them by hand."
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used. This job unlocks no discoverable tool, and the policy forbids unlocking tools the agent will not use."
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used. This job calls no discoverable tool."
+    },
+    {
+     "tool": "order_replacement_credit_card_7291",
+     "who": "agent",
+     "step": null,
+     "not_used": "This tool belongs to the replacement-card procedure. That document is cited here only for its standard identity-verification sentence."
+    },
+    {
+     "tool": "apply_for_credit_card",
+     "who": "customer",
+     "step": null,
+     "not_used": "Not part of this job. If the customer separately asks to apply for a card whose documented promo is still open, that is a separate card-application job, and the customer runs the tool."
+    }
+   ],
+   "info": [
+    {
+     "field": "offer_terms",
+     "about": "What each offer the customer wants says: the card it is for, the reward or waiver, the spend amount, the time period and any dates",
+     "from": "customer",
+     "ask": "Could you read me the exact terms on the offer, including which card it is for, the reward, any spending requirement and the dates?",
+     "may_hold_back": true
+    },
+    {
+     "field": "offer_card_product",
+     "about": "Which Rho-Bank card the flyer names, if it names one",
+     "from": "customer",
+     "ask": "Which Rho-Bank card does the flyer say the offer is for?",
+     "may_hold_back": true
+    },
+    {
+     "field": "offer_source",
+     "about": "Where the customer saw the offer: letter, email, flyer or ad",
+     "from": "customer",
+     "ask": "Where did you receive this offer: a letter, an email or a flyer?",
+     "may_hold_back": false
+    },
+    {
+     "field": "is_business_owner",
+     "about": "Whether the customer owns a business. Business cards need business details to apply.",
+     "from": "customer",
+     "ask": "Is this for a personal card, or do you own a business you would be applying for?",
+     "may_hold_back": true
+    },
+    {
+     "field": "existing_account",
+     "about": "Whether the customer already holds the Rho-Bank card the offer is for. This matters only when a documented promo matches.",
+     "from": "records",
+     "ask": "Do you already hold a Rho-Bank credit card, or is this offer for a new card?",
+     "may_hold_back": true
+    },
+    {
+     "field": "current_time",
+     "about": "Today's date, used to check promotion windows",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "transfer_request",
+     "about": "Whether the customer asks or demands to speak with a human agent, and whether they kept pressing after being told the offer is not available",
+     "from": "customer",
+     "ask": "",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "ask_terms",
+     "by": "model",
+     "do": "Ask the customer for the exact terms of each offer: card, reward, spend requirement, time period and dates. Also ask where they received it. Do not ask for the flyer itself or for any documents. Handle the offers one at a time.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time so promotion windows can be checked.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "ask_terms"
+     ],
+     "if": null,
+     "quote": "Submit your application within the promo window and be approved.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "id": "search_kb_for_offer",
+     "by": "model",
+     "do": "Search the knowledge base for a documented promotion that matches the terms exactly. Search by keyword (KB_search_bm25) and by meaning (KB_search_dense), then open each promo document with cat. Do this for each offer the customer raises, including offers they raise again.",
+     "call": "KB_search_bm25",
+     "args": {
+      "query": "the card name and offer terms the customer gave in ask_terms (e.g. 'statement credit spend first months', 'annual fee waived first year', 'foreign transaction fee promo')"
+     },
+     "lookup": [],
+     "after": [
+      "get_time"
+     ],
+     "if": null,
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "match_offer",
+     "by": "model",
+     "do": "For each claimed offer, decide whether a documented promo matches it. A match needs the same card, the same reward amount, and the same spend amount and period. The current date from get_time must also fall inside the promo window, and the customer must meet its eligibility rules (new customer, invitation where required, a business for business cards). A promo with different terms, a closed window, or eligibility the customer does not meet is not a match.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_time",
+      "search_kb_for_offer"
+     ],
+     "after": [
+      "search_kb_for_offer"
+     ],
+     "if": null,
+     "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "id": "explain_documented_offer",
+     "by": "model",
+     "do": "Explain how to qualify exactly as the matched promo's document says: open or apply within the window, then meet the stated spend, and expect the stated posting timeline. Do not apply credits or waivers yourself.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "match_offer",
+      "get_time",
+      "search_kb_for_offer"
+     ],
+     "after": [
+      "match_offer"
+     ],
+     "if": "a documented, currently active promotion matches the customer's terms and the customer is eligible for that card",
+     "quote": "Open your account within the promotional window and meet new customer eligibility criteria",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_011"
+    },
+    {
+     "id": "decline_unavailable_offer",
+     "by": "model",
+     "do": "Tell the customer politely that the offer as described is not one Rho-Bank can find or honor. You may state documented public facts only, for example that a promo with different terms exists or that a promo window has closed. Do not reveal internal policy or invent terms or exceptions, and do not apply any statement credit, fee waiver or fee change. Repeat this for each offer the customer raises, including offers they raise again, and give the same answer however often they insist.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "match_offer"
+     ],
+     "after": [
+      "match_offer"
+     ],
+     "if": "no documented promotion matches, the matching promotion's window has ended, the promotion needs an invitation the customer lacks, or the matching promotion is for a business card and the customer has no business",
+     "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "id": "verify_lookup",
+     "by": "model",
+     "do": "Ask for the customer's name or email and look up their record. Confirm they correctly give any 2 of date of birth, email, phone number and address. Share no account details before they are verified.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "as given by the customer (or use get_user_information_by_email / get_user_information_by_id with what they give)"
+     },
+     "lookup": [],
+     "after": [
+      "match_offer"
+     ],
+     "if": "match_offer found a matching, current promo the customer is eligible for, and helping requires reading their account records",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "verify_log",
+     "by": "harness",
+     "do": "Log the verification using the record returned by verify_lookup and the time from get_time.",
+     "call": "log_verification",
+     "args": {
+      "name": "verify_lookup result",
+      "user_id": "verify_lookup result",
+      "address": "verify_lookup result",
+      "email": "verify_lookup result",
+      "phone_number": "verify_lookup result",
+      "date_of_birth": "verify_lookup result",
+      "time_verified": "get_time result"
+     },
+     "lookup": [
+      "verify_lookup"
+     ],
+     "after": [
+      "verify_lookup"
+     ],
+     "if": "the customer correctly gave 2 of the 4 identifying values in verify_lookup",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "read_accounts",
+     "by": "harness",
+     "do": "Read the verified customer's credit card accounts to see whether they already hold the card the matched promo is for. A new-customer promo does not apply to an existing account.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "verify_log"
+     ],
+     "if": "a matched promo exists and the customer was verified",
+     "quote": "The credit card account ID to apply the credit to. This can be found by calling get_credit_card_accounts_by_user.",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    },
+    {
+     "id": "transfer_after_persistent_demand",
+     "by": "model",
+     "do": "The customer has kept pressing after being told the offers are not available and now demands a human. Confirm the transfer and transfer them with the Tier 1 reason code. The summary lists the offers they asked about and says they were told the offers are not available.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "Customer asked to redeem flyer promotional offers (list each offer's terms from ask_terms); none match an active documented promotion they qualify for; customer was told several times and now demands a human agent",
+      "reason": "customer_demands_after_unavailable_offer_refusal"
+     },
+     "lookup": [
+      "decline_unavailable_offer"
+     ],
+     "after": [
+      "decline_unavailable_offer"
+     ],
+     "if": "the customer has been told the offers are not available, has kept pressing several times, and now demands a human agent",
+     "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "transfer_unconfirmed_offer",
+     "by": "model",
+     "do": "The customer asked for a human right after you reported that the claimed letter, email or flyer offer cannot be verified, with no repeated insistence. Transfer them with the Tier 2 reason code. The summary lists the claimed offer and says it could not be found in the knowledge base.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "the claimed offer's terms and source from ask_terms, and that search_kb_for_offer found no matching documented promotion",
+      "reason": "unconfirmed_external_communication"
+     },
+     "lookup": [
+      "decline_unavailable_offer"
+     ],
+     "after": [
+      "decline_unavailable_offer"
+     ],
+     "if": "the customer requests a human agent after being told the claimed offer cannot be verified, without having persisted multiple times after refusals (otherwise use transfer_after_persistent_demand)",
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Pick the transfer reason from the highest tier that applies. When the customer keeps demanding a human after being told the offers are not available, use the Tier 1 code customer_demands_after_unavailable_offer_refusal, not the Tier 2 code unconfirmed_external_communication.",
+     "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "Use unconfirmed_external_communication only when the customer requests a transfer because a claimed flyer, letter or email offer cannot be found, without the pattern of being refused and persisting.",
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "The only documented 'spend $10,000 in the first 2 months' promotion is on the Business Bronze Rewards Card. It pays $500, not any other amount, and it is a business card.",
+     "quote": "After qualification, a $500 statement credit will be applied to your account.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_010"
+    },
+    {
+     "rule": "The Business Bronze spend promo window runs 2025-10-01 through 2026-03-31. It counts net new purchases within the first 2 months of account opening.",
+     "quote": "This offer is available from 2025-10-01 through 2026-03-31.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_010"
+    },
+    {
+     "rule": "Business cards need business details to apply. A customer with no business is not eligible for business card promotions.",
+     "quote": "Provide basic business details such as legal business name, EIN (if available), entity type, and ownership information.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_001"
+    },
+    {
+     "rule": "The consumer first-year annual fee waiver (Platinum Rewards Card) applies only to accounts opened in its promo window, which ends 2024-12-31. It cannot be applied after the window or retroactively.",
+     "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "rule": "The Platinum Rewards first-year fee waiver window starts 2024-06-01.",
+     "quote": "Start date: 2024-06-01",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "rule": "The other first-year fee waivers are for business cards only (Business Platinum Rewards, Business Silver Rewards). They are for new customers and apply only inside their windows.",
+     "quote": "Offer is for new customers only and applies to new accounts opened within the promotion window.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_011"
+    },
+    {
+     "rule": "The Business Silver Rewards first-year fee waiver applies only to new customers who open the account inside its promotional window.",
+     "quote": "New customers who open an account during the promotional window receive a first-year annual fee of 0",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_011"
+    },
+    {
+     "rule": "The Diamond Elite fee waiver and $5,000 credit are by invitation only and need the invitation accepted inside the window. They cannot be granted on request.",
+     "quote": "Accept your invitation during the promo window (between 2025-11-01 and 2026-01-31).",
+     "doc": "doc_credit_cards_diamond_elite_card_009"
+    },
+    {
+     "rule": "No document describes a time-limited promotion of 0% foreign transaction fees (for example, for a set number of years). 0% foreign transaction fees are only a standing feature of certain cards, so a time-limited 0% foreign-fee offer cannot be verified.",
+     "quote": "Foreign transaction fee: 0%",
+     "doc": "doc_credit_cards_gold_rewards_card_001"
+    },
+    {
+     "rule": "The Platinum Rewards 0% foreign transaction fee is a standing card feature, not a promotion.",
+     "quote": "Foreign transaction fee: 0% on international purchases.",
+     "doc": "doc_credit_cards_platinum_rewards_card_001"
+    },
+    {
+     "rule": "On the Silver Rewards Card, the 0% foreign transaction fee depends on holding a premium subscription. It is not a promotional period.",
+     "quote": "Foreign transaction fee with a premium subscription: 0%",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "rule": "A 'promotional_credit' statement credit is only for a real promotional offer or campaign. It is never issued for an offer that cannot be verified in the knowledge base.",
+     "quote": "'promotional_credit': Credit from a promotional offer or campaign",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    }
+   ],
+   "done_when": "For every offer the customer raised, the customer has been told either how to qualify for a matching documented promotion or that the offer is not available. No credit, waiver or fee change was applied for an unverified offer. If the customer demanded a human after persistent refusals, transfer_to_human_agents was called with reason customer_demands_after_unavailable_offer_refusal. If they asked for a human with no persistence, it was called with unconfirmed_external_communication. Either way the call carried a summary of the claimed offers."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_042",
+   "why": "Internal transfer reason codes. Covers unverifiable letter, email or flyer offers (unconfirmed_external_communication), persistent demands after an offer refusal (customer_demands_after_unavailable_offer_refusal), and the highest-tier rule."
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_010",
+   "why": "The only documented spend-$10,000-in-2-months promo: a $500 credit on a business card, window 2025-10-01 to 2026-03-31."
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_001",
+   "why": "Business card applications need business details, so a customer with no business does not qualify."
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_009",
+   "why": "Platinum first-year annual fee waiver, window 2024-06-01 to 2024-12-31, not retroactive."
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_011",
+   "why": "Business Silver first-year fee waiver for new customers inside its window."
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_011",
+   "why": "Business Platinum first-year fee waiver for new customers inside its window."
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_009",
+   "why": "Invitation-only Diamond Elite fee waiver and credit promo."
+  },
+  {
+   "id": "doc_credit_cards_gold_rewards_card_001",
+   "why": "0% foreign transaction fee as a standing Gold card feature."
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_001",
+   "why": "0% foreign transaction fee as a standing Platinum card feature."
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_001",
+   "why": "Silver Rewards 0% foreign transaction fee depends on a premium subscription."
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_017",
+   "why": "Statement credit tool and its 'promotional_credit' reason. It must not be used for unverified offers."
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_001",
+   "why": "Source of the standard identity-verification sentence."
+  }
+ ],
+ "open_questions": [
+  "No document says how many refusals must come before a transfer for an unverifiable offer. Policy guideline 6 (transfer after 4 requests) covers issues the agent can resolve. This one cannot be resolved, so the workflow transfers once the customer demands a human, using the Tier 1 code if they persisted after refusals.",
+  "No knowledge base document describes a 0% foreign transaction fee promo for a fixed number of years, or a $1,000 credit for $10,000 spend in 2 months. These are treated as unverifiable.",
+  "The special transfer protocols in doc_credit_cards_credit_cards_(general)_010, _011 and _012 apply only to their own scenarios, not to offer requests.",
+  "The knowledge base does not say whether the agent should offer a transfer before the customer asks. The workflow waits for the customer's request."
+ ],
+ "merge": [
+  {
+   "job": "handle_unverified_promotional_offer_request",
+   "into": [
+    "handle_unverified_promotional_offer_request"
+   ],
+   "previous_sessions": [
+    "20261006T152355Z_banking_knowledge_r1_task_008"
+   ],
+   "changelog": [
+    {
+     "change": "changed",
+     "what": "doc ids for doc_bank_accounts_bank_accounts__general__042",
+     "why": "Rewritten in the id form the search tools print (doc_bank_accounts_bank_accounts_(general)_042). It is the same document and the quotes are unchanged.",
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "starts, tools, aliases, lookup fields",
+     "why": "The old version had no starts, tools or lookup. They are added so every check names its lookup and every tool the cited documents name is listed.",
+     "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "match_offer",
+     "why": "An explicit decision step that reads get_time and search_kb_for_offer results, so the explain and decline branches are decided on looked-up facts",
+     "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "change": "added",
+     "what": "transfer_unconfirmed_offer",
+     "why": "A new branch for a customer who asks for a human without persisting after refusals. It uses the Tier 2 code that an existing rule already described but no step carried out.",
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "verify_lookup, verify_log, read_accounts",
+     "why": "A conditional branch for when a documented promo matches and the agent must read account records. Verification is needed before any record access.",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "change": "added",
+     "what": "info offer_source, existing_account, transfer_request",
+     "why": "Facts this customer's case needs: where the offer came from, whether they already hold the card, and whether and how they demanded a human",
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "rules: Business Bronze window, Platinum window start, Business Silver waiver, Diamond Elite invitation, Platinum 0% FX, Silver Rewards premium-subscription FX, promotional_credit restriction",
+     "why": "Additional documented promo facts used to decide matches for flyer offers",
+     "quote": "'promotional_credit': Credit from a promotional offer or campaign",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    },
+    {
+     "change": "changed",
+     "what": "decline_unavailable_offer",
+     "why": "Adds the invitation-only case to its condition and keeps the same answer under repeated insistence. Everything the old step did is kept.",
+     "quote": "Accept your invitation during the promo window (between 2025-11-01 and 2026-01-31).",
+     "doc": "doc_credit_cards_diamond_elite_card_009"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 35,
+     "n": 35,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [
+      "apply_statement_credit_8472",
+      "order_replacement_credit_card_7291"
+     ],
+     "missing": [],
+     "n": 2
+    },
+    "D3": {
+     "with_condition": 0,
+     "n": 0
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 4,
+     "n": 5,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 0.8
+    }
+   },
+   "failed": [],
+   "taken": true
+  }
+ ],
+ "rejected": [],
+ "draft": [
+  {
+   "job": "handle_unverified_promotional_offer_request",
+   "aliases": [
+    "redeem_flyer_promotional_offer",
+    "redeem_mailed_offer",
+    "claim_promotion_from_letter_email_or_flyer",
+    "unavailable_offer_refusal_and_transfer"
+   ],
+   "when": {
+    "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks to redeem or claim an offer they saw in a letter, email, flyer or ad. The agent never offers to apply a credit, fee waiver or fee exemption that the knowledge base does not list.",
+    "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+   },
+   "tools": [
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_bm25",
+     "who": "agent",
+     "step": "search_kb",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_dense",
+     "who": "agent",
+     "step": "search_kb",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "transfer",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "verify_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "verify_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "verify_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "verify_log",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "read_accounts",
+     "not_used": null
+    },
+    {
+     "tool": "apply_statement_credit_8472",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used for an offer the knowledge base does not list, or one whose window has closed or whose eligibility the customer does not meet. A flyer, letter or email by itself is not grounds for a 'promotional_credit'. Documented promos post on their own after qualification, so this job never issues them by hand."
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used. This job unlocks no discoverable tool, and the policy says not to unlock tools you will not use."
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used. This job calls no discoverable tool."
+    },
+    {
+     "tool": "order_replacement_credit_card_7291",
+     "who": "agent",
+     "step": null,
+     "not_used": "This tool belongs to the replacement-card procedure. That document is cited here only for its standard identity-verification sentence."
+    },
+    {
+     "tool": "apply_for_credit_card",
+     "who": "customer",
+     "step": null,
+     "not_used": "Not part of this job. If the customer separately asks to apply for a card whose documented promo is still open, that is a separate card-application job, and the customer runs the tool."
+    }
+   ],
+   "info": [
+    {
+     "field": "offer_terms",
+     "about": "What each claimed offer promises: the spend required, the reward or credit, the fee waived, the duration, and the card or product named",
+     "from": "customer",
+     "ask": "Could you read me the exact terms of the offer, including which card or account it is for, what you need to do to qualify, and what you would receive?",
+     "may_hold_back": false
+    },
+    {
+     "field": "offer_source",
+     "about": "Where the customer saw the offer (letter, email, flyer, ad)",
+     "from": "customer",
+     "ask": "Where did you receive this offer: a letter, an email or a flyer?",
+     "may_hold_back": false
+    },
+    {
+     "field": "is_business_owner",
+     "about": "Whether the customer owns a business, which business credit card applications require",
+     "from": "customer",
+     "ask": "Is this for a business you own, or for personal use?",
+     "may_hold_back": true
+    },
+    {
+     "field": "existing_account",
+     "about": "Whether the customer already has a Rho-Bank card the offer is meant to apply to",
+     "from": "records",
+     "ask": "Do you already hold a Rho-Bank credit card, or is this offer for a new card?",
+     "may_hold_back": true
+    },
+    {
+     "field": "current_date",
+     "about": "Today's date, used to test promo windows",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "transfer_request",
+     "about": "Whether the customer asks or demands to speak with a human agent",
+     "from": "customer",
+     "ask": "",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "get_offer_details",
+     "by": "model",
+     "do": "Ask the customer to describe each offer they want to redeem: its terms (spend required, reward or credit, fee waived, duration), the card or product it names, and where they received it. Handle the offers one at a time.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current date so promo windows can be checked.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "get_offer_details"
+     ],
+     "if": null,
+     "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "id": "search_kb",
+     "by": "model",
+     "do": "Search the knowledge base by keyword and by meaning for each claimed offer, using its exact terms (for example the spend amount and period, the credit amount, 'first year annual fee', 'foreign transaction fee'). Open every promo document that comes back with cat.",
+     "call": "KB_search_bm25",
+     "args": {
+      "query": "the claimed offer's terms from get_offer_details"
+     },
+     "lookup": [],
+     "after": [
+      "get_offer_details"
+     ],
+     "if": null,
+     "quote": "Customer claims a specific promotion/program/offer exists (they have a letter, email, or flyer) but you cannot verify or find it in the KB after searching",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "match_offer",
+     "by": "model",
+     "do": "For each claimed offer, decide whether a documented promo matches it exactly. The terms must be the same (amount, period, reward, duration), the current date from get_time must fall inside the promo window, and the customer must meet the eligibility rules (new customer, and business ownership for business cards). A promo with different terms, an expired window, or eligibility the customer does not meet is not a match.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_time",
+      "search_kb"
+     ],
+     "after": [
+      "get_time",
+      "search_kb"
+     ],
+     "if": null,
+     "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "id": "inform_unavailable",
+     "by": "model",
+     "do": "Tell the customer politely that you cannot find or honor this offer as described, and that you cannot apply its credit, fee waiver or fee exemption. Do not invent terms or exceptions, and do not reveal internal procedures. You may briefly state documented public facts, for example that a promo with different terms exists or that a promo window has closed. When the customer moves to another offer, repeat get_offer_details, search_kb and match_offer for it. Keep giving the same answer however often the customer insists.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "match_offer"
+     ],
+     "after": [
+      "match_offer"
+     ],
+     "if": "match_offer found no documented promo that matches the claimed offer, or the matching promo's window has closed, or the customer is not eligible",
+     "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "verify_lookup",
+     "by": "model",
+     "do": "Only if a documented promo matches and you must read the customer's account records to help them: ask for their name or email, look the customer up, and confirm they give correctly any 2 of date of birth, email, phone number and address.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "as given by the customer (or use get_user_information_by_email / get_user_information_by_id)"
+     },
+     "lookup": [],
+     "after": [
+      "match_offer"
+     ],
+     "if": "match_offer found a matching, current promo the customer is eligible for, and helping requires their account records",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "verify_log",
+     "by": "harness",
+     "do": "Log the verification using the record returned by verify_lookup and the time from get_time.",
+     "call": "log_verification",
+     "args": {
+      "name": "verify_lookup result",
+      "user_id": "verify_lookup result",
+      "address": "verify_lookup result",
+      "email": "verify_lookup result",
+      "phone_number": "verify_lookup result",
+      "date_of_birth": "verify_lookup result",
+      "time_verified": "get_time result"
+     },
+     "lookup": [
+      "verify_lookup"
+     ],
+     "after": [
+      "verify_lookup"
+     ],
+     "if": "the customer correctly gave 2 of the 4 identifying values in verify_lookup",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "read_accounts",
+     "by": "harness",
+     "do": "Read the verified customer's credit card accounts to see whether they already hold the card the matched promo is for.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "verify_log"
+     ],
+     "if": "a matched promo exists and the customer was verified",
+     "quote": "The credit card account ID to apply the credit to. This can be found by calling get_credit_card_accounts_by_user.",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    },
+    {
+     "id": "explain_matched_offer",
+     "by": "model",
+     "do": "Explain how to qualify for the matched promo exactly as its document states (window, new-customer requirement, spend threshold, posting timeline). Do not apply any credit or waiver by hand: these promos post after qualification.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "match_offer",
+      "read_accounts"
+     ],
+     "after": [
+      "match_offer"
+     ],
+     "if": "match_offer found a matching, current promo the customer is eligible for",
+     "quote": "Apply during the promo window and, if approved, your first year annual fee is $0.00 instead of $200.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "id": "transfer",
+     "by": "model",
+     "do": "When the customer asks or demands to speak with a human, transfer them. Use reason 'customer_demands_after_unavailable_offer_refusal' if you had already told them the offer is not available and they kept insisting, which is the Tier 1 code and comes first. Use 'unconfirmed_external_communication' if they ask for a human right after you report that you cannot verify the offer, with no repeated insistence. In the summary, list the offers the customer claimed and say none could be verified in the knowledge base. Do not transfer unless the customer asks for it or accepts it.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "the claimed offers from get_offer_details and the outcome of match_offer",
+      "reason": "'customer_demands_after_unavailable_offer_refusal' or 'unconfirmed_external_communication' as decided above"
+     },
+     "lookup": [
+      "inform_unavailable"
+     ],
+     "after": [
+      "inform_unavailable"
+     ],
+     "if": "the customer requests or demands a human agent after being told the claimed offer cannot be found or honored",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below. Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Pick the transfer reason from the highest tier that applies. If the customer kept insisting after being told the offers do not exist and now demands a human, the reason is 'customer_demands_after_unavailable_offer_refusal' (Tier 1). Otherwise it is 'unconfirmed_external_communication' (Tier 2) for an unverifiable letter, email or flyer offer.",
+     "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "A promo applies only to accounts opened inside its window. If get_current_time is past the window end, the promo cannot be granted.",
+     "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "rule": "The Platinum Rewards first-year annual fee waiver window runs 2024-06-01 to 2024-12-31.",
+     "quote": "Start date: 2024-06-01",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "rule": "The only documented spend-$10,000-in-2-months offer is the Business Bronze Rewards new-customer promo, which pays a $500 statement credit, not any other amount. It is a business card.",
+     "quote": "After qualification, a $500 statement credit will be applied to your account.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_010"
+    },
+    {
+     "rule": "The Business Bronze spend promo requires net new purchases of $10,000 within the first 2 months of account opening, during its window of 2025-10-01 through 2026-03-31.",
+     "quote": "This offer is available from 2025-10-01 through 2026-03-31.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_010"
+    },
+    {
+     "rule": "A business credit card application requires business details, so a customer who owns no business is not a candidate for business-card promos.",
+     "quote": "Provide basic business details such as legal business name, EIN (if available), entity type, and ownership information.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_001"
+    },
+    {
+     "rule": "Business Silver and Business Platinum first-year fee waivers are only for new customers who open a business card inside the promo window.",
+     "quote": "Offer is for new customers only and applies to new accounts opened within the promotion window.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_011"
+    },
+    {
+     "rule": "The Business Silver Rewards first-year fee waiver applies only to new customers who open the account inside its promotional window.",
+     "quote": "New customers who open an account during the promotional window receive a first-year annual fee of 0",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_011"
+    },
+    {
+     "rule": "The Diamond Elite fee waiver and $5,000 credit are by invitation only and require accepting the invitation inside its window. They cannot be granted on request.",
+     "quote": "Accept your invitation during the promo window (between 2025-11-01 and 2026-01-31).",
+     "doc": "doc_credit_cards_diamond_elite_card_009"
+    },
+    {
+     "rule": "A 0% foreign transaction fee is a standing feature of certain cards, not a time-limited promotion. No documented promo grants 0% foreign transaction fees for a set number of years.",
+     "quote": "Foreign transaction fee: 0% on international purchases.",
+     "doc": "doc_credit_cards_platinum_rewards_card_001"
+    },
+    {
+     "rule": "On the Silver Rewards Card, the 0% foreign transaction fee depends on holding a premium subscription. It is not a promotional period.",
+     "quote": "Foreign transaction fee with a premium subscription: 0%",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "rule": "A 'promotional_credit' statement credit is only for a real promotional offer or campaign. It is never issued for an offer that cannot be verified in the knowledge base.",
+     "quote": "'promotional_credit': Credit from a promotional offer or campaign",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    }
+   ],
+   "done_when": "Every offer the customer claimed has been checked against the knowledge base and the current date, and the customer has been told which offers cannot be found or honored. No credit, waiver or fee change was applied for an unverified offer. If the customer asked for a human, transfer_to_human_agents was called with a summary and the highest-tier reason code that applies."
+  }
+ ]
+}

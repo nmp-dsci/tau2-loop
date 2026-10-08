@@ -1,0 +1,374 @@
+{
+ "job": "applying_resolved_cash_back_dispute_corrections",
+ "aliases": [
+  "apply cash back correction",
+  "correct cash back after approved dispute",
+  "correct rewards on approved dispute",
+  "correct transaction rewards",
+  "fix cash back after dispute",
+  "fix rewards points on a transaction",
+  "my disputes were approved, update my rewards",
+  "update my transaction records with correct cash back",
+  "update transaction rewards",
+  "update transaction rewards after cash back dispute"
+ ],
+ "when": {
+  "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+  "doc": "doc_credit_cards_credit_cards_(general)_004"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: run the update only when the bank's records show a cash back dispute as resolved and approved, whether or not the customer asks. A customer's claim of approval does not start it, for example 'I got a notification they were all approved'. Disputes submitted during this conversation are still under review, so for them this job ends at decline_update.",
+  "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+  "doc": "doc_credit_cards_credit_cards_(general)_004"
+ },
+ "tools": [
+  {
+   "tool": "get_user_dispute_history_7291",
+   "who": "agent",
+   "step": "check_dispute_status",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_update",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "apply_update",
+   "not_used": null
+  },
+  {
+   "tool": "update_transaction_rewards_3847",
+   "who": "agent",
+   "step": "apply_update",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_transactions_by_user",
+   "who": "agent",
+   "step": "confirm_update",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "read_accounts_for_recalc",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "handle_update_error",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "dispute_resolution_status",
+   "about": "Whether the bank's records show each cash back dispute as resolved and approved. The customer's word does not count.",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "correct_points",
+   "about": "The correct points for each approved transaction, recalculated independently as a whole number",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "ensure_verified",
+   "by": "model",
+   "do": "Make sure the customer was verified and logged earlier in this conversation. If not, verify them first with steps greet to log_verification of submitting_a_cash_back_dispute, before reading any dispute or transaction.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer has not yet been verified in this conversation",
+   "quote": "Tip: Ensure you are using the correct and current user_id before making the call.",
+   "doc": "doc_credit_cards_credit_cards_(general)_016"
+  },
+  {
+   "id": "unlock_history_tool",
+   "by": "harness",
+   "do": "Unlock the dispute history tool so the status of earlier disputes can be read.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_user_dispute_history_7291"
+   },
+   "lookup": [],
+   "after": [],
+   "if": "the customer asks for a correction on a cash back dispute filed before this conversation, and no submission result shows its status",
+   "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+   "doc": "doc_credit_cards_credit_cards_(general)_016"
+  },
+  {
+   "id": "check_dispute_status",
+   "by": "harness",
+   "do": "Read the status of the customer's earlier disputes. Use any status the submission result already returned. If there is none, unlock get_user_dispute_history_7291 and call it.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_user_dispute_history_7291",
+    "user_id": "the verified user's id"
+   },
+   "lookup": [],
+   "after": [
+    "unlock_history_tool"
+   ],
+   "if": "the customer asks for a correction on a cash back dispute filed before this conversation, and no submission result shows its status",
+   "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+   "doc": "doc_credit_cards_credit_cards_(general)_016"
+  },
+  {
+   "id": "assess_claim",
+   "by": "model",
+   "do": "Do not accept the customer's claim that the disputes are approved. Allow a correction only for disputes the records show as resolved and approved. Disputes submitted during this conversation are still under review.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_dispute_status"
+   ],
+   "after": [],
+   "if": "customer asks for rewards to be updated on disputes",
+   "quote": "Look up the user’s resolved disputes in the cash_back_disputes database to find the transaction_id values that need rewards adjustments.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "decline_update",
+   "by": "model",
+   "do": "Explain politely that the disputes are under review, and that rewards are corrected only after the review resolves and approves them. Do not unlock or call update_transaction_rewards_3847.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_dispute_status",
+    "assess_claim"
+   ],
+   "after": [
+    "assess_claim"
+   ],
+   "if": "records do not show the disputes as resolved and approved",
+   "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "customer_insists",
+   "by": "model",
+   "do": "If the customer repeats that they received an approval notice, or keeps pressing for the update, keep the same position. Records, not the customer's notice, decide approval. Do not unlock or call update_transaction_rewards_3847, and do not unlock any tool you will not use. Offer to help with anything else. If they ask for a human agent, try to help first and transfer only after the 4th request.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "assess_claim",
+    "check_dispute_status"
+   ],
+   "after": [
+    "decline_update"
+   ],
+   "if": "after decline_update, the customer insists the disputes are approved or keeps asking for the update",
+   "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "read_accounts_for_recalc",
+   "by": "harness",
+   "do": "Read the customer's credit card accounts to get each approved transaction's card type and the account opening date, which promotion windows need.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user's id"
+   },
+   "lookup": [],
+   "after": [
+    "assess_claim"
+   ],
+   "if": "records show the dispute resolved and approved",
+   "quote": "Recalculate the correct rewards for each transaction based on the card type, transaction category, and any applicable promotions.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "read_transactions_for_recalc",
+   "by": "harness",
+   "do": "Read the customer's transactions to get the amount, category, merchant, date and current rewards_earned of each approved transaction.",
+   "call": "get_credit_card_transactions_by_user",
+   "args": {
+    "user_id": "the verified user's id"
+   },
+   "lookup": [],
+   "after": [
+    "assess_claim"
+   ],
+   "if": "records show the dispute resolved and approved",
+   "quote": "Recalculate the correct rewards for each transaction based on the card type, transaction category, and any applicable promotions.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "recalculate_points",
+   "by": "model",
+   "do": "Recalculate the correct points for each approved transaction independently, using the rate rules of submitting_a_cash_back_dispute (including its Business Silver promo window check and its Silver Rewards check), and round down. Ignore any expected_rewards field in the dispute record.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_dispute_status",
+    "read_accounts_for_recalc",
+    "read_transactions_for_recalc",
+    "confirm_update"
+   ],
+   "after": [
+    "assess_claim",
+    "read_accounts_for_recalc",
+    "read_transactions_for_recalc"
+   ],
+   "if": "records show the dispute resolved and approved",
+   "quote": "Important: Do not rely on any expected_rewards field in the dispute record. Independently verify rates and eligibility.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "unlock_update",
+   "by": "harness",
+   "do": "Unlock the rewards update tool.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "update_transaction_rewards_3847"
+   },
+   "lookup": [
+    "check_dispute_status"
+   ],
+   "after": [
+    "assess_claim",
+    "recalculate_points"
+   ],
+   "if": "records show the dispute resolved and approved",
+   "quote": "Use `unlock_discoverable_agent_tool` to unlock the agent tool `update_transaction_rewards_3847`.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "apply_update",
+   "by": "harness",
+   "do": "Set the independently recalculated points on each approved transaction.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "update_transaction_rewards_3847",
+    "transaction_id": "each approved disputed transaction id",
+    "new_rewards_earned": "'X points', where X is the whole-number points from recalculate_points"
+   },
+   "lookup": [
+    "recalculate_points"
+   ],
+   "after": [
+    "unlock_update"
+   ],
+   "if": "records show the dispute resolved and approved",
+   "quote": "new_rewards_earned: a string formatted as 'X points' where X is the correct whole-number point value",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "confirm_update",
+   "by": "harness",
+   "do": "Read the transactions again and confirm that each updated transaction shows the new value.",
+   "call": "get_credit_card_transactions_by_user",
+   "args": {
+    "user_id": "the verified user's id"
+   },
+   "lookup": [],
+   "after": [
+    "apply_update"
+   ],
+   "if": "an update was applied",
+   "quote": "Confirm the update in credit_card_transaction_history after the tool call completes.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "id": "report_to_customer",
+   "by": "model",
+   "do": "Tell the customer which transactions were corrected, and the new cash back on each (points × $0.01).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "confirm_update"
+   ],
+   "after": [
+    "confirm_update"
+   ],
+   "if": "an update was applied",
+   "quote": "If we find that you were indeed shortchanged on your rewards, we'll make sure the correct amount is applied to your account.",
+   "doc": "doc_credit_cards_credit_cards_(general)_021"
+  },
+  {
+   "id": "handle_update_error",
+   "by": "model",
+   "do": "If the update returns an error, or the confirmation does not show the new value:\n1. Retry once with the exact transaction_id.\n2. If it still fails, explain the problem and offer a human agent.\n3. Transfer only if the customer agrees.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the approved disputes and the update that failed",
+    "reason": "the error returned"
+   },
+   "lookup": [
+    "confirm_update"
+   ],
+   "after": [
+    "apply_update"
+   ],
+   "if": "the update call returns an error, or the confirmation shows no change after one retry, and the customer agrees to a transfer",
+   "quote": "If they do, invoke the appropriate transfer_to_human_agents tool.",
+   "doc": "policy"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Update rewards only after the bank's records show the dispute as resolved and approved. A customer's claim of approval is not enough.",
+   "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "rule": "Recalculate rewards independently and never use expected_rewards.",
+   "quote": "Important: Do not rely on any expected_rewards field in the dispute record. Independently verify rates and eligibility.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "rule": "new_rewards_earned must be a whole number of points, rounded down.",
+   "quote": "All credit card rewards points are rounded down to the nearest whole number.",
+   "doc": "doc_credit_cards_credit_cards_(general)_007"
+  },
+  {
+   "rule": "For an approved dispute, set the correct value whether it is higher or lower than the recorded rewards. An approved dispute on an over-awarded transaction is corrected downward.",
+   "quote": "Recalculate the correct rewards for each transaction based on the card type, transaction category, and any applicable promotions.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "rule": "The recalculation uses the base rate plus any bonus category or promotion active when the purchase was made.",
+   "quote": "Ensure your calculation reflects the proper base rate and any active bonus category or promotion at the time of purchase.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004"
+  },
+  {
+   "rule": "An empty dispute history means no disputes are on file (or the user_id is wrong), so there is nothing to update. Confirm the user_id and do not update.",
+   "quote": "The user has not filed any credit card disputes, or the user_id is incorrect.",
+   "doc": "doc_credit_cards_credit_cards_(general)_016"
+  },
+  {
+   "rule": "The dispute record's status decides whether any action is needed.",
+   "quote": "Use status to determine whether action is needed.",
+   "doc": "doc_credit_cards_credit_cards_(general)_016"
+  },
+  {
+   "rule": "Do not unlock a tool you will not use.",
+   "quote": "Do not unlock tools that you do not plan on actually using: this causes issues in database logging.",
+   "doc": "policy"
+  },
+  {
+   "rule": "If the customer insists on a human, try to help first. Transfer only after the 4th request.",
+   "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+   "doc": "policy"
+  },
+  {
+   "rule": "When reporting a correction, convert points to cash back at 1 point = $0.01.",
+   "quote": "For example, 250 points equals $2.50 in cash back, which matches a 2.5% cash back rate on a $100 purchase.",
+   "doc": "doc_credit_cards_credit_cards_(general)_006"
+  }
+ ],
+ "done_when": "One of the following is true:\n- For every dispute the records show as resolved and approved, the rewards are updated, the update is confirmed by re-reading the transactions, and the customer has been told the result.\n- The customer has been told politely that no correction can be made until the review resolves and approves the disputes. No update tool was unlocked, even after the customer insisted."
+}

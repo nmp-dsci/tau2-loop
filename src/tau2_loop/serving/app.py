@@ -504,6 +504,38 @@ def create_app() -> FastAPI:
             raise HTTPException(503, str(e)) from e
         return {"id": meta.id}
 
+    @app.get("/api/workflows/{domain}/rag/library")
+    def workflow_rag_library(domain: str, version: str) -> dict[str, Any]:
+        """A RAG version's library now (s21): each job, its version and the question that wrote it,
+        and, for a concurrent version, which workers hold or wait for which jobs."""
+        _rag_domain(domain)
+        from tau2_loop.workflows import library as wf_library
+
+        try:
+            agent = workflow_rag.load(domain, version)
+        except workflow_rag.RagAgentError as e:
+            raise HTTPException(404, str(e)) from e
+        concurrent = agent.merge == "concurrent"
+        st = wf_library.store_for(domain, version) if concurrent else None
+        jobs = [
+            {
+                "job": e["job"],
+                "version": e.get("version"),
+                "session": e["session"],
+                "task": e.get("task_id"),
+            }
+            for e in wf_library.entries(domain, version)
+        ]
+        locks = st.locks() if st else {"held": [], "waiting": []}
+        return {
+            "version": version,
+            "concurrent": concurrent,
+            "workers": agent.workers,
+            "commits": len(st.commits()) if st else None,
+            "jobs": jobs,
+            **locks,
+        }
+
     @app.get("/api/workflows/{domain}/rag/sessions/{session_id}")
     def workflow_rag_session(domain: str, session_id: str) -> dict[str, Any]:
         """One session as it stands: its events so far, and its workflow and score once done."""

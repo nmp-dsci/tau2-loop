@@ -1,0 +1,3478 @@
+{
+ "jobs": [
+  {
+   "job": "review_recent_credit_card_transactions",
+   "aliases": [
+    "balance higher than expected",
+    "check credit card charges",
+    "check_unrecognized_charges",
+    "credit_card_transaction_history",
+    "review_credit_card_transactions",
+    "show recent credit card transactions",
+    "statement balance looks wrong",
+    "unrecognized credit card charges"
+   ],
+   "when": {
+    "quote": "Review recent transaction history to check for suspicious activity.",
+    "doc": "doc_checking_accounts_purple_account_007"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks to see their credit card transactions, or questions their balance or charges. If unauthorized charges are found, the agent may offer a card replacement, but orders one only when the customer agrees. The agent does not file a dispute unless the customer asks for one.",
+    "quote": "You see a charge you didn't make or don't recognize",
+    "doc": "doc_credit_cards_credit_cards_(general)_018"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "get_accounts",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": "get_transactions",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "handle_errors",
+     "not_used": null
+    },
+    {
+     "tool": "order_replacement_credit_card_7291",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. This job only reviews transactions. A replacement is ordered in order_replacement_credit_card, and only when the customer asks for it or agrees to it."
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. Reviewing transactions needs only the standard read tools. Unlocking happens in the replacement and dispute jobs."
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. Discoverable tools are called only in the replacement and dispute jobs."
+    },
+    {
+     "tool": "file_credit_card_transaction_dispute_4829",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. Disputes are filed only in filing_a_credit_card_transaction_dispute, and only when the customer asks for them."
+    }
+   ],
+   "info": [
+    {
+     "field": "customer_identifier",
+     "about": "The customer's full name, email or user id, used to find their record. The name lookup is case sensitive.",
+     "from": "customer",
+     "ask": "Could you please give me your full name or the email on your account so I can find it?",
+     "may_hold_back": false
+    },
+    {
+     "field": "identity_details",
+     "about": "Any 2 of: date of birth, email, phone number, home address. These must match the records the lookup returns.",
+     "from": "customer",
+     "ask": "To verify your identity, could you give me your full name and two of the following: your date of birth, email address, phone number or home address?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_in_question",
+     "about": "Which Rho-Bank credit card the customer wants to review. Use this if more than one credit card account is returned.",
+     "from": "customer",
+     "ask": "Which of your Rho-Bank credit cards would you like me to review?",
+     "may_hold_back": false
+    },
+    {
+     "field": "unrecognized_transactions",
+     "about": "Which of the listed transactions the customer did not make or does not recognize",
+     "from": "customer",
+     "ask": "Do you recognize all of these charges, or are there any you did not make?",
+     "may_hold_back": true
+    },
+    {
+     "field": "next_requests_order",
+     "about": "When the customer wants both a replacement card and disputes: the order they want them done in",
+     "from": "customer",
+     "ask": "Would you like me to replace the card first and then file the disputes?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely and ask how you can help. Ask for their full name or email and two of: date of birth, email, phone number, home address.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record with the email or full name they gave (the name lookup is case sensitive; use get_user_information_by_id if they gave a user id). If no record is found, ask for another identifier.",
+     "call": "get_user_information_by_email",
+     "args": {
+      "email": "the email the customer gave (or use get_user_information_by_name with the full name)"
+     },
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "check_identity",
+     "by": "model",
+     "do": "Check that at least 2 of DOB, email, phone and address match the record. Share no account details before this check passes. If fewer than 2 match, ask again and do not continue.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "check_identity"
+     ],
+     "if": "identity verified",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record once per conversation, using the values from the record",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name from records",
+      "user_id": "the verified user's id",
+      "address": "address from records",
+      "email": "email from records",
+      "phone_number": "phone from records",
+      "date_of_birth": "DOB from records",
+      "time_verified": "timestamp from get_current_time"
+     },
+     "lookup": [
+      "lookup_user",
+      "check_identity"
+     ],
+     "after": [
+      "get_time"
+     ],
+     "if": "identity verified",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the customer's credit card accounts to find the card in question and its tier",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Look up the customer's credit card account.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_transactions",
+     "by": "harness",
+     "do": "Get the customer's credit card transactions",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Review recent transaction history to check for suspicious activity.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "id": "present_transactions",
+     "by": "model",
+     "do": "List the recent transactions on the card in question, most recent first, with merchant, amount and date. Include every one, unusual ones too, and leave none out. Then ask whether the customer recognizes them all. If the customer asks for more transactions, show any that remain. If there are none, say so.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_accounts",
+      "get_transactions"
+     ],
+     "after": [
+      "get_transactions",
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "Review recent transactions and note anything unfamiliar.",
+     "doc": "doc_credit_cards_platinum_rewards_card_004"
+    },
+    {
+     "id": "record_unrecognized",
+     "by": "model",
+     "do": "For each charge the customer says they did not make, note its transaction id, date, merchant, amount and card account from get_transactions. The replacement and dispute jobs use these later. Do not ask the customer for them again.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_transactions",
+      "get_accounts"
+     ],
+     "after": [
+      "present_transactions"
+     ],
+     "if": "the customer reports one or more unrecognized or unauthorized charges",
+     "quote": "Please have your account information ready, along with any details about the transaction in question such as the purchase date, merchant name, and amount.",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    },
+    {
+     "id": "route_suspicious",
+     "by": "model",
+     "do": "If the customer says there are charges they did not make, treat the card as compromised and offer to cancel and replace it (next job: order_replacement_credit_card). Order it only if the customer agrees or asks.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "present_transactions",
+      "get_transactions"
+     ],
+     "after": [
+      "present_transactions"
+     ],
+     "if": "customer reports unrecognized or unauthorized charges",
+     "quote": "If suspicious transactions found: Follow stolen card protocol to assist the customer.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "id": "route_dispute_request",
+     "by": "model",
+     "do": "If the customer asks to dispute the unrecognized charges, follow the separate credit card transaction dispute job. Do not file a dispute the customer has not asked for.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "present_transactions",
+      "get_transactions"
+     ],
+     "after": [
+      "present_transactions"
+     ],
+     "if": "the customer asks to dispute one or more charges",
+     "quote": "Our representatives will walk you through the process, gather the necessary information, and file the dispute on your behalf.",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    },
+    {
+     "id": "requests_in_order",
+     "by": "model",
+     "do": "If the customer wants both a replacement card and disputes, do them in the order the customer asks: usually order_replacement_credit_card first, then filing_a_credit_card_transaction_dispute. Reuse the verification. If the replacement was ordered first, every dispute on that card uses card_action cancel_and_reissue, and no second replacement is ordered.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "record_unrecognized"
+     ],
+     "after": [
+      "route_suspicious",
+      "route_dispute_request"
+     ],
+     "if": "the customer wants both a replacement card and disputes for the unrecognized charges",
+     "quote": "'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced - whether you've already ordered a replacement card via order_replacement_credit_card_7291 or the cancellation is happening as part of this dispute)",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "all_recognized",
+     "by": "model",
+     "do": "If the customer recognizes every charge, answer any questions about the balance and close the request.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "present_transactions",
+      "get_transactions"
+     ],
+     "after": [
+      "present_transactions"
+     ],
+     "if": "the customer recognizes every transaction",
+     "quote": "Review recent transactions and note anything unfamiliar.",
+     "doc": "doc_credit_cards_platinum_rewards_card_004"
+    },
+    {
+     "id": "handle_errors",
+     "by": "model",
+     "do": "If a lookup returns an error, retry once with corrected inputs. If it still fails, explain that and ask whether the customer wants a human agent. Transfer only if they say yes, with reason code technical_system_error.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "what was verified and which lookup failed",
+      "reason": "technical_system_error"
+     },
+     "lookup": [],
+     "after": [
+      "get_transactions"
+     ],
+     "if": "a lookup returns an error that a retry does not fix, and the customer agrees to a transfer",
+     "quote": "If they do, invoke the appropriate transfer_to_human_agents tool.",
+     "doc": "policy"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Do not look up or reveal transactions until the customer has matched 2 of DOB, email, phone and address and the verification is logged",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Charges the customer did not make or does not recognize count as unauthorized or fraudulent",
+     "quote": "**Unauthorized or Fraudulent Charges**: You see a charge you didn't make or don't recognize",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    },
+    {
+     "rule": "Once unauthorized activity is confirmed, a card number replacement is the remedy. Disputes are a separate step, taken when the customer asks for them.",
+     "quote": "If unauthorized activity is confirmed, we will replace your card number and assist with disputes for impacted transactions.",
+     "doc": "doc_credit_cards_platinum_rewards_card_004"
+    },
+    {
+     "rule": "A transfer after a lookup error that will not clear uses reason code technical_system_error",
+     "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "The customer is verified and logged, has seen every recent transaction on the card in question, and has said whether any are unauthorized. If any are, their transaction ids are noted and they have been offered a replacement (order_replacement_credit_card). If they asked, they have been routed to a dispute, in the order they chose. Otherwise their questions are answered."
+  },
+  {
+   "job": "order_replacement_credit_card",
+   "aliases": [
+    "cancel and reissue after fraudulent charges",
+    "cancel and reissue credit card",
+    "cancel_and_reissue_credit_card",
+    "how_to_order_a_replacement_credit_card",
+    "lost or stolen credit card replacement",
+    "lost_stolen_fraud_credit_card_replacement",
+    "new card number after fraud",
+    "replace credit card",
+    "replace_compromised_card",
+    "replacement card after a credit limit increase done first",
+    "replacement card with expedited shipping after fraud",
+    "ship replacement card to alternate or work address"
+   ],
+   "when": {
+    "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+    "doc": "doc_credit_cards_credit_card_replacements_001"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks to cancel, replace or reissue a credit card, or agrees to the replacement offered after they reported unauthorized charges. For fraud_suspected or stolen, the agent strongly recommends expedited shipping. If the customer also asked for a credit limit increase on the same card and it has not been decided, a pending replacement would block it. Tell them before ordering and offer to do the increase first (cli_conflict_notice).",
+    "quote": "'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced",
+    "doc": "doc_credit_cards_credit_cards_(general)_014"
+   },
+   "tools": [
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "get_cc_account",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "get_primary_address",
+     "not_used": null
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": "check_pending_unlock",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": "check_pending",
+     "not_used": null
+    },
+    {
+     "tool": "get_pending_replacement_orders_5765",
+     "who": "agent",
+     "step": "check_pending",
+     "not_used": null
+    },
+    {
+     "tool": "order_replacement_credit_card_7291",
+     "who": "agent",
+     "step": "place_order",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "transfer_manual_review",
+     "not_used": null
+    },
+    {
+     "tool": "file_credit_card_transaction_dispute_4829",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. A dispute is a separate job, done only if the customer asks for one. If it is filed after this replacement, its card_action is cancel_and_reissue."
+    },
+    {
+     "tool": "submit_credit_limit_increase_request_7392",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. A credit limit increase is processed only in processing_cli_approvals_and_denials. cli_conflict_notice only offers to do it first."
+    },
+    {
+     "tool": "approve_credit_limit_increase_5847",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. The CLI document is cited only because a pending replacement blocks an increase. Approvals happen in processing_cli_approvals_and_denials."
+    },
+    {
+     "tool": "deny_credit_limit_increase_5848",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. CLI denials happen in processing_cli_approvals_and_denials."
+    },
+    {
+     "tool": "get_credit_limit_increase_history_4829",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. The CLI cooldown check belongs to processing_cli_approvals_and_denials."
+    }
+   ],
+   "info": [
+    {
+     "field": "card_to_replace",
+     "about": "Which credit card account to replace, when the customer has more than one",
+     "from": "customer",
+     "ask": "Which credit card would you like to replace?",
+     "may_hold_back": false
+    },
+    {
+     "field": "replacement_reason",
+     "about": "Exactly one of fraud_suspected, lost, stolen, damaged, expired, other. Unrecognized charges with the card still in hand mean fraud_suspected.",
+     "from": "customer",
+     "ask": "What is the reason for the replacement: suspected fraud, lost, stolen, damaged, expired, or something else?",
+     "may_hold_back": false
+    },
+    {
+     "field": "shipping_address",
+     "about": "Where to ship the new card: the primary address on file, or an alternate address the customer gives (such as work), including any unit or suite. The customer may say they want a different address only when asked.",
+     "from": "customer",
+     "ask": "Where should we ship the replacement card: your address on file, or a different address? Please include any unit or suite number.",
+     "may_hold_back": true
+    },
+    {
+     "field": "shipping_speed",
+     "about": "standard (7–10 business days, free) or expedited (2–3 business days, fee by card tier)",
+     "from": "customer",
+     "ask": "Would you like standard shipping (7–10 business days, free) or expedited shipping (2–3 business days, with a fee that depends on your card tier)?",
+     "may_hold_back": true
+    },
+    {
+     "field": "expedited_fee_consent",
+     "about": "The customer's agreement to the expedited fee for their tier, needed only when a fee applies",
+     "from": "customer",
+     "ask": "Expedited shipping for your card carries a fee of [tier fee]. Do you agree to this fee?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_tier",
+     "about": "Tier of the card being replaced, read from the card type on the account record",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "cli_first_choice",
+     "about": "When the customer also wants a credit limit increase on the same card, not yet decided: whether they want it handled before the replacement is ordered",
+     "from": "customer",
+     "ask": "A pending replacement card would hold up the credit limit increase until it is delivered. Would you like me to handle the credit limit increase first?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "ensure_verified",
+     "by": "model",
+     "do": "Make sure the customer was verified and logged earlier in this conversation. If not, do the verification steps of review_recent_credit_card_transactions (or filing_a_credit_card_transaction_dispute) first: lookup, 2 matching values, get_current_time, log_verification.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "log_verification"
+     ],
+     "after": [],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "already_ordered_this_conversation",
+     "by": "model",
+     "do": "If a replacement for this card was already ordered earlier in this conversation (for example in the dispute job's replacement_branch), do not order again. Confirm the existing order's address, speed and delivery window to the customer, and skip the remaining ordering steps.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "ensure_verified"
+     ],
+     "after": [
+      "ensure_verified"
+     ],
+     "if": "order_replacement_credit_card_7291 already succeeded for this card in this conversation",
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "get_cc_account",
+     "by": "harness",
+     "do": "Get the verified user's credit card accounts and pick the account of the card to replace. Note its account id and card type (tier). If the customer has more than one card, ask which one.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "ensure_verified"
+     ],
+     "if": null,
+     "quote": "Look up the customer's credit card account.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "cli_conflict_notice",
+     "by": "model",
+     "do": "Before ordering, tell the customer that a pending replacement card would block the credit limit increase until it is delivered or cancelled. Offer to handle the increase first. If they agree, run processing_cli_approvals_and_denials now (no new verification), then come back here. If they want the replacement first, continue here. Order nothing in this step.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_cc_account"
+     ],
+     "after": [
+      "get_cc_account"
+     ],
+     "if": "the customer also asked in this conversation for a credit limit increase on the same card, and it has not yet been decided",
+     "quote": "If a replacement is pending, the CLI cannot be processed until the replacement is delivered or cancelled.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "confirm_reason",
+     "by": "model",
+     "do": "Confirm the replacement reason and record exactly one value. Use fraud_suspected when the customer reports unrecognized charges (stolen or lost if they say the card itself is gone).",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "get_cc_account"
+     ],
+     "if": null,
+     "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "check_pending_unlock",
+     "by": "harness",
+     "do": "Unlock the tool that checks for pending replacement orders",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765"
+     },
+     "lookup": [],
+     "after": [
+      "get_cc_account"
+     ],
+     "if": null,
+     "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "check_pending",
+     "by": "harness",
+     "do": "Check the account for an existing replacement order that is still pending",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765",
+      "arguments": {
+       "credit_card_account_id": "the account id of the card being replaced, from get_cc_account"
+      }
+     },
+     "lookup": [],
+     "after": [
+      "check_pending_unlock"
+     ],
+     "if": null,
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "eligibility_decision",
+     "by": "model",
+     "do": "Decide eligibility. The customer is not eligible if any returned order is not delivered or cancelled (for example pending or shipped), or if the tier limit for the 60-day period is exceeded (Entry 2, Mid 3, Premium and above 4). An empty list means no pending order. If the response is ambiguous or shows an invalid id, retry once with the account-level id.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_pending",
+      "get_cc_account"
+     ],
+     "after": [
+      "check_pending",
+      "confirm_reason"
+     ],
+     "if": null,
+     "quote": "Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "not_eligible",
+     "by": "model",
+     "do": "Do not unlock or call order_replacement_credit_card_7291. Tell the customer why: a replacement is already being processed (wait until it is delivered or cancelled), or the tier's replacement limit is reached. If the customer has a legitimate need beyond the limit, offer a manual review by a human agent.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "eligibility_decision"
+     ],
+     "after": [
+      "eligibility_decision"
+     ],
+     "if": "not eligible",
+     "quote": "Wait until the current replacement is delivered or cancelled before submitting a new request.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "transfer_manual_review",
+     "by": "model",
+     "do": "Transfer the customer for a manual review of the replacement limit. Use reason code fraud_or_security_concern when the replacement is for fraud_suspected, stolen or lost. Otherwise use the best-matching code from the transfer reason list (other, with details in the summary).",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "verified customer requesting a credit card replacement beyond the tier limit; reason from confirm_reason; manual review of replacement limit requested",
+      "reason": "fraud_or_security_concern for fraud_suspected/stolen/lost, otherwise the best-matching code (e.g. other)"
+     },
+     "lookup": [
+      "eligibility_decision"
+     ],
+     "after": [
+      "not_eligible"
+     ],
+     "if": "not eligible because of the tier limit, the customer asks for a manual review, and the customer agrees to the transfer",
+     "quote": "If you believe you have a legitimate need for an additional replacement beyond these limits, contact customer support to request a manual review of your case.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "get_primary_address",
+     "by": "harness",
+     "do": "Read the primary address on file for the verified user, if it was not already read during verification",
+     "call": "get_user_information_by_id",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "eligibility_decision"
+     ],
+     "if": "eligible and the address on file has not been read yet in this conversation",
+     "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "confirm_address",
+     "by": "model",
+     "do": "Ask whether to ship to the address on file or to an alternate address. If alternate, take the full address including any suite or unit and read it back for confirmation.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_primary_address"
+     ],
+     "after": [
+      "eligibility_decision"
+     ],
+     "if": "eligible",
+     "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "offer_shipping",
+     "by": "model",
+     "do": "Offer standard (7–10 business days, free) or expedited (2–3 business days) shipping, and state the expedited fee for the card's tier: Entry (Bronze Rewards, EcoCard, Business Bronze) $15.00; Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom) $10.00; Premium and above (Gold, Business Gold, Platinum, Business Platinum, Diamond Elite) $0.00. For fraud_suspected or stolen, strongly recommend expedited. If a fee applies and the customer picks expedited, get their consent.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_cc_account",
+      "confirm_reason"
+     ],
+     "after": [
+      "eligibility_decision"
+     ],
+     "if": "eligible",
+     "quote": "If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "unlock_order",
+     "by": "harness",
+     "do": "Unlock the replacement order tool",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291"
+     },
+     "lookup": [
+      "eligibility_decision"
+     ],
+     "after": [
+      "confirm_address",
+      "offer_shipping"
+     ],
+     "if": "eligible, and the customer has confirmed the address and shipping speed (and fee consent if a fee applies)",
+     "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "place_order",
+     "by": "model",
+     "do": "Place the replacement order using the parameter names the unlock returns",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291",
+      "arguments": {
+       "card_or_account_id": "the account id or card id of the card being replaced, from get_cc_account",
+       "reason": "the confirmed reason from confirm_reason",
+       "shipping_address": "the address the customer confirmed in confirm_address",
+       "shipping_speed": "standard or expedited, from offer_shipping",
+       "expedited_fee_acknowledgement": "true if the customer consented to the tier fee",
+       "notes": "context, e.g. unrecognized charges reported; ship to alternate address; delivery instructions"
+      }
+     },
+     "lookup": [
+      "eligibility_decision",
+      "confirm_address",
+      "offer_shipping"
+     ],
+     "after": [
+      "unlock_order"
+     ],
+     "if": "eligible, and the customer has confirmed the address and shipping speed (and fee consent if a fee applies)",
+     "quote": "Use call_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291 and include:",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "order_error",
+     "by": "model",
+     "do": "If the order call returns an error or a rejection, explain the reason (pending replacement or tier limit) and what must be resolved. Do not say the card was replaced. Offer a manual review by a human agent if the customer wants one (transfer_manual_review).",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "place_order"
+     ],
+     "after": [
+      "place_order"
+     ],
+     "if": "place_order returns an error or rejection",
+     "quote": "If you believe you have a legitimate need for an additional replacement beyond these limits, contact customer support to request a manual review of your case.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "order_system_error_transfer",
+     "by": "model",
+     "do": "If place_order returns a system error, not a pending-order or tier-limit rejection, fix any bad argument and retry once. If it still fails, tell the customer the replacement was not ordered and ask whether they want a human agent. Transfer only if they agree, with reason code technical_system_error.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "replacement request details (reason, address, speed) and the error returned",
+      "reason": "technical_system_error"
+     },
+     "lookup": [
+      "place_order"
+     ],
+     "after": [
+      "order_error"
+     ],
+     "if": "place_order still returns a system error after one corrected retry, and the customer agrees to a transfer",
+     "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "confirm_outcome",
+     "by": "model",
+     "do": "Tell the customer: the old card is cancelled now. The new card has a different number and CVV, and the account number stays the same. Give the delivery window (standard 7–10 / expedited 2–3 business days), the address it ships to and any fee. Say to watch for emails when the order is placed and when the card ships, and to update saved card details with merchants.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "place_order"
+     ],
+     "after": [
+      "place_order"
+     ],
+     "if": "place_order succeeded",
+     "quote": "The old card is automatically cancelled for security and will no longer work for new purchases.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "fraud_reminder",
+     "by": "model",
+     "do": "For fraud_suspected or stolen, remind the customer to review recent transactions and dispute any unauthorized charges in the app or website. File a dispute only if the customer asks for one.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "confirm_reason"
+     ],
+     "after": [
+      "place_order"
+     ],
+     "if": "reason is fraud_suspected or stolen",
+     "quote": "If the reason was fraud_suspected or stolen, remind the customer to review recent transactions and dispute any unauthorized charges in the app or website.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Do not unlock or call order_replacement_credit_card_7291 unless the customer is eligible",
+     "quote": "Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Not eligible while an earlier replacement order for the account is still pending",
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Treat any returned order that is not delivered or cancelled (e.g. pending, shipped) as pending",
+     "quote": "Treat the account as having pending replacement activity unless every order is clearly delivered or cancelled.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "rule": "If the pending-order check returns an empty or ambiguous response, retry it",
+     "quote": "Retry the call.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "rule": "Replacement limit per 60-day period: Entry-tier 2, Mid-tier 3, Premium-tier and above 4",
+     "quote": "Replacement requests are limited within a 60-day period to help protect your account.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Silver Rewards Card is Mid-tier: up to 3 replacements per period",
+     "quote": "Mid-tier: up to 3 replacements per period.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Expedited fee: Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom) $10.00; Entry-tier $15.00; Premium-tier and above $0.00",
+     "quote": "Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom): $10.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Standard delivery takes 7–10 business days and is free. Expedited takes 2–3 business days; the mid-tier fee (Silver Rewards) is $10.00.",
+     "quote": "  - Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom): $10.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Entry-tier expedited fee (Bronze Rewards Card, EcoCard, Business Bronze Rewards Card) is $15.00",
+     "quote": "Entry-tier (Bronze Rewards Card, EcoCard, Business Bronze Rewards Card): $15.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "rule": "Expedited shipping is free for Premium tier and above (Gold, Business Gold, Platinum, Business Platinum, Diamond Elite)",
+     "quote": "Premium-tier and above (Gold Rewards Card, Business Gold Rewards Card, Platinum Rewards Card, Business Platinum Rewards Card, Diamond Elite Card): $0.00 (complimentary).",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "rule": "Standard delivery is 7–10 business days and free",
+     "quote": "Standard delivery: 7–10 business days; free for all cardholders.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "rule": "The shipping address may be the primary address or an alternate one the customer gives (such as a work address with suite). Use the address the customer confirms.",
+     "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "When a fee applies, record the customer's consent to it before ordering",
+     "quote": "Expedited_fee_acknowledgement: customer consent captured if a fee applies based on tier.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "No new replacement while one is still pending",
+     "quote": "- You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Replacement limit per 60-day period: Entry 2, Mid 3, Premium and above 4",
+     "quote": "- Replacement requests are limited within a 60-day period to help protect your account.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Do not unlock or call order_replacement_credit_card_7291 unless the customer is eligible",
+     "quote": "- Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Unlock order_replacement_credit_card_7291 with unlock_discoverable_agent_tool before placing the order, and only once the customer is eligible",
+     "quote": "  - Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Place the order with call_discoverable_agent_tool, including the account/card id, reason, shipping address, shipping speed, fee acknowledgement and notes",
+     "quote": "  - Use call_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291 and include:",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Record exactly one replacement reason: fraud_suspected, lost, stolen, damaged, expired or other",
+     "quote": "- Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Confirm the shipping address (primary or alternate, with any unit or suite) before ordering",
+     "quote": "- Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "For fraud_suspected or stolen, strongly recommend expedited shipping and remind the customer to review recent transactions",
+     "quote": "- If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "After the order, the old card is cancelled and no longer works for new purchases",
+     "quote": "- The old card is automatically cancelled for security and will no longer work for new purchases.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "The replacement has a new card number and CVV. The account number does not change.",
+     "quote": "A new card is created with a different card number and CVV.",
+     "doc": "doc_credit_cards_credit_card_replacements_003"
+    },
+    {
+     "rule": "A pending replacement blocks a credit limit increase on the account. If the customer also wants an increase that is not yet decided, tell them before ordering and offer to do the increase first.",
+     "quote": "If a replacement is pending, the CLI cannot be processed until the replacement is delivered or cancelled.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "rule": "Transfers use a listed reason code. Fraud, stolen or lost cards use fraud_or_security_concern; a system error that blocks the order uses technical_system_error.",
+     "quote": "| fraud_or_security_concern | Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "One of these is true. (1) order_replacement_credit_card_7291 has been called once with the confirmed reason, the customer-confirmed shipping address, the chosen speed and any fee consent, and the customer has been told: the old card is cancelled, the new number and CVV, the delivery window, any fee and the email notifications, plus (for fraud_suspected or stolen) the reminder to review and dispute unauthorized charges. (2) It was already ordered earlier in the conversation, and the customer was told so. (3) The customer is not eligible, and the reason and next steps (wait, or a manual review) have been explained. (4) The order call kept failing with a system error, and a transfer was offered. In every case, if the customer also wanted a credit limit increase on the same card that was not yet decided, they were told before ordering that the replacement would block it, and the order they chose was followed."
+  },
+  {
+   "job": "filing_a_credit_card_transaction_dispute",
+   "aliases": [
+    "cancelled subscription still charging dispute",
+    "credit card chargeback request",
+    "credit card transaction dispute",
+    "credit_card_fraud_dispute",
+    "dispute a charge, then another request in the same conversation",
+    "dispute a credit card charge",
+    "dispute charges on several credit cards at once",
+    "dispute fraudulent charges after the card was replaced in the same conversation",
+    "dispute fraudulent charges on credit cards already replaced after a wallet theft",
+    "dispute plus replacement plus credit limit increase",
+    "dispute several charges from one merchant",
+    "dispute_credit_card_charge",
+    "dispute_unauthorized_credit_card_charge",
+    "duplicate_charge_dispute",
+    "file_credit_card_transaction_dispute",
+    "fraud dispute after a credit limit increase done first",
+    "fraudulent_charge_dispute",
+    "goods not received dispute",
+    "incorrect amount dispute",
+    "item never delivered and merchant not responding",
+    "item_not_as_described_dispute",
+    "merchant dispute on a credit card",
+    "provisional credit applied to the largest disputes first",
+    "provisional credit on a credit card dispute",
+    "received something different from what I paid for",
+    "refund never processed dispute"
+   ],
+   "when": {
+    "quote": "When a customer needs to file a formal dispute for a credit card transaction (such as unauthorized charges, merchant issues, or billing errors), the agent must gather comprehensive information and call the file_credit_card_transaction_dispute_4829 tool.",
+    "doc": "doc_credit_cards_credit_cards_(general)_014"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks to dispute a credit card charge. Never file a dispute the customer did not ask for. Order a replacement card only if the customer asks for the card to be cancelled and replaced. Provisional credit is never a separate action: it is decided for each dispute and passed in that dispute's eligible_for_provisional_credit flag. If the customer also asked for something else in the same conversation, do the requests in the order the customer gave them, and verify only once. One exception: when they also asked for a credit limit increase on the same card and it has not been decided yet, first tell them that an active dispute (and a pending replacement) would block the increase. Offer to do the increase first (cli_conflict_notice), then follow the order the customer chooses.",
+    "quote": "However, if you've already tried contacting the merchant without success, or if the charge appears to be fraudulent, please don't hesitate to reach out to us right away.",
+    "doc": "doc_credit_cards_credit_cards_(general)_018"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "get_accounts",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": "get_transactions",
+     "not_used": null
+    },
+    {
+     "tool": "give_discoverable_user_tool",
+     "who": "agent",
+     "step": "give_last4_tool",
+     "not_used": null
+    },
+    {
+     "tool": "get_card_last_4_digits",
+     "who": "customer",
+     "step": "run_last4_tool",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_user_tool",
+     "who": "customer",
+     "step": "run_last4_tool",
+     "not_used": null
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": "unlock_file",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_dispute_history_7291",
+     "who": "agent",
+     "step": "check_dispute_history",
+     "not_used": null
+    },
+    {
+     "tool": "get_pending_replacement_orders_5765",
+     "who": "agent",
+     "step": "replacement_pending_check",
+     "not_used": null
+    },
+    {
+     "tool": "order_replacement_credit_card_7291",
+     "who": "agent",
+     "step": "replacement_branch",
+     "not_used": null
+    },
+    {
+     "tool": "file_credit_card_transaction_dispute_4829",
+     "who": "agent",
+     "step": "file_dispute",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": "file_dispute",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "handle_failure",
+     "not_used": null
+    },
+    {
+     "tool": "apply_statement_credit_8472",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. Provisional credit is recorded only through the dispute's eligible_for_provisional_credit flag. No dispute document says to post a statement credit when a dispute is filed. This tool is for goodwill credits, fee reversals and similar adjustments, and for credits after a dispute is resolved."
+    },
+    {
+     "tool": "submit_credit_limit_increase_request_7392",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. A credit limit increase is processed only in processing_cli_approvals_and_denials. cli_conflict_notice only points the customer there."
+    },
+    {
+     "tool": "approve_credit_limit_increase_5847",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. The CLI document is cited only because an active dispute blocks an increase. Approvals happen in processing_cli_approvals_and_denials."
+    },
+    {
+     "tool": "deny_credit_limit_increase_5848",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. CLI denials happen in processing_cli_approvals_and_denials."
+    },
+    {
+     "tool": "get_credit_limit_increase_history_4829",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. The CLI cooldown check belongs to processing_cli_approvals_and_denials."
+    }
+   ],
+   "info": [
+    {
+     "field": "identity_values",
+     "about": "Any 2 of date of birth, email, phone number and address. These are checked against the records.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, email address, phone number or home address?",
+     "may_hold_back": true
+    },
+    {
+     "field": "disputed_transaction",
+     "about": "The merchant and the approximate amount or date. These are used to find the transaction_id and purchase_date in the card transaction records.",
+     "from": "customer",
+     "ask": "Which charge would you like to dispute? Please tell me the merchant, and the approximate amount and date if you know them.",
+     "may_hold_back": false
+    },
+    {
+     "field": "disputed_transactions_selection",
+     "about": "When the customer names only a merchant, or says several charges are wrong: which of the listed transactions they want to dispute, and what is wrong with each one",
+     "from": "customer",
+     "ask": "Here are the recent charges from this merchant on your card. Which of them do you want to dispute, and what is wrong with each one?",
+     "may_hold_back": true
+    },
+    {
+     "field": "cards_involved",
+     "about": "When the customer disputes charges on more than one card: which card each disputed charge is on. Confirm this against the transaction records.",
+     "from": "customer",
+     "ask": "Which of your cards is each of these charges on?",
+     "may_hold_back": false
+    },
+    {
+     "field": "dispute_reason",
+     "about": "One of unauthorized_fraudulent_charge, duplicate_charge, incorrect_amount, goods_services_not_received, goods_services_not_as_described, canceled_subscription_still_charging or refund_never_processed. Getting something different from what was paid for (for example, a different or cheaper room or item) is goods_services_not_as_described. A charge repeated a second time is duplicate_charge.",
+     "from": "customer",
+     "ask": "Which of these best describes the problem: an unauthorized or fraudulent charge, a duplicate charge, an incorrect amount, goods or services not received, goods or services not as described, a cancelled subscription that is still charging, or a refund that was never processed?",
+     "may_hold_back": true
+    },
+    {
+     "field": "contacted_merchant",
+     "about": "Whether the customer tried to resolve the issue with the merchant first (true or false). Ask for each transaction, including fraud disputes.",
+     "from": "customer",
+     "ask": "Did you try to resolve this with the merchant first?",
+     "may_hold_back": true
+    },
+    {
+     "field": "issue_noticed_date",
+     "about": "The date the customer noticed the issue, as MM/DD/YYYY. If the customer says 'today', get the date from get_current_time. Never guess a date.",
+     "from": "customer",
+     "ask": "When did you notice the issue?",
+     "may_hold_back": true
+    },
+    {
+     "field": "resolution_requested",
+     "about": "One of full_refund, partial_refund (needs partial_refund_amount) or reversal_of_charge",
+     "from": "customer",
+     "ask": "Which resolution would you like: a full refund, a partial refund (and how much), or a reversal of the charge?",
+     "may_hold_back": true
+    },
+    {
+     "field": "partial_refund_amount",
+     "about": "The dollar amount, needed only if resolution_requested is partial_refund",
+     "from": "customer",
+     "ask": "How much would you like refunded?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_action",
+     "about": "keep_active, or cancel_and_reissue if the customer wants the card replaced (or a replacement was already ordered for it in this conversation). Ask once per card when several cards are involved.",
+     "from": "customer",
+     "ask": "Would you like to keep your card active, or cancel it and have a replacement issued?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_last_4_digits",
+     "about": "The last 4 digits of the card used for the disputed transaction. Ask once per card when several cards are involved. If the records already show them, confirm them instead of asking.",
+     "from": "customer",
+     "ask": "What are the last 4 digits of the card used for this charge?",
+     "may_hold_back": true
+    },
+    {
+     "field": "credit_card_account_id",
+     "about": "The credit card account ID. It is needed for get_card_last_4_digits and get_pending_replacement_orders_5765. It shows which card holds the transaction and that card's tier, and it is used to read the account's open date.",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "replacement_details",
+     "about": "Needed only for cancel_and_reissue with a replacement order: the confirmed shipping address (the address on file, or an alternate such as a work address, with suite or unit), the replacement reason (fraud_suspected, lost, stolen, damaged, expired or other) and the shipping speed (standard, or expedited with any tier fee)",
+     "from": "customer",
+     "ask": "Where should we ship the replacement card, what is the reason for the replacement, and would you like standard or expedited shipping?",
+     "may_hold_back": true
+    },
+    {
+     "field": "provisional_credit_priority",
+     "about": "When the customer files several disputes: which ones they most want handled first, for example the ones hurting their cash flow most. Use it to order the filings.",
+     "from": "customer",
+     "ask": "Which of these disputes are most important for you to have handled first?",
+     "may_hold_back": true
+    },
+    {
+     "field": "other_requests",
+     "about": "Any other request the customer raised in the same conversation (for example a credit limit increase), to handle after the dispute in the order the customer gave",
+     "from": "customer",
+     "ask": "Is there anything else I can help you with today?",
+     "may_hold_back": false
+    },
+    {
+     "field": "cli_first_choice",
+     "about": "When the customer also wants a credit limit increase on the same card, not yet decided: whether they want the increase handled before the dispute is filed",
+     "from": "customer",
+     "ask": "Filing this dispute would hold up the credit limit increase until the dispute is resolved. Would you like me to handle the credit limit increase first?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "reuse_verification",
+     "by": "model",
+     "do": "If the customer was already verified and logged earlier in this conversation (for example while freezing, closing or replacing cards after a wallet theft, or during a credit limit increase), do not verify or log again. Reuse the verified user's record and skip lookup_user through log_verification; continue at get_accounts.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "the customer was verified and log_verification was called earlier in this conversation",
+     "quote": "No need to verify more than once in a single conversation.",
+     "doc": "policy"
+    },
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Greet the customer, acknowledge every request they named, and ask for identifying details. Look them up with get_user_information_by_email if they give an email, get_user_information_by_name (case-sensitive) if they give a name, or get_user_information_by_id if they give a user id.",
+     "call": "get_user_information_by_email",
+     "args": {
+      "email": "the email the customer gave"
+     },
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Confirm that at least 2 of date of birth, email, phone and address match the record from lookup_user. Share no account information before they match. If they do not match, ask again. If verification still fails, stop.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time. Use it for the verification log, for any date the customer gives as 'today', and to work out account age and purchase age.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "verify"
+     ],
+     "if": null,
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification.",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user id",
+      "address": "address on record",
+      "email": "email on record",
+      "phone_number": "phone on record",
+      "date_of_birth": "date of birth on record",
+      "time_verified": "the current time"
+     },
+     "lookup": [
+      "verify"
+     ],
+     "after": [
+      "get_time"
+     ],
+     "if": "2 or more values matched",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_accounts",
+     "by": "harness",
+     "do": "Get the user's credit card accounts. Note each one's card type (tier), account id and open date.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user id"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "1. Account Standing: The customer's credit card account has been open for at least 60 days",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "id": "cli_conflict_notice",
+     "by": "model",
+     "do": "Before filing anything, tell the customer that an active dispute on the card (and a pending replacement card) would block the credit limit increase until it is resolved. Offer to handle the increase first. If they agree, run processing_cli_approvals_and_denials now (no new verification), then come back here. If they want the dispute first, continue here; the increase will then follow its own denial path. File nothing in this step.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_accounts"
+     ],
+     "after": [
+      "get_accounts"
+     ],
+     "if": "the customer also asked in this conversation for a credit limit increase on the same card, and it has not yet been decided",
+     "quote": "3. No Pending Disputes: Verify the account has no active disputes.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "id": "get_transactions",
+     "by": "harness",
+     "do": "Get the user's card transactions and find each disputed one by merchant and amount. This gives its transaction_id and purchase_date.",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user id"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "1. transaction_id (string) - ID of the transaction being disputed. ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "list_merchant_transactions",
+     "by": "model",
+     "do": "List the transactions in get_transactions for the merchant the customer named, with the date and amount of each. Ask which ones they want to dispute and what is wrong with each. Do not guess which charges are disputed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_transactions",
+      "get_accounts"
+     ],
+     "after": [
+      "get_transactions",
+      "get_accounts"
+     ],
+     "if": "the customer names only a merchant or says several charges are wrong, without giving the exact date and amount of each",
+     "quote": "Please have your account information ready, along with any details about the transaction in question such as the purchase date, merchant name, and amount.",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    },
+    {
+     "id": "identify_transaction",
+     "by": "model",
+     "do": "Match the customer's merchant, approximate amount and date to exactly one transaction in get_transactions, and confirm it with the customer. From the record, take the transaction_id, the exact amount, the purchase date (MM/DD/YYYY) and the card account it was made on. If nothing matches, ask for more detail. If it still cannot be found, explain that the dispute cannot be filed without the transaction, and stop.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_transactions",
+      "get_accounts"
+     ],
+     "after": [
+      "get_transactions",
+      "get_accounts"
+     ],
+     "if": null,
+     "quote": "10. purchase_date (string, format MM/DD/YYYY) - The date in which the disputed transaction occurred.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "not_in_records",
+     "by": "model",
+     "do": "Tell the customer that a charge they described is not in their transaction records. Do not file a dispute for it. Continue with the charges that are in the records.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_transactions",
+      "identify_transaction"
+     ],
+     "after": [
+      "identify_transaction"
+     ],
+     "if": "a charge the customer describes cannot be matched to any transaction in get_transactions",
+     "quote": "Review transaction details to confirm the disputed transaction context.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "map_cards",
+     "by": "model",
+     "do": "Group the disputed transactions by the card account each was made on (identify_transaction, get_accounts). For each card, use its own card type for the provisional credit tier maximum. Ask for its last 4 digits once (ask_last4) and its card_action once (ask_card_action). Use these card-level values for every dispute on that card. Never apply one card's values to a transaction on another card.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_accounts",
+      "get_transactions",
+      "identify_transaction"
+     ],
+     "after": [
+      "identify_transaction"
+     ],
+     "if": "the disputed transactions are on more than one of the customer's cards",
+     "quote": "Last 4 digits of the credit card under which the disputed transaction took place.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "repeat_per_transaction",
+     "by": "model",
+     "do": "When the customer disputes more than one transaction, handle each one separately: identify_transaction, ask_reason, ask_merchant, ask_noticed, ask_resolution and decide_provisional, then one file_dispute call per transaction_id. Each dispute gets its own reason, merchant-contact answer and provisional credit decision. Use the same card_action for every dispute on the same card.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "identify_transaction",
+      "list_merchant_transactions"
+     ],
+     "after": [
+      "identify_transaction"
+     ],
+     "if": "the customer wants to dispute more than one transaction",
+     "quote": "1. transaction_id (string) - ID of the transaction being disputed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_reason",
+     "by": "model",
+     "do": "Have the customer choose the dispute reason from the allowed values. Paid for one thing and received a different or cheaper one: goods_services_not_as_described. Never received it: goods_services_not_received. Charged a different amount than expected: incorrect_amount. Charge the customer did not make: unauthorized_fraudulent_charge. Subscription cancelled but still charging: canceled_subscription_still_charging. Promised refund never applied: refund_never_processed.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "12. dispute_reason (string) - Ask user to select one. Must be exactly one of these values:",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "map_duplicate",
+     "by": "model",
+     "do": "If the customer says a charge repeats another charge (the same amount charged again), record dispute_reason = duplicate_charge.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "ask_reason",
+      "get_transactions"
+     ],
+     "after": [
+      "ask_reason"
+     ],
+     "if": "the customer says a charge is a repeat of another charge",
+     "quote": "'duplicate_charge': Same charge appeared multiple times",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_merchant",
+     "by": "model",
+     "do": "Ask whether the customer tried to resolve the charge with the merchant first. Record true or false.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "9. contacted_merchant (boolean) - Ask user: Did you try to resolve this with the merchant first? Pass true or false",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "advise_merchant",
+     "by": "model",
+     "do": "Mention that contacting the merchant is often faster. If the customer still wants to file, continue with contacted_merchant = false. Do not refuse to file.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "ask_merchant",
+      "ask_reason"
+     ],
+     "after": [
+      "ask_merchant",
+      "ask_reason"
+     ],
+     "if": "contacted_merchant is false and the reason is not unauthorized_fraudulent_charge",
+     "quote": "We recommend reaching out to the merchant first to try to resolve the issue, as they can often process refunds or corrections more quickly than a formal dispute process.",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    },
+    {
+     "id": "ask_noticed",
+     "by": "model",
+     "do": "Ask when the customer noticed the issue. Format it as MM/DD/YYYY. If they say 'today', use the date from get_current_time.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_time"
+     ],
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "11. issue_noticed_date (string, format MM/DD/YYYY) - Ask user when they noticed the issue. ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_resolution",
+     "by": "model",
+     "do": "Ask which resolution the customer wants. For a partial refund, ask for the amount.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "13. resolution_requested (string) - Ask user what resolution they want. Must be exactly one of these values:",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_card_action",
+     "by": "model",
+     "do": "Ask whether to keep the card active or cancel and reissue it.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "   - 'keep_active': Keep the card active, just dispute this charge (use when user wants to continue using their current card)",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "card_already_replaced",
+     "by": "model",
+     "do": "If a replacement for the card was already ordered earlier in this conversation (for example in lost_stolen_card_cross_product_security_protocol after a wallet theft), do not ask about card_action and do not order again: set card_action = cancel_and_reissue for every dispute on that card, and skip replacement_pending_unlock through replacement_branch.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_accounts",
+      "identify_transaction"
+     ],
+     "after": [
+      "identify_transaction"
+     ],
+     "if": "order_replacement_credit_card_7291 already succeeded for this card in this conversation",
+     "quote": "'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced - whether you've already ordered a replacement card via order_replacement_credit_card_7291 or the cancellation is happening as part of this dispute)",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "replacement_pending_unlock",
+     "by": "harness",
+     "do": "Unlock get_pending_replacement_orders_5765 so the replacement eligibility check can run.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765"
+     },
+     "lookup": [
+      "ask_card_action"
+     ],
+     "after": [
+      "ask_card_action",
+      "get_accounts"
+     ],
+     "if": "the customer wants the card cancelled and replaced and no replacement has been ordered yet in this conversation",
+     "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "replacement_pending_check",
+     "by": "harness",
+     "do": "Check the card's account for replacement orders that are not yet delivered or cancelled. If any order is pending or shipped, the customer is not eligible: explain that the current replacement must be delivered or cancelled first, and do not order. If the tier limit is exceeded (Entry 2, Mid 3, Premium and above 4 per 60 days), the customer is also not eligible: offer a manual review.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765",
+      "credit_card_account_id": "the account id of the card the disputed transactions are on (get_accounts / identify_transaction)"
+     },
+     "lookup": [],
+     "after": [
+      "replacement_pending_unlock"
+     ],
+     "if": "the customer wants the card cancelled and replaced and no replacement has been ordered yet in this conversation",
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "unlock_replacement",
+     "by": "harness",
+     "do": "Unlock order_replacement_credit_card_7291.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291"
+     },
+     "lookup": [
+      "ask_card_action",
+      "replacement_pending_check"
+     ],
+     "after": [
+      "ask_card_action",
+      "replacement_pending_check"
+     ],
+     "if": "the customer wants the card cancelled and replaced, no replacement has been ordered yet, and the customer is eligible for a replacement under the replacement-card procedure",
+     "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "replacement_branch",
+     "by": "model",
+     "do": "Follow the replacement-card procedure (order_replacement_credit_card job). Confirm the shipping address: the one on file or an alternate the customer gives, with any suite or unit. Confirm the replacement reason: fraud_suspected for charges the customer did not make. Confirm the shipping speed: expedited fee by tier, with consent; strongly recommend expedited for fraud_suspected or stolen. Then order the replacement and pass card_action = cancel_and_reissue in the dispute. Tell the customer the old card is cancelled automatically. If the customer is not eligible for a replacement, explain the next steps from that procedure and do not call the tool.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291",
+      "account_id": "the card account of the disputed transaction (identify_transaction)",
+      "reason": "the customer's replacement reason",
+      "shipping_address": "the address the customer confirmed",
+      "shipping_speed": "standard or expedited, as the customer chose"
+     },
+     "lookup": [
+      "ask_card_action",
+      "get_accounts",
+      "identify_transaction",
+      "replacement_pending_check"
+     ],
+     "after": [
+      "unlock_replacement"
+     ],
+     "if": "card_action is cancel_and_reissue, no replacement has been ordered yet, and the customer is eligible",
+     "quote": "Use call_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291 and include:",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "ask_last4",
+     "by": "model",
+     "do": "Ask for the last 4 digits of the card used for the transaction.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "get_transactions"
+     ],
+     "if": null,
+     "quote": "3. card_last_4_digits (string) - Last 4 digits of the credit card under which the disputed transaction took place. \". ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "last4_from_records",
+     "by": "model",
+     "do": "If get_accounts or get_transactions already shows the card's last 4 digits, use them as the answer to ask_last4: read them back and ask the customer to confirm. Do not give the lookup tool in that case.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_accounts",
+      "get_transactions"
+     ],
+     "after": [
+      "get_transactions"
+     ],
+     "if": "the account or transaction records returned the card's last 4 digits",
+     "quote": "3. card_last_4_digits (string) - Last 4 digits of the credit card under which the disputed transaction took place. \". ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "give_last4_tool",
+     "by": "model",
+     "do": "Give the customer the last-4 lookup tool. Tell them to run it with their credit card account ID.",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_card_last_4_digits"
+     },
+     "lookup": [
+      "ask_last4"
+     ],
+     "after": [
+      "ask_last4"
+     ],
+     "if": "the customer does not know or does not have the card's last 4 digits",
+     "quote": "- Tell the user to use the exact tool name and parameter: get_card_last_4_digits(credit_card_account_id: str).",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "run_last4_tool",
+     "by": "customer",
+     "do": "The customer runs get_card_last_4_digits with their credit card account ID and reports the digits.",
+     "call": "call_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_card_last_4_digits",
+      "credit_card_account_id": "the customer's credit card account id"
+     },
+     "lookup": [],
+     "after": [
+      "give_last4_tool"
+     ],
+     "if": "the tool was given",
+     "quote": "- Call the tool with your credit card account ID:",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "unlock_dispute_history",
+     "by": "harness",
+     "do": "Unlock get_user_dispute_history_7291.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+     },
+     "lookup": [
+      "ask_reason",
+      "ask_merchant",
+      "get_accounts",
+      "identify_transaction",
+      "get_time"
+     ],
+     "after": [
+      "ask_reason",
+      "ask_merchant",
+      "get_accounts",
+      "identify_transaction"
+     ],
+     "if": "only if all other provisional credit criteria are met (eligible reason category, account open at least 60 days, amount within limits, merchant contacted for non-fraud). Otherwise skip it, because the answer is already false.",
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "check_dispute_history",
+     "by": "harness",
+     "do": "Unlock get_user_dispute_history_7291 (unlock_dispute_history), then call it to count the disputes filed in the past 12 months.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "user_id": "the verified user id"
+     },
+     "lookup": [],
+     "after": [
+      "ask_reason",
+      "ask_merchant",
+      "get_accounts",
+      "unlock_dispute_history"
+     ],
+     "if": "only if all other provisional credit criteria are met (eligible reason category, account open at least 60 days, amount within limits, merchant contacted for non-fraud). Otherwise skip it, because the answer is already false.",
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "running_dispute_count",
+     "by": "model",
+     "do": "Read the dispute history once, in check_dispute_history, and count the disputes dated in the past 12 months, measured against get_time. Add 1 to the count for each dispute filed successfully earlier in this conversation. Before each filing, use this running count for the previous-disputes criterion: the dispute meets it only if the count is 2 or less.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_dispute_history",
+      "get_time",
+      "file_dispute"
+     ],
+     "after": [
+      "check_dispute_history"
+     ],
+     "if": "more than one dispute is being filed in this conversation",
+     "quote": "4. Previous Disputes: The customer has not filed more than 2 disputes in the past 12 months",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "id": "decide_provisional",
+     "by": "model",
+     "do": "Decide eligible_for_provisional_credit using the Provisional Credit Eligibility Guidelines. Every criterion must hold: (1) The account has been open at least 60 days (open date from get_accounts compared with get_time). (2) The reason is unauthorized_fraudulent_charge or duplicate_charge, or it is goods_services_not_received with the purchase made more than 30 days ago. (3) The amount is at least $25.00 and no more than the maximum for the tier of the card the transaction is on. (4) No more than 2 disputes in the past 12 months (check_dispute_history, or running_dispute_count when several disputes are filed). (5) For a reason other than fraud, the merchant was contacted. If any criterion fails, set it to false.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_accounts",
+      "get_transactions",
+      "identify_transaction",
+      "get_time",
+      "ask_reason",
+      "ask_merchant",
+      "check_dispute_history",
+      "running_dispute_count"
+     ],
+     "after": [
+      "ask_reason",
+      "ask_merchant",
+      "get_accounts",
+      "identify_transaction"
+     ],
+     "if": null,
+     "quote": "15. eligible_for_provisional_credit (boolean) - Agent must determine this based on the Provisional Credit Eligibility Guidelines article in this knowledge base. Pass true or false.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_priority",
+     "by": "model",
+     "do": "Ask which of the disputes the customer most wants handled first, unless they have already said. Do not explain the internal eligibility rules.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide_provisional",
+      "running_dispute_count"
+     ],
+     "after": [
+      "decide_provisional"
+     ],
+     "if": "several disputes meet criteria (1), (2), (3) and (5), the running count leaves room for fewer of them than that, and the customer has not yet said which matter most",
+     "quote": "4. Previous Disputes: The customer has not filed more than 2 disputes in the past 12 months",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "id": "priority_largest_first",
+     "by": "model",
+     "do": "If the customer says they want any limited provisional credit applied to the largest charges first, rank the disputes that meet criteria (1), (2), (3) and (5) by transaction amount from get_transactions, highest first, and use that ranking as the priority in order_disputes.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_transactions",
+      "decide_provisional",
+      "ask_priority"
+     ],
+     "after": [
+      "ask_priority"
+     ],
+     "if": "the customer asks for the largest disputed charges to be handled first",
+     "quote": "4. Previous Disputes: The customer has not filed more than 2 disputes in the past 12 months",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "id": "order_disputes",
+     "by": "model",
+     "do": "Set the filing order. First file the disputes that meet criteria (1), (2), (3) and (5), starting with the ones the customer named as most important (ask_priority). Then file all the other disputes. Before each filing, recompute criterion (4) from running_dispute_count and set that dispute's eligible_for_provisional_credit again.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide_provisional",
+      "running_dispute_count",
+      "ask_priority"
+     ],
+     "after": [
+      "decide_provisional"
+     ],
+     "if": "several disputes are being filed and more of them meet criteria (1), (2), (3) and (5) than the running count allows",
+     "quote": "4. Previous Disputes: The customer has not filed more than 2 disputes in the past 12 months",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "id": "unlock_file",
+     "by": "harness",
+     "do": "Unlock the dispute filing tool.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829"
+     },
+     "lookup": [
+      "decide_provisional"
+     ],
+     "after": [
+      "decide_provisional",
+      "ask_resolution",
+      "ask_card_action",
+      "ask_noticed"
+     ],
+     "if": "the customer asked to dispute the transaction, is verified, the transaction is identified, and every required argument has been gathered",
+     "quote": "First unlock the tool, then call it using call_discoverable_agent_tool with the tool name and a JSON string containing all the required arguments.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "file_dispute",
+     "by": "model",
+     "do": "File the dispute with all the required arguments. For several transactions, make one call per transaction (repeat_per_transaction), in the order set by order_disputes when it applies. After each successful filing, add 1 to the running dispute count.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829",
+      "transaction_id": "the disputed transaction id from records (identify_transaction)",
+      "card_action": "keep_active or cancel_and_reissue, as the customer chose for this card (cancel_and_reissue if card_already_replaced applies)",
+      "card_last_4_digits": "the last 4 digits of the card this transaction is on (ask_last4, last4_from_records or run_last4_tool)",
+      "full_name": "the verified user's name on record",
+      "user_id": "the verified user id",
+      "phone": "phone on record",
+      "email": "email on record",
+      "address": "address on record",
+      "contacted_merchant": "true or false, as the customer said",
+      "purchase_date": "the transaction date from records, MM/DD/YYYY",
+      "issue_noticed_date": "the date the customer gave, MM/DD/YYYY (get_current_time date if 'today')",
+      "dispute_reason": "the selected reason value",
+      "resolution_requested": "full_refund, partial_refund or reversal_of_charge",
+      "partial_refund_amount": "only if partial_refund",
+      "eligible_for_provisional_credit": "the decided boolean"
+     },
+     "lookup": [
+      "decide_provisional",
+      "identify_transaction",
+      "order_disputes",
+      "card_already_replaced"
+     ],
+     "after": [
+      "unlock_file",
+      "ask_last4"
+     ],
+     "if": "the customer asked to dispute this transaction, is verified, and all required arguments are gathered",
+     "quote": "When a customer needs to file a formal dispute for a credit card transaction (such as unauthorized charges, merchant issues, or billing errors), the agent must gather comprehensive information and call the file_credit_card_transaction_dispute_4829 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Confirm the dispute was filed and say whether provisional credit applies. Explain that provisional credit is temporary: it becomes permanent if the dispute is resolved in the customer's favor and is reversed if not. Do not reveal the internal eligibility rules.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "file_dispute",
+      "decide_provisional"
+     ],
+     "after": [
+      "file_dispute"
+     ],
+     "if": null,
+     "quote": "When you file a dispute with our customer service team, they will let you know whether provisional credit applies to your situation.",
+     "doc": "doc_credit_cards_credit_cards_(general)_022"
+    },
+    {
+     "id": "handle_failure",
+     "by": "model",
+     "do": "If filing returns an error, fix the bad argument and retry once. Each argument must be an exact allowed value or an MM/DD/YYYY date. If it still fails, explain the problem and ask whether the customer wants a human agent. Call transfer_to_human_agents only if they say yes. Use reason code fraud_or_security_concern when the disputes are unauthorized or fraudulent charges, otherwise technical_system_error.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "what was gathered, which disputes were filed, and the error returned (credit card dispute filing failed)",
+      "reason": "fraud_or_security_concern for unauthorized/fraudulent charges, otherwise technical_system_error"
+     },
+     "lookup": [
+      "file_dispute"
+     ],
+     "after": [
+      "file_dispute"
+     ],
+     "if": "the dispute tool still returns an error after one corrected retry and the customer agrees to a transfer",
+     "quote": "If they do, invoke the appropriate transfer_to_human_agents tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "continue_next_request",
+     "by": "model",
+     "do": "Once the dispute is confirmed, move on to the customer's next request (for example processing_cli_approvals_and_denials for a credit limit increase, order_replacement_credit_card, or activating_a_debit_card). Do not verify or log identity again: reuse the verified user. Jobs that check for active disputes (a credit limit increase, a card closure) will find the dispute just filed in the dispute history.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "confirm"
+     ],
+     "after": [
+      "confirm"
+     ],
+     "if": "the customer asked for another request in this conversation",
+     "quote": "No need to verify more than once in a single conversation.",
+     "doc": "policy"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Provisional credit is true only if ALL of these hold: (1) the account has been open at least 60 days; (2) the reason is unauthorized_fraudulent_charge or duplicate_charge, or it is goods_services_not_received with the purchase made more than 30 days ago; (3) the amount is at least $25.00 and no more than the tier maximum; (4) no more than 2 disputes in the past 12 months; (5) for a non-fraud dispute, the merchant was contacted first",
+     "quote": "## Eligibility Criteria — Customer is ELIGIBLE for provisional credit if ALL of the following are true:",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "The reasons incorrect_amount, goods_services_not_as_described, canceled_subscription_still_charging and refund_never_processed are never eligible for provisional credit",
+     "quote": "- Dispute reason is 'incorrect_amount', 'goods_services_not_as_described', 'canceled_subscription_still_charging', or 'refund_never_processed'",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Mid-tier cards (Silver Rewards, Business Silver Rewards, Green Rewards, Silver Zoom) have a provisional credit maximum of $5000.00. Other tiers: Entry $2500, Premium $10000, Elite $15000, Diamond Elite $25000.",
+     "quote": "- Mid Tier (Silver Rewards Card, Business Silver Rewards Card, Green Rewards Card, Silver Zoom Card): Maximum $5000.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Entry-tier cards (Bronze Rewards, EcoCard, Business Bronze Rewards, Crypto-Cash Back) have a provisional credit maximum of $2500.00",
+     "quote": "Entry Tier (Bronze Rewards Card, EcoCard, Business Bronze Rewards Card, Crypto-Cash Back Card): Maximum $2500.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Premium-tier cards (Gold Rewards, Business Gold Rewards) have a provisional credit maximum of $10000.00",
+     "quote": "Premium Tier (Gold Rewards Card, Business Gold Rewards Card): Maximum $10000.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Elite-tier cards (Platinum Rewards, Business Platinum Rewards) have a provisional credit maximum of $15000.00",
+     "quote": "Elite Tier (Platinum Rewards Card, Business Platinum Rewards Card): Maximum $15000.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "The Invitation-tier card (Diamond Elite) has a provisional credit maximum of $25000.00",
+     "quote": "Invitation Tier (Diamond Elite Card): Maximum $25000.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Use cancel_and_reissue only when the customer wants the card replaced; otherwise use keep_active",
+     "quote": "   - 'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced - whether you've already ordered a replacement card via order_replacement_credit_card_7291 or the cancellation is happening as part of this dispute) ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "A card whose replacement was already ordered in this conversation takes card_action cancel_and_reissue, and no second replacement is ordered",
+     "quote": "'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced - whether you've already ordered a replacement card via order_replacement_credit_card_7291 or the cancellation is happening as part of this dispute)",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "partial_refund_amount is passed only when resolution_requested is partial_refund",
+     "quote": "14. partial_refund_amount (number, optional) - Only required if resolution_requested is 'partial_refund'. The dollar amount for the partial refund.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "If the customer does not have the last 4 digits, give them the get_card_last_4_digits user tool instead of walking them through the steps",
+     "quote": "- Providing this tool replaces any step‑by‑step process for obtaining the last four digits.",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "rule": "Provisional credit requires the credit card account to have been open at least 60 days (open date from get_credit_card_accounts_by_user, compared with get_current_time)",
+     "quote": "1. Account Standing: The customer's credit card account has been open for at least 60 days",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "goods_services_not_received is eligible only when the purchase was made more than 30 days ago",
+     "quote": "'goods_services_not_received' (only if purchase was made more than 30 days ago)",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "The transaction amount must be >= $25.00 and <= the maximum for the tier of the card it is on",
+     "quote": "3. Dispute Amount: The transaction amount must be at least $25.00 and must not exceed the card's maximum provisional credit limit based on card tier (see below)",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Not eligible if the customer filed more than 2 disputes in the past 12 months (from get_user_dispute_history_7291). When several disputes are filed in one conversation, count those already filed in it too: a dispute meets this criterion only if the running count is 2 or less when it is filed.",
+     "quote": "4. Previous Disputes: The customer has not filed more than 2 disputes in the past 12 months",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "For any reason other than unauthorized_fraudulent_charge, provisional credit requires contacted_merchant = true",
+     "quote": "5. Contacted Merchant: For non-fraud disputes (anything other than 'unauthorized_fraudulent_charge'), the customer must have attempted to resolve with the merchant first",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Ordering a replacement cancels the old card automatically, so order one only when the customer wants the card replaced",
+     "quote": "The old card is automatically cancelled for security and will no longer work for new purchases.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "The dispute's address argument is the registered home address from the records, never a shipping address the customer gives for a replacement card",
+     "quote": "8. address (string) - The registered home address of the user.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "A charge that appears more than once is a duplicate_charge",
+     "quote": "'duplicate_charge': Same charge appeared multiple times",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "Do not order a replacement unless the eligibility check (pending orders, tier limit) passes",
+     "quote": "Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Each dispute uses the last 4 digits and tier of the card its own transaction was made on",
+     "quote": "Last 4 digits of the credit card under which the disputed transaction took place.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "An active dispute blocks a credit limit increase on the same account. If the customer also wants an increase that is not yet decided, tell them before filing and offer to do the increase first.",
+     "quote": "3. No Pending Disputes: Verify the account has no active disputes.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "rule": "Verify identity once per conversation; a later job in the same conversation reuses the verified user",
+     "quote": "No need to verify more than once in a single conversation.",
+     "doc": "policy"
+    },
+    {
+     "rule": "A transfer after a failed filing uses a listed reason code: fraud_or_security_concern for unauthorized or fraudulent charges, otherwise technical_system_error",
+     "quote": "| fraud_or_security_concern | Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "All of the following hold. The customer is verified and the verification is logged (once per conversation). If the customer also wanted a credit limit increase on the same card that was not yet decided, they were told before filing that the dispute would block it, and the order they chose was followed. file_credit_card_transaction_dispute_4829 has been called successfully once for each confirmed transaction in the records, on every card involved, with all required arguments. Each call carries that card's last 4 digits and the card_action for that card (cancel_and_reissue for a card already replaced in this conversation), plus an eligible_for_provisional_credit value decided for that dispute, using the running dispute count and the order from the customer's priorities (largest first if they asked) when several disputes are filed. If the customer chose cancel_and_reissue and was eligible, a replacement was ordered (once only). Charges not found in the records were explained and not disputed. The customer has been told that each dispute is filed and whether provisional credit applies. If filing failed, the failure has been explained instead and a transfer offered. If the customer raised another request, the agent has moved on to that job without verifying again."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_card_replacements_001",
+   "why": "Internal procedure for a replacement credit card: verification, account lookup, address, reason, shipping fees by tier, eligibility gate, order_replacement_credit_card_7291 arguments and what to say after the order"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_002",
+   "why": "Expedited fees by tier; expedited shipping recommended for fraud or stolen cards"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_003",
+   "why": "After a replacement: new number and CVV, same account number, and review recent transactions on suspected fraud"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_004",
+   "why": "Replacement eligibility: no pending request; 60-day limits by tier; manual review"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_replacements_005",
+   "why": "get_pending_replacement_orders_5765 and how to read its statuses; retry on errors"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_014",
+   "why": "Internal dispute procedure, the file_credit_card_transaction_dispute_4829 arguments, and card_action cancel_and_reissue"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_015",
+   "why": "Provisional credit eligibility criteria and maximums by tier"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_016",
+   "why": "get_user_dispute_history_7291, used for the count of earlier disputes"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_013",
+   "why": "get_card_last_4_digits, a tool the customer runs"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_018",
+   "why": "Customer-facing dispute reasons; agents file disputes on the customer's behalf"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_022",
+   "why": "Agent tells the customer whether provisional credit applies"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_004",
+   "why": "Review recent transactions and note anything unfamiliar; replace the card and help with disputes"
+  },
+  {
+   "id": "doc_checking_accounts_purple_account_007",
+   "why": "Review transaction history for suspicious activity; if any is found, follow the stolen-card protocol"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_007",
+   "why": "A pending replacement or an active dispute blocks a CLI"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_042",
+   "why": "Transfer reason codes (fraud_or_security_concern, technical_system_error)"
+  }
+ ],
+ "open_questions": [
+  "No document says how to count credit card replacements in the 60-day window. get_pending_replacement_orders_5765 may return only pending orders, so the tier limit may not be checkable from it.",
+  "No document names the account field that holds the open date used for the 60-day account-age check for provisional credit.",
+  "No document says whether the credit card account records include the card's last 4 digits. If they do not, the customer gives them or runs get_card_last_4_digits.",
+  "No credit-card-specific document says how many 'recent' transactions to show. The workflow shows every returned transaction for the card.",
+  "No document says whether a transaction that already has an open dispute may be disputed again."
+ ],
+ "merge": [
+  {
+   "job": "review_recent_credit_card_transactions",
+   "into": [
+    "review_recent_credit_card_transactions"
+   ],
+   "previous_sessions": [
+    "20261007T061805Z_banking_knowledge_r2_task_036"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "tools order_replacement_credit_card_7291, unlock_discoverable_agent_tool, call_discoverable_agent_tool, file_credit_card_transaction_dispute_4829 (not_used)",
+     "why": "The cited documents name these tools. Each is now listed with the reason this job does not call it.",
+     "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "change": "added",
+     "what": "record_unrecognized",
+     "why": "New branch: keep the records' ids for the charges the customer denies, so the replacement and dispute jobs can use them without asking again",
+     "quote": "Please have your account information ready, along with any details about the transaction in question such as the purchase date, merchant name, and amount.",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    },
+    {
+     "change": "added",
+     "what": "requests_in_order",
+     "why": "New branch for a customer who wants a replacement and then disputes: a replacement ordered first sets card_action to cancel_and_reissue",
+     "quote": "'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced - whether you've already ordered a replacement card via order_replacement_credit_card_7291 or the cancellation is happening as part of this dispute)",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "change": "changed",
+     "what": "handle_errors args.reason",
+     "why": "The transfer document says to pick a listed reason code. technical_system_error replaces the free-text error.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "rule: technical_system_error for lookup failures; info next_requests_order; aliases",
+     "why": "Supports the changes above",
+     "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 25,
+     "n": 25,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [
+      "file_credit_card_transaction_dispute_4829",
+      "order_replacement_credit_card_7291"
+     ],
+     "missing": [],
+     "n": 2
+    },
+    "D3": {
+     "with_condition": 0,
+     "n": 0
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 5,
+     "n": 5,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  },
+  {
+   "job": "order_replacement_credit_card",
+   "into": [
+    "order_replacement_credit_card"
+   ],
+   "previous_sessions": [
+    "20261007T234414Z_banking_knowledge_r3_task_054"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "tools approve_credit_limit_increase_5847, deny_credit_limit_increase_5848, get_credit_limit_increase_history_4829 (not_used)",
+     "why": "The cited CLI document names these tools. They are listed with the reason this job does not call them.",
+     "quote": "If a replacement is pending, the CLI cannot be processed until the replacement is delivered or cancelled.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "change": "changed",
+     "what": "transfer_manual_review args.reason",
+     "why": "The transfer document requires a listed reason code, not free text. The old text moves into the summary.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "order_system_error_transfer",
+     "why": "New failure path for a system error that is not a pending-order or tier-limit rejection: retry once, then offer a transfer",
+     "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "rule: transfer reason codes; done_when case (4); aliases",
+     "why": "Supports the changes above",
+     "quote": "| fraud_or_security_concern | Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 50,
+     "n": 50,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [
+      "approve_credit_limit_increase_5847",
+      "deny_credit_limit_increase_5848",
+      "file_credit_card_transaction_dispute_4829",
+      "get_credit_limit_increase_history_4829",
+      "get_pending_replacement_orders_5765",
+      "order_replacement_credit_card_7291",
+      "submit_credit_limit_increase_request_7392"
+     ],
+     "missing": [],
+     "n": 7
+    },
+    "D3": {
+     "with_condition": 2,
+     "n": 2
+    },
+    "D4": {
+     "named": 2,
+     "n": 2
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 6,
+     "n": 6,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  },
+  {
+   "job": "filing_a_credit_card_transaction_dispute",
+   "into": [
+    "filing_a_credit_card_transaction_dispute"
+   ],
+   "previous_sessions": [
+    "20261007T234414Z_banking_knowledge_r3_task_054"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "tools approve_credit_limit_increase_5847, deny_credit_limit_increase_5848, get_credit_limit_increase_history_4829 (not_used)",
+     "why": "The cited CLI document names these tools. They are listed with the reason this job does not call them.",
+     "quote": "3. No Pending Disputes: Verify the account has no active disputes.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_007"
+    },
+    {
+     "change": "added",
+     "what": "last4_from_records",
+     "why": "New branch: when the records already show the last 4 digits, confirm them instead of giving the customer the lookup tool",
+     "quote": "3. card_last_4_digits (string) - Last 4 digits of the credit card under which the disputed transaction took place. \". ",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "change": "changed",
+     "what": "handle_failure args.reason",
+     "why": "The transfer document requires a listed reason code. The free text moves into the summary.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "rule: transfer reason codes; file_dispute card_last_4_digits source includes last4_from_records; aliases",
+     "why": "Supports the changes above",
+     "quote": "| fraud_or_security_concern | Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 71,
+     "n": 71,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [
+      "approve_credit_limit_increase_5847",
+      "deny_credit_limit_increase_5848",
+      "file_credit_card_transaction_dispute_4829",
+      "get_card_last_4_digits",
+      "get_credit_limit_increase_history_4829",
+      "get_pending_replacement_orders_5765",
+      "get_user_dispute_history_7291",
+      "order_replacement_credit_card_7291",
+      "submit_credit_limit_increase_request_7392"
+     ],
+     "missing": [],
+     "n": 9
+    },
+    "D3": {
+     "with_condition": 5,
+     "n": 5
+    },
+    "D4": {
+     "named": 8,
+     "n": 8
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 15,
+     "n": 15,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  }
+ ],
+ "rejected": [],
+ "draft": [
+  {
+   "job": "review_recent_credit_card_transactions",
+   "aliases": [
+    "credit_card_transaction_history",
+    "check_unrecognized_charges",
+    "balance_higher_than_expected"
+   ],
+   "when": {
+    "quote": "If the replacement is due to suspected fraud, review recent transactions in the Rho-Bank app or website and report any unauthorized charges.",
+    "doc": "doc_credit_cards_credit_card_replacements_003"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks to see their credit card transactions or reports charges they do not recognize. Reading transactions is not a write, but it needs verification first.",
+    "quote": "- **Unauthorized or Fraudulent Charges**: You see a charge you didn't make or don't recognize",
+    "doc": "doc_credit_cards_credit_cards_(general)_018"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "get_cc_accounts",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": "get_cc_transactions",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "tool_error",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "customer_identifier",
+     "about": "full name, email or user id, used to find the customer's record",
+     "from": "customer",
+     "ask": "To find your profile, could you give me your full name or the email address on your account?",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_values",
+     "about": "any 2 of: date of birth, email, phone number, address on file",
+     "from": "customer",
+     "ask": "To verify your identity, please give me two of these: your date of birth, email, phone number or home address on file.",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_in_question",
+     "about": "which credit card the customer wants to review (card type / last 4) when they have more than one",
+     "from": "customer",
+     "ask": "Which of your Rho-Bank credit cards would you like me to review?",
+     "may_hold_back": true
+    },
+    {
+     "field": "unrecognized_transactions",
+     "about": "which listed transactions the customer says they did not make",
+     "from": "customer",
+     "ask": "Do you recognize all of these charges, or are there any you did not make?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet_and_collect_id",
+     "by": "model",
+     "do": "Greet the customer. Ask for a full name, email or user id so you can find their profile, and ask for two verification values (date of birth, email, phone, address).",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Find the customer's record with get_user_information_by_name (case sensitive), get_user_information_by_email or get_user_information_by_id, whichever identifier the customer gave.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave (or email → get_user_information_by_email; user id → get_user_information_by_id)"
+     },
+     "lookup": [],
+     "after": [
+      "greet_and_collect_id"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "check_identity",
+     "by": "model",
+     "do": "Compare the customer's values with the record. They are verified only if at least 2 of date of birth, email, phone number and address match. A name or user id alone does not count. If fewer than 2 match, share no account information. Ask again for correct values. If they still cannot verify, say you cannot access the account.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification log.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "check_identity"
+     ],
+     "if": "the customer was verified",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification once per conversation.",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's record",
+      "user_id": "the verified user's record",
+      "address": "the verified user's record",
+      "email": "the verified user's record",
+      "phone_number": "the verified user's record",
+      "date_of_birth": "the verified user's record",
+      "time_verified": "get_time result"
+     },
+     "lookup": [],
+     "after": [
+      "get_time"
+     ],
+     "if": "the customer was verified and no verification has been logged yet in this conversation",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_cc_accounts",
+     "by": "harness",
+     "do": "Read the verified user's credit card accounts (account id, card type/tier, open date, status).",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Look up the customer's credit card account.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "get_cc_transactions",
+     "by": "harness",
+     "do": "Read the verified user's credit card transactions.",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "get_cc_accounts"
+     ],
+     "if": null,
+     "quote": "If the replacement is due to suspected fraud, review recent transactions in the Rho-Bank app or website and report any unauthorized charges.",
+     "doc": "doc_credit_cards_credit_card_replacements_003"
+    },
+    {
+     "id": "present_transactions",
+     "by": "model",
+     "do": "Find the account the customer asked about (ask which card if they have several). List all of its recent transactions, not just a few, with date, merchant, amount and category. If the customer asks for more, show the rest. Then ask whether they recognize every charge.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_cc_accounts",
+      "get_cc_transactions"
+     ],
+     "after": [
+      "get_cc_transactions"
+     ],
+     "if": null,
+     "quote": "If the replacement is due to suspected fraud, review recent transactions in the Rho-Bank app or website and report any unauthorized charges.",
+     "doc": "doc_credit_cards_credit_card_replacements_003"
+    },
+    {
+     "id": "route_unrecognized",
+     "by": "model",
+     "do": "If the customer says one or more charges are not theirs, write down each one's transaction id from get_cc_transactions. If they want the card replaced, go to order_replacement_credit_card. If they want the charges disputed, go to file_credit_card_transaction_dispute (replacement first when they ask for both). If every charge is recognized, explain the balance from the listed transactions.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_cc_transactions"
+     ],
+     "after": [
+      "present_transactions"
+     ],
+     "if": null,
+     "quote": "- **Unauthorized or Fraudulent Charges**: You see a charge you didn't make or don't recognize",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    },
+    {
+     "id": "tool_error",
+     "by": "model",
+     "do": "If a lookup returns an error, retry it once. If it still fails, tell the customer you cannot complete the request right now and ask if they want a human agent. If they agree, call transfer_to_human_agents with reason technical_system_error.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "what was done and which call failed",
+      "reason": "technical_system_error"
+     },
+     "lookup": [],
+     "after": [],
+     "if": "a lookup still fails after a retry and the customer agrees to a transfer",
+     "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Share no account or transaction information until at least 2 of date of birth, email, phone and address match the record. Verify and log once per conversation.",
+     "quote": "Verify the customer's identity using standard verification procedures.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "A charge the customer did not make or does not recognize is an unauthorized/fraudulent charge that can be disputed.",
+     "quote": "- **Unauthorized or Fraudulent Charges**: You see a charge you didn't make or don't recognize",
+     "doc": "doc_credit_cards_credit_cards_(general)_018"
+    }
+   ],
+   "done_when": "The customer is verified and logged, has seen the recent transactions on the card they asked about, and has said whether any charge is unrecognized. Each unrecognized charge has its transaction id noted, and the customer's next request (replacement, dispute or none) is identified."
+  },
+  {
+   "job": "order_replacement_credit_card",
+   "aliases": [
+    "replace_credit_card",
+    "cancel_and_reissue_credit_card",
+    "lost_stolen_fraud_credit_card_replacement"
+   ],
+   "when": {
+    "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+    "doc": "doc_credit_cards_credit_card_replacements_001"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks to cancel/replace the credit card. The agent does not order a replacement the customer did not ask for.",
+    "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+    "doc": "doc_credit_cards_credit_card_replacements_001"
+   },
+   "tools": [
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "lookup_account",
+     "not_used": null
+    },
+    {
+     "tool": "get_pending_replacement_orders_5765",
+     "who": "agent",
+     "step": "check_pending_orders",
+     "not_used": null
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": "unlock_tools",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": "check_pending_orders",
+     "not_used": null
+    },
+    {
+     "tool": "order_replacement_credit_card_7291",
+     "who": "agent",
+     "step": "order_replacement",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "not_eligible",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "replacement_reason",
+     "about": "exactly one of fraud_suspected, lost, stolen, damaged, expired, other",
+     "from": "customer",
+     "ask": "What is the reason for the replacement: suspected fraud, lost, stolen, damaged, expired, or something else?",
+     "may_hold_back": true
+    },
+    {
+     "field": "shipping_address",
+     "about": "the address on file or an alternate address (including unit/suite) where the new card should go",
+     "from": "customer",
+     "ask": "Should we ship the new card to your address on file, or to a different address? If different, please give the full address including any suite or unit number.",
+     "may_hold_back": true
+    },
+    {
+     "field": "shipping_speed",
+     "about": "standard (7–10 business days, free) or expedited (2–3 business days, fee by tier)",
+     "from": "customer",
+     "ask": "Would you like standard shipping (7–10 business days, free) or expedited shipping (2–3 business days, fee based on your card tier)?",
+     "may_hold_back": true
+    },
+    {
+     "field": "expedited_fee_consent",
+     "about": "the customer agrees to the tier's expedited fee when one applies",
+     "from": "customer",
+     "ask": "Expedited shipping for your card has a fee of [tier fee]. Do you agree to that fee?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "lookup_account",
+     "by": "harness",
+     "do": "Read the verified user's credit card accounts. Pick the account for the card being replaced and note its account id and card type (tier).",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [],
+     "if": "the customer is verified (job review_recent_credit_card_transactions steps check_identity/log_verification)",
+     "quote": "Look up the customer's credit card account.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "ask_reason",
+     "by": "model",
+     "do": "Ask for the replacement reason and record exactly one of fraud_suspected, lost, stolen, damaged, expired, other. Unrecognized charges on the card mean fraud_suspected.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "lookup_account"
+     ],
+     "if": null,
+     "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "confirm_address",
+     "by": "model",
+     "do": "Ask whether to ship to the address on file or an alternate address. If alternate, get the full address including any suite/unit and read it back to confirm.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_account"
+     ],
+     "after": [
+      "ask_reason"
+     ],
+     "if": null,
+     "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "ask_shipping",
+     "by": "model",
+     "do": "Offer standard (7–10 business days, no fee) or expedited (2–3 business days). The expedited fee depends on the card tier from lookup_account: Entry (Bronze Rewards, EcoCard, Business Bronze) $15.00; Mid (Silver Rewards, Business Silver, Green Rewards, Silver Zoom) $10.00; Premium and above (Gold, Platinum, Diamond Elite) $0.00. If the reason is fraud_suspected or stolen, strongly recommend expedited. If a fee applies to the chosen speed, get the customer's consent to it.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_account",
+      "ask_reason"
+     ],
+     "after": [
+      "confirm_address"
+     ],
+     "if": null,
+     "quote": "If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "unlock_tools",
+     "by": "harness",
+     "do": "Unlock the pending-order check tool so eligibility can be read.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765"
+     },
+     "lookup": [],
+     "after": [
+      "ask_shipping"
+     ],
+     "if": null,
+     "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "check_pending_orders",
+     "by": "harness",
+     "do": "Read the account's replacement orders.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_pending_replacement_orders_5765",
+      "arguments": "{\"credit_card_account_id\": account id from lookup_account}"
+     },
+     "lookup": [],
+     "after": [
+      "unlock_tools"
+     ],
+     "if": null,
+     "quote": "Invoke get_pending_replacement_orders_5765 with the credit_card_account_id parameter.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "id": "decide_eligibility",
+     "by": "model",
+     "do": "The customer is eligible only if (a) no returned order is in a non-final state (pending, shipped) and (b) the number of replacements in the last 60 days is below the tier limit: Entry 2, Mid 3, Premium and above 4. Use created_at from check_pending_orders and get_current_time for the window. On an error or an ambiguous response, retry the call once.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_pending_orders",
+      "lookup_account"
+     ],
+     "after": [
+      "check_pending_orders"
+     ],
+     "if": null,
+     "quote": "Confirm eligibility for replacement in the knowledge base before proceeding.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "not_eligible",
+     "by": "model",
+     "do": "If not eligible, do not unlock or call the order tool. If an order is still open, explain that a new one cannot be submitted until it is delivered or cancelled. If the tier limit is reached, explain the limit and that a manual review is possible, and ask if they want a human agent. If they agree, call transfer_to_human_agents (fraud_or_security_concern when fraud is involved, otherwise the best-matching code).",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "replacement request, reason, and why it is blocked",
+      "reason": "fraud_or_security_concern or best-matching code"
+     },
+     "lookup": [
+      "decide_eligibility"
+     ],
+     "after": [
+      "decide_eligibility"
+     ],
+     "if": "the customer is not eligible and agrees to a transfer for manual review",
+     "quote": "If you believe you have a legitimate need for an additional replacement beyond these limits, contact customer support to request a manual review of your case.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "id": "unlock_order_tool",
+     "by": "harness",
+     "do": "Unlock the replacement order tool.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291"
+     },
+     "lookup": [
+      "decide_eligibility"
+     ],
+     "after": [
+      "decide_eligibility"
+     ],
+     "if": "the customer is eligible and has confirmed reason, address and shipping speed",
+     "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "order_replacement",
+     "by": "harness",
+     "do": "Order the replacement card.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "order_replacement_credit_card_7291",
+      "arguments": "credit card account id from lookup_account; reason from ask_reason; shipping_address from confirm_address; shipping_speed (standard|expedited) from ask_shipping; expedited_fee_acknowledgement = customer's consent from ask_shipping when a fee applies; notes = relevant context (e.g. suspected fraud, delivery to alternate address)"
+     },
+     "lookup": [
+      "decide_eligibility"
+     ],
+     "after": [
+      "unlock_order_tool"
+     ],
+     "if": "the customer is eligible, asked for the replacement, and consented to any expedited fee",
+     "quote": "Use call_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291 and include:",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "id": "confirm_order",
+     "by": "model",
+     "do": "Confirm the order and tell the customer four things: the old card is cancelled now; the new card has a new number and CVV; delivery takes 7–10 business days standard or 2–3 business days expedited; they will get emails when the order is placed and when the card ships. If the reason was fraud_suspected or stolen, remind them to review recent transactions and dispute unauthorized charges. If the order call returns an error, retry once. If it still fails, offer a transfer with reason technical_system_error.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "order_replacement"
+     ],
+     "after": [
+      "order_replacement"
+     ],
+     "if": null,
+     "quote": "The old card is automatically cancelled for security and will no longer work for new purchases.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Expedited fee by tier: Entry $15.00; Mid (Silver Rewards, Business Silver, Green Rewards, Silver Zoom) $10.00; Premium and above $0.00. Standard is free.",
+     "quote": "Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom): $10.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "Strongly recommend expedited shipping when the reason is fraud_suspected or stolen.",
+     "quote": "If your card was stolen or you suspect fraud, we strongly recommend expedited shipping to reduce the window for potential misuse.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "rule": "No new replacement while an existing replacement request is still being processed (non-final status).",
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Replacement limit per 60-day period: Entry 2, Mid 3, Premium and above 4.",
+     "quote": "Replacement requests are limited within a 60-day period to help protect your account.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "rule": "Do not unlock or call order_replacement_credit_card_7291 unless eligible.",
+     "quote": "Do not unlock or call the tool unless the customer is eligible. If not eligible, explain next steps per the knowledge base.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "rule": "The expedited fee needs the customer's consent before ordering.",
+     "quote": "Expedited_fee_acknowledgement: customer consent captured if a fee applies based on tier.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ],
+   "done_when": "Either the replacement is ordered with the confirmed reason, address, speed and fee consent, and the customer has been told the old card is cancelled, the delivery window, and the email notices; or the customer has been told why they are not eligible and offered the next step (wait, or a transfer for manual review)."
+  },
+  {
+   "job": "file_credit_card_transaction_dispute",
+   "aliases": [
+    "dispute_unauthorized_credit_card_charge",
+    "credit_card_chargeback",
+    "fraudulent_charge_dispute"
+   ],
+   "when": {
+    "quote": "the agent must gather comprehensive information and call the file_credit_card_transaction_dispute_4829 tool.",
+    "doc": "doc_credit_cards_credit_cards_(general)_014"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks to dispute specific charges. After a fraud replacement the agent may remind them that disputes are possible, but it files only on request.",
+    "quote": "Our representatives will walk you through the process, gather the necessary information, and file the dispute on your behalf.",
+    "doc": "doc_credit_cards_credit_cards_(general)_018"
+   },
+   "tools": [
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "read_records",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": "read_records",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "read_records",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_dispute_history_7291",
+     "who": "agent",
+     "step": "read_dispute_history",
+     "not_used": null
+    },
+    {
+     "tool": "get_card_last_4_digits",
+     "who": "customer",
+     "step": "get_last4",
+     "not_used": null
+    },
+    {
+     "tool": "give_discoverable_user_tool",
+     "who": "agent",
+     "step": "get_last4",
+     "not_used": null
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": "unlock_dispute_tool",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": "file_dispute",
+     "not_used": null
+    },
+    {
+     "tool": "file_credit_card_transaction_dispute_4829",
+     "who": "agent",
+     "step": "file_dispute",
+     "not_used": null
+    },
+    {
+     "tool": "order_replacement_credit_card_7291",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not called in this job. It is named only to set card_action: if a replacement was already ordered (job order_replacement_credit_card), use cancel_and_reissue."
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "file_error",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "disputed_transactions",
+     "about": "which transactions the customer disputes (matched to transaction ids in the records)",
+     "from": "customer",
+     "ask": "Which charges would you like to dispute?",
+     "may_hold_back": false
+    },
+    {
+     "field": "contacted_merchant",
+     "about": "whether the customer tried to resolve it with the merchant first",
+     "from": "customer",
+     "ask": "Did you try to resolve this with the merchant first?",
+     "may_hold_back": true
+    },
+    {
+     "field": "issue_noticed_date",
+     "about": "date the customer noticed the issue (MM/DD/YYYY)",
+     "from": "customer",
+     "ask": "When did you first notice this charge?",
+     "may_hold_back": true
+    },
+    {
+     "field": "dispute_reason",
+     "about": "one of unauthorized_fraudulent_charge, duplicate_charge, incorrect_amount, goods_services_not_received, goods_services_not_as_described, canceled_subscription_still_charging, refund_never_processed",
+     "from": "customer",
+     "ask": "Which best describes the problem: unauthorized/fraudulent charge, duplicate charge, incorrect amount, goods or services not received, not as described, cancelled subscription still charging, or refund never processed?",
+     "may_hold_back": true
+    },
+    {
+     "field": "resolution_requested",
+     "about": "full_refund, partial_refund (with amount) or reversal_of_charge",
+     "from": "customer",
+     "ask": "What resolution would you like: a full refund, a partial refund, or a reversal of the charge?",
+     "may_hold_back": true
+    },
+    {
+     "field": "partial_refund_amount",
+     "about": "dollar amount, only if partial_refund",
+     "from": "customer",
+     "ask": "What amount would you like refunded?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_last_4",
+     "about": "last 4 digits of the card the charge was made on",
+     "from": "records",
+     "ask": "If it is not in the records: please run the tool I am sending you to get your card's last 4 digits and tell me the result.",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "read_records",
+     "by": "harness",
+     "do": "Read the verified user's credit card accounts (account id, card type/tier, open date) and transactions (transaction id, date, amount, merchant), and get the current time.",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user (also call get_credit_card_accounts_by_user with the same user_id, and get_current_time)"
+     },
+     "lookup": [],
+     "after": [],
+     "if": "the customer is verified",
+     "quote": "1. transaction_id (string) - ID of the transaction being disputed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "ask_dispute_details",
+     "by": "model",
+     "do": "For each disputed transaction, ask: did you contact the merchant first; when did you notice the issue; which dispute reason applies (one of the seven values); and what resolution you want (full_refund, partial_refund with amount, reversal_of_charge). Do not assume the answers.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "read_records"
+     ],
+     "if": null,
+     "quote": "9. contacted_merchant (boolean) - Ask user: Did you try to resolve this with the merchant first? Pass true or false",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "unlock_history",
+     "by": "harness",
+     "do": "Unlock the dispute history tool.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+     },
+     "lookup": [],
+     "after": [
+      "ask_dispute_details"
+     ],
+     "if": null,
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "read_dispute_history",
+     "by": "harness",
+     "do": "Read the user's dispute history (dispute dates, statuses, transactions).",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "arguments": "{\"user_id\": the verified user}"
+     },
+     "lookup": [],
+     "after": [
+      "unlock_history"
+     ],
+     "if": null,
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "get_last4",
+     "by": "model",
+     "do": "Take the card's last 4 digits from the account/transaction records if present. Only if they are missing, give the customer get_card_last_4_digits and ask them to run it with their credit_card_account_id and tell you the result.",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_card_last_4_digits"
+     },
+     "lookup": [
+      "read_records"
+     ],
+     "after": [
+      "read_records"
+     ],
+     "if": "the last 4 digits are not in the records already returned",
+     "quote": "Tell the user to use the exact tool name and parameter: get_card_last_4_digits(credit_card_account_id: str).",
+     "doc": "doc_credit_cards_credit_cards_(general)_013"
+    },
+    {
+     "id": "decide_card_action",
+     "by": "model",
+     "do": "Set card_action to cancel_and_reissue if a replacement was ordered for this card in this conversation or the customer wants it replaced now. Otherwise set it to keep_active.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "read_records"
+     ],
+     "after": [
+      "ask_dispute_details"
+     ],
+     "if": null,
+     "quote": "'cancel_and_reissue': The card is being cancelled and a replacement issued",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "decide_provisional_credit",
+     "by": "model",
+     "do": "For each transaction, set eligible_for_provisional_credit = true only if ALL five conditions hold. (1) The account has been open ≥60 days (open date vs current time). (2) The reason is unauthorized_fraudulent_charge, duplicate_charge, or goods_services_not_received with the purchase made more than 30 days ago. (3) The amount is ≥ $25.00 and ≤ the tier max: Entry $2500.00; Mid $5000.00; Premium $10000.00; Elite $15000.00; Diamond Elite $25000.00. (4) The dispute history shows no more than 2 disputes in the past 12 months. (5) For non-fraud reasons, the customer contacted the merchant first. Otherwise false.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "read_records",
+      "read_dispute_history",
+      "ask_dispute_details"
+     ],
+     "after": [
+      "read_dispute_history"
+     ],
+     "if": null,
+     "quote": "15. eligible_for_provisional_credit (boolean) - Agent must determine this based on the Provisional Credit Eligibility Guidelines article in this knowledge base. Pass true or false.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "unlock_dispute_tool",
+     "by": "harness",
+     "do": "Unlock the dispute filing tool.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829"
+     },
+     "lookup": [
+      "decide_provisional_credit"
+     ],
+     "after": [
+      "decide_provisional_credit",
+      "decide_card_action"
+     ],
+     "if": "the customer asked to dispute and all required answers have been collected",
+     "quote": "First unlock the tool, then call it using call_discoverable_agent_tool with the tool name and a JSON string containing all the required arguments.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "file_dispute",
+     "by": "harness",
+     "do": "File one dispute per disputed transaction.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "file_credit_card_transaction_dispute_4829",
+      "arguments": "transaction_id and purchase_date (MM/DD/YYYY) from read_records; card_action from decide_card_action; card_last_4_digits from get_last4; full_name, user_id, phone, email, address = the verified user's registered record (home address, not a shipping address); contacted_merchant, issue_noticed_date (MM/DD/YYYY), dispute_reason, resolution_requested (+ partial_refund_amount if partial_refund) from ask_dispute_details; eligible_for_provisional_credit from decide_provisional_credit"
+     },
+     "lookup": [
+      "decide_provisional_credit",
+      "decide_card_action"
+     ],
+     "after": [
+      "unlock_dispute_tool",
+      "get_last4"
+     ],
+     "if": "the customer asked to dispute this transaction",
+     "quote": "the agent must gather comprehensive information and call the file_credit_card_transaction_dispute_4829 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "id": "confirm_disputes",
+     "by": "model",
+     "do": "Confirm each dispute was filed and tell the customer whether provisional credit applies to each one. Do not reveal internal criteria.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "file_dispute"
+     ],
+     "after": [
+      "file_dispute"
+     ],
+     "if": null,
+     "quote": "When you file a dispute with our customer service team, they will let you know whether provisional credit applies to your situation.",
+     "doc": "doc_credit_cards_credit_cards_(general)_022"
+    },
+    {
+     "id": "file_error",
+     "by": "model",
+     "do": "If a call returns an error, retry it once. If it still fails, tell the customer the dispute could not be filed and ask if they want a human agent. If they agree, call transfer_to_human_agents (reason fraud_or_security_concern for unauthorized charges, else technical_system_error).",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "disputes requested, which were filed, what failed",
+      "reason": "fraud_or_security_concern or technical_system_error"
+     },
+     "lookup": [],
+     "after": [],
+     "if": "a dispute call still fails after a retry and the customer agrees to a transfer",
+     "quote": "| fraud_or_security_concern | Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Provisional credit requires an account open at least 60 days.",
+     "quote": "1. Account Standing: The customer's credit card account has been open for at least 60 days",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Provisional credit requires an amount ≥ $25.00 and ≤ the tier max (Mid tier incl. Silver Rewards: $5000.00).",
+     "quote": "Mid Tier (Silver Rewards Card, Business Silver Rewards Card, Green Rewards Card, Silver Zoom Card): Maximum $5000.00",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Provisional credit requires no more than 2 disputes filed in the past 12 months.",
+     "quote": "4. Previous Disputes: The customer has not filed more than 2 disputes in the past 12 months",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Merchant contact is required only for non-fraud reasons.",
+     "quote": "5. Contacted Merchant: For non-fraud disputes (anything other than 'unauthorized_fraudulent_charge'), the customer must have attempted to resolve with the merchant first",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "Eligible reasons: unauthorized_fraudulent_charge, duplicate_charge, and goods_services_not_received only if the purchase was more than 30 days ago.",
+     "quote": "'goods_services_not_received' (only if purchase was made more than 30 days ago)",
+     "doc": "doc_credit_cards_credit_cards_(general)_015"
+    },
+    {
+     "rule": "The address argument is the registered home address.",
+     "quote": "8. address (string) - The registered home address of the user.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    },
+    {
+     "rule": "partial_refund_amount is sent only with partial_refund.",
+     "quote": "14. partial_refund_amount (number, optional) - Only required if resolution_requested is 'partial_refund'.",
+     "doc": "doc_credit_cards_credit_cards_(general)_014"
+    }
+   ],
+   "done_when": "A dispute is filed for every transaction the customer asked to dispute, with all required arguments and a computed eligible_for_provisional_credit, and the customer has been told the result and whether provisional credit applies. Or, after a failure, the customer has been offered a transfer."
+  }
+ ],
+ "decision": {
+  "review_recent_credit_card_transactions": [
+   "review_recent_credit_card_transactions"
+  ],
+  "order_replacement_credit_card": [
+   "order_replacement_credit_card"
+  ],
+  "file_credit_card_transaction_dispute": [
+   "filing_a_credit_card_transaction_dispute"
+  ]
+ },
+ "lock": {
+  "token": 44,
+  "jobs": [
+   "file_credit_card_transaction_dispute",
+   "filing_a_credit_card_transaction_dispute",
+   "order_replacement_credit_card",
+   "review_recent_credit_card_transactions"
+  ],
+  "waited_ms": 35,
+  "read": {
+   "filing_a_credit_card_transaction_dispute": 3,
+   "review_recent_credit_card_transactions": 0,
+   "order_replacement_credit_card": 1
+  },
+  "committed": {
+   "review_recent_credit_card_transactions": 1,
+   "order_replacement_credit_card": 2,
+   "filing_a_credit_card_transaction_dispute": 4
+  },
+  "error": null
+ }
+}

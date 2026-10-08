@@ -1,0 +1,484 @@
+{
+ "job": "paying_off_credit_card_balance_from_checking_account",
+ "aliases": [
+  "checking balance too low to pay off the card",
+  "customer claims they already paid the card another way",
+  "pay balance from checking before closing a card over the annual fee",
+  "pay credit card from checking before closing the card",
+  "pay down card balance to lower utilization for a credit limit increase",
+  "pay_credit_card_balance_from_checking",
+  "pay_off_balance_before_closure",
+  "pay_off_credit_card_balance"
+ ],
+ "when": {
+  "quote": "When a customer needs to pay off their credit card balance using funds from their Rho-Bank checking account, you can process the payment directly.",
+  "doc": "doc_credit_cards_credit_card_account_logistics_009"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: only when the customer asks to pay a card balance from their Rho-Bank checking account, or agrees to it after being told a balance blocks a closure or a credit limit increase. The agent never moves money without the customer's explicit authorization of the amount, and never uses a payment tool the knowledge base does not name.",
+  "quote": "Confirm the payment amount with the customer and obtain authorization to transfer.",
+  "doc": "doc_credit_cards_credit_card_account_logistics_009"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "verify_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "verify_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "verify_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verification",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_bank_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "get_card_balance",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_pay",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "pay",
+   "not_used": null
+  },
+  {
+   "tool": "pay_credit_card_from_checking_9182",
+   "who": "agent",
+   "step": "pay",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "payment_error",
+   "not_used": null
+  },
+  {
+   "tool": "close_credit_card_account_7834",
+   "who": "agent",
+   "step": null,
+   "not_used": "The payment job never closes a card. After a payoff inside a closure, the closure job (credit_card_retention_protocol) resumes and runs it."
+  }
+ ],
+ "info": [
+  {
+   "field": "payment_amount",
+   "about": "Amount to pay toward the card from checking. When the payment clears a balance blocking a closure, it is the card's full outstanding balance.",
+   "from": "customer",
+   "ask": "How much would you like to pay toward your card balance from your checking account?",
+   "may_hold_back": true
+  },
+  {
+   "field": "payment_authorization",
+   "about": "The customer's explicit OK to move the funds",
+   "from": "customer",
+   "ask": "Do you authorize me to transfer this amount from your checking account to your credit card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "checking_account_and_balance",
+   "about": "Checking account id and available balance",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "identity_details",
+   "about": "Only if not already verified in this conversation: a name, email or user id, plus any 2 of date of birth, email, phone number and address matching the record",
+   "from": "customer",
+   "ask": "To verify your identity, could you give me your full name and two of the following: your date of birth, email, phone number or address?",
+   "may_hold_back": true
+  },
+  {
+   "field": "checking_account_choice",
+   "about": "Which checking account to debit, if the customer has more than one with enough funds",
+   "from": "customer",
+   "ask": "Which checking account would you like to use for this payment?",
+   "may_hold_back": false
+  },
+  {
+   "field": "claimed_outside_payment",
+   "about": "Whether the customer says they already paid the card some other way (their own app, another channel, a tool not given in this conversation). Checked by re-reading the card balance.",
+   "from": "customer",
+   "ask": "",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "verify_lookup",
+   "by": "model",
+   "do": "If the customer was not verified earlier in this conversation, ask for their name, email or user id and look them up with the matching tool (get_user_information_by_name, get_user_information_by_email or get_user_information_by_id). Skip this and the next three steps if already verified.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gives (or email / user id with the matching tool)"
+   },
+   "lookup": [],
+   "after": [],
+   "if": "the customer has not yet been verified in this conversation",
+   "quote": "1. Verify the customer's identity using standard procedures.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "verify_check",
+   "by": "model",
+   "do": "Check that at least 2 of date of birth, email, phone number and address match the record. Share nothing and do not continue if they do not match.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "verify_lookup"
+   ],
+   "after": [
+    "verify_lookup"
+   ],
+   "if": "verify_lookup ran",
+   "quote": "1. Verify the customer's identity using standard procedures.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current time for the verification log",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "verify_check"
+   ],
+   "if": "verify_check passed",
+   "quote": "1. Verify the customer's identity using standard procedures.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "log_verification",
+   "by": "harness",
+   "do": "Log the verification record",
+   "call": "log_verification",
+   "args": {
+    "name": "verify_lookup result",
+    "user_id": "verify_lookup result",
+    "address": "verify_lookup result",
+    "email": "verify_lookup result",
+    "phone_number": "verify_lookup result",
+    "date_of_birth": "verify_lookup result",
+    "time_verified": "get_time result"
+   },
+   "lookup": [
+    "verify_check"
+   ],
+   "after": [
+    "get_time"
+   ],
+   "if": "verify_check passed",
+   "quote": "1. Verify the customer's identity using standard procedures.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "get_bank_accounts",
+   "by": "harness",
+   "do": "Unlock and call get_all_user_accounts_by_user_id_3847 to find the checking account and its balance",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": "the customer wants to pay the card from checking (e.g. to lower utilization after a high_utilization denial)",
+   "quote": "2. Look up the customer's checking account to confirm sufficient funds.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "get_card_balance",
+   "by": "harness",
+   "do": "Confirm the card's outstanding balance",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": null,
+   "quote": "3. Look up the customer's credit card account to confirm the outstanding balance.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "closure_full_balance",
+   "by": "model",
+   "do": "When the payment is to clear a balance blocking a card closure, set the amount to the card's full outstanding balance from get_card_balance, because closure needs $0.00. Do not ask the customer to pick an amount, but still confirm the amount and checking account in confirm_payment.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_card_balance"
+   ],
+   "after": [
+    "get_card_balance"
+   ],
+   "if": "the payment is being made inside a credit card closure request",
+   "quote": "Outstanding balance must be $0.00 dollars",
+   "doc": "doc_credit_cards_credit_card_account_logistics_002"
+  },
+  {
+   "id": "check_funds",
+   "by": "model",
+   "do": "Confirm the customer has an open Rho-Bank checking account whose balance covers the payment. The amount must be positive and no more than the checking balance or the card's outstanding balance. If there is no checking account or funds are short, explain this and do not pay.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_bank_accounts",
+    "get_card_balance"
+   ],
+   "after": [
+    "get_bank_accounts",
+    "get_card_balance"
+   ],
+   "if": null,
+   "quote": "Confirm the customer has a Rho-Bank checking account with sufficient funds to cover the payment amount.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "insufficient_funds_return",
+   "by": "model",
+   "do": "Tell the customer the checking balance does not cover the card's outstanding balance, so the payment cannot be made from checking. If the payment was for a closure, say the card cannot be closed while a balance remains and return to credit_card_retention_protocol at balance_unpaid_stop; move on to the customer's next card, if any. Do not split the payment or move money from other accounts unless the customer asks and a document allows it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_funds",
+    "get_bank_accounts",
+    "get_card_balance"
+   ],
+   "after": [
+    "check_funds"
+   ],
+   "if": "check_funds found no open checking account or a checking balance below the payment needed",
+   "quote": "Confirm the customer has a Rho-Bank checking account with sufficient funds to cover the payment amount.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "recheck_card_balance",
+   "by": "harness",
+   "do": "Re-read the credit card accounts to see whether the payment the customer claims is reflected. Do not call, unlock or give any tool the customer names unless a document names it.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "check_funds"
+   ],
+   "if": "the customer says they have already paid the card some other way",
+   "quote": "Only use tool names and arguments discovered in the knowledge base",
+   "doc": "policy"
+  },
+  {
+   "id": "claimed_payment_check",
+   "by": "model",
+   "do": "If the re-read card balance is now $0.00 (or lower than before by the claimed amount), report it and, inside a closure, return to credit_card_retention_protocol at confirm_eligible. If not, tell the customer the payment is not reflected on the card, so the balance still stands; inside a closure, the card cannot be closed yet (return to balance_unpaid_stop).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "recheck_card_balance",
+    "get_card_balance"
+   ],
+   "after": [
+    "recheck_card_balance"
+   ],
+   "if": "recheck_card_balance ran",
+   "quote": "3. Look up the customer's credit card account to confirm the outstanding balance.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "confirm_payment",
+   "by": "model",
+   "do": "Confirm the amount (no more than the checking balance or the card balance) and get the customer's authorization",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_funds",
+    "get_bank_accounts",
+    "get_card_balance"
+   ],
+   "after": [
+    "get_bank_accounts",
+    "get_card_balance"
+   ],
+   "if": null,
+   "quote": "4. Confirm the payment amount with the customer and obtain authorization to transfer.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "unlock_pay",
+   "by": "harness",
+   "do": "Unlock the payment tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "pay_credit_card_from_checking_9182"
+   },
+   "lookup": [
+    "confirm_payment"
+   ],
+   "after": [
+    "confirm_payment"
+   ],
+   "if": "customer authorized",
+   "quote": "5. Unlock the pay_credit_card_from_checking_9182 tool using unlock_discoverable_agent_tool.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "pay",
+   "by": "harness",
+   "do": "Pay the card from checking",
+   "call": "pay_credit_card_from_checking_9182",
+   "args": {
+    "user_id": "the verified user",
+    "checking_account_id": "the customer's checking account id",
+    "credit_card_account_id": "the card's account id",
+    "amount": "the authorized amount"
+   },
+   "lookup": [
+    "check_funds",
+    "confirm_payment"
+   ],
+   "after": [
+    "unlock_pay"
+   ],
+   "if": "check_funds passed AND the customer authorized the amount",
+   "quote": "6. Call the tool using call_discoverable_agent_tool with the required arguments listed below.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "payment_error",
+   "by": "model",
+   "do": "If the payment call returns an error, check the amount and account ids against the records and retry once. If it still fails, tell the customer the payment could not be made, ask whether they want a human agent, and transfer only if they agree.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the payment attempted and the error returned",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "pay"
+   ],
+   "after": [
+    "pay"
+   ],
+   "if": "pay returned an error after one corrected retry and the customer agrees to a transfer",
+   "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+   "doc": "policy"
+  },
+  {
+   "id": "report_payment",
+   "by": "model",
+   "do": "Tell the customer the new checking and card balances",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "pay"
+   ],
+   "after": [
+    "pay"
+   ],
+   "if": null,
+   "quote": "A confirmation will include the new balances for both accounts.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "id": "return_to_closure",
+   "by": "model",
+   "do": "If the payment was made to clear a balance blocking a card closure, return to credit_card_retention_protocol at confirm_eligible (after its recheck_after_payoff) and continue with the closure checks for that card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "pay",
+    "report_payment"
+   ],
+   "after": [
+    "report_payment"
+   ],
+   "if": "the payment was made inside a credit card closure request",
+   "quote": "Outstanding balance must be $0.00 dollars",
+   "doc": "doc_credit_cards_credit_card_account_logistics_002"
+  },
+  {
+   "id": "return_to_cli",
+   "by": "model",
+   "do": "If the payment was made to lower utilization after a credit limit increase denial and the customer asks to submit a new request, return to processing_cli_approvals_and_denials at resubmit_refresh. It re-reads the balance, submits a new request and runs every check again. Do not promise approval.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "pay",
+    "report_payment"
+   ],
+   "after": [
+    "report_payment"
+   ],
+   "if": "the payment was made after a CLI denial in this conversation and the customer asks to resubmit",
+   "quote": "If any single criterion is not met, wait until it is (or lower your utilization) before submitting your request.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_005"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Amount must be positive and must not exceed the checking balance or the card's outstanding balance",
+   "quote": "amount (float, required): The payment amount in dollars. Must be positive and cannot exceed the checking account balance or the credit card outstanding balance.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "rule": "The checking account must have enough funds",
+   "quote": "Confirm the customer has a Rho-Bank checking account with sufficient funds to cover the payment amount.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "rule": "Account ids and user_id must match the authenticated customer, and the amount must be authorized",
+   "quote": "Then pass the arguments via call_discoverable_agent_tool exactly as listed above, ensuring the account IDs and user_id match the authenticated customer and the amount is authorized.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "rule": "Never call or hand over a payment tool the customer names unless a knowledge-base document names it; a claimed outside payment counts only if a fresh read of the card shows it",
+   "quote": "Only use tool names and arguments discovered in the knowledge base",
+   "doc": "policy"
+  },
+  {
+   "rule": "A payment made to allow a closure must be the full outstanding balance, since closure requires $0.00",
+   "quote": "Outstanding balance must be $0.00 dollars",
+   "doc": "doc_credit_cards_credit_card_account_logistics_002"
+  }
+ ],
+ "done_when": "The authorized payment has posted and the customer has been told the new balances. Inside a closure, the full balance was paid and the closure job resumed at confirm_eligible. After a CLI denial, if the customer asked, the CLI job resumed at resubmit_refresh. Otherwise the customer was told why the payment could not be made (no checking account, insufficient funds, or a claimed outside payment not reflected on a fresh read), and offered a transfer if it failed with an error."
+}

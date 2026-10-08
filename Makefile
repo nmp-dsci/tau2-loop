@@ -14,7 +14,7 @@ MLFLOW_TRACKING_URI ?= http://localhost:5000
 API_PORT ?= 8081
 AGENT_PORT ?= 8091
 KIND ?= gate
-# USER_MODEL unset: the customer is Haiku (eval/runner.USER_MODEL); another makes the run an experiment the loop never reuses
+# USER_MODEL unset: the customer is Sonnet (eval/runner.USER_MODEL, s18); another makes the run an experiment the loop never reuses
 USER_MODEL ?=
 
 help: ## list targets
@@ -31,8 +31,20 @@ splits: ## cut each domain's base set in half, train / test (seed 300) → data/
 documents: ## index banking's knowledge base (title and size per document) → data/tasks, for Evals
 	uv run tau2loop documents
 
-fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true or PARALLEL_CALLS=true, by hand
-	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls)
+fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true, PARALLEL_CALLS=true or WORKFLOWS=rN, by hand
+	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(WORKFLOWS),--workflows $(WORKFLOWS))
+
+rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (default r2): r2 one at a time in id order, r3 with WORKERS= (default its own 4); resumable (TASKS= some, LIMIT=); SPLIT=test researches the test questions too (r3, the person's call, 8 Oct 2026)
+	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS)) --split $(SPLIT)
+
+rag-locks: ## s21: who is updating which workflow in RAG='s library (default r3): held and waiting locks
+	uv run tau2loop rag-locks --domain banking_knowledge --rag $(or $(RAG),r3)
+
+rag-replay: ## s21: RAG='s library (default r3) as of commit AT= (default the latest), as JSON
+	uv run tau2loop rag-replay --domain banking_knowledge --rag $(or $(RAG),r3) $(if $(AT),--at $(AT))
+
+rag-rubric: ## s20: the rubric's checks over RAG='s whole library (default r2), no model
+	uv run tau2loop rag-rubric --domain banking_knowledge --rag $(or $(RAG),r2)
 
 agent-service: ## the agent's model call as a container on 127.0.0.1:$(AGENT_PORT); runs reach it with AGENT_SERVICE_URL
 	uv run tau2loop agent-service --docker --port $(AGENT_PORT)
@@ -46,8 +58,8 @@ platform-status: ## preflight: the central MLflow must answer /health (runs befo
 smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
 	uv run tau2loop smoke --agent $(or $(AGENT),v0) --concurrency $(CONCURRENCY)
 
-eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks; USER_MODEL= the customer)
-	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t)) $(if $(USER_MODEL),--user-model $(USER_MODEL))
+eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks; USER_MODEL= the customer; NOTE= the run's note)
+	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t)) $(if $(USER_MODEL),--user-model $(USER_MODEL)) $(if $(NOTE),--note "$(NOTE)")
 
 baselines: platform-status ## each domain's base version on its train split, one trial each: v0, or the oldest version where v0 was retired (banking, v1)
 	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --split train --concurrency $(CONCURRENCY) || exit 1; done
@@ -56,7 +68,7 @@ score: ## summarise RUN=<run id>
 	uv run tau2loop score $(RUN)
 
 extend: platform-status ## play only the tasks RUN=<run id>'s split has gained since, joined to it as one run of the split (a champion's train run stays its record)
-	uv run tau2loop extend $(RUN) --concurrency $(CONCURRENCY)
+	uv run tau2loop extend $(RUN) --concurrency $(CONCURRENCY) $(if $(NOTE),--note "$(NOTE)")
 
 rescore: ## replay RUN=<run id> through tau2's evaluators offline and compare verdicts
 	uv run tau2loop rescore $(RUN)
@@ -141,4 +153,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: rag-build rag-locks rag-replay rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

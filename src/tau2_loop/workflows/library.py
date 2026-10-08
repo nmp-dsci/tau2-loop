@@ -10,6 +10,14 @@ The two functions behind v6's harness tools return text for the model to read:
 `find()` ranks the library's jobs against the agent's one-line request by shared words (no
 model, so the same request always gets the same answer) and gives the best match whole;
 `request()` asks workflow_rag to research the request and returns what it wrote.
+
+Since s20 a version may name a `seed` (r2: r1): its library starts from the seed's, and each of
+its sessions merges the question into the jobs it shares, so a later version contains the
+earlier one instead of replacing it; a merged job's `aliases` retire the names it absorbed.
+
+Since s21 a version with `merge: concurrent` (r3) is built by several workers at once, so the
+order sessions started is not the order their merges landed: its library is its store's commit
+log (`store.FileStore`, `rag_library/<domain>/<rag>/`), started from the seed's library.
 """
 
 from __future__ import annotations
@@ -21,7 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from tau2_loop.workflows import rag_agent
+from tau2_loop.workflows import rag_agent, store
 
 STOP = frozenset(
     [
@@ -98,12 +106,29 @@ def _job_text(job: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
+def _seed(domain: str, rag_version: str) -> str | None:
+    """The version whose library this one starts from (s20: r2 starts from r1's), if any."""
+    try:
+        return rag_agent.load(domain, rag_version).seed
+    except rag_agent.RagAgentError:
+        return None
+
+
 def entries(domain: str, rag_version: str, root: Path | None = None) -> list[dict[str, Any]]:
-    """One entry per job, from the latest finished train-question session that wrote it."""
+    """One entry per job, from the latest finished train-question session that wrote it.
+
+    A version with a `seed` (s20, r2) starts from the seed's library, and each of its sessions
+    wrote merged versions: a job replaces its own name and every name it lists in `aliases`
+    or merged `into` it, so two names for one procedure become one job."""
     root = root or rag_agent.RAG_RUNS_DIR
+    if _concurrent(domain, rag_version):
+        return store_for(domain, rag_version).entries()
+    seed = _seed(domain, rag_version)
+    out: dict[str, dict[str, Any]] = (
+        {e["job"]: e for e in entries(domain, seed, root)} if seed and seed != rag_version else {}
+    )
     if not root.is_dir():
-        return []
-    out: dict[str, dict[str, Any]] = {}
+        return list(out.values())
     for d in sorted(root.iterdir()):  # oldest first, so a later session's job replaces it
         meta_p, out_p = d / "run.json", d / "output.json"
         if not (meta_p.is_file() and out_p.is_file()):
@@ -119,6 +144,8 @@ def entries(domain: str, rag_version: str, root: Path | None = None) -> list[dic
         wf = json.loads(out_p.read_text())
         for job in wf.get("jobs") or []:
             if isinstance(job, dict) and job.get("job"):
+                for old in merged_names(job):
+                    out.pop(old, None)
                 out[str(job["job"])] = {
                     "job": str(job["job"]),
                     "workflow": job,
@@ -126,6 +153,52 @@ def entries(domain: str, rag_version: str, root: Path | None = None) -> list[dic
                     "task_id": meta.get("task_id"),
                 }
     return list(out.values())
+
+
+def _concurrent(domain: str, rag_version: str) -> bool:
+    try:
+        return rag_agent.load(domain, rag_version).merge == "concurrent"
+    except rag_agent.RagAgentError:
+        return False
+
+
+def _session_job(session: str, job: str) -> dict[str, Any] | None:
+    """One job as a finished session wrote it: how a pinned seed entry is read back."""
+    p = rag_agent.RAG_RUNS_DIR / session / "output.json"
+    if not p.is_file():
+        return None
+    for j in json.loads(p.read_text()).get("jobs") or []:
+        if isinstance(j, dict) and j.get("job") == job:
+            return j
+    return None
+
+
+def store_for(domain: str, rag_version: str) -> store.FileStore:
+    """The store a concurrent version's library lives in, seeded with its seed's library."""
+    seed = _seed(domain, rag_version)
+    return store.FileStore(
+        domain,
+        rag_version,
+        seed=(lambda: entries(domain, seed)) if seed and seed != rag_version else None,
+        load=_session_job,
+    )
+
+
+def merged_names(job: dict[str, Any]) -> list[str]:
+    """The other names a merged job stands for: its `aliases` and the jobs merged `into` it."""
+    names: list[str] = []
+    for k in ("aliases", "into"):
+        v = job.get(k) or []
+        for n in [v] if isinstance(v, str) else v:
+            if isinstance(n, str) and n and n != job.get("job") and n not in names:
+                names.append(n)
+    return names
+
+
+def by_name(lib: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
+    """A library job by its name or one of its aliases."""
+    name = name.strip()
+    return next((e for e in lib if e["job"] == name or name in merged_names(e["workflow"])), None)
 
 
 def rank(request: str, lib: list[dict[str, Any]]) -> list[tuple[float, bool, dict[str, Any]]]:
@@ -136,7 +209,10 @@ def rank(request: str, lib: list[dict[str, Any]]) -> list[tuple[float, bool, dic
     offer the cash-back dispute because both say "credit card"."""
     want = set(_words(request))
     texts = [
-        (set(_words(e["job"].replace("_", " "))), set(_words(_job_text(e["workflow"]))))
+        (
+            set(_words(" ".join([e["job"], *merged_names(e["workflow"])]).replace("_", " "))),
+            set(_words(_job_text(e["workflow"]))),
+        )
         for e in lib
     ]
     df: dict[str, int] = {}
@@ -164,7 +240,7 @@ def find(domain: str, rag_version: str, request: str, job: str = "") -> str:
             "this request, or work from the knowledge base."
         )
     if job:
-        e = next((x for x in lib if x["job"] == job.strip()), None)
+        e = by_name(lib, job)
         if e is None:
             names = ", ".join(x["job"] for x in lib)
             return f"No job named {job!r} in the library. Its jobs: {names}."

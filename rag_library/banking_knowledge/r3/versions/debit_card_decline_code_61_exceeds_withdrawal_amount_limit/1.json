@@ -1,0 +1,578 @@
+{
+ "job": "debit_card_decline_code_61_exceeds_withdrawal_amount_limit",
+ "aliases": [
+  "atm_card_declined_daily_limit",
+  "check_remaining_daily_atm_limit",
+  "debit_card_declined_at_atm",
+  "teen_light_green_account_atm_limit"
+ ],
+ "when": {
+  "quote": "Transaction exceeds the card's daily purchase or ATM limit. Check limits from the debit card lookup:",
+  "doc": "doc_checking_accounts_light_green_account_005"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer reports a declined ATM withdrawal or card purchase. This may include a teen Light Green Account card the customer is guardian of. The agent then works through each card the customer names, one card at a time, starting with the card the customer picks.",
+  "quote": "Transaction exceeds the card's daily purchase or ATM limit. Check limits from the debit card lookup:",
+  "doc": "doc_checking_accounts_light_green_account_005"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "find_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "find_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "find_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verification",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_lookup_tools",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "get_transactions",
+   "not_used": null
+  },
+  {
+   "tool": "request_temporary_debit_card_limit_increase_8374",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job only finds the cause of the decline and offers the increase. The increase itself is made in requesting_temporary_debit_card_limit_increase. It is never used for a Light Green Account card, because teen limits are fixed."
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "transfer_if_needed",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_details",
+   "about": "The customer's name or email, used to find the record, plus any 2 of date of birth, email, phone number, address",
+   "from": "customer",
+   "ask": "To verify your identity, could you give me your full name and two of these: date of birth, email, phone number, or home address?",
+   "may_hold_back": true
+  },
+  {
+   "field": "declined_cards",
+   "about": "Which debit cards were declined, named by the account each one is linked to (for example a teen Light Green Account the customer is guardian of), and which card to start with",
+   "from": "customer",
+   "ask": "Which card or cards were declined, which account is each one linked to, and which would you like to start with?",
+   "may_hold_back": false
+  },
+  {
+   "field": "attempted_amount",
+   "about": "How much the customer tried to withdraw or spend with each declined card",
+   "from": "customer",
+   "ask": "How much did you try to withdraw with this card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "teen_attempted_amount",
+   "about": "How much the teen tried to withdraw",
+   "from": "customer",
+   "ask": "How much did your child try to withdraw?",
+   "may_hold_back": true
+  },
+  {
+   "field": "decline_message",
+   "about": "The decline code or message shown at the ATM, if the customer saw one",
+   "from": "customer",
+   "ask": "Did the ATM show a specific decline code or message?",
+   "may_hold_back": true
+  },
+  {
+   "field": "needs_more",
+   "about": "Whether the customer needs more than the amount left today",
+   "from": "customer",
+   "ask": "Do you need more than that today?",
+   "may_hold_back": true
+  },
+  {
+   "field": "daily_atm_limit",
+   "about": "The card's daily ATM limit (daily_atm_limit), or the documented limit for its account class if the field is missing",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "atm_used_today",
+   "about": "ATM amount already withdrawn today: daily_atm_used if the card record returns it, otherwise the sum of today's atm_withdrawal transactions",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "teen_card_and_usage",
+   "about": "The Light Green account's card record and today's atm_withdrawal transactions. The card may not show a daily_atm_limit field.",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "greet",
+   "by": "model",
+   "do": "Greet the customer politely and acknowledge the declined card or cards. Say you will verify their identity before looking at the accounts.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Generally, for any scenario involving accessing customer information in internal databases, you must first verify their identify before proceeding.",
+   "doc": "policy"
+  },
+  {
+   "id": "ask_identity",
+   "by": "model",
+   "do": "Ask for the customer's name (or email) plus any two of: date of birth, email, phone number, address.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "greet"
+   ],
+   "if": "the customer has not been verified yet in this conversation",
+   "quote": "ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+   "doc": "policy"
+  },
+  {
+   "id": "find_user",
+   "by": "harness",
+   "do": "Look up the customer record with the tool that matches what the customer gave: get_user_information_by_name (the name is case sensitive), get_user_information_by_email or get_user_information_by_id.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gave (or the email / user id, with the matching tool)"
+   },
+   "lookup": [],
+   "after": [
+    "ask_identity"
+   ],
+   "if": "the customer has not been verified yet in this conversation",
+   "quote": "To verify the identity of the user, call the appropriate read tools",
+   "doc": "policy"
+  },
+  {
+   "id": "check_identity",
+   "by": "model",
+   "do": "Compare the values the customer gave with the record. Continue only if at least 2 of date of birth, email, phone number and address match. If they do not match, say you cannot verify the customer, share nothing about the accounts, and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "find_user"
+   ],
+   "after": [
+    "find_user"
+   ],
+   "if": null,
+   "quote": "Do not leak any information about the user before they are verified.",
+   "doc": "policy"
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current time. It is needed for the verification log and to tell which withdrawals were made 'today'.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "check_identity"
+   ],
+   "if": null,
+   "quote": "If you need the current time, always use the get_current_time() tool.",
+   "doc": "policy"
+  },
+  {
+   "id": "log_verification",
+   "by": "harness",
+   "do": "Log the verification with the values from the verified record and the current time.",
+   "call": "log_verification",
+   "args": {
+    "name": "verified record",
+    "user_id": "verified record",
+    "address": "verified record",
+    "email": "verified record",
+    "phone_number": "verified record",
+    "date_of_birth": "verified record",
+    "time_verified": "get_time result"
+   },
+   "lookup": [
+    "check_identity",
+    "get_time"
+   ],
+   "after": [
+    "get_time"
+   ],
+   "if": "identity was verified in check_identity and has not already been logged in this conversation",
+   "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+   "doc": "policy"
+  },
+  {
+   "id": "unlock_lookup_tools",
+   "by": "harness",
+   "do": "Unlock each of get_all_user_accounts_by_user_id_3847, get_debit_cards_by_account_id_7823 and get_bank_account_transactions_9173, once each.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847, then get_debit_cards_by_account_id_7823, then get_bank_account_transactions_9173"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": "the tool has not already been unlocked in this conversation",
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Get all of the verified user's bank accounts. Match each declined card to its checking account by account_class, and note the account_id, status, balance and date_opened.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the verified user"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "unlock_lookup_tools"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "ask_card_order",
+   "by": "model",
+   "do": "If several cards were declined, handle them one at a time, starting with the card the customer picks. For the card being handled, ask how much they tried to withdraw if they have not said.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": "the order of the cards or the attempted amount for the current card is not yet known",
+   "quote": "1. Calculate remaining: 'Your daily [purchase/ATM] limit is $[limit]. You've used $[used] today, leaving $[remaining] available.'",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "get_cards",
+   "by": "harness",
+   "do": "Look up the debit cards on the checking account linked to the card being handled. Use the current card (not CLOSED) and read card_id, status, daily_atm_limit, daily_purchase_limit and, if present, daily_atm_used.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "arguments": {
+     "account_id": "account_id from get_accounts for the card being handled"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "get_transactions",
+   "by": "harness",
+   "do": "Get the transaction history of the same checking account. Find today's atm_withdrawal transactions (dated the same day as get_time) and any overdraft_fee transactions.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_bank_account_transactions_9173",
+    "arguments": {
+     "account_id": "account_id from get_accounts for the card being handled"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "check_card_and_account_status",
+   "by": "model",
+   "do": "Before blaming the limit, check the card status and the account status. If the account is not OPEN, tell the customer only that the account has a restriction, and give the branch and 1-800-RHO-ACCT. If the card is FROZEN, PENDING or CLOSED, tell the customer the card cannot be used as it is, and follow debit_card_decline_code_05_do_not_honor for it. A limit increase cannot fix either case. Otherwise continue.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_cards"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": null,
+   "quote": "Your account has a restriction that is preventing transactions. Please visit a branch or call our dedicated account services line at 1-800-RHO-ACCT for assistance.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "compute_remaining",
+   "by": "model",
+   "do": "Compute remaining = daily ATM limit − ATM amount used today. For the limit, use the card's daily_atm_limit. If the card record has no limit field, use the account class's documented limit: Green Account (checking) $600, Blue Account $500, Light Green Account $150. For the amount used, use daily_atm_used, or else add up today's atm_withdrawal amounts. If the attempted amount is more than the remaining amount, the decline is caused by the daily limit (Code 61).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards",
+    "get_transactions",
+    "get_time"
+   ],
+   "after": [
+    "check_card_and_account_status",
+    "get_transactions"
+   ],
+   "if": "the card is ACTIVE and its account is OPEN",
+   "quote": "daily_atm_used: ATM amount already used today",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "explain_remaining",
+   "by": "model",
+   "do": "Tell the customer the daily limit, how much has been used today and how much is left. Suggest withdrawing no more than the amount left. If the card record shows no limit field, say so and use the documented limit for the account class.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "compute_remaining",
+    "get_cards",
+    "get_transactions"
+   ],
+   "after": [
+    "compute_remaining"
+   ],
+   "if": "the attempted amount exceeds the remaining daily ATM limit and the account_class is not Light Green Account",
+   "quote": "1. Calculate remaining: 'Your daily [purchase/ATM] limit is $[limit]. You've used $[used] today, leaving $[remaining] available.'",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "teen_lookup",
+   "by": "harness",
+   "do": "Look up the Light Green account's debit card",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "the Light Green Account id from the accounts lookup"
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": "the card being handled is on a Light Green Account and get_cards has not already been run for that account",
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "teen_txns",
+   "by": "harness",
+   "do": "Get the transactions and add up today's ATM withdrawals",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "the Light Green Account id"
+   },
+   "lookup": [],
+   "after": [
+    "teen_lookup"
+   ],
+   "if": "the card being handled is on a Light Green Account and get_transactions has not already been run for that account",
+   "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "teen_explain",
+   "by": "model",
+   "do": "Explain the $150/day ATM limit, the amount used today and what is left (150 - used)",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "teen_lookup",
+    "teen_txns",
+    "get_cards",
+    "get_transactions",
+    "get_time"
+   ],
+   "after": [
+    "teen_txns"
+   ],
+   "if": "the card being handled is on a Light Green Account",
+   "quote": "- Cash withdrawals are limited to $150 per day at ATMs.",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "teen_no_increase",
+   "by": "model",
+   "do": "If asked for an increase, explain that the teen limits are fixed safeguards and cannot be raised. Do NOT call the increase tool. Suggest withdrawing over several days or using the parent's card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts"
+   ],
+   "after": [
+    "teen_explain"
+   ],
+   "if": "customer asks for more",
+   "quote": "For cash needs that exceed $150, plan ahead by withdrawing over multiple days.",
+   "doc": "doc_checking_accounts_light_green_account_011"
+  },
+  {
+   "id": "offer_increase",
+   "by": "model",
+   "do": "If the customer needs more than the amount left on a card that is not a Light Green Account card, offer a temporary 24-hour increase. If they accept, or ask for one themselves, run requesting_temporary_debit_card_limit_increase for this card; its eligibility checks decide whether the increase is granted. Mention that a non-Rho ATM may have its own lower limit.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "compute_remaining",
+    "get_accounts"
+   ],
+   "after": [
+    "explain_remaining"
+   ],
+   "if": "the customer needs more than the remaining limit and the account_class is not Light Green Account",
+   "quote": "Tell customer: 'I can request a temporary increase that lasts 24 hours. Would you like me to do that?'",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "permanent_increase_note",
+   "by": "model",
+   "do": "If the customer asks for a permanent increase, explain that permanent increases depend on the account tier and only Elite tier accounts can request them. Offer the temporary 24-hour increase instead. No documented tool makes a permanent increase.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts"
+   ],
+   "after": [
+    "explain_remaining"
+   ],
+   "if": "the customer asks for a permanent limit increase",
+   "quote": "**Permanent Increase**: Depends on account tier. Elite tier can request permanent increases.",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "next_card",
+   "by": "model",
+   "do": "Repeat ask_card_order through offer_increase for each other declined card the customer named. Close only when every card has been addressed.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "offer_increase",
+    "teen_no_increase",
+    "teen_explain"
+   ],
+   "if": "another declined card remains",
+   "quote": "Check limits from the debit card lookup:",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "transfer_if_needed",
+   "by": "model",
+   "do": "If neither the limit nor the card or account status explains the decline, and no documented procedure resolves it, ask whether the customer wants a human agent. Transfer only if they say yes.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the cards checked and what was found",
+    "reason": "decline cause outside documented procedures"
+   },
+   "lookup": [
+    "check_card_and_account_status",
+    "compute_remaining"
+   ],
+   "after": [
+    "compute_remaining"
+   ],
+   "if": "no documented cause or fix applies and the customer agrees to a transfer",
+   "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+   "doc": "policy"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Light Green Account ATM limit is fixed at $150/day and cannot be increased or removed for a minor",
+   "quote": "These safeguards are built into the account and cannot be removed for a minor.",
+   "doc": "doc_checking_accounts_light_green_account_011"
+  },
+  {
+   "rule": "Do not change controls on a teen account without the guardian's authorization",
+   "quote": "Do NOT modify parental controls without the guardian's authorization.",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "rule": "Light Green Account card purchases are capped at $300 per day",
+   "quote": "Card-based purchases are capped at $300 per day.",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "rule": "Green Account (checking) daily ATM limit is $600, combined across all ATM withdrawals in 24 hours",
+   "quote": "Your Green Account (checking) debit card has a daily ATM withdrawal limit of $600.",
+   "doc": "doc_checking_accounts_green_account_(checking)_012"
+  },
+  {
+   "rule": "Blue Account daily ATM limit is $500, combined across all ATM withdrawals in 24 hours",
+   "quote": "Your Blue Account debit card has a daily ATM withdrawal limit of $500. This limit applies to all ATM withdrawals combined (domestic and international) within a 24-hour period.",
+   "doc": "doc_checking_accounts_blue_account_012"
+  },
+  {
+   "rule": "Remaining = daily limit − amount used today. The decline is a limit decline when the attempted amount is above the remaining amount.",
+   "quote": "1. Calculate remaining: 'Your daily [purchase/ATM] limit is $[limit]. You've used $[used] today, leaving $[remaining] available.'",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "rule": "Permanent limit increases depend on the tier (Elite tier only). Otherwise offer only the temporary increase.",
+   "quote": "**Permanent Increase**: Depends on account tier. Elite tier can request permanent increases.",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "rule": "A non-Rho ATM may have its own lower limit that Rho-Bank cannot override",
+   "quote": "3. IMPORTANT: For ATM limits at non-Rho ATMs, the other bank's ATM may have its own lower limit that we cannot override.",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  }
+ ],
+ "done_when": "The customer is verified and logged. For every declined card the customer named, the agent has explained either the limit, the amount used today and the amount left, or the status or restriction behind the decline. For a teen Light Green card, the agent has explained the remaining amount and said no increase is possible. For each other card where more was needed, a temporary increase was offered and, if accepted, handled in requesting_temporary_debit_card_limit_increase."
+}

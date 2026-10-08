@@ -581,7 +581,7 @@ def test_a_fork_inherits_its_sources_held_challengers_and_names_its_model(
     prompt = build_prompt(v3, "v4", meta.run_id, failures)
     assert (
         "The agent is Claude Sonnet 5" in prompt
-        and "Claude Haiku 4.5) plays the customer" in prompt
+        and "Claude Sonnet 5) plays the customer" in prompt  # the loop's customer since s18
     )
     assert "a fork of `v0`" in prompt and "agents/airline/v2/" in prompt
     assert "breaks none" in prompt
@@ -614,7 +614,8 @@ def _write_run(
     from dataclasses import asdict
 
     from tau2_loop.eval.results import summarise, write_results
-    from tau2_loop.eval.runner import SIM_RULES
+    from tau2_loop.eval.runner import SIM_RULES, USER_MODEL
+    from tau2_loop.llm import sdk_model
 
     ids = TRAIN if split == "train" else TEST
     rows = _rows(PASSES[(agent.name, split)], ids)
@@ -626,7 +627,7 @@ def _write_run(
         agent=agent.name,
         fingerprint=agent.fingerprint,
         model="claude-sdk/" + agent.config.model,
-        user_model="claude-sdk/claude-haiku-4-5",  # the loop reuses only runs with its customer (s16)
+        user_model=sdk_model(USER_MODEL),  # the loop reuses only runs with its customer (s16)
         judge_model="j",
         split=split,
         n_tasks=len(ids),
@@ -1102,6 +1103,11 @@ BANKING_V4 = (
     "20261004T222002Z_banking_knowledge_v4_train",
     "20261004T113341Z_banking_knowledge_v4_test",
 )
+# v8 (v7 reading workflow_rag r3), champion by the person's call (9 Oct 2026): a tool change
+BANKING_V8 = (
+    "20261008T134442Z_banking_knowledge_v8_train",
+    "20261008T134445Z_banking_knowledge_v8_test",
+)
 
 
 def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> None:
@@ -1113,7 +1119,9 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
     v1's title restored. Cycle 2's v3, a tool change, was held by the gate (6 → 6 on test) and
     then promoted by the person's call (4 Oct 2026): a harness without v1's defects. Cycle 3's v4,
     written by `make optimise` from v3 (Sonnet at high effort, every tool call of a reply kept),
-    was promoted by the gate on test: 6 → 14, fixed 8, broke 0 (5 Oct 2026)."""
+    was promoted by the gate on test: 6 → 14, fixed 8, broke 0 (5 Oct 2026). v8, v7 reading
+    workflow_rag r3, was promoted by the person's call (9 Oct 2026), a tool change outside the
+    loop: test 14 → 21 against v4, its train run the smoke extended to the 60."""
     from tau2_loop.agent.versions import base_version, lineage
     from tau2_loop.data.splits import read_split, split_ids
     from tau2_loop.loop.ledger import read_ledger
@@ -1122,7 +1130,7 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
 
     d = "banking_knowledge"
     reg = read_registry(d)
-    assert reg["champion"]["run_id"] == BANKING_V4[0] and reg["challenger"] is None
+    assert reg["champion"]["run_id"] == BANKING_V8[0] and reg["challenger"] is None
     assert [(h["agent"], h["kind"]) for h in reg["history"] if h["event"] == "promote"] == [
         ("v1", "model swap"),
         ("v1", "re-baseline"),
@@ -1130,6 +1138,7 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
         ("v1", "re-decided"),
         ("v3", "tool change"),
         ("v4", "gate"),
+        ("v8", "tool change"),
     ]
     e, e2, e3 = read_ledger(d)
     o3 = e3["outcome"]
@@ -1160,7 +1169,14 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
             meta.composed_of == [old, added.run_id]
             and added.task_ids == s[split][len(s["v2"][split]) :]
         )
-        assert loop_run._runs_of(d, "v1", split, split_ids(d, split), 1)[0].run_id == run
+        # reused under the rules and customer it ran with; under tau2_loop/2 and a Sonnet customer
+        # (s18) the loop plays v1 again rather than compare across them
+        assert (meta.sim_rules, meta.user_model) == ("tau2_loop/1", "claude-sdk/claude-haiku-4-5")
+        assert loop_run._runs_of(d, "v1", split, split_ids(d, split), 1) == []
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(loop_run, "SIM_RULES", meta.sim_rules)
+            mp.setattr(loop_run, "USER_MODEL", "haiku")
+            assert loop_run._runs_of(d, "v1", split, split_ids(d, split), 1)[0].run_id == run
     meta, results = load_run(BANKING_V1_V3[0])
     v1 = load_version(d, "v1")
     # v1's one run of split v3 and v2's, over all 60 train tasks; v2's test ids stay out

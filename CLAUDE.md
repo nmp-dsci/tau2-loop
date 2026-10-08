@@ -24,15 +24,26 @@
   CLI tells every session today's date; the customer (`eval/user.py`, a subclass
   of tau2's) is told the world's time and to ignore it, the agent's prompt ends
   with `compose.CLOCK_NOTE`. The customer also holds a stop sent with words until
-  the agent's turn. Runs record `sim_rules`; the loop never compares runs across
-  it, so bump `runner.SIM_RULES` when these rules change.
-- **Banking's champion is v4** (5 Oct 2026, promoted by the gate): written by `make optimise`
-  from v3 under banking's s14 guide (routing: all five surfaces), Sonnet at high effort with
-  `parallel_calls: true`. Test 6 → 14 (fixed 8, broke 0, p = 0.004); train 12 → 29 of 60
-  (`20261004T222002Z`, test `20261004T113341Z`). v3 before it (4 Oct, the person's call): v1's
-  prompt with AllTools (`alltools_minilm`), native calls and the identity note, a `tool change`
-  that removed v1's harness defects. Loop cycles start from v4; CI's gate needs the sandbox and
-  MiniLM to re-score it (`.github/workflows/ci.yml`).
+  the agent's turn, and (s18, `tau2_loop/2`, 7 Oct 2026) a text turn of its that
+  speaks as an AI, writes a call out as text, denies a tool the agent gave it (read
+  from the environment) or quotes an id it was never shown is withheld and asked
+  again, twice at most (`user.check_customer`, deterministic). The customer is
+  Sonnet since s18 (`runner.USER_MODEL`, the person's call; Haiku before). Runs
+  record `sim_rules` and the customer; the loop never compares runs across either,
+  so bump `runner.SIM_RULES` when these rules change. Every run before /2 (v4's and
+  v7's included) is re-played before a gate.
+- **Banking's champion is v8** (9 Oct 2026, the person's call, a `tool change`): v7 (v6's prompt
+  and workflow tools at Sonnet medium) reading workflow_rag r3's library, which holds a workflow
+  researched from each of the 60 train and 37 test questions' customer scripts. Test 14 → 21 of 37
+  against v4 (fixed 9, broke 2, McNemar p = 0.033), 12 → 21 against v7 (p = 0.006); train 38 of
+  60 against v4's 29 and v7's 37 (`20261008T134442Z`, the smoke `20261007T224313Z` extended; test
+  `20261008T134445Z`). Promoted without re-playing v4 under `tau2_loop/2` (the person's call: v4's
+  runs are `/1`, its test with the Haiku customer, and v4 has no per-question research). v4 before
+  it (5 Oct 2026, promoted by the gate): written by `make optimise` from v3 under banking's s14
+  guide, Sonnet at high effort with `parallel_calls: true`; test 6 → 14 (p = 0.004), train 12 → 29
+  (`20261004T222002Z`, test `20261004T113341Z`). v3 before that (4 Oct, the person's call): v1's
+  prompt with AllTools (`alltools_minilm`), native calls and the identity note. Loop cycles start
+  from v8; CI's gate needs the sandbox and MiniLM to re-score it (`.github/workflows/ci.yml`).
 - **Banking's base is v1, its split is v3** (3 Oct 2026): v0 is retired and
   deleted; every banking experiment is scored on split v3's 60 train / 37 test
   tasks. v1's runs were extended to it (`make extend RUN=`: only the new tasks
@@ -94,8 +105,36 @@
   (`find_workflow`) holds only train-question sessions; a mid-conversation `request_workflow`
   reads only the agent's words and is never cached. Test is held out of optimisation, not hidden
   (the person's call): Evals shows each test question's workflows as `golden.RULES` map them,
-  and `test_counts.json` stays counts only. v7 (v6 at Sonnet medium) is a held experiment:
-  train 37/60 and test 12/37 against v4's 29 and 14 (`.lavish/s17_…`); v4 stays champion.
+  and `test_counts.json` stays counts only. v7 (v6 at Sonnet medium) was a held experiment:
+  train 37/60 and test 12/37 against v4's 29 and 14 (`.lavish/s17_…`).
+  r2 (s20, 7 Oct 2026, the person's calls) merges instead of replacing: seeded with r1's 64
+  workflows, `make rag-build` runs the train questions one at a time in id order, each researched
+  then merged into the jobs it shares (`merge.md`); `workflows/rubric.py` checks every merge
+  without a model (nothing lost that the changelog does not name, no quote not found), a failure
+  is sent back once, and a merge that still fails keeps the previous version. The rubric is in
+  r2's prompt; no reviewer yet (saved for optimising), and no gold or v7 outcome reaches r2.
+  v8 = v7 with `workflows: r2` only (`make fork FROM=v7 WORKFLOWS=r2`). r2's build was paused at
+  34 of 60 (the person's call, 7 Oct 2026) for r3 (s21): r2's library as its seed (pinned in
+  `rag_library/…/seed.json`), the other 26 questions only (`queue: after_seed`), shuffled, 4
+  workers. Research takes no lock; a decide turn names the jobs a merge writes, `workflows/store.py`
+  locks them all at once (a lease with a fencing token), the merge reads their newest versions,
+  and a commit is refused unless every version it read is still the head. r3's library is its
+  commit log, not session order; `make rag-locks` and the Agent tab show who holds what. Every
+  message the harness sends is saved as a `user` event, so a session replays turn for turn. r4 (8 Oct
+  2026, the person's call, not run) is r3 at less cost, since r3 cost 1.6× r2 a question: a turn
+  that must write keeps the tools listed and refuses a call (`keep_tools`; dropping them changed the
+  prompt's first block, so r3's decide turns read 3% from cache), and a merge into one library job
+  may be written as edits on its newest version (`merge_write: edits`, `workflows/edits.py`), which
+  the harness applies before the same rubric. Seeded with r3, it queues nothing r3's library merged.
+  **r3 also researches test** (8 Oct 2026, the person's call, `make rag-build RAG=r3 SPLIT=test`;
+  the default stays train only, and the viewer still refuses a test question): each test question
+  gets the same step before answering that each train question had, a workflow researched from its
+  customer's script, never from gold, and v8 reads the library on test exactly as on train (one
+  `find_workflow` over the whole library, no split or task filter). Test stays held out of
+  optimisation: no test outcome reaches a prompt. The script is more than the customer's opening
+  words (their details and how they will react), so a version without this step, v4 or v7, is a
+  different pipeline, not the same agent with less data. v8's train run is its smoke (14/20, run
+  `20261007T224313Z`, on r3 before test went in) extended by the other 40 (`make extend NOTE=`).
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

@@ -1,0 +1,169 @@
+{
+ "job": "security_hold_transfer_offer",
+ "aliases": [
+  "escalate locked card to security",
+  "security hold transfer",
+  "security-team transfer for a PIN-locked card that cannot be unlocked",
+  "transfer_to_security_team"
+ ],
+ "when": {
+  "quote": "If pin_lock_reason = 'security_hold' → This card cannot be unlocked by chat agents. Offer to transfer the customer to the security team for this card.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: the agent offers the security-team transfer for a card on security hold, or as one of the options for a card that cannot be unlocked. The transfer happens only after the customer accepts, and after the customer's other cards are handled.",
+  "quote": "Transfer to security team for investigation",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+ },
+ "tools": [
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "read_card",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "read_card",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "read_card",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "transfer",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "transfer_consent",
+   "about": "Whether the customer wants to be transferred to the security team",
+   "from": "customer",
+   "ask": "This card has a hold that our security team needs to review. Would you like me to transfer you to them?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "read_card",
+   "by": "harness",
+   "do": "Read the card's pin_locked and pin_lock_reason from the debit card lookup for its checking account. Reuse the result if the PIN lock investigation already read it in this conversation.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "account_id": "the card's checking account (from get_all_user_accounts_by_user_id_3847 for the verified user)"
+   },
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "finish_others",
+   "by": "model",
+   "do": "First finish every other card the customer raised: its unlock, PIN reset, closure and replacement. The transfer ends the chat.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "read_card"
+   ],
+   "if": "the customer has other cards still to handle",
+   "quote": "Each card must be scored individually and may have different outcomes.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "offer",
+   "by": "model",
+   "do": "Say that this card cannot be unlocked in chat, without revealing internal details, and offer the security-team transfer",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "read_card"
+   ],
+   "after": [
+    "read_card",
+    "finish_others"
+   ],
+   "if": "pin_lock_reason = 'security_hold'",
+   "quote": "If pin_lock_reason = 'security_hold' → This card cannot be unlocked by chat agents. Offer to transfer the customer to the security team for this card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "offer_cannot_unlock",
+   "by": "model",
+   "do": "For a card the PIN lock investigation could not unlock, offer the security-team transfer as one of its options: closure and replacement, transfer, or PIN reset.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "read_card"
+   ],
+   "after": [
+    "read_card",
+    "finish_others"
+   ],
+   "if": "the PIN lock investigation found the card cannot be unlocked and the customer is choosing among the options",
+   "quote": "Transfer to security team for investigation",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "transfer",
+   "by": "model",
+   "do": "Transfer only if the customer accepts, with reason fraud_or_security_concern. If they decline, acknowledge it and close the conversation.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "PIN-locked card under security hold",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "offer",
+    "offer_cannot_unlock"
+   ],
+   "after": [
+    "offer"
+   ],
+   "if": "customer accepts transfer",
+   "quote": "Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "declined",
+   "by": "model",
+   "do": "If the customer declines, do not unlock, reset or otherwise act on the card. Tell them they can contact Rho-Bank later about it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "offer",
+    "offer_cannot_unlock"
+   ],
+   "after": [
+    "offer"
+   ],
+   "if": "the customer declines the transfer",
+   "quote": "This card cannot be unlocked by chat agents.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Never unlock or reset the PIN on a card under security hold, and never transfer without the customer's consent",
+   "quote": "This card cannot be unlocked by chat agents.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Security transfers use the Tier 1 reason code fraud_or_security_concern",
+   "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "done_when": "The customer has been offered the security-team transfer, and was transferred if they accepted or had the decline acknowledged if they refused. The other cards were handled before the transfer."
+}

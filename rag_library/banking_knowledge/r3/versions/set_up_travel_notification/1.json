@@ -1,0 +1,238 @@
+{
+ "job": "set_up_travel_notification",
+ "aliases": [
+  "kb_gap_travel_notification_transfer",
+  "notify_bank_of_travel_abroad",
+  "prevent_card_decline_while_traveling",
+  "travel_alert_request",
+  "travel_notice"
+ ],
+ "when": {
+  "quote": "Customer asked for information or instructions that you searched for in KB but couldn't find, you informed customer, customer then requests transfer",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks how to set up a travel notification, travel notice or travel alert on a card before a trip. No document lets the agent offer this job. A transfer is offered only after the agent has told the customer that no documented process was found, and it happens only if the customer agrees.",
+  "quote": "Customer asked for information or instructions that you searched for in KB but couldn't find, you informed customer, customer then requests transfer",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+ },
+ "tools": [
+  {
+   "tool": "KB_search_bm25",
+   "who": "agent",
+   "step": "search_kb",
+   "not_used": null
+  },
+  {
+   "tool": "KB_search_dense",
+   "who": "agent",
+   "step": "search_kb",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "transfer",
+   "not_used": null
+  },
+  {
+   "tool": "initial_transfer_to_human_agent_0218",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. This tool belongs only to the Credit Card Purchase Decline Diagnostic Procedure, which applies when purchases are already being declined despite available credit and the customer asks for a human. A customer planning a trip has no decline yet, so the regular transfer_to_human_agents tool is used."
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used. No document names a travel-notification tool, and the policy forbids unlocking a tool the agent will not use. initial_transfer_to_human_agent_0218 is for active declines only."
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used. This job calls no discoverable tool."
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used. This job only gives information and reads or changes no customer records, so it needs no identity verification and no verification log."
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used. Nothing in this job depends on the time, because no verification is logged."
+  }
+ ],
+ "info": [
+  {
+   "field": "wants_human_transfer",
+   "about": "Whether the customer wants a human agent after hearing that the knowledge base has no documented travel-notification process",
+   "from": "customer",
+   "ask": "I'm sorry, I wasn't able to find a documented process for setting up travel notifications. Would you like me to transfer you to a human agent who can help with this?",
+   "may_hold_back": true
+  },
+  {
+   "field": "current_declines",
+   "about": "Whether a purchase on the card is being declined right now, or the customer is only planning ahead",
+   "from": "customer",
+   "ask": "Is your card being declined on any purchases right now, or are you setting this up ahead of your trip?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "no_verification",
+   "by": "model",
+   "do": "Greet the customer. This job only gives information, so do not verify identity or look up records. If the customer later needs something that reads or changes their records, verify them first (any 2 of date of birth, email, phone number, address), then call log_verification.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Use when the transfer is due to the agent's inability to find or verify information.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "search_kb",
+   "by": "model",
+   "do": "Search the knowledge base for a travel-notification or travel-alert procedure or tool. Search by keyword (KB_search_bm25) and by meaning (KB_search_dense), using terms such as 'travel notification', 'travel alert' and 'traveling abroad card'. Open every Internal document that matches with cat.",
+   "call": "KB_search_bm25",
+   "args": {
+    "query": "fixed: 'travel notification', 'travel alert', 'notify bank of travel abroad'"
+   },
+   "lookup": [],
+   "after": [
+    "no_verification"
+   ],
+   "if": null,
+   "quote": "Customer asked for information or instructions that you searched for in KB but couldn't find, you informed customer, customer then requests transfer",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "check_procedure_exists",
+   "by": "model",
+   "do": "Decide whether search_kb found a real procedure: steps, a form, a tool name or a contact channel for registering travel. Product pages that only say 'enable travel alerts' or 'enable travel notifications' and give no steps do NOT count. If a real procedure or tool exists, follow it exactly. If not, go to inform_no_procedure.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "search_kb"
+   ],
+   "after": [
+    "search_kb"
+   ],
+   "if": null,
+   "quote": "Enable travel notifications if your risk controls require it.",
+   "doc": "doc_credit_cards_gold_rewards_card_004"
+  },
+  {
+   "id": "route_active_decline",
+   "by": "model",
+   "do": "If the customer says purchases are being declined right now despite available credit, this is not a planning question. Switch to the Credit Card Purchase Decline Diagnostic Procedure and its transfer protocol.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "search_kb",
+    "check_procedure_exists"
+   ],
+   "after": [
+    "check_procedure_exists"
+   ],
+   "if": "the customer reports current purchase declines despite available credit",
+   "quote": "When a customer reports purchase declines despite available credit and asks to speak to a human agent, follow this special protocol:",
+   "doc": "doc_credit_cards_credit_cards_(general)_010"
+  },
+  {
+   "id": "inform_no_procedure",
+   "by": "model",
+   "do": "Tell the customer plainly and honestly that you could not find a documented process for setting up travel notifications. Do not invent app navigation, forms, phone numbers, deadlines or lead times. Do not present general product-page tips as setup instructions.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "search_kb",
+    "check_procedure_exists"
+   ],
+   "after": [
+    "check_procedure_exists"
+   ],
+   "if": "check_procedure_exists found no documented travel-notification procedure or tool",
+   "quote": "Some cards have restrictions on international transactions that need to be lifted before traveling abroad.",
+   "doc": "doc_credit_cards_credit_cards_(general)_023"
+  },
+  {
+   "id": "offer_transfer",
+   "by": "model",
+   "do": "Ask the customer whether they would like to be transferred to a human agent who can help with the travel notification. Do not transfer unless they say yes.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "search_kb",
+    "check_procedure_exists"
+   ],
+   "after": [
+    "inform_no_procedure"
+   ],
+   "if": "no documented procedure was found and the customer has not already asked for a human",
+   "quote": "Customer asked for information or instructions that you searched for in KB but couldn't find, you informed customer, customer then requests transfer",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "transfer",
+   "by": "model",
+   "do": "Transfer the customer with reason 'kb_search_unsuccessful_customer_requests_transfer'. In the summary, say the customer wants to set up a travel notification on their card for an upcoming international trip and the knowledge base has no documented procedure for it. Transfer on the first request. The rule to keep helping until the customer asks 4 times does not apply here, because the request is outside the agent's documented capabilities.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "reason": "fixed value from doc: kb_search_unsuccessful_customer_requests_transfer",
+    "summary": "model-written summary of the request and the unsuccessful KB search"
+   },
+   "lookup": [
+    "search_kb",
+    "check_procedure_exists"
+   ],
+   "after": [
+    "inform_no_procedure"
+   ],
+   "if": "no documented procedure was found, the customer was told so, and the customer then asks for or accepts a transfer to a human agent",
+   "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below. Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "close_without_transfer",
+   "by": "model",
+   "do": "If the customer declines the transfer, thank them and close politely. Do not invent any further process.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "search_kb",
+    "check_procedure_exists"
+   ],
+   "after": [
+    "offer_transfer"
+   ],
+   "if": "the customer declines the transfer",
+   "quote": "Use when the transfer is due to the agent's inability to find or verify information.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "The knowledge base has no travel-notification procedure or tool. Product pages only advise enabling travel alerts or notifications and give no steps. The agent must not make up a process, form, app path or phone number for it.",
+   "quote": "Enable travel alerts so legitimate international activity is recognized.",
+   "doc": "doc_credit_cards_diamond_elite_card_008"
+  },
+  {
+   "rule": "When the KB has no answer, the customer has been told so, and the customer then asks for a human, the transfer reason is kb_search_unsuccessful_customer_requests_transfer (Tier 2). No Tier 1 reason applies to a travel-notification request.",
+   "quote": "Customer asked for information or instructions that you searched for in KB but couldn't find, you informed customer, customer then requests transfer",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "rule": "If purchases are being declined right now despite available credit and the customer asks for a human, the Credit Card Purchase Decline Diagnostic Procedure applies instead. It uses initial_transfer_to_human_agent_0218 for the first three requests. It does not apply to a customer who is only planning a trip.",
+   "quote": "When a customer reports purchase declines despite available credit and asks to speak to a human agent, follow this special protocol:",
+   "doc": "doc_credit_cards_credit_cards_(general)_010"
+  }
+ ],
+ "done_when": "The customer has been told honestly that no documented travel-notification process was found, and no steps were invented. After that, one of two things happened: the customer accepted a transfer and transfer_to_human_agents was called with reason kb_search_unsuccessful_customer_requests_transfer, or the customer declined and the conversation was closed politely."
+}

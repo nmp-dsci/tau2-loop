@@ -330,21 +330,23 @@ def test_a_dry_run_records_effort_split_version_and_route(
 def test_another_customer_is_recorded_and_its_run_is_never_the_loops_record(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """s16: the customer's model can change for an experiment; the run says so and the loop skips it."""
+    """s16: the customer's model can change for an experiment; the run says so and the loop skips it.
+    The loop's own customer is Sonnet since s18 (the person's call, 7 Oct 2026); Haiku is now the
+    experiment."""
     from tau2_loop.eval import runner
     from tau2_loop.loop import run as loop_run
 
     monkeypatch.setattr(runner, "RUNS_DIR", tmp_path)
     meta, _ = runner.run_eval("airline", "v0", "train", dry_run=True, track=False)
-    assert meta.user_model == "claude-sdk/claude-haiku-4-5"
+    assert meta.user_model == "claude-sdk/claude-sonnet-5"
     cfg = runner._run_config(
-        "airline", runner.load_version("airline", "v0"), ["0"], 1, 1, 300, "sonnet"
+        "airline", runner.load_version("airline", "v0"), ["0"], 1, 1, 300, "haiku"
     )
-    assert cfg.llm_user == "claude-sdk/claude-sonnet-5"
+    assert cfg.llm_user == "claude-sdk/claude-haiku-4-5"
     meta2, _ = runner.run_eval(
-        "airline", "v0", "train", dry_run=True, track=False, user_model="sonnet"
+        "airline", "v0", "train", dry_run=True, track=False, user_model="haiku"
     )
-    assert meta2.user_model == "claude-sdk/claude-sonnet-5"
+    assert meta2.user_model == "claude-sdk/claude-haiku-4-5"
     real = {"dry_run": False, "sim_rules": runner.SIM_RULES}
     assert loop_run._covers(meta.__class__(**{**meta.__dict__, **real}), meta.task_ids, 1)
     assert not loop_run._covers(meta2.__class__(**{**meta2.__dict__, **real}), meta2.task_ids, 1)
@@ -357,7 +359,8 @@ def _fake_run(runs: Path, run_id: str, ids: list[str], passes: set[str], **over:
     from dataclasses import asdict
 
     from tau2_loop.eval.results import TaskResult, summarise, write_results
-    from tau2_loop.eval.runner import SIM_RULES, RunMeta
+    from tau2_loop.eval.runner import SIM_RULES, USER_MODEL, RunMeta
+    from tau2_loop.llm import sdk_model
 
     d = runs / run_id
     (d / "traces").mkdir(parents=True)
@@ -383,7 +386,7 @@ def _fake_run(runs: Path, run_id: str, ids: list[str], passes: set[str], **over:
         "agent": "v1",
         "fingerprint": "fp1",
         "model": "sonnet",
-        "user_model": "claude-sdk/claude-haiku-4-5",
+        "user_model": sdk_model(USER_MODEL),  # the loop's own customer
         "judge_model": "haiku",
         "split": "train",
         "n_tasks": len(ids),
@@ -460,7 +463,7 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
     [
         ({"fingerprint": "fp0"}, "bytes changed"),
         ({"sim_rules": None}, "other simulation rules"),
-        ({"user_model": "claude-sdk/claude-sonnet-5"}, "another customer"),
+        ({"user_model": "claude-sdk/claude-haiku-4-5"}, "another customer"),
         ({"task_ids": ["t1", "t9"]}, "no longer on its train side"),
     ],
 )

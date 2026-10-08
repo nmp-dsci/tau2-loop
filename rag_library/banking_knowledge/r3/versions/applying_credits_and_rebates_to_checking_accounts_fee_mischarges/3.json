@@ -1,0 +1,941 @@
+{
+ "job": "applying_credits_and_rebates_to_checking_accounts_fee_mischarges",
+ "aliases": [
+  "apply_credits_and_rebates_to_checking_accounts",
+  "applying_credits_and_rebates_to_checking_accounts",
+  "atm_fee_mischarge_refund",
+  "atm_fee_overcharge_correction",
+  "atm_fee_review_and_refund",
+  "checking_account_fee_mischarge_review",
+  "checking_account_fee_review",
+  "checking_fee_mischarge_review",
+  "fee_mischarge_credit",
+  "fee_refund_checking",
+  "incorrect_fee_refund_checking",
+  "missing_atm_rebate_credit",
+  "missing_rebate_credit",
+  "missing_rebate_credit_checking",
+  "multiple_checking_accounts_atm_fee_review",
+  "review_checking_fees_and_refund"
+ ],
+ "when": {
+  "quote": "If any fees on the customer's account do not match the correct amounts per the documented fee schedule, the agent must identify all fee discrepancies and apply a credit for the net correction.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks for a review of fees or rebates on their checking accounts. The agent does not offer credits unprompted. Once the review shows a discrepancy, the agent must explain it and offer the correction. It applies the credit after the customer agrees.",
+  "quote": "Simply contact us, and we'll thoroughly review the charge in question. If we determine that the fee was applied in error, we'll promptly credit your account for the full amount.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_019"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verif",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "get_txns",
+   "not_used": null
+  },
+  {
+   "tool": "apply_checking_account_credit_5829",
+   "who": "agent",
+   "step": "apply_credit",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "credit_error",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_values",
+   "about": "Any 2 of: date of birth, email, phone number, address, plus a name, email or user id so the agent can look up the record",
+   "from": "customer",
+   "ask": "To verify your identity, could you give me your full name and two of these: date of birth, email, phone number, or address?",
+   "may_hold_back": true
+  },
+  {
+   "field": "accounts_in_question",
+   "about": "Which checking account(s) the customer thinks have wrong fees",
+   "from": "customer",
+   "ask": "Which of your checking accounts are the fees on?",
+   "may_hold_back": false
+  },
+  {
+   "field": "review_period",
+   "about": "The month or statement cycle the customer wants reviewed",
+   "from": "customer",
+   "ask": "Which month or statement period should I review?",
+   "may_hold_back": true
+  },
+  {
+   "field": "fee_concern",
+   "about": "What looks wrong: a fee type (ATM, monthly maintenance and so on) or a missing rebate. The customer may not know. If so, the agent reviews every fee in the period",
+   "from": "customer",
+   "ask": "Which fees or rebates look wrong to you? If you aren't sure, I can review every fee in that period.",
+   "may_hold_back": true
+  },
+  {
+   "field": "account_ids_and_classes",
+   "about": "account_id, account_class (product name such as Blue Account, Green Account (checking), Bluest Account, Light Green Account, Purple Account, Light Blue Account, Dark Green Account or Evergreen Account), account_type, status and balance of each account",
+   "from": "records",
+   "ask": "",
+   "may_hold_back": false
+  },
+  {
+   "field": "fee_and_rebate_transactions",
+   "about": "atm_withdrawal, atm_fee, monthly_fee, fee_rebate, rebate_credit and fee_refund transactions in the review period. Include their descriptions (in-network, domestic out-of-network or foreign) and the withdrawal amounts",
+   "from": "records",
+   "ask": "",
+   "may_hold_back": false
+  },
+  {
+   "field": "date_of_birth",
+   "about": "Used to confirm Light Green Account age eligibility (13–24)",
+   "from": "records",
+   "ask": "",
+   "may_hold_back": false
+  },
+  {
+   "field": "customer_consent_to_credit",
+   "about": "Whether the customer wants the identified corrections credited",
+   "from": "customer",
+   "ask": "I found fees that don't match your account's fee schedule. Would you like me to credit the difference back to each affected account?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "greet",
+   "by": "model",
+   "do": "Greet the customer and ask what they need. Ask which accounts, which review period and what looks wrong, if they have not said. Ask for identity details. Share no account data yet",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Verify the customer's identity and account ownership",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "lookup_user",
+   "by": "harness",
+   "do": "Look up the customer's record by the name, email or id they gave",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gave (or use get_user_information_by_email / _by_id)"
+   },
+   "lookup": [],
+   "after": [
+    "greet"
+   ],
+   "if": null,
+   "quote": "1. Verify the customer's identity and account ownership",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "match_identity",
+   "by": "model",
+   "do": "Confirm that at least 2 of DOB, email, phone and address match the record. Do not reveal any account data before this. If fewer than 2 match, ask again. If they still do not match, tell the customer you cannot verify them and stop",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "lookup_user"
+   ],
+   "after": [
+    "lookup_user"
+   ],
+   "if": null,
+   "quote": "1. Verify the customer's identity and account ownership",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current time. Use it for the verification log and as today's date for the 14-day cooldown check",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "match_identity"
+   ],
+   "if": "identity verified",
+   "quote": "1. Verify the customer's identity and account ownership",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "log_verif",
+   "by": "harness",
+   "do": "Log the verification",
+   "call": "log_verification",
+   "args": {
+    "name": "verified user's name",
+    "user_id": "verified user's id",
+    "address": "record address",
+    "email": "record email",
+    "phone_number": "record phone",
+    "date_of_birth": "record DOB",
+    "time_verified": "time from get_current_time"
+   },
+   "lookup": [
+    "match_identity"
+   ],
+   "after": [
+    "get_time"
+   ],
+   "if": "identity verified",
+   "quote": "1. Verify the customer's identity and account ownership",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "unlock_accounts",
+   "by": "harness",
+   "do": "Unlock the account lookup tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+   },
+   "lookup": [],
+   "after": [
+    "log_verif"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Get all the customer's accounts. Confirm each disputed account is a checking account they own, and note its account_class",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the verified user's id"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "unlock_accounts"
+   ],
+   "if": null,
+   "quote": "2. Confirm the account is a checking account (credits cannot be applied to savings or other account types)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "not_checking",
+   "by": "model",
+   "do": "If an account the customer named is not in get_accounts, tell them. If it is not a checking account, explain that this credit applies only to checking accounts and do not credit it here",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts"
+   ],
+   "after": [
+    "get_accounts"
+   ],
+   "if": "an account in question is missing from the records or is not a checking account",
+   "quote": "Credits may ONLY be applied to checking accounts. Savings accounts and other account types are not eligible.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "unlock_txns",
+   "by": "harness",
+   "do": "Unlock the transaction history tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_bank_account_transactions_9173"
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "get_txns",
+   "by": "harness",
+   "do": "Get the transaction history for each checking account in question, one call per account. If the customer is unsure which account, get it for every checking account they name. Results come newest first",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_bank_account_transactions_9173",
+    "arguments": {
+     "account_id": "each checking account id in question, from get_accounts"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "unlock_txns"
+   ],
+   "if": null,
+   "quote": "- Check the transaction history to confirm each fee discrepancy",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "review_all_when_unsure",
+   "by": "model",
+   "do": "If the customer cannot say which fee is wrong, do not press them. For each checking account in question, list every atm_withdrawal, atm_fee, monthly_fee, fee_rebate, rebate_credit and fee_refund in the review period from get_txns. Pair each atm_fee with its withdrawal and classify the withdrawal from its description as in-network, domestic out-of-network or foreign. Then run the compute_ step for that account's class.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "the customer is not sure which fees are wrong and asks for a full review",
+   "quote": "Review the account terms and documented fee structures to identify all fees that differ from what should have been charged",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "compute_bluest",
+   "by": "model",
+   "do": "For a Bluest Account in the review period, the correct fees are $2.00 per domestic out-of-network withdrawal and a $0.00 Rho-Bank fee per foreign ATM withdrawal. Overcharge = posted ATM fees minus correct fees. Also check whether ATM fee rebates owed (up to $50 per month) are missing from the fee_rebate entries",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Bluest Account",
+   "quote": "Single withdrawal: Withdrawing cash once from an out-of-network ATM will incur a fee of $2.00, plus any ATM operator surcharge.",
+   "doc": "doc_checking_accounts_bluest_account_010"
+  },
+  {
+   "id": "bluest_rebate_shortfall",
+   "by": "model",
+   "do": "For a Bluest Account, list in date order the ATM fees in each month of the review period, using their correct amounts from compute_bluest. Expected rebate = that total, capped at $50 for the month. Add up the fee_rebate and rebate_credit entries already posted for that month. Missing rebate = expected minus posted, or 0 if that is negative. Do not count a correction twice: a fee overcharge that a posted rebate already covers in full is not owed again.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_txns",
+    "compute_bluest"
+   ],
+   "after": [
+    "compute_bluest"
+   ],
+   "if": "account_class is Bluest Account",
+   "quote": "Rebates are credited until you reach the monthly maximum of $50.",
+   "doc": "doc_checking_accounts_bluest_account_007"
+  },
+  {
+   "id": "compute_light_green",
+   "by": "model",
+   "do": "For a Light Green Account in the review period, the first 4 domestic out-of-network withdrawals in the month are free (count them in date order), and each one after that costs $1.50. Foreign withdrawals are charged by tier, per withdrawal: $2.00 up to and including $100, $3.50 above $100 up to and including $300, $5.00 above $300. Overcharge = posted ATM fees minus correct fees",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Light Green Account",
+   "quote": "You get 4 free out-of-network ATM withdrawals per month before the $1.50 fee applies.",
+   "doc": "doc_checking_accounts_light_green_account_001"
+  },
+  {
+   "id": "compute_blue",
+   "by": "model",
+   "do": "For a Blue Account in the review period, pair each ATM withdrawal with its atm_fee. Domestic out-of-network fee = 1% of the withdrawal, capped at $3.00 each. Foreign-currency fee = the greater of 3% of the USD amount or $5.00 each. In-network fee = $0. Overcharge = posted ATM fees minus correct fees. An undercharge is negative",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Blue Account",
+   "quote": "Out-of-network ATM withdrawal: 1% of withdrawal amount (max $3.00)",
+   "doc": "doc_checking_accounts_blue_account_001"
+  },
+  {
+   "id": "compute_green",
+   "by": "model",
+   "do": "For a Green Account (checking) in the review period, pair each ATM withdrawal with its atm_fee. Domestic out-of-network fee = flat $3.00 each. Foreign fee = the greater of 3% of the USD-equivalent amount or $5.00 each. Overcharge = posted ATM fees minus correct fees. An undercharge is negative",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Green Account (checking)",
+   "quote": "Withdrawals at non-network ATMs incur a fee of $3.00 per transaction.",
+   "doc": "doc_checking_accounts_green_account_(checking)_002"
+  },
+  {
+   "id": "compute_purple",
+   "by": "model",
+   "do": "For a Purple Account in the review period, pair each ATM withdrawal with its atm_fee. Domestic out-of-network fee = $2.50 per withdrawal (each withdrawal separately, even on the same day). Foreign ATM withdrawal Rho-Bank fee = $0.00, so any Rho-Bank fee posted on a foreign withdrawal is a mischarge. In-network fee = $0. Overcharge = posted ATM fees minus correct fees. An undercharge is negative",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Purple Account",
+   "quote": "You are charged $2.50 per cash withdrawal made at an out-of-network ATM.",
+   "doc": "doc_checking_accounts_purple_account_012"
+  },
+  {
+   "id": "purple_rebate_shortfall",
+   "by": "model",
+   "do": "For a Purple Account, for each month of the review period total the eligible ATM fees at their correct amounts from compute_purple. Expected rebate = that total, capped at $30 for the month. Add up the fee_rebate and rebate_credit entries already posted for that month. Missing rebate = expected minus posted, or 0 if that is negative. Do not count a correction twice: a fee overcharge that a posted rebate already covers in full is not owed again.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_txns",
+    "compute_purple"
+   ],
+   "after": [
+    "compute_purple"
+   ],
+   "if": "account_class is Purple Account",
+   "quote": "Rebates apply after eligible ATM fees post to your account and are credited up to the monthly cap.",
+   "doc": "doc_checking_accounts_purple_account_004"
+  },
+  {
+   "id": "compute_light_blue",
+   "by": "model",
+   "do": "For a Light Blue Account, count each month's withdrawals in date order, keeping the two allowances separate. Domestic out-of-network: the first 2 in the month are free, then $2.50 each. Foreign ATM: the first 2 in the month are free, then $4.00 each, whatever the amount. Unused free withdrawals do not carry over to the next month. In-network fee = $0. Overcharge = posted ATM fees minus correct fees. An undercharge is negative",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Light Blue Account",
+   "quote": "After you use all 2 free foreign ATM withdrawals in a month, each additional foreign ATM withdrawal is charged a fee of $4.00.",
+   "doc": "doc_checking_accounts_light_blue_account_006"
+  },
+  {
+   "id": "compute_dark_green",
+   "by": "model",
+   "do": "For a Dark Green Account, pair each ATM withdrawal with its atm_fee. Domestic out-of-network fee = 1% of the withdrawal, with a $1.50 minimum per withdrawal. Foreign ATM fee = 2.5% of the withdrawal, capped at $6.00 per transaction. In-network fee = $0. Overcharge = posted ATM fees minus correct fees. An undercharge is negative",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Dark Green Account",
+   "quote": "The fee is capped at a maximum of $6.00 per transaction, protecting you from excessive fees on larger withdrawals.",
+   "doc": "doc_checking_accounts_dark_green_account_002"
+  },
+  {
+   "id": "compute_evergreen",
+   "by": "model",
+   "do": "For an Evergreen Account, pair each ATM withdrawal with its atm_fee. Domestic out-of-network fee = 1% of the cash dispensed, capped at $2.50, worked out for each withdrawal separately. Foreign ATM fee = 2% of the withdrawal, with a $3.00 minimum per transaction. In-network fee = $0. Overcharge = posted ATM fees minus correct fees. An undercharge is negative",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is Evergreen Account",
+   "quote": "The percentage is applied to the cash dispensed amount. If the percentage-based fee exceeds $2.50, the fee is capped at $2.50.",
+   "doc": "doc_checking_accounts_evergreen_account_008"
+  },
+  {
+   "id": "compute_other",
+   "by": "model",
+   "do": "For any other checking product, search the knowledge base for its own at-a-glance, fee and ATM documents. Work out each correct fee and any promised rebate from them before judging. Check other fee lines (monthly_fee and so on) against the product's schedule the same way",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_txns"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "account_class is not covered by a compute_ step above, or fees other than ATM fees are in question",
+   "quote": "Review the account terms and documented fee structures to identify all fees that differ from what should have been charged",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "compute_net",
+   "by": "model",
+   "do": "For each account, net correction = sum of overcharges − undercharges + missing rebates (from bluest_rebate_shortfall for a Bluest Account, purple_rebate_shortfall for a Purple Account) − any refunds or rebates already posted for the same fees. Use exact cents and do not round. Choose credit_type: fee_refund for wrongly charged fees, rebate_credit for missing rebates. If both apply, use the type that covers the majority of the corrections",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "compute_bluest",
+    "bluest_rebate_shortfall",
+    "compute_light_green",
+    "compute_blue",
+    "compute_green",
+    "compute_purple",
+    "purple_rebate_shortfall",
+    "compute_light_blue",
+    "compute_dark_green",
+    "compute_evergreen",
+    "compute_other",
+    "get_txns"
+   ],
+   "after": [
+    "compute_bluest",
+    "bluest_rebate_shortfall",
+    "compute_light_green",
+    "compute_blue",
+    "compute_green",
+    "compute_purple",
+    "purple_rebate_shortfall",
+    "compute_light_blue",
+    "compute_dark_green",
+    "compute_evergreen",
+    "compute_other"
+   ],
+   "if": null,
+   "quote": "Ensure the credit amount reflects the net correction across all identified fee discrepancies",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "no_discrepancy",
+   "by": "model",
+   "do": "If an account's net correction is 0 or less, tell the customer its fees match the documented schedule and explain how they are calculated. Apply no credit to that account. Do not credit for any other reason, because that needs supervisor approval",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "compute_net"
+   ],
+   "after": [
+    "compute_net"
+   ],
+   "if": "net correction for an account is not greater than 0",
+   "quote": "Credits may only be applied for the two circumstances listed above. Do not apply credits for any other reason without supervisor approval.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "check_cooldown",
+   "by": "model",
+   "do": "For each account with a net correction above 0, look in get_txns for a fee_refund or rebate_credit from an earlier agent credit dated within 14 days of the current time from get_time. If you find one, explain that no credit can be applied to that account right now and do not call the credit tool for it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_time",
+    "get_txns",
+    "compute_net"
+   ],
+   "after": [
+    "compute_net"
+   ],
+   "if": "net correction for an account is greater than 0",
+   "quote": "After a credit is applied to a checking account, the system enforces a 14-day cooldown period before another credit can be applied to that same account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "explain_findings",
+   "by": "model",
+   "do": "For each account, tell the customer which fees were wrong and by how much, and which rebates are missing. Then offer to apply a credit",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "compute_net"
+   ],
+   "after": [
+    "compute_net"
+   ],
+   "if": null,
+   "quote": "3. Verify the customer meets one of the eligible circumstances listed above",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "unlock_credit",
+   "by": "harness",
+   "do": "Unlock the checking credit tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "apply_checking_account_credit_5829"
+   },
+   "lookup": [
+    "compute_net",
+    "check_cooldown"
+   ],
+   "after": [
+    "explain_findings",
+    "check_cooldown"
+   ],
+   "if": "at least one account has a net correction greater than 0 and is not in the 14-day cooldown, and the customer accepted the offer",
+   "quote": "The apply_checking_account_credit_5829 tool is used to add a credit transaction to a checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "apply_credit",
+   "by": "harness",
+   "do": "Apply ONE credit per account for that account's exact net correction (fee overcharges and any missing rebates combined)",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "apply_checking_account_credit_5829",
+    "arguments": {
+     "account_id": "the checking account id from get_accounts",
+     "amount": "exact net correction for that account from compute_net",
+     "credit_type": "fee_refund (or rebate_credit if missing rebates are the majority of the correction)"
+    }
+   },
+   "lookup": [
+    "compute_net",
+    "get_accounts",
+    "check_cooldown"
+   ],
+   "after": [
+    "unlock_credit"
+   ],
+   "if": "net correction for that account is greater than 0, the account is not in the 14-day cooldown, and the customer agreed; repeat once for each such account",
+   "quote": "Because only one credit call is allowed per account, if multiple corrections are needed for the same account (e.g., both fee refunds and missing rebates), combine them into a single credit with the total amount and use the credit_type that applies to the majority of the corrections.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "credit_error",
+   "by": "model",
+   "do": "If the credit call returns an error (for example, the 14-day cooldown after an earlier credit), do not retry it and do not credit another account instead. Explain that the credit cannot be applied now and ask whether the customer wants a human agent. Transfer only if they agree, using reason code technical_system_error",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the review done, the discrepancies found and the error returned",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "apply_credit"
+   ],
+   "after": [
+    "apply_credit"
+   ],
+   "if": "apply_checking_account_credit_5829 returned an error and the customer agrees to a transfer",
+   "quote": "After a credit is applied to a checking account, the system enforces a 14-day cooldown period before another credit can be applied to that same account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "id": "transfer_if_requested",
+   "by": "model",
+   "do": "First try to resolve the issue yourself. Transfer only if the customer agrees and one of these holds: a fee dispute needs specialist review outside the two eligible circumstances, or the customer has asked for a human 4 times. Use reason complex_billing_dispute for a fee dispute needing specialist review. Otherwise use the highest-tier code that fits, for example customer_frustrated_demands_human. Summarize the review and any credits.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the review done, the discrepancies found and the credits applied",
+    "reason": "complex_billing_dispute, or the matching tier code"
+   },
+   "lookup": [
+    "explain_findings",
+    "no_discrepancy"
+   ],
+   "after": [
+    "explain_findings"
+   ],
+   "if": "the customer agrees to a transfer, and either the fee issue needs specialist review outside the documented credit circumstances or the customer has asked for a human 4 times",
+   "quote": "Billing disputes requiring specialist review (recurring charges, statement errors, fee reversals)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "confirm",
+   "by": "model",
+   "do": "Using the credit results, tell the customer the credit applied to each account and its new balance. If they ask, give the total credited to each account. Tell them they do not need to do anything else. Mention that in-network ATMs avoid out-of-network fees",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "apply_credit"
+   ],
+   "after": [
+    "apply_credit"
+   ],
+   "if": null,
+   "quote": "6. Inform the customer of the applied credit and new account balance",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Credits may be applied only to checking accounts, and only for missing rebates or fee mischarges",
+   "quote": "Credits may only be applied for the two circumstances listed above. Do not apply credits for any other reason without supervisor approval.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "Call apply_checking_account_credit_5829 at most once per checking account per interaction",
+   "quote": "The apply_checking_account_credit_5829 tool may only be called ONCE per checking account per customer interaction.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "The credit equals the exact net correction across all fee discrepancies on that account, with no rounding",
+   "quote": "The credit amount must match the exact rebate or fee amount - do not round or estimate.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "Find every fee discrepancy on the account, not just the ones the customer named",
+   "quote": "- Ensure the credit amount reflects the net correction across all identified fee discrepancies",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "Bluest: domestic out-of-network ATM fee is $2.00 per withdrawal",
+   "quote": "The fee is assessed per withdrawal. Multiple withdrawals will each incur a separate fee.",
+   "doc": "doc_checking_accounts_bluest_account_010"
+  },
+  {
+   "rule": "Bluest: the Rho-Bank foreign ATM withdrawal fee is $0.00, so any Rho foreign ATM fee is a mischarge",
+   "quote": "Withdraw from ATMs abroad with no Rho-Bank fee: $0.00. Third-party ATM operator fees may still apply.",
+   "doc": "doc_checking_accounts_bluest_account_003"
+  },
+  {
+   "rule": "Bluest: ATM fee rebates are capped at $50 per month",
+   "quote": "If your aggregate ATM fees exceed $50 in a given month, the excess will not be rebated.",
+   "doc": "doc_checking_accounts_bluest_account_007"
+  },
+  {
+   "rule": "Bluest: rebates cover third-party ATM fees",
+   "quote": "When you incur third-party ATM fees, you are rebated up to $50 per monthly statement cycle.",
+   "doc": "doc_checking_accounts_bluest_account_003"
+  },
+  {
+   "rule": "Bluest: rebates are credited until the month's total reaches $50",
+   "quote": "Rebates are credited until you reach the monthly maximum of $50.",
+   "doc": "doc_checking_accounts_bluest_account_007"
+  },
+  {
+   "rule": "Before crediting a missing rebate, confirm it was not already applied",
+   "quote": "- Confirm the rebate has not already been applied by checking the account's transaction history",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "A missing rebate is credited only if the customer meets every eligibility requirement for it",
+   "quote": "If a rebate that should have been applied to the customer's account has not yet been applied, and the customer meets all eligibility requirements for that rebate, the agent may apply the credit.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "Light Green: 4 free domestic out-of-network withdrawals per month, then $1.50 each",
+   "quote": "You get 4 free out-of-network ATM withdrawals per month before the $1.50 fee applies.",
+   "doc": "doc_checking_accounts_light_green_account_001"
+  },
+  {
+   "rule": "Light Green foreign ATM fee is set by tier for each withdrawal: <=$100 → $2.00; >$100 and <=$300 → $3.50; >$300 → $5.00. An amount exactly at a threshold gets the lower tier's fee",
+   "quote": "Amounts exactly at a threshold are charged the lower tier’s fee.",
+   "doc": "doc_checking_accounts_light_green_account_013"
+  },
+  {
+   "rule": "Light Green foreign ATM fees are flat for each withdrawal and depend on that single withdrawal's amount",
+   "quote": "Foreign ATM withdrawal fees on Light Green accounts are flat per withdrawal and depend on the amount you take out in a single transaction.",
+   "doc": "doc_checking_accounts_light_green_account_013"
+  },
+  {
+   "rule": "Light Green: the middle foreign-ATM tier is $3.50",
+   "quote": "| More than $100 and up to and including $300 | $3.50 |",
+   "doc": "doc_checking_accounts_light_green_account_013"
+  },
+  {
+   "rule": "Light Green holder must be 13–24",
+   "quote": "You must be the primary account holder and be between 13 and 24 years old to open the account.",
+   "doc": "doc_checking_accounts_light_green_account_002"
+  },
+  {
+   "rule": "Blue Account: domestic out-of-network ATM fee = 1% of the withdrawal, at most $3.00 per withdrawal",
+   "quote": "Out-of-network ATM withdrawal: 1% of withdrawal amount (max $3.00)",
+   "doc": "doc_checking_accounts_blue_account_001"
+  },
+  {
+   "rule": "Blue Account: foreign-currency ATM fee = the greater of 3% of the withdrawal or $5.00, per withdrawal",
+   "quote": "For ATM withdrawals made in a foreign currency, you are charged 3% of the withdrawal amount, with a minimum fee of $5.00 per withdrawal.",
+   "doc": "doc_checking_accounts_blue_account_012"
+  },
+  {
+   "rule": "Blue Account: in-network ATMs carry no out-of-network fee",
+   "quote": "Use in-network ATMs to avoid out-of-network ATM fees",
+   "doc": "doc_checking_accounts_blue_account_003"
+  },
+  {
+   "rule": "Green Account (checking): domestic out-of-network ATM fee is a flat $3.00 per withdrawal. ATM-owner surcharges are separate",
+   "quote": "Withdrawals at non-network ATMs incur a fee of $3.00 per transaction.",
+   "doc": "doc_checking_accounts_green_account_(checking)_002"
+  },
+  {
+   "rule": "Green Account (checking): foreign ATM fee = the greater of 3% of the USD-equivalent amount or $5.00, per withdrawal",
+   "quote": "Compare the result to $5.00. The higher amount is your fee.",
+   "doc": "doc_checking_accounts_green_account_(checking)_012"
+  },
+  {
+   "rule": "Purple Account: domestic out-of-network ATM fee is $2.50 for each withdrawal",
+   "quote": "You are charged $2.50 per cash withdrawal made at an out-of-network ATM.",
+   "doc": "doc_checking_accounts_purple_account_012"
+  },
+  {
+   "rule": "Purple Account: the out-of-network fee is charged on each withdrawal, even several on the same day",
+   "quote": "Assessed per withdrawal. Multiple withdrawals in the same day will each incur a separate $2.50 fee.",
+   "doc": "doc_checking_accounts_purple_account_012"
+  },
+  {
+   "rule": "Purple Account: the Rho-Bank foreign ATM withdrawal fee is $0.00, so any Rho foreign ATM fee is a mischarge",
+   "quote": "No foreign ATM withdrawal fees: $0.00 per withdrawal (third-party ATM operator fees may still apply)",
+   "doc": "doc_checking_accounts_purple_account_001"
+  },
+  {
+   "rule": "Purple Account: ATM fee rebates are capped at $30 per month",
+   "quote": "You are eligible for refunds of ATM operator fees up to a monthly cap of $30.",
+   "doc": "doc_checking_accounts_purple_account_004"
+  },
+  {
+   "rule": "Purple Account: no more rebates once the month's rebates reach $30",
+   "quote": "You reached the monthly rebate cap of $30. Additional ATM operator fees in the same month are not rebated.",
+   "doc": "doc_checking_accounts_purple_account_010"
+  },
+  {
+   "rule": "Light Blue Account: 2 free domestic out-of-network withdrawals per month",
+   "quote": "You receive 2 free out-of-network ATM withdrawals each month.",
+   "doc": "doc_checking_accounts_light_blue_account_004"
+  },
+  {
+   "rule": "Light Blue Account: $2.50 for each out-of-network withdrawal after the 2 free ones",
+   "quote": "After using your free allowance, each additional withdrawal costs $2.50.",
+   "doc": "doc_checking_accounts_light_blue_account_004"
+  },
+  {
+   "rule": "Light Blue Account: 2 free foreign ATM withdrawals per month, then $4.00 each",
+   "quote": "After you use all 2 free foreign ATM withdrawals in a month, each additional foreign ATM withdrawal is charged a fee of $4.00.",
+   "doc": "doc_checking_accounts_light_blue_account_006"
+  },
+  {
+   "rule": "Light Blue Account: free withdrawals do not carry over to the next month",
+   "quote": "Unused free withdrawals do not roll over to future months.",
+   "doc": "doc_checking_accounts_light_blue_account_006"
+  },
+  {
+   "rule": "Dark Green Account: domestic out-of-network ATM fee is 1% of the withdrawal, at least $1.50",
+   "quote": "Out-of-network ATM withdrawal fee: 1% (min $1.50)",
+   "doc": "doc_checking_accounts_dark_green_account_001"
+  },
+  {
+   "rule": "Dark Green Account: foreign ATM fee is 2.5% of the withdrawal",
+   "quote": "When you withdraw cash from an ATM abroad, a fee of 2.5% of the withdrawal amount is charged.",
+   "doc": "doc_checking_accounts_dark_green_account_002"
+  },
+  {
+   "rule": "Dark Green Account: foreign ATM fee is at most $6.00 per withdrawal",
+   "quote": "The fee is capped at a maximum of $6.00 per transaction, protecting you from excessive fees on larger withdrawals.",
+   "doc": "doc_checking_accounts_dark_green_account_002"
+  },
+  {
+   "rule": "Evergreen Account: domestic out-of-network ATM fee is 1% of the cash dispensed, capped at $2.50",
+   "quote": "The percentage is applied to the cash dispensed amount. If the percentage-based fee exceeds $2.50, the fee is capped at $2.50.",
+   "doc": "doc_checking_accounts_evergreen_account_008"
+  },
+  {
+   "rule": "Evergreen Account: the out-of-network fee is worked out separately for each withdrawal",
+   "quote": "Multiple withdrawals in the same day each incur a separate fee, calculated individually using 1% and capped at $2.50 per withdrawal.",
+   "doc": "doc_checking_accounts_evergreen_account_008"
+  },
+  {
+   "rule": "Evergreen Account: foreign ATM fee is 2% of the withdrawal, at least $3.00",
+   "quote": "Foreign ATM withdrawal fee: 2% of the withdrawal amount, with a minimum of $3.00 per transaction.",
+   "doc": "doc_checking_accounts_evergreen_account_001"
+  },
+  {
+   "rule": "An ATM fee that should have been refunded under the account's benefits counts as an incorrectly charged fee",
+   "quote": "an ATM fee that should have been refunded under your account's benefits",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_019"
+  },
+  {
+   "rule": "A 14-day cooldown follows any credit to the same checking account",
+   "quote": "After a credit is applied to a checking account, the system enforces a 14-day cooldown period before another credit can be applied to that same account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "credit_type is 'fee_refund' for wrongly charged fees and 'rebate_credit' for missing rebates",
+   "quote": "For refunding fees that were incorrectly charged",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "Use credit_type 'rebate_credit' for missing rebates",
+   "quote": "For rebates that should have been applied but were missing",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "The credit amount argument must be positive (greater than 0)",
+   "quote": "amount: The positive dollar amount to credit (must be greater than 0)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "Confirm each fee discrepancy against the transaction history",
+   "quote": "Check the transaction history to confirm each fee discrepancy",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_017"
+  },
+  {
+   "rule": "In transaction records, positive amounts are credits and negative amounts are debits",
+   "quote": "Positive values are credits (money in), negative values are debits (money out)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "rule": "Transfers use a reason code from the documented list. Use technical_system_error when a system error blocks the request",
+   "quote": "System error or outage preventing completion of the customer's request",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "done_when": "All of the following are true:\n- The customer is verified and the verification is logged.\n- Every fee and rebate in the review period on each checking account in question has been checked against its product's documented fee schedule. If the customer was unsure what was wrong, every fee on each account was reviewed. For a Bluest Account this includes missing ATM fee rebates up to the $50 monthly cap, and for a Purple Account missing ATM fee rebates up to the $30 monthly cap.\n- Exactly one credit has been applied to each account that has a positive net correction and is not in the 14-day cooldown, after the customer agreed.\n- The customer has been told each credited amount and new balance. If an account got no credit, they have been told why (no discrepancy, or the cooldown). If a credit call failed, they have been told why and offered a transfer."
+}

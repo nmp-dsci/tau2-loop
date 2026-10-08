@@ -1,0 +1,1225 @@
+{
+ "jobs": [
+  {
+   "job": "understanding_credit_card_referral_statuses",
+   "aliases": [
+    "check credit card referral status",
+    "credit_card_referral_status_inquiry",
+    "referral bonus inquiry",
+    "referral bonus not received",
+    "why haven't I received my referral bonus"
+   ],
+   "when": {
+    "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks about a referral they made or a missing referral bonus. This job reads records and explains them. The only write is a transfer, for a persistent ERROR status, and only after the customer agrees to it.",
+    "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "get_referrals_by_user",
+     "who": "agent",
+     "step": "get_referrals",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "explain_error",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": null,
+     "not_used": "Do not call this for the referred person. They are a different customer and are not verified in this conversation. The referral status comes from get_referrals_by_user, and the requirement comes from the card's referral program document."
+    },
+    {
+     "tool": "get_referral_link",
+     "who": "customer",
+     "step": null,
+     "not_used": "This tool creates a new referral link. It is only for a customer who asks to refer someone new, after that job's pre-checks. It is not used to look into an existing referral or a missing bonus. Agents must not generate the link themselves."
+    }
+   ],
+   "info": [
+    {
+     "field": "customer_identifier",
+     "about": "Something to find the customer's record with: full name, email or user id",
+     "from": "customer",
+     "ask": "Could I have your full name so I can look up your profile?",
+     "may_hold_back": true
+    },
+    {
+     "field": "verification_values",
+     "about": "Any 2 of date of birth, email, phone number, address. They must match the record.",
+     "from": "customer",
+     "ask": "To verify your identity, please give me two of these: your date of birth, email, phone number or address on file.",
+     "may_hold_back": true
+    },
+    {
+     "field": "which_referral",
+     "about": "Which referral the customer is asking about, if the records show more than one (for example the most recent one, or the one whose friend was approved and is using the card)",
+     "from": "customer",
+     "ask": "I see several referrals on your profile. Which one are you asking about?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referral_status",
+     "about": "The status of the referral in question: COMPLETE, IN_PROGRESS, NO_PROGRESS, APPLIED, REJECTED or ERROR",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "referred_card_type",
+     "about": "The credit card the friend was referred to. It decides which program's bonus and qualifying-spend terms apply.",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "error_persists",
+     "about": "For an ERROR status: whether the customer says the error has lasted, and whether they want a human agent",
+     "from": "customer",
+     "ask": "Has this referral been showing an error for a while? Would you like me to transfer you to a human agent to look into it?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely and ask how you can help. Share no account information before the customer is verified.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Be polite and professional",
+     "doc": "policy"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record using the identifier they gave",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave (or use get_user_information_by_email / get_user_information_by_id with what they gave)"
+     },
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Ask for 2 of: date of birth, email, phone, address. Check them against the record. Share nothing about the customer before they are verified.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify_failed",
+     "by": "model",
+     "do": "Tell the customer you cannot verify their identity, so you cannot look up their referrals. Share no account details, and stop.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user",
+      "verify"
+     ],
+     "after": [
+      "verify"
+     ],
+     "if": "fewer than 2 of the values the customer gave match the record",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification log",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "verify"
+     ],
+     "if": "verification succeeded",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "address on record",
+      "email": "email on record",
+      "phone_number": "phone on record",
+      "date_of_birth": "DOB on record",
+      "time_verified": "timestamp from get_current_time"
+     },
+     "lookup": [],
+     "after": [
+      "get_time"
+     ],
+     "if": "verification succeeded",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_referrals",
+     "by": "harness",
+     "do": "Get all referrals the verified customer has made",
+     "call": "get_referrals_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "use_single_referral",
+     "by": "model",
+     "do": "Only one referral is returned, so use it. Note its status and referred card type.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": "exactly one referral is returned",
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "identify_referral",
+     "by": "model",
+     "do": "If there are several referrals, ask which one the customer means (for example the most recent one, where the friend was approved). Then note its status and card type.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": "more than one referral is returned",
+     "quote": "IN_PROGRESS — the referred person has successfully opened a new account and is in progress to meet the criteria for the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "no_referral_found",
+     "by": "model",
+     "do": "Tell the customer you cannot find the referral they describe on their profile. Do not guess a status or invent a reason. Remind them that the friend must apply through their referral link for it to be tracked.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": "get_referrals returns no referrals, or none matches the one the customer describes",
+     "quote": "When they use your link to apply and are approved, the referral will be tracked to your account.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "lookup_card_program",
+     "by": "model",
+     "do": "Find the referred card's own referral program document in the KB. Get its qualifying spend amount, time window, bonus and annual cap.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "if": null,
+     "quote": "Each credit card type has its own referral bonus and eligibility requirements that are not detailed here.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "no_card_program",
+     "by": "model",
+     "do": "Tell the customer that the referred card has no documented referral offer, so you cannot confirm any bonus terms for it. Do not invent terms.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "lookup_card_program"
+     ],
+     "after": [
+      "lookup_card_program"
+     ],
+     "if": "the KB has no referral program document for the referred card type",
+     "quote": "Not all credit cards participate in the referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "explain_in_progress",
+     "by": "model",
+     "do": "IN_PROGRESS: tell the customer the friend's account is open but hasn't met the bonus criteria yet. State the documented requirement for that card: the exact qualifying spend in dollars and the days from account opening (e.g. Platinum Rewards Card: $1,500 within 90 days). Then state the bonus and payout timing. No agent action is needed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "lookup_card_program"
+     ],
+     "after": [
+      "lookup_card_program"
+     ],
+     "if": "status is IN_PROGRESS",
+     "quote": "IN_PROGRESS: No action required; monitor until criteria are met.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_complete",
+     "by": "model",
+     "do": "COMPLETE: tell the customer the bonus will be granted under the card's program terms, and give the documented payout timing",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "lookup_card_program"
+     ],
+     "after": [
+      "lookup_card_program"
+     ],
+     "if": "status is COMPLETE",
+     "quote": "COMPLETE: The bonus will be granted per the applicable referral program terms.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_no_progress",
+     "by": "model",
+     "do": "NO_PROGRESS: remind the customer that the invitee has not started an application",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "if": "status is NO_PROGRESS",
+     "quote": "NO_PROGRESS: You may remind the referrer that the invitee has not started an application.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_applied",
+     "by": "model",
+     "do": "APPLIED: explain that the application is awaiting a decision and no intervention is needed",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "if": "status is APPLIED",
+     "quote": "APPLIED: Await the application decision; no manual intervention is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_rejected",
+     "by": "model",
+     "do": "REJECTED: check the customer's other referrals for the 2-per-rolling-7-day limit. Explain that the referral was auto-denied and cannot be reinstated in that window. Do not retry right away.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "if": "status is REJECTED",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_error",
+     "by": "model",
+     "do": "ERROR: tell the customer to retry later. If the error persists, offer to transfer to a human agent, and transfer only after the customer agrees. Use reason code technical_system_error, with a summary of the referral and its ERROR status.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "short summary: the verified user's referral is in ERROR status and the condition persists",
+      "reason": "technical_system_error (fixed code from doc_bank_accounts_bank_accounts_(general)_042)"
+     },
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral"
+     ],
+     "if": "status is ERROR and the condition persists and the customer agrees to a transfer",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "answer_followups",
+     "by": "model",
+     "do": "Answer follow-up questions with the documented terms only (requirement amount, window, bonus, payout timing). Do not invent terms or look up the friend's records.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_card_program"
+     ],
+     "after": [
+      "explain_in_progress"
+     ],
+     "if": null,
+     "quote": "Each referral program has specific requirements that your friend must meet to trigger the bonus, such as making a certain amount of purchases within a specified timeframe after account opening.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "A referral bonus is paid only after the referred person is approved and meets that card's qualifying spend within the window",
+     "quote": "Each referral program has specific requirements that your friend must meet to trigger the bonus, such as making a certain amount of purchases within a specified timeframe after account opening.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "rule": "Platinum Rewards Card: the friend must spend at least $1,500 within 90 days of account opening. The referrer earns $100.",
+     "quote": "The referred friend must spend at least $1,500 within 90 days of account opening to qualify you for the bonus.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Platinum Rewards Card: the bonus is credited after approval and the $1,500 spend within 90 days",
+     "quote": "Bonuses are typically credited after the referred applicant is approved and meets the $1,500 spend requirement within 90 days.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Platinum Rewards Card: self-referrals and duplicate applications do not qualify",
+     "quote": "Self-referrals or duplicate applications do not qualify.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Silver Rewards Card: the friend must spend at least $750 within 60 days. The referrer earns 75. The bonus posts within 1-2 billing cycles.",
+     "quote": "The referred person must be approved and spend at least $750 within 60 days of account opening",
+     "doc": "doc_credit_cards_silver_rewards_card_011"
+    },
+    {
+     "rule": "EcoCard: the friend must spend at least $500 within 60 days. The referrer earns 50. The bonus posts within 1-2 billing cycles.",
+     "quote": "The referred person must be approved and spend at least $500 within 60 days of account opening",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "EcoCard payout: typically within one to two billing cycles after the $500 is met",
+     "quote": "Your bonus typically posts within one to two billing cycles after the referred account meets the $500 requirement",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "Business Bronze Rewards Card: at least $1,750 in net purchases within 90 days. The referrer earns $75.",
+     "quote": "The referred business must complete at least $1,750 in net purchases within 90 days of account opening.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_011"
+    },
+    {
+     "rule": "Business Silver Rewards Card: at least $3,000 within 90 days. The referrer earns $100.",
+     "quote": "The referred business must spend at least $3,000 within 90 days of account opening for you to receive the bonus",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_013"
+    },
+    {
+     "rule": "Business Gold Rewards Card: $7,500 within 90 days. The referrer earns $200.",
+     "quote": "The referred business must spend $7,500 within 90 from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_010"
+    },
+    {
+     "rule": "Business Platinum Rewards Card: $15,000 within 135 days. The referrer earns $300.",
+     "quote": "When the referred business is approved and completes qualifying spend of $15,000 within 135 days from account opening, you earn a bonus of $300.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_012"
+    },
+    {
+     "rule": "Green Rewards Card (business): at least $2,250 within 90 days. The referrer earns 75.",
+     "quote": "The referred business must spend at least $2,250 within 90 days from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_green_rewards_card_010"
+    },
+    {
+     "rule": "Silver Zoom Card: $7,500 in purchases within 90 days. The referrer earns $150.",
+     "quote": "The referred business must complete purchases totaling $7,500 within 90 days of account opening",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "rule": "No more than 2 credit card referral bonuses in any rolling 7-day window, across all card types. Further referrals are auto-denied.",
+     "quote": "You can receive at most 2 referral bonuses in any rolling 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "The third and later referrals in a rolling 7-day window are automatically denied",
+     "quote": "If you attempt to receive more than 2 referrals in a single week, the third referral (and any subsequent referrals that week) will be automatically denied.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Auto-denied referrals cannot be reinstated within the same 7-day window",
+     "quote": "Auto-denied referrals due to the limit cannot be reinstated within the same 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Personal card programs (Platinum, Silver, EcoCard) cap at 7 referral bonuses per calendar year",
+     "quote": "You can earn up to 7 referral bonuses per calendar year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "A REJECTED status means the user has too many referral processes going on",
+     "quote": "REJECTED — the user has too many referral processes going on",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "COMPLETE means the referred person opened an account and met the bonus criteria",
+     "quote": "COMPLETE — the referred person has successfully opened a new account and met the criteria to get the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "IN_PROGRESS means the account is open but the bonus criteria are not yet met",
+     "quote": "IN_PROGRESS — the referred person has successfully opened a new account and is in progress to meet the criteria for the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "Not every card has a referral program. If the referred card has no documented program, no bonus terms can be confirmed.",
+     "quote": "Not all credit cards participate in the referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "rule": "For a transfer, pick the reason code from the highest tier that applies. A persistent system error is technical_system_error.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "The customer is verified and the verification is logged, or the customer has been told they could not be verified. Their referrals have been retrieved and the referral in question identified, or they have been told it cannot be found. The agent has explained the status and, for IN_PROGRESS, the referred card's exact documented qualifying spend amount and time window. Follow-up questions are answered. For a persistent ERROR, the customer has accepted or declined a transfer."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_001",
+   "why": "Internal: what each credit card referral status means and what the agent does for each"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_002",
+   "why": "Each card has its own referral terms; the rolling 7-day limit of 2 bonuses, auto-denial and no reinstatement"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_020",
+   "why": "Customer service can check referral status; not all cards participate; the bonus needs a set spend within a timeframe; referrals are tracked through the link"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_009",
+   "why": "Internal: get_referral_link is for new referrals only, and agents must not generate links (not used in this job)"
+  },
+  {
+   "id": "doc_credit_cards_ecocard_011",
+   "why": "EcoCard referral terms: $500 within 60 days, payout timing"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_011",
+   "why": "Silver Rewards Card referral terms: $750 within 60 days"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_008",
+   "why": "Platinum Rewards Card referral terms: $1,500 within 90 days, 7 per year, no self-referrals"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_011",
+   "why": "Business Bronze referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_gold_rewards_card_010",
+   "why": "Business Gold referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_012",
+   "why": "Business Platinum referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_013",
+   "why": "Business Silver referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_green_rewards_card_010",
+   "why": "Green Rewards Card referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_silver_zoom_card_011",
+   "why": "Silver Zoom referral terms"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_042",
+   "why": "Transfer reason codes (technical_system_error for a persistent ERROR status)"
+  }
+ ],
+ "open_questions": [
+  "The documents do not say which fields get_referrals_by_user returns, such as card type, referred user, dates or spend progress. If it shows no spend progress, the agent can state only the card's full documented threshold, not the amount still remaining.",
+  "No document allows looking up the referred person's transactions to work out their progress. They are an unverified, different customer, so this workflow does not do it.",
+  "No document covers a referrer who offers to spend on the referred person's card for them. Whether the agent should comment on this is undocumented.",
+  "For the ERROR status, 'if the condition persists' is not defined. This workflow treats it as the customer reporting a lasting error and accepting a transfer.",
+  "The Bronze Rewards, Gold Rewards, Diamond Elite and Crypto-Cash Back cards show no referral program documents. If a referral record names one of these cards, the terms that apply are undocumented."
+ ],
+ "merge": [
+  {
+   "job": "understanding_credit_card_referral_statuses",
+   "into": [
+    "understanding_credit_card_referral_statuses"
+   ],
+   "previous_sessions": [
+    "20261006T150619Z_banking_knowledge_r1_task_016"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "starts",
+     "why": "The job had no starts. It runs only when the customer asks about a referral or bonus.",
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "change": "added",
+     "what": "tools",
+     "why": "The tools list was missing. It now lists every tool, with get_credit_card_transactions_by_user and get_referral_link marked not used, each with its reason.",
+     "quote": "Agents must not generate the link on the customer’s behalf.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "change": "added",
+     "what": "greet",
+     "why": "The policy requires an opening before verification",
+     "quote": "Be polite and professional",
+     "doc": "policy"
+    },
+    {
+     "change": "added",
+     "what": "verify_failed",
+     "why": "New failure path for when verification does not succeed",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "change": "added",
+     "what": "use_single_referral",
+     "why": "identify_referral covered only the case of several referrals. This new branch covers a single referral.",
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "change": "added",
+     "what": "no_referral_found",
+     "why": "New failure path for when no referral matches the one the customer describes",
+     "quote": "When they use your link to apply and are approved, the referral will be tracked to your account.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "change": "added",
+     "what": "no_card_program",
+     "why": "New branch for when the referred card has no documented referral program",
+     "quote": "Not all credit cards participate in the referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "change": "changed",
+     "what": "explain_error args.reason",
+     "why": "The transfer reason must be a code from the reason-code list. A persistent system error maps to technical_system_error, not a free-text reason.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "lookup fields on all check/decision steps",
+     "why": "Each check now names the steps that read the facts it decides on (D4)",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "change": "added",
+     "what": "info.error_persists",
+     "why": "The fact the ERROR transfer branch decides on",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "change": "added",
+     "what": "rules: COMPLETE meaning, IN_PROGRESS meaning, 7-day auto-denial, no reinstatement, not all cards participate, EcoCard payout, Platinum self-referral, transfer reason code",
+     "why": "Rules these documents state that the old version lacked",
+     "quote": null,
+     "doc": null
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 52,
+     "n": 52,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [
+      "get_referral_link"
+     ],
+     "missing": [],
+     "n": 1
+    },
+    "D3": {
+     "with_condition": 0,
+     "n": 0
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 4,
+     "n": 4,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  }
+ ],
+ "rejected": [],
+ "draft": [
+  {
+   "job": "understanding_credit_card_referral_statuses",
+   "aliases": [
+    "referral bonus not received",
+    "check credit card referral status",
+    "why haven't I received my referral bonus",
+    "referral bonus inquiry"
+   ],
+   "when": {
+    "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks about a referral or a missing referral bonus. This job only reads records and explains them. It makes no write for the customer.",
+    "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "get_referrals_by_user",
+     "who": "agent",
+     "step": "get_referrals",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": null,
+     "not_used": "Do not call this for the referred person. They are a different customer and have not been verified in this conversation. The referral status comes from get_referrals_by_user."
+    },
+    {
+     "tool": "get_referral_link",
+     "who": "customer",
+     "step": null,
+     "not_used": "This tool creates a new referral link. It is only for a customer who asks to refer someone new, after that job's pre-checks. It is not used to look into an existing referral or a missing bonus. Agents must not generate the link themselves."
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "error_status",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "identity_details",
+     "about": "Any 2 of: date of birth, email, phone number, address. Used to verify the caller",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, email address, phone number or home address?",
+     "may_hold_back": true
+    },
+    {
+     "field": "customer_name_or_email",
+     "about": "How to find the customer's record",
+     "from": "customer",
+     "ask": "Could you please tell me your full name (or the email on your account) so I can find your profile?",
+     "may_hold_back": true
+    },
+    {
+     "field": "which_referral",
+     "about": "Which referral the customer is asking about, if the records show more than one",
+     "from": "customer",
+     "ask": "I see more than one referral on your profile. Which one are you asking about, for example the most recent one, or the card or date of the friend's application?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referral_status",
+     "about": "The status of the chosen referral: COMPLETE, IN_PROGRESS, NO_PROGRESS, APPLIED, REJECTED or ERROR",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "referred_card_type",
+     "about": "The credit card the referred person was referred to. This decides which program's spend requirement and time window apply",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely and ask how you can help. Do not share any account information before the customer is verified.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Ask for the customer's name or email. Fetch their record with get_user_information_by_name (or get_user_information_by_email, or get_user_information_by_id if they give a user id).",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives (or email/user_id with the matching tool)"
+     },
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "verify_identity",
+     "by": "model",
+     "do": "Ask for 2 of: date of birth, email, phone number, address. Compare them with the record from lookup_user. If fewer than 2 match, say you cannot verify the customer and stop. Share no account details.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time to use as the verification timestamp.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "verify_identity"
+     ],
+     "if": "identity verified (2 of the 4 details match)",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record.",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's record",
+      "user_id": "the verified user's record",
+      "address": "the verified user's record",
+      "email": "the verified user's record",
+      "phone_number": "the verified user's record",
+      "date_of_birth": "the verified user's record",
+      "time_verified": "result of get_time"
+     },
+     "lookup": [],
+     "after": [
+      "get_time"
+     ],
+     "if": "identity verified (2 of the 4 details match)",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "get_referrals",
+     "by": "harness",
+     "do": "Get all referrals made by the verified user.",
+     "call": "get_referrals_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "identify_referral",
+     "by": "model",
+     "do": "Find the referral the customer means. If there is only one, use it. If there are several, ask which one, for example the most recent. Match their answer to a record by date, card or referred user. If no referral matches, tell the customer you cannot find it on their profile. Do not guess a status.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": null,
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "find_program_terms",
+     "by": "model",
+     "do": "Read the referred card type from the chosen referral. Open that card's referral program document and note the qualifying spend and time window (see rules). If the card has no documented referral program, tell the customer it has no referral offer and that no bonus can be paid.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "identify_referral"
+     ],
+     "after": [
+      "identify_referral"
+     ],
+     "if": null,
+     "quote": "Each credit card type has its own referral bonus and eligibility requirements that are not detailed here.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "in_progress_status",
+     "by": "model",
+     "do": "Explain that the referred person has opened the account but has not yet met the bonus criteria. State that card's documented qualifying spend amount and time window from account opening, for example 'at least $750 within 60 days' for the Silver Rewards Card. Say the bonus is issued once the requirement is met. Only quote a remaining amount if the referral record itself shows spend progress. No action is needed from the agent.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "identify_referral",
+      "find_program_terms"
+     ],
+     "after": [
+      "find_program_terms"
+     ],
+     "if": "chosen referral's status is IN_PROGRESS",
+     "quote": "IN_PROGRESS: No action required; monitor until criteria are met.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "complete_status",
+     "by": "model",
+     "do": "Explain that the referral has met the criteria and the bonus will be granted under that card's program terms. Where the card's document states payout timing, give it, for example 'typically within one to two billing cycles'.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "identify_referral",
+      "find_program_terms"
+     ],
+     "after": [
+      "find_program_terms"
+     ],
+     "if": "chosen referral's status is COMPLETE",
+     "quote": "COMPLETE: The bonus will be granted per the applicable referral program terms.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "no_progress_status",
+     "by": "model",
+     "do": "Explain that the invitee has not started an application yet, so no bonus can be earned until they apply with the referral link and meet the requirements.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "identify_referral"
+     ],
+     "after": [
+      "identify_referral"
+     ],
+     "if": "chosen referral's status is NO_PROGRESS",
+     "quote": "NO_PROGRESS: You may remind the referrer that the invitee has not started an application.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "applied_status",
+     "by": "model",
+     "do": "Explain that the application is waiting for a decision, that no manual action is needed, and that the spend requirement starts once the account is opened.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "identify_referral"
+     ],
+     "after": [
+      "identify_referral"
+     ],
+     "if": "chosen referral's status is APPLIED",
+     "quote": "APPLIED: Await the application decision; no manual intervention is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "rejected_status",
+     "by": "model",
+     "do": "Review the customer's other referrals from get_referrals before advising. Explain that the referral was rejected. Name the cause if the records show one, such as more than 2 referral bonuses in a rolling 7-day window. Say auto-denied referrals cannot be reinstated within the same 7-day window. Do not advise an immediate retry.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral"
+     ],
+     "after": [
+      "identify_referral"
+     ],
+     "if": "chosen referral's status is REJECTED",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "error_status",
+     "by": "model",
+     "do": "Explain that a system error affected the referral and that it may clear later. If the customer reports the error has persisted, offer a transfer to a human agent. Transfer only if they accept, using reason code technical_system_error and a summary of the referral issue.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "short summary of the verified user's referral and its ERROR status",
+      "reason": "technical_system_error (fixed value from doc_bank_accounts_bank_accounts_(general)_042)"
+     },
+     "lookup": [
+      "identify_referral"
+     ],
+     "after": [
+      "identify_referral"
+     ],
+     "if": "chosen referral's status is ERROR, the condition persists, and the customer agrees to be transferred",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "answer_followups",
+     "by": "model",
+     "do": "Answer follow-up questions only from the card's documented referral terms: spend amount, time window, bonus amount, annual limit, payout timing. Do not invent other conditions. Do not look up or discuss the referred person's account or transactions.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "find_program_terms"
+     ],
+     "after": [
+      "find_program_terms"
+     ],
+     "if": "customer asks what is needed to receive the bonus",
+     "quote": "Each referral program has specific requirements that your friend must meet to trigger the bonus, such as making a certain amount of purchases within a specified timeframe after account opening.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "COMPLETE means the referred person opened an account and met the bonus criteria.",
+     "quote": "COMPLETE — the referred person has successfully opened a new account and met the criteria to get the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "IN_PROGRESS means the account is open but the bonus criteria are not yet met.",
+     "quote": "IN_PROGRESS — the referred person has successfully opened a new account and is in progress to meet the criteria for the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "REJECTED means the user has too many referral processes going on.",
+     "quote": "REJECTED — the user has too many referral processes going on",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "At most 2 referral bonuses in any rolling 7-day window, across all credit card types. The third and later ones are auto-denied.",
+     "quote": "If you attempt to receive more than 2 referrals in a single week, the third referral (and any subsequent referrals that week) will be automatically denied.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Auto-denied referrals cannot be reinstated within the same 7-day window.",
+     "quote": "Auto-denied referrals due to the limit cannot be reinstated within the same 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Not every card has a referral program. If the referred card has no documented program, no bonus applies.",
+     "quote": "Not all credit cards participate in the referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "rule": "EcoCard: the referred person must be approved and spend at least $500 within 60 days of account opening. Bonus 50, up to 7 per calendar year.",
+     "quote": "The referred person must be approved and spend at least $500 within 60 days of account opening",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "EcoCard payout: typically within one to two billing cycles after the $500 is met.",
+     "quote": "Your bonus typically posts within one to two billing cycles after the referred account meets the $500 requirement",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "Silver Rewards Card: the referred person must be approved and spend at least $750 within 60 days of account opening. Bonus 75, up to 7 per calendar year, typically posts within one to two billing cycles.",
+     "quote": "The referred person must be approved and spend at least $750 within 60 days of account opening",
+     "doc": "doc_credit_cards_silver_rewards_card_011"
+    },
+    {
+     "rule": "Platinum Rewards Card: the referred friend must spend at least $1,500 within 90 days of account opening. Bonus $100, up to 7 per calendar year.",
+     "quote": "The referred friend must spend at least $1,500 within 90 days of account opening to qualify you for the bonus.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Platinum Rewards Card: self-referrals and duplicate applications do not qualify.",
+     "quote": "Self-referrals or duplicate applications do not qualify.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Business Bronze Rewards Card: at least $1,750 in net purchases within 90 days of account opening. Bonus $75.",
+     "quote": "The referred business must complete at least $1,750 in net purchases within 90 days of account opening.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_011"
+    },
+    {
+     "rule": "Business Gold Rewards Card: $7,500 within 90 days of account opening. Bonus $200.",
+     "quote": "The referred business must spend $7,500 within 90 from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_010"
+    },
+    {
+     "rule": "Business Platinum Rewards Card: $15,000 within 135 days of account opening. Bonus $300.",
+     "quote": "When the referred business is approved and completes qualifying spend of $15,000 within 135 days from account opening, you earn a bonus of $300.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_012"
+    },
+    {
+     "rule": "Business Silver Rewards Card: at least $3,000 within 90 days of account opening. Bonus $100.",
+     "quote": "The referred business must spend at least $3,000 within 90 days of account opening for you to receive the bonus",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_013"
+    },
+    {
+     "rule": "Green Rewards Card (business): at least $2,250 within 90 days of account opening. Bonus 75.",
+     "quote": "The referred business must spend at least $2,250 within 90 days from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_green_rewards_card_010"
+    },
+    {
+     "rule": "Silver Zoom Card: purchases totaling $7,500 within 90 days of account opening. Bonus $150.",
+     "quote": "The referred business must complete purchases totaling $7,500 within 90 days of account opening",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "rule": "For a transfer, pick the reason code from the highest tier that applies. A persistent system error is technical_system_error.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "The customer is verified and logged. The referral they asked about has been found with get_referrals_by_user. The agent has explained its status and what it means, with the card's documented spend amount and time window when the status is IN_PROGRESS. Or, for a persistent ERROR, the customer has accepted a transfer or declined one."
+  }
+ ]
+}
