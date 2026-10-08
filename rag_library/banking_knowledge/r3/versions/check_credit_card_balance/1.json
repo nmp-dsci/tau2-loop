@@ -1,0 +1,116 @@
+{
+ "job": "check_credit_card_balance",
+ "aliases": [
+  "account balance inquiry",
+  "check balance on a rewards card",
+  "credit card balance lookup"
+ ],
+ "when": {
+  "quote": "3. Look up the customer's credit card account to confirm the outstanding balance.",
+  "doc": "doc_credit_cards_credit_card_account_logistics_009"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks for a credit card balance. The agent never volunteers balances.",
+  "quote": "Looking up account balances, transaction history, referral history...",
+  "doc": "policy"
+ },
+ "tools": [
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "b_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "pay_credit_card_from_checking_9182",
+   "who": "agent",
+   "step": null,
+   "not_used": "A balance inquiry moves no money. Use this tool only if the customer separately asks to pay the card from checking, under paying_off_credit_card_balance_from_checking_account."
+  }
+ ],
+ "info": [
+  {
+   "field": "card_type",
+   "about": "Which Rho-Bank credit card the customer is asking about",
+   "from": "customer",
+   "ask": "Which of your Rho-Bank credit cards would you like the balance for?",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "b_verify",
+   "by": "model",
+   "do": "Confirm the customer passed standard verification (job verify_customer_identity). A bypass-code verification does not count, because a bypass code may be used only for account recovery. If the customer is not verified, do not look up or state any balance.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Use the bypass code only for account recovery.",
+   "doc": "doc_customer_support_special_support_codes_001"
+  },
+  {
+   "id": "b_lookup",
+   "by": "harness",
+   "do": "Read the verified user's credit card accounts.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "b_verify"
+   ],
+   "if": "the customer passed standard verification",
+   "quote": "Use get_credit_card_accounts_by_user to retrieve any credit card accounts for the customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "b_answer",
+   "by": "model",
+   "do": "Match the card the customer named to an account from b_lookup and tell them its current balance. Say so if the account is closed. If several accounts match, ask which one they mean. If none matches, say so and list the card types they hold.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "b_lookup"
+   ],
+   "after": [
+    "b_lookup"
+   ],
+   "if": null,
+   "quote": "This will return all active and closed credit card accounts.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "b_error",
+   "by": "model",
+   "do": "If the lookup returns an error, retry once. If it still fails, explain that the balance cannot be retrieved right now and ask whether the customer wants a human agent. Follow transfer_to_human_agent only if they agree, with reason technical_system_error.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "b_lookup"
+   ],
+   "after": [
+    "b_lookup"
+   ],
+   "if": "the account lookup returned an error that a retry did not fix",
+   "quote": "System error or outage preventing completion of the customer's request",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Account ids and balances used must belong to the authenticated customer.",
+   "quote": "ensuring the account IDs and user_id match the authenticated customer",
+   "doc": "doc_credit_cards_credit_card_account_logistics_009"
+  },
+  {
+   "rule": "A bypass-code verification does not authorize a balance inquiry. Standard verification is required.",
+   "quote": "Use the bypass code only for account recovery.",
+   "doc": "doc_customer_support_special_support_codes_001"
+  }
+ ],
+ "done_when": "The job ends in one of three ways: the verified customer was told the balance of the card they asked about; they were told no matching card exists; or they were told the lookup failed and were offered a transfer."
+}

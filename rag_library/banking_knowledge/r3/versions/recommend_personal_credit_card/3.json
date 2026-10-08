@@ -1,0 +1,1633 @@
+{
+ "job": "recommend_personal_credit_card",
+ "aliases": [
+  "apply_for_credit_card",
+  "apply_for_diamond_elite_card",
+  "apply_for_named_credit_card",
+  "apply_for_personal_credit_card",
+  "apply_for_silver_rewards_card",
+  "best sign-up bonus card with the lowest annual fee",
+  "card with no foreign transaction fee, purchase protection and a high credit limit",
+  "choose_a_credit_card",
+  "choose_best_cash_back_card",
+  "choose_best_credit_card",
+  "compare_credit_cards",
+  "compare_credit_cards_by_requirements",
+  "credit card sign-up bonus recommendation",
+  "credit_card_application",
+  "credit_card_recommendation",
+  "lowest annual fee card that meets requirements, ties broken by cash back",
+  "new credit card promotional offer inquiry",
+  "new_credit_card_application_guidance",
+  "open_new_credit_card",
+  "recommend_and_apply_for_personal_credit_card",
+  "recommend_card_by_fx_protection_and_credit_limit",
+  "recommend_credit_card_by_signup_bonus",
+  "recommend_highest_cash_back_personal_credit_card",
+  "recommend_personal_credit_card_by_requirements",
+  "switch_to_another_card",
+  "which credit card has the best welcome bonus",
+  "which_credit_card_should_i_get"
+ ],
+ "when": {
+  "quote": "Every Rho-Bank credit card earns rewards on all purchases, but certain categories of spending may earn you bonus rewards at a higher rate.",
+  "doc": "doc_credit_cards_credit_cards_(general)_019"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks one of these: which personal card suits them; for a card that meets stated requirements (for example foreign transaction fee, purchase protection, a possible credit limit, minimum payment or virtual cards); which card has the best sign-up or promotional bonus; or to apply, including for a specific card they name. The agent compares the cards and recommends. For a card the customer names, it checks that card's entry requirement. The customer applies with their own apply_for_credit_card tool. No document tells the agent to offer a card unprompted.",
+  "quote": "Complete the application in your Rho‑Bank dashboard and consent to a credit pull (minimum score: $720).",
+  "doc": "doc_credit_cards_gold_rewards_card_001"
+ },
+ "tools": [
+  {
+   "tool": "apply_for_credit_card",
+   "who": "customer",
+   "step": "customer_applies",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "check_promo_dates",
+   "not_used": null
+  },
+  {
+   "tool": "shell",
+   "who": "agent",
+   "step": "read_card_terms",
+   "not_used": null
+  },
+  {
+   "tool": "KB_search_bm25",
+   "who": "agent",
+   "step": "read_card_terms",
+   "not_used": null
+  },
+  {
+   "tool": "KB_search_dense",
+   "who": "agent",
+   "step": "read_card_terms",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used for a product recommendation. The policy requires verification only when the agent reads or changes customer records, and a recommendation does neither. Verify (2 of DOB, email, phone, address, then log_verification) only if the customer also asks about their own accounts."
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used, for the same reason as get_user_information_by_name. A recommendation reads no customer records."
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used, for the same reason as get_user_information_by_name. A recommendation reads no customer records."
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": null,
+   "not_used": "Used only after a verification that is actually needed (see above). A recommendation alone does not need one."
+  },
+  {
+   "tool": "downgrade_credit_card_3847",
+   "who": "agent",
+   "step": null,
+   "not_used": "This tool only changes an existing card to a no-annual-fee card. It cannot open a new card, so this job does not use it."
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": null,
+   "not_used": "No document makes the cards a customer already holds a condition for recommending or applying for a new personal card, so this job reads no records."
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": null,
+   "not_used": "The agent can explain every card itself, and the customer applies themselves. Transfer only under policy guideline 6, after the customer has asked 4 times."
+  }
+ ],
+ "info": [
+  {
+   "field": "card_use",
+   "about": "Whether the card is for personal or business spending. This decides whether personal or business cards are candidates.",
+   "from": "customer",
+   "ask": "Is this card for your personal everyday spending or for a business?",
+   "may_hold_back": false
+  },
+  {
+   "field": "card_purpose",
+   "about": "The same fact as card_use (personal everyday purchases or a business), kept from the earlier version. Business cards are judged on business credit.",
+   "from": "customer",
+   "ask": "Is this card for your personal everyday purchases or for a business?",
+   "may_hold_back": false
+  },
+  {
+   "field": "personal_or_business",
+   "about": "The same fact as card_use, kept from the merged recommend_and_apply version. This workflow covers personal cards; business cards need business credit (PAYDEX).",
+   "from": "customer",
+   "ask": "Is this card for personal use or for a business?",
+   "may_hold_back": true
+  },
+  {
+   "field": "spending_categories",
+   "about": "Where the customer's spending goes (everyday purchases, travel, software, green merchants) and whether another card already covers any of it, for example a corporate card that pays for work travel.",
+   "from": "customer",
+   "ask": "What do you mainly plan to use the card for? Are any categories, like travel, already paid by another card such as an employer card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "max_foreign_transaction_fee",
+   "about": "The highest foreign transaction fee the customer will accept, if they have a ceiling (for example none at all)",
+   "from": "customer",
+   "ask": "What is the highest foreign transaction fee you would accept?",
+   "may_hold_back": false
+  },
+  {
+   "field": "max_minimum_payment_pct",
+   "about": "The highest minimum monthly payment percentage the customer will accept, if they have a ceiling",
+   "from": "customer",
+   "ask": "What is the highest minimum monthly payment, as a percent of your balance, that works for you?",
+   "may_hold_back": false
+  },
+  {
+   "field": "needs_virtual_card_management",
+   "about": "Whether the card must offer virtual card management",
+   "from": "customer",
+   "ask": "Do you need virtual card management on the card?",
+   "may_hold_back": false
+  },
+  {
+   "field": "needs_purchase_protection",
+   "about": "Whether the card must include purchase protection",
+   "from": "customer",
+   "ask": "Does the card need to include purchase protection?",
+   "may_hold_back": false
+  },
+  {
+   "field": "min_credit_limit_needed",
+   "about": "The smallest credit limit the customer needs the card to be able to reach (the top of the card's documented range must be at least this)",
+   "from": "customer",
+   "ask": "Is there a credit limit the card must be able to reach?",
+   "may_hold_back": false
+  },
+  {
+   "field": "tie_break_preference",
+   "about": "How the customer chooses when several cards meet every requirement, for example the lowest annual fee first and then the highest cash back on their spending",
+   "from": "customer",
+   "ask": "If more than one card meets your needs, how should I choose: lowest annual fee, highest cash back, or something else?",
+   "may_hold_back": true
+  },
+  {
+   "field": "other_requirements",
+   "about": "Any other hard requirements, such as annual fee, rewards or APR",
+   "from": "customer",
+   "ask": "Is there anything else the card must have, such as no annual fee or a certain kind of rewards?",
+   "may_hold_back": true
+  },
+  {
+   "field": "annual_fee_tolerance",
+   "about": "Whether the customer will accept a card with an annual fee at all, or only if it is the only option.",
+   "from": "customer",
+   "ask": "Would you consider a card with an annual fee, or do you want a card with no annual fee?",
+   "may_hold_back": true
+  },
+  {
+   "field": "max_effective_annual_fee",
+   "about": "The most the customer will pay each year in fees after any rebate. Use this when the customer gives a dollar budget rather than a yes or no.",
+   "from": "customer",
+   "ask": "What is the most you're willing to pay each year in card fees?",
+   "may_hold_back": true
+  },
+  {
+   "field": "expected_monthly_spend",
+   "about": "How much the customer expects to put on the card each month. This decides whether the Platinum $150.00 annual fee rebate applies ($7500.00 in every monthly window).",
+   "from": "customer",
+   "ask": "About how much do you expect to spend on the card each month?",
+   "may_hold_back": true
+  },
+  {
+   "field": "rho_bank_plus_subscription",
+   "about": "Whether the customer has an active Rho-Bank+ subscription from any source (for example, given through an employer). The Gold Rewards Card requires one, and it also changes the Silver card's foreign transaction fee.",
+   "from": "customer",
+   "ask": "Do you currently have an active Rho-Bank+ premium subscription?",
+   "may_hold_back": true
+  },
+  {
+   "field": "has_rho_bank_plus_subscription",
+   "about": "The same fact as rho_bank_plus_subscription, kept from the earlier version. The application tool asks for it.",
+   "from": "customer",
+   "ask": "Do you have an active Rho-Bank+ subscription?",
+   "may_hold_back": true
+  },
+  {
+   "field": "rho_bank_subscription",
+   "about": "The same fact as rho_bank_plus_subscription, kept from the merged credit_card_application version. It is the application tool's argument.",
+   "from": "customer",
+   "ask": "Do you have a Rho-Bank+ subscription?",
+   "may_hold_back": true
+  },
+  {
+   "field": "credit_score",
+   "about": "The customer's approximate credit score, checked against each card's minimum. No agent tool reads it. The customer may not know it or may decline to say.",
+   "from": "customer",
+   "ask": "Roughly what is your current credit score?",
+   "may_hold_back": true
+  },
+  {
+   "field": "diamond_elite_invitation",
+   "about": "Whether the customer has received a Diamond Elite Card invitation. A customer who says they have had no communications from the bank has none.",
+   "from": "customer",
+   "ask": "Have you received an invitation from Rho-Bank for the Diamond Elite Card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "annual_income",
+   "about": "The customer's annual income, which the customer's apply_for_credit_card tool asks for.",
+   "from": "customer",
+   "ask": "What is your annual income?",
+   "may_hold_back": true
+  },
+  {
+   "field": "customer_name",
+   "about": "The customer's full name for the application.",
+   "from": "customer",
+   "ask": "What is your full name?",
+   "may_hold_back": false
+  },
+  {
+   "field": "requested_card_type",
+   "about": "The specific personal card the customer says they want to apply for, when they name one instead of asking for a recommendation",
+   "from": "customer",
+   "ask": "Which card would you like to apply for?",
+   "may_hold_back": false
+  },
+  {
+   "field": "signup_bonus_priority",
+   "about": "Whether the customer's main goal is a new-customer sign-up bonus in points, cash back or a statement credit. A 0% intro APR, a first-year fee waiver or a temporary cash back multiplier is not a sign-up bonus.",
+   "from": "customer",
+   "ask": "Is your main goal a sign-up bonus in points or cash back, or another kind of promotion, such as an intro APR or an annual fee waiver?",
+   "may_hold_back": false
+  },
+  {
+   "field": "signup_tie_break",
+   "about": "How to choose when more than one card has an open sign-up bonus, for example the lowest annual fee or the largest bonus",
+   "from": "customer",
+   "ask": "If more than one card has a sign-up bonus, what matters most to you: the lowest annual fee, the biggest bonus, or something else?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "greet",
+   "by": "model",
+   "do": "Greet the customer. Confirm they want a personal card recommendation, for example the card with the highest cash back or a card that meets specific requirements. Do not verify identity: no customer records are read or changed.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "You earn 10.0% cash back on all eligible purchases.",
+   "doc": "doc_credit_cards_platinum_rewards_card_002"
+  },
+  {
+   "id": "gather",
+   "by": "model",
+   "do": "Before recommending anything, collect the customer's hard requirements (foreign transaction fee ceiling, minimum payment ceiling, virtual card management, purchase protection, a credit limit the card must be able to reach, any others), their credit score, their Rho-Bank+ subscription status, and whether the card is for personal or business use. No identity verification is needed, because no customer records are read or changed.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "You must provide standard identity and income information during the application.",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "id": "gather_needs",
+   "by": "model",
+   "do": "Before comparing cards, ask for each of these the customer has not given: personal or business use; main spending categories, and any that another card already covers; whether they will accept an annual fee. Do not verify identity, because no customer records are read.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "greet"
+   ],
+   "if": null,
+   "quote": "Each credit card has its own bonus categories with higher reward rates.",
+   "doc": "doc_credit_cards_credit_cards_(general)_005"
+  },
+  {
+   "id": "ask_budget_spend",
+   "by": "model",
+   "do": "Before recommending anything, ask for the yearly fee budget and the expected monthly spend. These decide whether the Platinum rebate makes its fee acceptable.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "gather_needs"
+   ],
+   "if": "the customer may accept an annual fee and has not already given a fee budget and monthly spend",
+   "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_007"
+  },
+  {
+   "id": "ask_eligibility",
+   "by": "model",
+   "do": "Before recommending, ask three things: whether the customer has an active Rho-Bank+ subscription, their approximate credit score, and whether they hold a Diamond Elite invitation. Customers often do not volunteer these facts.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "gather_needs"
+   ],
+   "if": "the customer has not already said these",
+   "quote": "Rho‑Bank+ premium subscription required: Yes",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "id": "ask_tie_break",
+   "by": "model",
+   "do": "If the customer has not said how to choose between several cards that meet every requirement, ask (for example lowest annual fee first, then highest cash back on their main spending).",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "gather_needs"
+   ],
+   "if": "the customer stated hard requirements and has not given a tie-break preference",
+   "quote": "Each credit card has its own bonus categories with higher reward rates.",
+   "doc": "doc_credit_cards_credit_cards_(general)_005"
+  },
+  {
+   "id": "check_promo_dates",
+   "by": "harness",
+   "do": "Call get_current_time to see which promotion windows are open, such as the Platinum first-year fee waiver (2024-06-01 to 2024-12-31) or the Bronze 0% APR window (2025-09-01 through 2026-02-28). Mention only promotions whose window includes today.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "gather_needs"
+   ],
+   "if": "a fee-waiver promotion would affect the comparison, or the agent intends to mention any promotion",
+   "quote": "Apply during the promo window and, if approved, your first year annual fee is $0.00 instead of $200.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "id": "read_card_terms",
+   "by": "harness",
+   "do": "Read every personal card's own documents for minimum credit score, subscription or invitation requirement, foreign transaction fee, minimum payment, virtual card management and annual fee. Bronze Rewards: _001, _005. Silver Rewards: _001, _007. Gold Rewards: _001, _005. Platinum Rewards: _001. Diamond Elite: _001, _002, _005, _008. EcoCard: _001, _008. Crypto-Cash Back: _001, _008, _009. Never judge from one card's page.",
+   "call": "shell",
+   "args": {
+    "command": "cat the card documents listed above (fixed list)"
+   },
+   "lookup": [],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "Minimum credit score required to apply: 0 (0 indicates no credit score requirement).",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "id": "read_protection_terms",
+   "by": "harness",
+   "do": "Also read each personal card's purchase protection and credit-limit documents: Bronze Rewards _006; Silver Rewards _001, _002, _007; Gold Rewards _001; Platinum Rewards _001, _003, _007; Diamond Elite _002, _007; EcoCard _001; Crypto-Cash Back _008. Never judge from one card's page.",
+   "call": "shell",
+   "args": {
+    "command": "cat the card documents listed above (fixed list)"
+   },
+   "lookup": [],
+   "after": [
+    "gather"
+   ],
+   "if": "the customer requires purchase protection or a credit limit the card must be able to reach",
+   "quote": "Purchase protection: eligible items are protected for 90 days after purchase, up to $3,000 per claim",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "screen_bronze",
+   "by": "model",
+   "do": "Check the Bronze Rewards Card: FX fee 2.75%, minimum payment 1.0%, virtual card management No, minimum credit score 640",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "Foreign transaction fee on international purchases: 2.75%",
+   "doc": "doc_credit_cards_bronze_rewards_card_001"
+  },
+  {
+   "id": "screen_silver",
+   "by": "model",
+   "do": "Check the Silver Rewards Card: FX fee 2.75% without a premium subscription (0% with one), minimum payment 1.5% of statement balance, virtual card management No, minimum credit score 680",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "Virtual card management features are No for this card",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "screen_gold",
+   "by": "model",
+   "do": "Check the Gold Rewards Card: FX fee 0%, minimum payment 2.0%, virtual card management Yes, minimum credit score 720, Rho-Bank+ subscription required",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "Minimum payment due each cycle: 2.0% of your outstanding balance",
+   "doc": "doc_credit_cards_gold_rewards_card_005"
+  },
+  {
+   "id": "screen_platinum",
+   "by": "model",
+   "do": "Check the Platinum Rewards Card: FX fee 0%, minimum payment 2.5%, virtual card management Yes, annual fee $200.00, minimum credit score 750",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "The minimum monthly payment is 2.5% of your outstanding balance.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "id": "screen_diamond",
+   "by": "model",
+   "do": "Check the Diamond Elite Card: invitation only, credit score of at least 780, minimum payment 3.0%. A customer without an invitation cannot apply for it",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "Membership is by invitation only (Yes).",
+   "doc": "doc_credit_cards_diamond_elite_card_001"
+  },
+  {
+   "id": "screen_ecocard",
+   "by": "model",
+   "do": "Check the EcoCard: no credit score requirement, FX fee 1.0%, minimum payment 1.0%, virtual card management Yes, annual fee $50.00",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "Minimum credit score required to apply: 0 (0 indicates no credit score requirement).",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "id": "screen_crypto",
+   "by": "model",
+   "do": "Check the Crypto-Cash Back card: FX fee 0%, minimum payment 1.5%, virtual card management Yes, annual fee $75.00, minimum credit score 660",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "gather"
+   ],
+   "if": null,
+   "quote": "What is the minimum credit score to apply for the card to earn crypto rewards? $660.",
+   "doc": "doc_credit_cards_crypto-cash_back_009"
+  },
+  {
+   "id": "filter_eligible",
+   "by": "model",
+   "do": "Remove cards the customer cannot get. Gold Rewards needs Rho-Bank+ and a score of at least 720. Platinum needs 750. Silver needs 680. Crypto-Cash Back needs 660. Bronze needs 640. EcoCard has no score minimum. Diamond Elite is by invitation only (score about 780 or higher). With a stated score below 640, only EcoCard remains.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "ask_eligibility",
+    "gather",
+    "read_card_terms"
+   ],
+   "after": [
+    "ask_eligibility"
+   ],
+   "if": null,
+   "quote": "Minimum credit score: $680",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "filter_requirements",
+   "by": "model",
+   "do": "Among the cards left by filter_eligible, keep only those that meet every hard feature requirement the customer stated. Use the documented values. Foreign transaction fee: Bronze 2.75%; Silver 2.75% without Rho-Bank+ and 0% with it; Gold 0%; Platinum 0%; Diamond Elite 0%; EcoCard 1.0%; Crypto-Cash Back 0%. Minimum payment: Bronze 1.0%; Silver 1.5%; Gold 2.0%; Platinum 2.5%; Diamond Elite 3.0%; EcoCard 1.0%; Crypto-Cash Back 1.5%. Virtual card management: Bronze No; Silver No; Gold, Platinum, Diamond Elite, EcoCard and Crypto-Cash Back Yes. A value equal to the customer's ceiling meets it ('or lower').",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "ask_eligibility",
+    "read_card_terms",
+    "filter_eligible",
+    "screen_bronze",
+    "screen_silver",
+    "screen_gold",
+    "screen_platinum",
+    "screen_diamond",
+    "screen_ecocard",
+    "screen_crypto"
+   ],
+   "after": [
+    "filter_eligible"
+   ],
+   "if": "the customer stated hard feature requirements (foreign transaction fee ceiling, minimum payment ceiling, virtual card management or another documented term)",
+   "quote": "Foreign transaction fee without a premium subscription: 2.75%",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "filter_protection_limit",
+   "by": "model",
+   "do": "Among the cards left by filter_eligible and filter_requirements, keep only those that meet the customer's purchase protection and credit-limit requirements. Purchase protection: Silver 90 days, up to $3,000 per claim; Gold 105 days, up to $7,500; Platinum 135 days, up to $17,500; Diamond Elite 150 days, unlimited; Crypto-Cash Back No; Bronze and EcoCard documents show none, so they fail. Top of the documented credit-limit range: Bronze $32,500; EcoCard $50,000; Silver $100,000; Crypto-Cash Back $110,000; Gold $112,500; Platinum $150,000; Diamond Elite $375,000. A card passes a limit requirement when the top of its range is at or above the amount the customer needs; tell the customer the actual limit is set at approval.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather",
+    "read_protection_terms",
+    "filter_eligible",
+    "filter_requirements"
+   ],
+   "after": [
+    "filter_requirements",
+    "read_protection_terms"
+   ],
+   "if": "the customer requires purchase protection or a credit limit the card must be able to reach",
+   "quote": "Is purchase protection included with this card? No.",
+   "doc": "doc_credit_cards_crypto-cash_back_008"
+  },
+  {
+   "id": "compare_cards",
+   "by": "model",
+   "do": "Compare all personal cards: Bronze, Silver, Gold, Platinum, Diamond Elite, Crypto-Cash Back and EcoCard. If filter_requirements or filter_protection_limit ran, compare only the cards that passed them. For each card, use its earn rate on the customer's actual spending, its effective annual fee (fee minus any rebate) and its eligibility. Earn rates: Bronze 1.0%; Silver 4.0% on travel/software and 1.0% otherwise; Gold 2.5%; Crypto-Cash Back 2.0%; Platinum 10.0%; Diamond Elite 5.0%; EcoCard 5 points/$ on green and 1 point/$ otherwise ($0.01 per point). Platinum's $200.00 fee nets to $50 if at least $7500.00 is spent in every month. Do not count bonus categories already covered by another card, such as travel paid by a corporate card. Drop ineligible cards and cards whose fee the customer will not accept. Then pick the highest earn rate left.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather_needs",
+    "ask_budget_spend",
+    "filter_eligible",
+    "filter_requirements",
+    "filter_protection_limit",
+    "check_promo_dates"
+   ],
+   "after": [
+    "filter_eligible",
+    "filter_requirements"
+   ],
+   "if": null,
+   "quote": "Purchases in non-bonus categories earn the card’s default rate.",
+   "doc": "doc_credit_cards_credit_cards_(general)_005"
+  },
+  {
+   "id": "apply_fee_preference",
+   "by": "model",
+   "do": "Apply the customer's fee preference. Annual fees: Bronze $0.00, Silver $0.00, Gold $0.00, EcoCard $50.00, Crypto-Cash Back $75.00, Platinum $200.00, Diamond Elite $495.00. If the customer refuses annual fees, keep only the eligible $0.00 cards. Consider a fee card only if the customer accepts fees or no eligible fee-free card remains.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "gather_needs",
+    "compare_cards"
+   ],
+   "after": [
+    "compare_cards"
+   ],
+   "if": null,
+   "quote": "Consider your net rewards after the $200.00 annual fee when planning large purchases.",
+   "doc": "doc_credit_cards_platinum_rewards_card_002"
+  },
+  {
+   "id": "recommend_by_requirements",
+   "by": "model",
+   "do": "Recommend the card or cards that passed filter_requirements, with each card's documented terms: minimum credit score, annual fee, APR, foreign transaction fee, minimum payment and virtual card management. If exactly one card passed, recommend it. If several passed, choose among them with the branch steps below, which consider only cards that passed. If nothing separates them, present them all and let the customer choose. Tell the customer they can apply themselves.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "filter_requirements",
+    "apply_fee_preference"
+   ],
+   "after": [
+    "apply_fee_preference"
+   ],
+   "if": "the customer stated hard feature requirements and at least one card passed filter_requirements",
+   "quote": "Virtual card management features are available: Yes.",
+   "doc": "doc_credit_cards_ecocard_008"
+  },
+  {
+   "id": "recommend_by_tiebreak",
+   "by": "model",
+   "do": "Among the cards left after filter_eligible, filter_requirements and filter_protection_limit, rank by the customer's stated tie-break order and recommend the single top card. Annual fees: Bronze, Silver and Gold $0.00; EcoCard $50.00; Crypto-Cash Back $75.00; Platinum $200.00; Diamond Elite $495.00. Cash back on the customer's main spending: Silver 4.0% on travel and software, 1.0% otherwise; Gold 2.5%; Platinum 10.0%; Diamond Elite 5.0%; Crypto-Cash Back 2.0%; Bronze 1.0%. Example: a customer with Rho-Bank+ and no invitation who needs 0% FX, purchase protection and a limit requirement at or below Silver's $100,000 maximum leaves Silver, Gold and Platinum. Lowest fee ties Silver and Gold at $0.00. If travel or software is the main spending, Silver (4.0%) beats Gold (2.5%); otherwise Gold wins. Give the card's minimum credit score as an underwriting requirement; if the score is unknown, do not drop the card for that. This step takes precedence over the other recommend_ branch steps.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "ask_tie_break",
+    "gather_needs",
+    "ask_eligibility",
+    "filter_eligible",
+    "filter_requirements",
+    "filter_protection_limit",
+    "apply_fee_preference"
+   ],
+   "after": [
+    "filter_protection_limit",
+    "apply_fee_preference"
+   ],
+   "if": "the customer stated a tie-break order and more than one card is left after filter_eligible, filter_requirements and filter_protection_limit",
+   "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+   "doc": "doc_credit_cards_silver_rewards_card_002"
+  },
+  {
+   "id": "recommend_gold",
+   "by": "model",
+   "do": "Recommend the Gold Rewards Card and explain it: 2.5% cash back on all purchases, $0.00 annual fee, Rho-Bank+ required, minimum score 720, 0% foreign transaction fee.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "apply_fee_preference",
+    "filter_eligible",
+    "filter_requirements",
+    "gather_needs"
+   ],
+   "after": [
+    "apply_fee_preference"
+   ],
+   "if": "the customer has Rho-Bank+ and a score of at least 720; they want no annual fee, or Gold gives the highest net return within their fee budget; travel and software are not the main share of the customer's own spending (where Silver's 4.0% beats Gold's 2.5%); if filter_requirements ran, Gold passed it; and recommend_by_tiebreak did not run",
+   "quote": "Cash back on all purchases: 2.5%",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "id": "recommend_silver_or_bronze",
+   "by": "model",
+   "do": "Recommend the Silver Rewards Card if a meaningful share of the customer's own spending is travel or software and their score is at least 680. Otherwise, explain that both Silver and Bronze earn 1.0% on everyday spending, and recommend Bronze if the score is below 680.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "apply_fee_preference",
+    "filter_eligible",
+    "filter_requirements",
+    "gather_needs"
+   ],
+   "after": [
+    "apply_fee_preference"
+   ],
+   "if": "either Gold is not eligible (no Rho-Bank+ or score below 720) or travel and software are the main share of the customer's own spending; the customer wants no annual fee; if filter_requirements ran, the recommended card passed it; and recommend_by_tiebreak did not run",
+   "quote": "You earn 1.0% cash back on eligible purchases.",
+   "doc": "doc_credit_cards_bronze_rewards_card_002"
+  },
+  {
+   "id": "recommend_one",
+   "by": "model",
+   "do": "Recommend exactly one card: the Platinum Rewards Card. Explain the 10.0% cash back, the $200.00 annual fee, the $150.00 rebate when the threshold is met in all 12 monthly windows, and the minimum credit score of $750.",
+   "call": null,
+   "args": {
+    "card": "Platinum Rewards Card"
+   },
+   "lookup": [
+    "compare_cards",
+    "ask_budget_spend",
+    "filter_eligible",
+    "filter_requirements"
+   ],
+   "after": [
+    "compare_cards"
+   ],
+   "if": "expected monthly spend >= $7500.00, $200.00 - $150.00 is within the customer's fee budget, the score is at least 750, if filter_requirements ran Platinum passed it, and recommend_by_tiebreak did not run",
+   "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "id": "recommend_platinum_score_unstated",
+   "by": "model",
+   "do": "Recommend exactly one card, the Platinum Rewards Card, even if the customer asks for a list of options. Explain three things: it earns 10.0% cash back on all purchases; the $200.00 annual fee is reduced by a $150.00 rebate when at least $7500.00 posts in every monthly window of the cardmember year, so the effective fee is $50; and Rho-Bank+ is not required. Tell the customer that approval needs a minimum credit score of 750. The agent cannot check the score, so do not drop the card because the score is unknown.",
+   "call": null,
+   "args": {
+    "card": "Platinum Rewards Card"
+   },
+   "lookup": [
+    "ask_budget_spend",
+    "ask_eligibility",
+    "compare_cards",
+    "filter_requirements"
+   ],
+   "after": [
+    "compare_cards"
+   ],
+   "if": "expected monthly spend >= $7500.00, an effective fee of $50 is within the customer's fee budget, the customer has no Diamond Elite invitation, the customer has not given a credit score (does not know it or declines to say), if filter_requirements ran Platinum passed it, and recommend_by_tiebreak did not run",
+   "quote": "Minimum credit score required: $750.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "id": "recommend_fee_card",
+   "by": "model",
+   "do": "Recommend the eligible fee card with the highest net cash back on the customer's spending, and state its fee clearly. Platinum: 10% for $200.00, with a $150.00 rebate only if $7500.00 is spent in every month. Diamond Elite: 5% for $495.00, invitation only. Crypto-Cash Back: 2% for $75.00. EcoCard: $50.00.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "apply_fee_preference",
+    "filter_eligible",
+    "filter_requirements"
+   ],
+   "after": [
+    "apply_fee_preference"
+   ],
+   "if": "either the customer accepts an annual fee (the card's fee fits their budget) but recommend_one does not apply, or no eligible fee-free card exists; if filter_requirements ran, the card passed it; and recommend_by_tiebreak did not run",
+   "quote": "You earn 10.0% cash back on all eligible purchases.",
+   "doc": "doc_credit_cards_platinum_rewards_card_002"
+  },
+  {
+   "id": "recommend_fallback",
+   "by": "model",
+   "do": "Recommend the highest-earning eligible card that fits the budget: Gold at 2.5% if the customer has Rho-Bank+, otherwise the card with the next highest flat rate. If no card fits, say so.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "compare_cards",
+    "filter_eligible",
+    "filter_requirements"
+   ],
+   "after": [
+    "compare_cards"
+   ],
+   "if": "Platinum's effective fee exceeds the customer's budget (considering only cards that passed filter_requirements, if it ran), and recommend_by_tiebreak did not run",
+   "quote": "Rho‑Bank+ premium subscription required: Yes",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "id": "recommend",
+   "by": "model",
+   "do": "Present the card chosen in the branch steps above and explain why: its earn rate, its annual fee, any requirement such as Rho-Bank+, and any hard requirement it meets (foreign transaction fee, minimum payment, virtual card management, purchase protection, credit-limit range). Recommend only cards that meet every hard requirement and every eligibility rule (credit score, subscription, invitation). Give only public product terms. If the customer rejects every card that fits, say so and do not push.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "compare_cards",
+    "apply_fee_preference",
+    "filter_requirements",
+    "screen_bronze",
+    "screen_silver",
+    "screen_gold",
+    "screen_platinum",
+    "screen_diamond",
+    "screen_ecocard",
+    "screen_crypto"
+   ],
+   "after": [
+    "compare_cards",
+    "screen_bronze",
+    "screen_silver",
+    "screen_gold",
+    "screen_platinum",
+    "screen_diamond",
+    "screen_ecocard",
+    "screen_crypto"
+   ],
+   "if": null,
+   "quote": "Cash back on all purchases: 2.5%",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "id": "no_fit",
+   "by": "model",
+   "do": "Tell the customer plainly that no card meets their requirements. If they ask, say which requirement each near-miss card fails. Do not invent exceptions or waivers, and do not push an ineligible card or one they rejected. End politely if they choose to go elsewhere.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "apply_fee_preference",
+    "filter_eligible",
+    "filter_requirements",
+    "filter_protection_limit"
+   ],
+   "after": [
+    "apply_fee_preference"
+   ],
+   "if": "no eligible card meets the customer's stated requirements",
+   "quote": "Membership is by invitation only (Yes).",
+   "doc": "doc_credit_cards_diamond_elite_card_001"
+  },
+  {
+   "id": "signup_scope",
+   "by": "model",
+   "do": "If the customer's main goal is a sign-up bonus, ask for whichever of these they have not stated. Is the card personal or business (card_use)? Is the bonus they want points, cash back or a statement credit (signup_bonus_priority)? If more than one card qualifies, how should one be chosen (signup_tie_break, for example the lowest annual fee)? Also ask whether they hold a Diamond Elite invitation. Do not verify identity, because no customer records are read.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "greet"
+   ],
+   "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+   "quote": "- Spend $5,000 in eligible purchases within your first month to earn $2,000 sustainability points.",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "id": "signup_read_promos",
+   "by": "harness",
+   "do": "Read every personal card's new-customer promotion document: Silver Rewards _009 and _010, EcoCard _009 and _010, Bronze Rewards _008, Platinum Rewards _009, Diamond Elite _009. The Gold Rewards and Crypto-Cash Back documents show no new-customer promotion. If the customer is open to a business card, also read Business Bronze _010 and _006, Business Silver _011 and _012, Business Platinum _011, and Silver Zoom _010 and _012. Never judge from one card's page.",
+   "call": "shell",
+   "args": {
+    "command": "cat the promotion documents listed above (fixed list)"
+   },
+   "lookup": [],
+   "after": [
+    "signup_scope"
+   ],
+   "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+   "quote": "Earn a statement credit of $500 when you spend $2,000 in the first 1 month(s) after account opening",
+   "doc": "doc_credit_cards_silver_rewards_card_010"
+  },
+  {
+   "id": "signup_classify",
+   "by": "model",
+   "do": "Sort each promotion read in signup_read_promos by type. Sign-up bonuses (a lump sum of points, cash back or a statement credit for meeting a spend threshold): Silver Rewards $500 statement credit; EcoCard bonus sustainability points; Diamond Elite $5,000 credit plus fee waiver (invitation only); Business Bronze $500 statement credit. Not sign-up bonuses: 0% intro APR (Bronze, Silver, EcoCard, Silver Zoom fuel), first-year annual fee waivers (Platinum, Business Silver, Business Platinum), and cash back multipliers (Business Silver 2x, Silver Zoom 3x). When the customer asked for a points or cash back sign-up bonus, keep only the sign-up bonuses.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "signup_read_promos",
+    "signup_scope"
+   ],
+   "after": [
+    "signup_read_promos"
+   ],
+   "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+   "quote": "New customers receive a 0% APR on carried balances for the first 12 months from account opening.",
+   "doc": "doc_credit_cards_bronze_rewards_card_008"
+  },
+  {
+   "id": "signup_window",
+   "by": "model",
+   "do": "Keep only the bonuses whose window includes today's date from check_promo_dates. Windows: Silver Rewards $500 2025-01-01 to 2025-06-30; EcoCard points 2025-08-01 through 2025-12-15; Diamond Elite 2025-11-01 to 2026-01-31; Business Bronze $500 2025-10-01 through 2026-03-31. A bonus whose window has ended or has not started is not available. Never present it as available.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_promo_dates",
+    "signup_read_promos",
+    "signup_classify"
+   ],
+   "after": [
+    "check_promo_dates",
+    "signup_classify"
+   ],
+   "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+   "quote": "You must open your account during the promotional period to qualify",
+   "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+  },
+  {
+   "id": "signup_eligibility",
+   "by": "model",
+   "do": "From the bonuses left by signup_window, drop: the Diamond Elite offer unless the customer has an invitation; business cards if the customer wants a personal card; cards the customer has ruled out. Tell the customer each remaining card's minimum credit score as an underwriting requirement. The agent cannot check the score, and EcoCard has none.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "signup_window",
+    "signup_scope",
+    "ask_eligibility"
+   ],
+   "after": [
+    "signup_window"
+   ],
+   "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+   "quote": "Membership is by invitation only (Yes).",
+   "doc": "doc_credit_cards_diamond_elite_card_001"
+  },
+  {
+   "id": "signup_no_match",
+   "by": "model",
+   "do": "Tell the customer that no card currently has an open sign-up bonus that fits their request. Briefly say why: the window has closed, the card is invitation-only, or the open promotion is an intro APR or fee waiver rather than a bonus. Do not invent an offer or extend a closed window. End politely if the customer chooses to go elsewhere.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "signup_window",
+    "signup_eligibility"
+   ],
+   "after": [
+    "signup_eligibility"
+   ],
+   "if": "no sign-up bonus is left after signup_window and signup_eligibility",
+   "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "id": "signup_recommend",
+   "by": "model",
+   "do": "For each card left after signup_eligibility, report: the bonus exactly as the document states it, the spend threshold, the qualifying period, the window end date and the annual fee. Personal annual fees: EcoCard $50.00, Silver $0.00, Diamond Elite $495.00 (waived if the offer is met). If more than one card is left, apply signup_tie_break (for example, the lowest annual fee first) and recommend that card. Example: an EcoCard in its window earns $2,000 sustainability points for $5,000 of eligible spend in the first 1 month; the points post after the qualifying period closes. Say the bonus is earned only by meeting the spend in time. Do not promise approval.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "signup_eligibility",
+    "signup_window",
+    "signup_read_promos",
+    "signup_scope"
+   ],
+   "after": [
+    "signup_eligibility"
+   ],
+   "if": "at least one sign-up bonus is left after signup_eligibility",
+   "quote": "Spend at least $5,000 in eligible purchases within your first 1 month of account opening.",
+   "doc": "doc_credit_cards_ecocard_009"
+  },
+  {
+   "id": "signup_business_option",
+   "by": "model",
+   "do": "Only if the customer is open to a business card and today is within 2025-10-01 through 2026-03-31, add the Business Bronze Rewards Card offer: a $500 statement credit for $10,000 in net purchases in the first 2 months, with a $0.00 annual fee. Say that it is a business card and needs business information. If the customer wants it, continue with the business card job recommend_business_credit_card_for_large_purchase_and_apply.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "signup_scope",
+    "check_promo_dates",
+    "signup_eligibility"
+   ],
+   "after": [
+    "signup_eligibility"
+   ],
+   "if": "the customer asks for a sign-up bonus, says they are open to a business card, and the Business Bronze offer window includes today",
+   "quote": "This offer is available from 2025-10-01 through 2026-03-31.",
+   "doc": "doc_business_credit_cards_business_bronze_rewards_card_010"
+  },
+  {
+   "id": "explain_apply",
+   "by": "model",
+   "do": "If the customer asks how to apply, explain that they apply themselves with their application tool, giving the card name, their full name, annual income and Rho-Bank+ status, and that the application includes a credit check. Do not apply for them.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "recommend"
+   ],
+   "if": "the customer asks how to apply for the recommended card",
+   "quote": "Complete the online application with your personal information and income details",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "apply",
+   "by": "customer",
+   "do": "The customer applies for the recommended card with the self-service application tool, giving their personal and financial details. This is the same action as customer_applies, kept from the merged recommend_and_apply version.",
+   "call": "apply_for_credit_card",
+   "args": {
+    "card_type": "the recommended card's name, e.g. 'EcoCard'",
+    "customer_name": "the customer's name",
+    "annual_income": "the customer's stated annual income",
+    "rho_bank_subscription": "whether the customer has Rho-Bank+"
+   },
+   "lookup": [],
+   "after": [
+    "recommend"
+   ],
+   "if": "a card meets all requirements and the customer wants to apply",
+   "quote": "Submit the application and, if approved, activate your card upon receipt to begin using it.",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "id": "cust_apply",
+   "by": "customer",
+   "do": "The customer submits the application for the recommended card with apply_for_credit_card and consents to the credit check. This is the same action as customer_applies, kept from the earlier version.",
+   "call": "apply_for_credit_card",
+   "args": {
+    "card_type": "the recommended card's exact name as the documents write it",
+    "customer_name": "the customer's name",
+    "annual_income": "the customer's stated annual income",
+    "rho_bank_subscription": "whether the customer has Rho-Bank+ (true/false)"
+   },
+   "lookup": [],
+   "after": [
+    "recommend"
+   ],
+   "if": "the customer chooses to apply for the recommended card",
+   "quote": "Consent to a credit check and submit any requested documentation",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "customer_applies",
+   "by": "customer",
+   "do": "The customer applies for the recommended card with their own apply_for_credit_card tool. The agent does not apply for them, and need not walk them through it unless asked.",
+   "call": "apply_for_credit_card",
+   "args": {
+    "card_type": "the recommended card's exact name as the documents write it, e.g. 'Gold Rewards Card', 'Platinum Rewards Card', 'Silver Rewards Card' or 'EcoCard'",
+    "customer_name": "the customer's name",
+    "annual_income": "the customer's stated annual income",
+    "rho_bank_subscription": "whether the customer has Rho-Bank+ (true/false)"
+   },
+   "lookup": [],
+   "after": [
+    "recommend",
+    "recommend_by_requirements",
+    "recommend_by_tiebreak",
+    "recommend_one",
+    "recommend_platinum_score_unstated",
+    "recommend_gold",
+    "recommend_silver_or_bronze",
+    "recommend_fee_card",
+    "recommend_fallback",
+    "signup_recommend"
+   ],
+   "if": "the customer chooses to apply",
+   "quote": "Complete the application in your Rho‑Bank dashboard and consent to a credit pull (minimum score: $720).",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "id": "named_card",
+   "by": "model",
+   "do": "If the customer names the personal card they want to apply for (for example a simpler card such as the Silver Rewards Card, or an upgrade such as the Diamond Elite Card), skip the comparison steps (gather through recommend) unless they ask for advice. Confirm the exact card name as the documents write it. If the customer was already verified earlier in the conversation, do not verify again; applying needs no verification.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer asks to apply for a specific personal card they name",
+   "quote": "Complete the online application with your personal information and income details",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "named_card_terms",
+   "by": "model",
+   "do": "Briefly give the named card's documented terms, taken from its own documents. Silver Rewards Card: $0.00 annual fee and minimum credit score 680. Diamond Elite Card: $495.00 annual fee, invitation only, credit score of at least 780. For any other card, use the values in screen_bronze through screen_crypto. Do not promise approval.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "named_card",
+    "read_card_terms"
+   ],
+   "after": [
+    "named_card"
+   ],
+   "if": "the customer asks to apply for a specific personal card they name",
+   "quote": "Annual fee: $0.00",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "named_ask_fields",
+   "by": "model",
+   "do": "Ask for each item the customer has not already given: full name, annual income, and whether they have a Rho-Bank+ subscription. If the named card is the Diamond Elite Card, also ask whether they have received an invitation.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "named_card"
+   ],
+   "if": "the customer asks to apply for a specific personal card they name",
+   "quote": "Complete the online application with your personal information and income details",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "named_diamond_check",
+   "by": "model",
+   "do": "If the named card is the Diamond Elite Card and the customer has no invitation, explain that membership is by invitation only and that they cannot apply. Do not have them apply, and offer to recommend another card (go to gather). If they say they have an invitation, continue.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "named_ask_fields"
+   ],
+   "after": [
+    "named_ask_fields"
+   ],
+   "if": "the named card is the Diamond Elite Card",
+   "quote": "Membership is by invitation only (Yes).",
+   "doc": "doc_credit_cards_diamond_elite_card_001"
+  },
+  {
+   "id": "named_diamond_promo",
+   "by": "model",
+   "do": "For an invited Diamond Elite applicant, state the $495.00 annual fee. Mention the invitation promo (fee waived and a $5,000 credit after $50,000 spent within 1 month) only if check_promo_dates shows today is inside 2025-11-01 to 2026-01-31.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_promo_dates",
+    "named_diamond_check"
+   ],
+   "after": [
+    "named_diamond_check",
+    "check_promo_dates"
+   ],
+   "if": "the named card is the Diamond Elite Card and the customer has an invitation",
+   "quote": "Campaign window: 2025-11-01 to 2026-01-31.",
+   "doc": "doc_credit_cards_diamond_elite_card_009"
+  },
+  {
+   "id": "named_gold_check",
+   "by": "model",
+   "do": "If the named card is the Gold Rewards Card and the customer has no Rho-Bank+ subscription, explain that the card requires one. Do not have them apply, and offer to recommend another card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "named_ask_fields"
+   ],
+   "after": [
+    "named_ask_fields"
+   ],
+   "if": "the named card is the Gold Rewards Card",
+   "quote": "Rho‑Bank+ premium subscription required: Yes",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "id": "named_rebate_warn",
+   "by": "model",
+   "do": "If the customer holds a Platinum Rewards Card with a rebate still pending and says they will close it or change its product, tell them the rebate would not be awarded. Applying for a new card does not by itself change the Platinum card.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "named_ask_fields"
+   ],
+   "if": "the customer mentions closing or product-changing a Platinum Rewards Card whose rebate is still pending",
+   "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "id": "customer_applies_named",
+   "by": "customer",
+   "do": "The customer applies for the named card with their own apply_for_credit_card tool. The agent does not apply for them.",
+   "call": "apply_for_credit_card",
+   "args": {
+    "card_type": "the named card's exact name, e.g. 'Silver Rewards Card' or 'Diamond Elite Card' (named_card)",
+    "customer_name": "the customer's full name (named_ask_fields)",
+    "annual_income": "the customer's stated annual income (named_ask_fields)",
+    "rho_bank_subscription": "whether the customer has Rho-Bank+, true/false (named_ask_fields)"
+   },
+   "lookup": [],
+   "after": [
+    "named_ask_fields",
+    "named_diamond_check",
+    "named_gold_check"
+   ],
+   "if": "the customer named a card and passed named_diamond_check and named_gold_check where they apply",
+   "quote": "Complete the online application with your personal information and income details",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "id": "named_result",
+   "by": "model",
+   "do": "Explain the application outcome. If approved, tell the customer to activate the card when it arrives and to set up alerts and autopay. If it was declined or returned an error, tell them the application was not completed and explain what they saw. Do not apply for another card unless they ask. Transfer only under the general policy, after asking.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "customer_applies_named"
+   ],
+   "after": [
+    "customer_applies_named"
+   ],
+   "if": "the customer ran apply_for_credit_card for a named card",
+   "quote": "Activate your physical card upon arrival and add it to your preferred digital wallets",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "The customer applies themselves with their personal and financial details (name, annual income, Rho-Bank+ status). The agent never applies on the customer's behalf.",
+   "quote": "Complete the online application with your personal and financial details.",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "rule": "Bronze Rewards Card: 1.0% cash back on everything, annual fee $0.00, minimum credit score 640.",
+   "quote": "You earn 1.0% cash back on eligible purchases.",
+   "doc": "doc_credit_cards_bronze_rewards_card_002"
+  },
+  {
+   "rule": "Bronze Rewards Card minimum credit score is 640.",
+   "quote": "Minimum credit score: $640",
+   "doc": "doc_credit_cards_bronze_rewards_card_001"
+  },
+  {
+   "rule": "Bronze Rewards Card: FX fee 2.75%, so it fails any FX limit below 2.75%",
+   "quote": "Foreign transaction fee on international purchases: 2.75%",
+   "doc": "doc_credit_cards_bronze_rewards_card_001"
+  },
+  {
+   "rule": "Bronze Rewards Card: no virtual card management",
+   "quote": "Virtual card management available: No",
+   "doc": "doc_credit_cards_bronze_rewards_card_001"
+  },
+  {
+   "rule": "Bronze Rewards Card: minimum payment 1.0%",
+   "quote": "Your minimum monthly payment is 1.0% of your outstanding balance, subject to any applicable minimum dollar requirement.",
+   "doc": "doc_credit_cards_bronze_rewards_card_005"
+  },
+  {
+   "rule": "Bronze Rewards Card: credit limit $3,000 up to $32,500; its documents show no purchase protection",
+   "quote": "Upon approval, your limit will be at least $3,000 and can be as high as $32,500, depending on your credit profile.",
+   "doc": "doc_credit_cards_bronze_rewards_card_006"
+  },
+  {
+   "rule": "The Bronze 0% first-year APR promo applies only to accounts opened 2025-09-01 through 2026-02-28. Check with get_current_time before mentioning it.",
+   "quote": "Promotional window: 2025-09-01 through 2026-02-28.",
+   "doc": "doc_credit_cards_bronze_rewards_card_008"
+  },
+  {
+   "rule": "Silver Rewards Card: 4.0% on travel and software, 1.0% on everything else, annual fee $0.00. If travel is paid by another card, Silver earns only 1.0% on everyday spending.",
+   "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+   "doc": "doc_credit_cards_silver_rewards_card_002"
+  },
+  {
+   "rule": "Silver Rewards Card travel rate applies to transactions categorized as travel (airlines, hotels, car rentals and similar)",
+   "quote": "You earn 4.0% back when the transaction is categorized as travel.",
+   "doc": "doc_credit_cards_silver_rewards_card_003"
+  },
+  {
+   "rule": "The Silver Rewards Card earns 4.0% only on travel and software purchases, and 1.0% on purchases outside those categories. Its minimum credit score is 680.",
+   "quote": "Purchases outside top categories earn 1.0% back",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "The Silver Rewards Card's foreign transaction fee is 2.75% without a premium subscription and 0% with one.",
+   "quote": "Foreign transaction fee with a premium subscription: 0%",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "Silver Rewards Card: FX fee 2.75% without a premium subscription, 0% with one",
+   "quote": "Foreign transaction fee without a premium subscription: 2.75%",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "Silver Rewards Card: a customer who keeps the premium subscription pays 0% foreign transaction fees",
+   "quote": "If you maintain the premium subscription, international purchases incur 0% in foreign transaction fees, which helps preserve your rewards when traveling abroad",
+   "doc": "doc_credit_cards_silver_rewards_card_008"
+  },
+  {
+   "rule": "Silver Rewards Card: minimum credit score 680 ($0 annual fee)",
+   "quote": "Minimum credit score: $680",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "Silver Rewards Card: no virtual card management",
+   "quote": "Virtual card management features are No for this card",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "Silver Rewards Card: minimum payment 1.5% of statement balance",
+   "quote": "Your minimum payment is 1.5% of your statement balance (subject to a minimum dollar amount as shown on your statement)",
+   "doc": "doc_credit_cards_silver_rewards_card_007"
+  },
+  {
+   "rule": "Silver Rewards Card: purchase protection 90 days, up to $3,000 per claim",
+   "quote": "Purchase protection: eligible items are protected for 90 days after purchase, up to $3,000 per claim",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "Silver Rewards Card: credit limit $10,000 to $100,000, so it passes a limit requirement of up to $100,000",
+   "quote": "Initial credit limits typically range from $10,000 to $100,000, subject to approval",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "Gold Rewards Card: 2.5% cash back on all purchases and annual fee $0.00.",
+   "quote": "Annual fee: $0.00",
+   "doc": "doc_credit_cards_gold_rewards_card_005"
+  },
+  {
+   "rule": "The Gold Rewards Card requires an active Rho-Bank+ subscription. Recommend it only if the customer has one; a customer without one is not eligible.",
+   "quote": "Rho‑Bank+ premium subscription required: Yes",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "rule": "Gold Rewards Card minimum credit score is 720 (a Rho-Bank+ subscription is also required).",
+   "quote": "Minimum credit score required: $720",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "rule": "Gold Rewards Card: FX fee 0%.",
+   "quote": "Foreign transaction fee: 0%",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "rule": "Gold Rewards Card: virtual card management available.",
+   "quote": "Virtual card management available: Yes",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "rule": "Gold Rewards Card: minimum payment 2.0%, so it fails any minimum payment ceiling below 2.0%.",
+   "quote": "Minimum payment due each cycle: 2.0% of your outstanding balance",
+   "doc": "doc_credit_cards_gold_rewards_card_005"
+  },
+  {
+   "rule": "Gold Rewards Card: purchase protection 105 days, up to $7,500 per claim",
+   "quote": "Purchase protection: 105 days from purchase, up to $7,500 per covered claim",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "rule": "Gold Rewards Card: credit limit $17,500 to $112,500",
+   "quote": "Approved credit limits typically range from $17,500 to $112,500.",
+   "doc": "doc_credit_cards_gold_rewards_card_001"
+  },
+  {
+   "rule": "Platinum Rewards Card: 10.0% on all purchases, the highest flat rate among personal cards, but its annual fee is $200.00. Do not recommend it to a customer who refuses annual fees while an eligible no-fee card is available.",
+   "quote": "You earn 10.0% cash back on all eligible purchases.",
+   "doc": "doc_credit_cards_platinum_rewards_card_002"
+  },
+  {
+   "rule": "Platinum earns 10.0% on everyday spend in all categories. It is the highest-cash-back answer for everyday spending only when the customer accepts its annual fee (or its effective fee after the rebate fits their budget).",
+   "quote": "Use the card for everyday spend to capture 10.0% on all categories.",
+   "doc": "doc_credit_cards_platinum_rewards_card_002"
+  },
+  {
+   "rule": "Platinum Rewards Card has a $200.00 annual fee.",
+   "quote": "Annual fee: $200.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "The Platinum annual fee is $200.00.",
+   "quote": "- Annual fee: $200.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "Platinum Rewards Card: minimum payment 2.5%, so it fails any minimum payment ceiling below 2.5%.",
+   "quote": "The minimum monthly payment is 2.5% of your outstanding balance.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "Platinum Rewards Card: FX fee 0%.",
+   "quote": "Foreign transaction fee: 0% on international purchases.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "Platinum Rewards Card: virtual card management available.",
+   "quote": "Virtual card management is available in your account: Yes.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "Platinum Rewards Card: credit limit $25,000 to $150,000",
+   "quote": "Typical approved credit limits range from $25,000 to $150,000. Your exact limit appears in your approval details.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "Platinum Rewards Card: purchase protection 135 days",
+   "quote": "Items you buy are protected for 135 days from the purchase date, subject to coverage terms and exclusions.",
+   "doc": "doc_credit_cards_platinum_rewards_card_003"
+  },
+  {
+   "rule": "Platinum Rewards Card: purchase protection up to $17,500 per claim",
+   "quote": "The maximum coverage per claim is $17,500, subject to policy terms and exclusions.",
+   "doc": "doc_credit_cards_platinum_rewards_card_007"
+  },
+  {
+   "rule": "Platinum gives a $150.00 annual fee rebate when monthly spend is at least $7500.00, which makes the net fee $50.",
+   "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_007"
+  },
+  {
+   "rule": "The rebate requires meeting the threshold in every month of the cardmember year. It is not prorated.",
+   "quote": "The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every month of your cardmember year.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "rule": "If the first-year fee is waived by a promotion, the rebate does not apply to that year. The first-year waiver promo window ended 2024-12-31.",
+   "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "rule": "The Platinum first-year fee waiver applies only to applications made between 2024-06-01 and 2024-12-31. The $200.00 fee applies after the first year either way.",
+   "quote": "The waiver applies to the first 12 months from account opening; after the first anniversary, the standard $200.00 annual fee applies.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "rule": "The Platinum first-year waiver cannot be applied to accounts opened outside its window. Compare Platinum at $200.00 less any rebate when today is after 2024-12-31.",
+   "quote": "The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "rule": "The Platinum rebate is lost if the account is closed or product-changed before the year-end evaluation.",
+   "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "rule": "Platinum requires a minimum credit score of $750.",
+   "quote": "- Minimum credit score required: $750.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "Platinum Rewards Card: minimum credit score 750",
+   "quote": "Minimum credit score required: $750.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "Diamond Elite Card: 5.0% on all purchases, by invitation only, annual fee $495.00. Customers cannot apply without an invitation, so do not recommend it as something the customer can apply for. A customer who says they have received no communications from the bank has no invitation.",
+   "quote": "Membership is by invitation only (Yes).",
+   "doc": "doc_credit_cards_diamond_elite_card_001"
+  },
+  {
+   "rule": "Diamond Elite candidates should have a credit score of at least 780.",
+   "quote": "You should maintain a credit score of at least $780 to be considered.",
+   "doc": "doc_credit_cards_diamond_elite_card_001"
+  },
+  {
+   "rule": "Diamond Elite Card: minimum payment 3.0%, invitation only",
+   "quote": "Minimum payment: 3.0% of your statement balance each cycle (or the statement minimum, if higher).",
+   "doc": "doc_credit_cards_diamond_elite_card_005"
+  },
+  {
+   "rule": "Diamond Elite Card: FX fee 0%.",
+   "quote": "Foreign transaction fee: 0%. Your international purchases are not subject to additional bank conversion fees.",
+   "doc": "doc_credit_cards_diamond_elite_card_008"
+  },
+  {
+   "rule": "Diamond Elite Card: virtual card management available.",
+   "quote": "Virtual card management is available (Yes).",
+   "doc": "doc_credit_cards_diamond_elite_card_002"
+  },
+  {
+   "rule": "Diamond Elite Card: credit limit $37,500 to $375,000",
+   "quote": "Your starting credit limit will fall within $37,500 to $375,000, based on a review of your profile.",
+   "doc": "doc_credit_cards_diamond_elite_card_002"
+  },
+  {
+   "rule": "Diamond Elite Card: purchase protection 150 days, unlimited coverage",
+   "quote": "Covered purchase window: 150 days from the date of purchase.",
+   "doc": "doc_credit_cards_diamond_elite_card_007"
+  },
+  {
+   "rule": "Diamond Elite annual fee is $495.00.",
+   "quote": "Your standard annual fee is $495.00.",
+   "doc": "doc_credit_cards_diamond_elite_card_006"
+  },
+  {
+   "rule": "For an invited customer only, the Diamond Elite invitation promo waives the $495.00 fee and posts a $5,000 credit when $50,000 is spent within 1 month. It applies only during the campaign window 2025-11-01 to 2026-01-31; check with get_current_time.",
+   "quote": "Campaign window: 2025-11-01 to 2026-01-31.",
+   "doc": "doc_credit_cards_diamond_elite_card_009"
+  },
+  {
+   "rule": "Diamond Elite fee waiver needs the $50,000 invitation spending requirement to be met within the promo period.",
+   "quote": "If you meet the invitation spending requirement of $50,000 within the specified promo period, your annual fee is waived (Yes).",
+   "doc": "doc_credit_cards_diamond_elite_card_006"
+  },
+  {
+   "rule": "Crypto-Cash Back: 2.0% on purchases, annual fee $75.00.",
+   "quote": "Do I need to pay an annual fee to access the rewards program? Annual fee: $75.00 dollars.",
+   "doc": "doc_credit_cards_crypto-cash_back_008"
+  },
+  {
+   "rule": "Crypto-Cash Back earns 2.0%.",
+   "quote": "You earn rewards at 2.0% on those transactions.",
+   "doc": "doc_credit_cards_crypto-cash_back_001"
+  },
+  {
+   "rule": "Crypto-Cash Back minimum credit score is 660.",
+   "quote": "What is the minimum credit score to apply for the card to earn crypto rewards? $660.",
+   "doc": "doc_credit_cards_crypto-cash_back_009"
+  },
+  {
+   "rule": "Crypto-Cash Back: FX fee 0%",
+   "quote": "What is the foreign transaction fee if I use the card abroad? 0%.",
+   "doc": "doc_credit_cards_crypto-cash_back_008"
+  },
+  {
+   "rule": "Crypto-Cash Back: minimum payment 1.5%",
+   "quote": "What is the minimum monthly payment? 1.5% of the outstanding balance.",
+   "doc": "doc_credit_cards_crypto-cash_back_008"
+  },
+  {
+   "rule": "Crypto-Cash Back: virtual card management available",
+   "quote": "Virtual card management availability: Yes.",
+   "doc": "doc_credit_cards_crypto-cash_back_001"
+  },
+  {
+   "rule": "Crypto-Cash Back has no purchase protection, so it fails a purchase protection requirement",
+   "quote": "Is purchase protection included with this card? No.",
+   "doc": "doc_credit_cards_crypto-cash_back_008"
+  },
+  {
+   "rule": "Crypto-Cash Back: credit limit $5,000 to $110,000",
+   "quote": "Your available credit range is $5,000 to $110,000 dollars",
+   "doc": "doc_credit_cards_crypto-cash_back_008"
+  },
+  {
+   "rule": "EcoCard earns sustainability points (5 per dollar on green purchases, 1 per dollar otherwise), not cash back, and has a $50.00 annual fee.",
+   "quote": "Annual fee: $50.00.",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "rule": "EcoCard has no minimum credit score. It is the only personal card open to a customer whose score is below 640.",
+   "quote": "Minimum credit score required to apply: 0 (0 indicates no credit score requirement).",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "rule": "EcoCard: FX fee 1.0%",
+   "quote": "Foreign transaction fee (international purchases): 1.0%.",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "rule": "EcoCard: credit limit $5,000 to $50,000; its documents show no purchase protection",
+   "quote": "Initial credit lines are determined at approval and typically range from $5,000 to $50,000.",
+   "doc": "doc_credit_cards_ecocard_001"
+  },
+  {
+   "rule": "EcoCard: minimum payment 1.0%",
+   "quote": "Your minimum monthly payment is 1.0% of your outstanding balance (plus any past due amounts and fees as applicable).",
+   "doc": "doc_credit_cards_ecocard_008"
+  },
+  {
+   "rule": "EcoCard: virtual card management available",
+   "quote": "Virtual card management features are available: Yes.",
+   "doc": "doc_credit_cards_ecocard_008"
+  },
+  {
+   "rule": "EcoCard is the only points card. Every other card's 'points' are cash back at 1 point = $0.01.",
+   "quote": "The only true points-based card is the EcoCard",
+   "doc": "doc_credit_cards_credit_cards_(general)_006"
+  },
+  {
+   "rule": "For a customer who wants the highest cash back on everyday purchases with no annual fee and has Rho-Bank+, the Gold Rewards Card (2.5%, $0 fee) beats Bronze (1%) and Silver (1% outside travel and software). Without Rho-Bank+, use the same comparison among the remaining cards. When travel or software is the customer's main spending, Silver's 4.0% beats Gold's 2.5%.",
+   "quote": "Earn 2.5% cash back on all purchases.",
+   "doc": "doc_credit_cards_gold_rewards_card_005"
+  },
+  {
+   "rule": "Cards have their own bonus categories: compare cash back on the customer's actual spending mix, not the headline rate, when breaking a tie",
+   "quote": "Each credit card has its own bonus categories with higher reward rates.",
+   "doc": "doc_credit_cards_credit_cards_(general)_005"
+  },
+  {
+   "rule": "Business cards are for businesses and need business information. The Business Silver card pays 10% only on travel and software, so it does not suit general everyday spending.",
+   "quote": "Earn 1.0% cash back on all other purchases",
+   "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+  },
+  {
+   "rule": "Business cards are judged on personal and business (PAYDEX) credit, so they are not candidates for a personal-use customer.",
+   "quote": "Your application is evaluated against both personal and business credit standards, including $765 and 77.",
+   "doc": "doc_business_credit_cards_business_platinum_rewards_card_001"
+  },
+  {
+   "rule": "A customer who names a card applies for it directly with apply_for_credit_card. Only that card's entry requirements are checked: an invitation for Diamond Elite, Rho-Bank+ for Gold. Credit score is decided by the application itself.",
+   "quote": "Complete the online application with your personal information and income details",
+   "doc": "doc_credit_cards_silver_rewards_card_001"
+  },
+  {
+   "rule": "Silver Rewards Card sign-up bonus: a $500 statement credit for $2,000 spent in the first 1 month. Only accounts opened 2025-01-01 to 2025-06-30 qualify; outside that window, do not offer it.",
+   "quote": "Accounts must be opened within: 2025-01-01 to 2025-06-30",
+   "doc": "doc_credit_cards_silver_rewards_card_010"
+  },
+  {
+   "rule": "EcoCard sign-up bonus: '$2,000 sustainability points' for $5,000 of eligible spend within the first 1 month. The promotion runs 2025-08-01 through 2025-12-15. New customers only.",
+   "quote": "This promotion runs from 2025-08-01 through 2025-12-15.",
+   "doc": "doc_credit_cards_ecocard_009"
+  },
+  {
+   "rule": "EcoCard bonus points post after the qualifying period closes. Returns, chargebacks, balance transfers, cash equivalents and fees do not count toward the threshold.",
+   "quote": "Bonus points typically post after the qualifying period closes and your transactions have cleared.",
+   "doc": "doc_credit_cards_ecocard_009"
+  },
+  {
+   "rule": "The EcoCard 0% APR promo is an APR offer, not a sign-up bonus, and only accounts opened 2024-10-01 through 2025-03-31 qualify.",
+   "quote": "Accounts opened during 2024-10-01 through 2025-03-31 are eligible.",
+   "doc": "doc_credit_cards_ecocard_010"
+  },
+  {
+   "rule": "The Silver Rewards Card 0% APR promo is an APR offer, not a sign-up bonus (window 2025-10-15 to 2025-12-31).",
+   "quote": "Applications and account openings must occur within: 2025-10-15 to 2025-12-31",
+   "doc": "doc_credit_cards_silver_rewards_card_009"
+  },
+  {
+   "rule": "The Bronze Rewards Card promotion is a 0% APR offer, not a sign-up bonus.",
+   "quote": "New customers receive a 0% APR on carried balances for the first 12 months from account opening.",
+   "doc": "doc_credit_cards_bronze_rewards_card_008"
+  },
+  {
+   "rule": "Business Bronze Rewards Card (business only): a $500 statement credit for $10,000 of net purchases in the first 2 months, offered 2025-10-01 through 2026-03-31. Mention it only to a customer open to a business card.",
+   "quote": "This offer is available from 2025-10-01 through 2026-03-31.",
+   "doc": "doc_business_credit_cards_business_bronze_rewards_card_010"
+  },
+  {
+   "rule": "Business Bronze Rewards Card annual fee is $0.00.",
+   "quote": "You are not charged an annual membership fee; the annual fee is $0.00.",
+   "doc": "doc_business_credit_cards_business_bronze_rewards_card_006"
+  },
+  {
+   "rule": "The Business Silver promotion is a 2x cash back multiplier, not a lump-sum sign-up bonus, and only accounts opened during the promo period qualify (2024-11-14 to 2025-11-14).",
+   "quote": "New Business Silver Rewards Card customers can earn 2x cash back on all purchases for the first 6 months after opening their account.",
+   "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+  },
+  {
+   "rule": "The Silver Zoom promotion is a triple cash back multiplier that must be claimed between 2024-01-01 and 2025-12-31. It is not a sign-up bonus.",
+   "quote": "You must claim the promotion within the window starting 2024-01-01 and ending 2025-12-31",
+   "doc": "doc_business_credit_cards_silver_zoom_card_012"
+  }
+ ],
+ "done_when": "The agent has the facts the decision needs: use, spending categories, any hard feature requirements (foreign transaction fee, minimum payment, virtual card management, purchase protection, a credit limit the card must be able to reach), fee tolerance or budget, the tie-break order when the customer has one, Rho-Bank+ status, invitation status, credit score (or that the customer did not give it), and monthly spend where Platinum is in play. It has checked all personal cards' rates, fees, features, protection, limit ranges and eligibility. It has then either recommended the card or cards that meet every requirement (one card when the customer gave a tie-break order), with their rate, annual fee and requirements (including any rebate condition and minimum score), or told the customer no card fits. For a customer whose goal is a sign-up bonus, the agent has checked every card's promotion window against get_current_time. It has then either reported each open sign-up bonus that fits (bonus as stated, spend threshold, period, window and annual fee) and recommended one by the customer's tie-break, or said that none fits and why. The customer has applied with apply_for_credit_card, or has declined or chosen to go elsewhere. When the customer named a card, one of two things is true: they applied for it with their full name, annual income and Rho-Bank+ status and were told the result; or they were told it is not available to them (Diamond Elite without an invitation, Gold without Rho-Bank+)."
+}

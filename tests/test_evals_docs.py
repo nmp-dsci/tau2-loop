@@ -218,7 +218,7 @@ def test_a_document_route_serves_tau2s_text_or_says_it_is_not_here() -> None:
 def test_the_tools_follow_bankings_champion_retrieval() -> None:
     d = client().get("/api/domains/banking_knowledge").json()
     h = d["harness_tools"]
-    assert (h["version"], h["retrieval"], h["known"]) == ("v4", "alltools_minilm", True)
+    assert (h["version"], h["retrieval"], h["known"]) == ("v8", "alltools_minilm", True)
     names = [t["name"] for t in h["tools"]]
     assert names[:3] == ["KB_search_bm25", "KB_search_dense", "shell"]
     assert "KB_search" not in names and "grep" not in names

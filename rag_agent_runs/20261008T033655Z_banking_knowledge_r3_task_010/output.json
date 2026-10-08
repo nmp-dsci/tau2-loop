@@ -1,0 +1,1479 @@
+{
+ "jobs": [
+  {
+   "job": "understanding_credit_card_referral_statuses",
+   "aliases": [
+    "check credit card referral status",
+    "credit_card_referral_status_inquiry",
+    "investigate_missing_credit_card_referral_bonus",
+    "only some referral bonuses paid",
+    "referral bonus inquiry",
+    "referral bonus not received",
+    "referral rejected",
+    "retry a rejected referral",
+    "why haven't I received my referral bonus"
+   ],
+   "when": {
+    "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks about a referral they made or a missing referral bonus. This job reads records and explains them. It has two writes. First, a transfer for a persistent ERROR status, only after the customer agrees. Second, a new referral attempt for a REJECTED referral, made by the customer with their own submit_referral tool, and only once the rolling 7-day window has passed and the customer wants to try again.",
+    "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "get_referrals_by_user",
+     "who": "agent",
+     "step": "get_referrals",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "explain_error",
+     "not_used": null
+    },
+    {
+     "tool": "submit_referral",
+     "who": "customer",
+     "step": "customer_resubmit",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": null,
+     "not_used": "Do not call this for the referred person. They are a different customer and are not verified in this conversation. The referral status comes from get_referrals_by_user, and the requirement comes from the card's referral program document."
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not needed. The status, card type and timestamps that decide whether a bonus is paid are all in the referral records from get_referrals_by_user."
+    },
+    {
+     "tool": "get_referral_link",
+     "who": "customer",
+     "step": null,
+     "not_used": "This tool creates a new referral link. It is only for a customer who asks to refer someone new, after that job's pre-checks. It is not used to look into an existing referral or a missing bonus. Agents must not generate the link themselves."
+    }
+   ],
+   "info": [
+    {
+     "field": "customer_identifier",
+     "about": "Something to find the customer's record with: full name, email or user id",
+     "from": "customer",
+     "ask": "Could I have your full name so I can look up your profile?",
+     "may_hold_back": true
+    },
+    {
+     "field": "verification_values",
+     "about": "Any 2 of date of birth, email, phone number, address. They must match the record.",
+     "from": "customer",
+     "ask": "To verify your identity, please give me two of these: your date of birth, email, phone number or address on file.",
+     "may_hold_back": true
+    },
+    {
+     "field": "which_referral",
+     "about": "Which referral the customer is asking about, if the records show more than one (for example the most recent one, or the one whose friend was approved and is using the card)",
+     "from": "customer",
+     "ask": "I see several referrals on your profile. Which one are you asking about?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referral_status",
+     "about": "The status of the referral in question: COMPLETE, IN_PROGRESS, NO_PROGRESS, APPLIED, REJECTED or ERROR",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "referred_card_type",
+     "about": "The credit card the friend was referred to. It decides which program's bonus and qualifying-spend terms apply.",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "referral_timestamps",
+     "about": "The exact timestamp of each referral record. They decide the rolling 7-day window count.",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "error_persists",
+     "about": "For an ERROR status: whether the customer says the error has lasted, and whether they want a human agent",
+     "from": "customer",
+     "ask": "Has this referral been showing an error for a while? Would you like me to transfer you to a human agent to look into it?",
+     "may_hold_back": true
+    },
+    {
+     "field": "wants_to_retry",
+     "about": "For a REJECTED referral whose 7-day window has passed: whether the customer wants to send that referral again",
+     "from": "customer",
+     "ask": "The limit window for that referral has now passed. Would you like to send that referral again for the same card?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely and ask how you can help. Share no account information before the customer is verified.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Be polite and professional",
+     "doc": "policy"
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record using the identifier they gave",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave (or use get_user_information_by_email / get_user_information_by_id with what they gave)"
+     },
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify",
+     "by": "model",
+     "do": "Ask for 2 of: date of birth, email, phone, address. Check them against the record. Share nothing about the customer before they are verified.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "verify_failed",
+     "by": "model",
+     "do": "Tell the customer you cannot verify their identity, so you cannot look up their referrals. Share no account details, and stop.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user",
+      "verify"
+     ],
+     "after": [
+      "verify"
+     ],
+     "if": "fewer than 2 of the values the customer gave match the record",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification log. Use the same timestamp for any rolling 7-day window check later in this job.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "verify"
+     ],
+     "if": "verification succeeded",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record",
+     "call": "log_verification",
+     "args": {
+      "name": "the verified user's name",
+      "user_id": "the verified user's id",
+      "address": "address on record",
+      "email": "email on record",
+      "phone_number": "phone on record",
+      "date_of_birth": "DOB on record",
+      "time_verified": "timestamp from get_current_time"
+     },
+     "lookup": [],
+     "after": [
+      "get_time"
+     ],
+     "if": "verification succeeded",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "get_referrals",
+     "by": "harness",
+     "do": "Get all referrals the verified customer has made",
+     "call": "get_referrals_by_user",
+     "args": {
+      "user_id": "the verified user's id"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "use_single_referral",
+     "by": "model",
+     "do": "Only one referral is returned, so use it. Note its status and referred card type.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": "exactly one referral is returned",
+     "quote": "You can track the status of your referrals at any time through the Rho-Bank mobile app or by contacting customer service.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "identify_referral",
+     "by": "model",
+     "do": "If there are several referrals, ask which one the customer means (for example the most recent one, where the friend was approved). Then note its status and card type.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": "more than one referral is returned and the customer is asking about one particular referral (not about why only some of several referrals earned a bonus)",
+     "quote": "IN_PROGRESS — the referred person has successfully opened a new account and is in progress to meet the criteria for the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "review_all_referrals",
+     "by": "model",
+     "do": "The customer asks about several referrals, for example why only some earned a bonus. Do not ask them to pick one. List every referral record with its status, card type and timestamp. Then run the matching explain_ step for each one, so each referral gets a specific reason from the records, not a list of general possibilities.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": "more than one referral is returned and the customer asks about several of them or about missing bonuses across them",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "no_referral_found",
+     "by": "model",
+     "do": "Tell the customer you cannot find the referral they describe on their profile. Do not guess a status or invent a reason. Remind them that the friend must apply through their referral link for it to be tracked.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": "get_referrals returns no referrals, or none matches the one the customer describes",
+     "quote": "When they use your link to apply and are approved, the referral will be tracked to your account.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "lookup_card_program",
+     "by": "model",
+     "do": "Find the referred card's own referral program document in the KB. Get its qualifying spend amount, time window, bonus and annual cap.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "if": null,
+     "quote": "Each credit card type has its own referral bonus and eligibility requirements that are not detailed here.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "no_card_program",
+     "by": "model",
+     "do": "Tell the customer that the referred card has no documented referral offer, so you cannot confirm any bonus terms for it. Do not invent terms.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "lookup_card_program"
+     ],
+     "after": [
+      "lookup_card_program"
+     ],
+     "if": "the KB has no referral program document for the referred card type",
+     "quote": "Not all credit cards participate in the referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "explain_in_progress",
+     "by": "model",
+     "do": "IN_PROGRESS: tell the customer the friend's account is open but hasn't met the bonus criteria yet. State the documented requirement for that card: the exact qualifying spend in dollars and the days from account opening (e.g. Platinum Rewards Card: $1,500 within 90 days). Then state the bonus and payout timing. No agent action is needed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals",
+      "lookup_card_program"
+     ],
+     "after": [
+      "lookup_card_program"
+     ],
+     "if": "status is IN_PROGRESS",
+     "quote": "IN_PROGRESS: No action required; monitor until criteria are met.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_complete",
+     "by": "model",
+     "do": "COMPLETE: tell the customer the bonus will be granted under the card's program terms, and give the documented payout timing",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals",
+      "lookup_card_program"
+     ],
+     "after": [
+      "lookup_card_program"
+     ],
+     "if": "status is COMPLETE",
+     "quote": "COMPLETE: The bonus will be granted per the applicable referral program terms.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_no_progress",
+     "by": "model",
+     "do": "NO_PROGRESS: remind the customer that the invitee has not started an application",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "if": "status is NO_PROGRESS",
+     "quote": "NO_PROGRESS: You may remind the referrer that the invitee has not started an application.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_applied",
+     "by": "model",
+     "do": "APPLIED: explain that the application is awaiting a decision and no intervention is needed",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "if": "status is APPLIED",
+     "quote": "APPLIED: Await the application decision; no manual intervention is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "rejected_window_check",
+     "by": "model",
+     "do": "For each REJECTED referral, use the exact timestamps in get_referrals to find the referral bonuses (COMPLETE, across all credit card types) that fell in the 7 days before it. Two of them mean it was auto-denied by the weekly limit. Then count the bonuses in the 7 days before the current time from get_time. Fewer than 2 means the window has passed. 2 or more means it is still active. Note when it ends: 7 days after the older of the two most recent bonuses.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "get_time"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "if": "status is REJECTED",
+     "quote": "A rolling 7-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "explain_rejected",
+     "by": "model",
+     "do": "REJECTED: check the customer's other referrals for the 2-per-rolling-7-day limit. Explain that the referral was auto-denied and cannot be reinstated in that window. Do not retry right away. Use rejected_window_check to name the specific referrals that filled the window.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals",
+      "rejected_window_check"
+     ],
+     "after": [
+      "rejected_window_check"
+     ],
+     "if": "status is REJECTED",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "still_in_window",
+     "by": "model",
+     "do": "Tell the customer the 7-day window has not passed yet, so a new attempt now would also be denied. Give the time it ends, from rejected_window_check. Do not suggest submitting again now.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "rejected_window_check"
+     ],
+     "after": [
+      "explain_rejected"
+     ],
+     "if": "status is REJECTED and 2 or more referral bonuses still fall within the 7 days before the current time",
+     "quote": "Auto-denied referrals due to the limit cannot be reinstated within the same 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "offer_retry",
+     "by": "model",
+     "do": "Tell the customer the 7-day window that caused the denial has passed, so they may now attempt the referral again for the same card type. Ask whether they want to.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "rejected_window_check"
+     ],
+     "after": [
+      "explain_rejected"
+     ],
+     "if": "status is REJECTED and fewer than 2 referral bonuses fall within the 7 days before the current time",
+     "quote": "If a referral is denied for hitting the limit, wait until enough time has passed to drop under the cap before attempting another.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "customer_resubmit",
+     "by": "customer",
+     "do": "The customer submits the referral again with their own submit_referral tool. They pass their own user_id and the exact card type of the REJECTED referral record (e.g. 'Gold Rewards Card'). The agent does not submit it. Submit one at a time: each new bonus counts toward the same 7-day cap, so 2 or more rejected referrals cannot all earn a bonus within one window.",
+     "call": "submit_referral",
+     "args": {
+      "user_id": "the verified user's id",
+      "account_type": "the card type of the REJECTED referral record from get_referrals"
+     },
+     "lookup": [
+      "rejected_window_check",
+      "offer_retry"
+     ],
+     "after": [
+      "offer_retry"
+     ],
+     "if": "the window has passed and the customer wants to retry",
+     "quote": "Track the timing of your last two successful referral bonuses before sending additional referrals.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "explain_resubmit_result",
+     "by": "model",
+     "do": "Tell the customer what the new referral's result means, using the status meanings: NO_PROGRESS until the friend applies, APPLIED while waiting for a decision. If it comes back REJECTED, do not retry again right away. If it comes back ERROR, tell the customer to retry later.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "customer_resubmit"
+     ],
+     "after": [
+      "customer_resubmit"
+     ],
+     "if": "the customer ran submit_referral",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_error",
+     "by": "model",
+     "do": "ERROR: tell the customer to retry later. If the error persists, offer to transfer to a human agent, and transfer only after the customer agrees. Use reason code technical_system_error, with a summary of the referral and its ERROR status.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "short summary: the verified user's referral is in ERROR status and the condition persists",
+      "reason": "technical_system_error (fixed code from doc_bank_accounts_bank_accounts_(general)_042)"
+     },
+     "lookup": [
+      "get_referrals",
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "after": [
+      "identify_referral",
+      "use_single_referral",
+      "review_all_referrals"
+     ],
+     "if": "status is ERROR and the condition persists and the customer agrees to a transfer",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "answer_followups",
+     "by": "model",
+     "do": "Answer follow-up questions with the documented terms only (requirement amount, window, bonus, payout timing). Do not invent terms or look up the friend's records.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_card_program"
+     ],
+     "after": [
+      "explain_in_progress"
+     ],
+     "if": null,
+     "quote": "Each referral program has specific requirements that your friend must meet to trigger the bonus, such as making a certain amount of purchases within a specified timeframe after account opening.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "A referral bonus is paid only after the referred person is approved and meets that card's qualifying spend within the window",
+     "quote": "Each referral program has specific requirements that your friend must meet to trigger the bonus, such as making a certain amount of purchases within a specified timeframe after account opening.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "rule": "Platinum Rewards Card: the friend must spend at least $1,500 within 90 days of account opening. The referrer earns $100.",
+     "quote": "The referred friend must spend at least $1,500 within 90 days of account opening to qualify you for the bonus.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Platinum Rewards Card: the bonus is credited after approval and the $1,500 spend within 90 days",
+     "quote": "Bonuses are typically credited after the referred applicant is approved and meets the $1,500 spend requirement within 90 days.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Platinum Rewards Card: self-referrals and duplicate applications do not qualify",
+     "quote": "Self-referrals or duplicate applications do not qualify.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Silver Rewards Card: the friend must spend at least $750 within 60 days. The referrer earns 75. The bonus posts within 1-2 billing cycles.",
+     "quote": "The referred person must be approved and spend at least $750 within 60 days of account opening",
+     "doc": "doc_credit_cards_silver_rewards_card_011"
+    },
+    {
+     "rule": "EcoCard: the friend must spend at least $500 within 60 days. The referrer earns 50. The bonus posts within 1-2 billing cycles.",
+     "quote": "The referred person must be approved and spend at least $500 within 60 days of account opening",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "EcoCard payout: typically within one to two billing cycles after the $500 is met",
+     "quote": "Your bonus typically posts within one to two billing cycles after the referred account meets the $500 requirement",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "Business Bronze Rewards Card: at least $1,750 in net purchases within 90 days. The referrer earns $75.",
+     "quote": "The referred business must complete at least $1,750 in net purchases within 90 days of account opening.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_011"
+    },
+    {
+     "rule": "Business Silver Rewards Card: at least $3,000 within 90 days. The referrer earns $100.",
+     "quote": "The referred business must spend at least $3,000 within 90 days of account opening for you to receive the bonus",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_013"
+    },
+    {
+     "rule": "Business Gold Rewards Card: $7,500 within 90 days. The referrer earns $200.",
+     "quote": "The referred business must spend $7,500 within 90 from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_010"
+    },
+    {
+     "rule": "Business Platinum Rewards Card: $15,000 within 135 days. The referrer earns $300.",
+     "quote": "When the referred business is approved and completes qualifying spend of $15,000 within 135 days from account opening, you earn a bonus of $300.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_012"
+    },
+    {
+     "rule": "Green Rewards Card (business): at least $2,250 within 90 days. The referrer earns 75.",
+     "quote": "The referred business must spend at least $2,250 within 90 days from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_green_rewards_card_010"
+    },
+    {
+     "rule": "Silver Zoom Card: $7,500 in purchases within 90 days. The referrer earns $150.",
+     "quote": "The referred business must complete purchases totaling $7,500 within 90 days of account opening",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "rule": "No more than 2 credit card referral bonuses in any rolling 7-day window, across all card types. Further referrals are auto-denied.",
+     "quote": "You can receive at most 2 referral bonuses in any rolling 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "The third and later referrals in a rolling 7-day window are automatically denied",
+     "quote": "If you attempt to receive more than 2 referrals in a single week, the third referral (and any subsequent referrals that week) will be automatically denied.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Auto-denied referrals cannot be reinstated within the same 7-day window",
+     "quote": "Auto-denied referrals due to the limit cannot be reinstated within the same 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "The weekly cap counts referrals from all credit card types together",
+     "quote": "This limit applies across all credit card types; referrals from different cards still count toward the same weekly cap.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "The 7-day window is judged from the exact timestamps of the most recent bonuses, read from get_referrals and the current time, not from calendar weeks",
+     "quote": "A rolling 7-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "A referral denied for the weekly limit may be attempted again only once enough time has passed to drop under the cap",
+     "quote": "If a referral is denied for hitting the limit, wait until enough time has passed to drop under the cap before attempting another.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Checking account referrals use a different cap (2 bonuses per rolling 9-day window). Do not apply it to credit card referrals.",
+     "quote": "You can receive at most 2 referral bonuses in any rolling 9-day window.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "rule": "Personal card programs (Platinum, Silver, EcoCard) cap at 7 referral bonuses per calendar year",
+     "quote": "You can earn up to 7 referral bonuses per calendar year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "A REJECTED status means the user has too many referral processes going on",
+     "quote": "REJECTED — the user has too many referral processes going on",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "COMPLETE means the referred person opened an account and met the bonus criteria",
+     "quote": "COMPLETE — the referred person has successfully opened a new account and met the criteria to get the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "IN_PROGRESS means the account is open but the bonus criteria are not yet met",
+     "quote": "IN_PROGRESS — the referred person has successfully opened a new account and is in progress to meet the criteria for the referral bonus",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "Not every card has a referral program. If the referred card has no documented program, no bonus terms can be confirmed.",
+     "quote": "Not all credit cards participate in the referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "rule": "For a transfer, pick the reason code from the highest tier that applies. A persistent system error is technical_system_error.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "The customer is verified and the verification is logged, or the customer has been told they could not be verified. Their referrals have been retrieved. Either the referral in question has been identified, or, when the customer asked about several, every referral has been explained with its specific status and reason. If the referral could not be found, the customer has been told so. For IN_PROGRESS, the customer has heard the referred card's exact documented qualifying spend amount and time window. For each REJECTED referral, the customer has heard which bonuses filled the 7-day window, and either when the window ends or that they may try again now. If they chose to retry, they ran submit_referral and the result was explained. Follow-up questions are answered. For a persistent ERROR, the customer has accepted or declined a transfer."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_001",
+   "why": "Internal: what each referral status means and how to act on it, including reviewing referral activity before advising on a REJECTED status and retrying or escalating an ERROR"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_002",
+   "why": "Rolling 7-day cap of 2 credit card referral bonuses across all cards, auto-denial, no reinstatement within the window, and a new attempt allowed after the window"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_020",
+   "why": "Customers can check referral status through customer service; not every card has a referral program; referrals are tracked through the link"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_008",
+   "why": "Platinum Rewards Card referral terms and annual cap"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_011",
+   "why": "Silver Rewards Card referral terms"
+  },
+  {
+   "id": "doc_credit_cards_ecocard_011",
+   "why": "EcoCard referral terms and payout timing"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_011",
+   "why": "Business Bronze Rewards Card referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_013",
+   "why": "Business Silver Rewards Card referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_gold_rewards_card_010",
+   "why": "Business Gold Rewards Card referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_012",
+   "why": "Business Platinum Rewards Card referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_green_rewards_card_010",
+   "why": "Green Rewards Card referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_silver_zoom_card_011",
+   "why": "Silver Zoom Card referral terms"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_042",
+   "why": "Transfer reason codes (technical_system_error)"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_047",
+   "why": "The checking account 9-day cap, cited only to keep it apart from the credit card 7-day cap"
+  }
+ ],
+ "open_questions": [
+  "No knowledge-base document names the customer's submit_referral tool. The retry step relies on it being the customer's own tool, and on doc_credit_cards_credit_cards_(general)_002 allowing a new attempt once the window has passed.",
+  "The documents do not say which timestamp in a referral record (creation or completion) marks when a bonus was received for the rolling-window count. Use the bonus or completion time if the record holds one, otherwise the record's timestamp.",
+  "No referral program document was found for the Gold Rewards Card, although doc_credit_cards_credit_cards_(general)_009 uses it as an example card name. It is unclear which bonus terms apply to Gold Rewards Card referrals."
+ ],
+ "merge": [
+  {
+   "job": "understanding_credit_card_referral_statuses",
+   "into": [
+    "understanding_credit_card_referral_statuses"
+   ],
+   "previous_sessions": [
+    "20261007T050012Z_banking_knowledge_r2_task_016"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "review_all_referrals",
+     "why": "New branch for a customer who asks why only some of several referrals earned a bonus. Each referral is explained from the records instead of asking the customer to pick one.",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "change": "changed",
+     "what": "identify_referral",
+     "why": "Its if is narrowed to a customer asking about one particular referral, so it does not conflict with review_all_referrals. Its behavior for that case is unchanged.",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "change": "changed",
+     "what": "get_time",
+     "why": "The same timestamp is now also used for the rolling 7-day window check. The step's call and condition are unchanged.",
+     "quote": "A rolling 7-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "added",
+     "what": "rejected_window_check",
+     "why": "The window count needs a check step that reads the referral timestamps and the current time before explaining a rejection.",
+     "quote": "A rolling 7-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "changed",
+     "what": "explain_rejected",
+     "why": "It now runs after rejected_window_check and lists it in lookup, so it names the specific bonuses that filled the window. The original instruction is kept.",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "change": "added",
+     "what": "still_in_window",
+     "why": "Branch for when the 7-day window has not yet passed",
+     "quote": "Auto-denied referrals due to the limit cannot be reinstated within the same 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "added",
+     "what": "offer_retry",
+     "why": "Branch for when the window has passed: the customer may try again",
+     "quote": "If a referral is denied for hitting the limit, wait until enough time has passed to drop under the cap before attempting another.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "added",
+     "what": "customer_resubmit",
+     "why": "The customer runs their own submit_referral tool to try a rejected referral again once the window has passed",
+     "quote": "Track the timing of your last two successful referral bonuses before sending additional referrals.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "added",
+     "what": "explain_resubmit_result",
+     "why": "Failure path for the result of the new referral attempt",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "change": "added",
+     "what": "submit_referral",
+     "why": "Customer tool used by customer_resubmit",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "change": "added",
+     "what": "get_credit_card_accounts_by_user",
+     "why": "Listed as not_used, with the reason",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "change": "added",
+     "what": "info: referral_timestamps, wants_to_retry",
+     "why": "Facts needed for the window check and the retry branch",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "change": "added",
+     "what": "rules: cross-card weekly cap, exact-timestamp window, retry after the window, 9-day checking cap not applied",
+     "why": "These rules decide the REJECTED branches",
+     "quote": "This limit applies across all credit card types; referrals from different cards still count toward the same weekly cap.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "changed",
+     "what": "lookup and after of lookup_card_program, explain_in_progress, explain_complete, explain_no_progress, explain_applied, explain_error",
+     "why": "review_all_referrals was added as an alternative route into these steps. Their instructions and conditions are unchanged.",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "change": "changed",
+     "what": "done_when",
+     "why": "Now also covers the multi-referral explanation and the REJECTED wait-or-retry outcomes",
+     "quote": null,
+     "doc": null
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 63,
+     "n": 63,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [],
+     "missing": [],
+     "n": 0
+    },
+    "D3": {
+     "with_condition": 1,
+     "n": 1
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 5,
+     "n": 5,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  }
+ ],
+ "rejected": [],
+ "draft": [
+  {
+   "job": "investigate_missing_credit_card_referral_bonus",
+   "aliases": [
+    "referral bonus not received",
+    "why didn't I get my referral bonus",
+    "referral rejected",
+    "retry a rejected referral",
+    "understanding credit card referral statuses"
+   ],
+   "when": {
+    "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+    "doc": "doc_credit_cards_credit_cards_(general)_001"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks why a referral bonus was not paid or asks about their referrals. The agent explains what the referral records show. A new referral is sent only by the customer, with the customer's own tool, and only when the documents allow a new attempt.",
+    "quote": "If a referral is denied for hitting the limit, wait until enough time has passed to drop under the cap before attempting another.",
+    "doc": "doc_credit_cards_credit_cards_(general)_002"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verif",
+     "not_used": null
+    },
+    {
+     "tool": "get_referrals_by_user",
+     "who": "agent",
+     "step": "get_referrals",
+     "not_used": null
+    },
+    {
+     "tool": "submit_referral",
+     "who": "customer",
+     "step": "customer_resubmit",
+     "not_used": null
+    },
+    {
+     "tool": "get_referral_link",
+     "who": "customer",
+     "step": "give_link_tool",
+     "not_used": null
+    },
+    {
+     "tool": "give_discoverable_user_tool",
+     "who": "agent",
+     "step": "give_link_tool",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "escalate_error",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not needed. The referral records returned by get_referrals_by_user hold the status, card type and timing that decide whether a bonus is paid."
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not needed. Whether a referred person met the qualifying spend shows in the referral status (IN_PROGRESS or COMPLETE). The agent does not read the referred person's transactions."
+    }
+   ],
+   "info": [
+    {
+     "field": "customer_identifier",
+     "about": "the customer's full name, email or user id, used to find their record",
+     "from": "customer",
+     "ask": "Could you please give me your full name or the email address on your account so I can find your profile?",
+     "may_hold_back": true
+    },
+    {
+     "field": "verification_values",
+     "about": "any two of: date of birth, email, phone number, address. They must match the record",
+     "from": "customer",
+     "ask": "To verify your identity, could you please confirm two of the following: your date of birth, email, phone number, or address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "wants_to_retry",
+     "about": "whether the customer wants to send a new referral again for a rejected one now that the limit window allows it",
+     "from": "customer",
+     "ask": "The limit window for that referral has now passed. Would you like to send that referral again?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referral_card_name",
+     "about": "the exact card name for a new referral or referral link",
+     "from": "records",
+     "ask": "Which card would you like to refer your friend to?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely and ask for their full name or email so you can find their account. Do not share any account information before verification.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Look up the customer with the identifier they gave: get_user_information_by_name for a full name (case sensitive), get_user_information_by_email for an email, or get_user_information_by_id for a user id.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave (or email / user_id with the matching lookup tool)"
+     },
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "verify_match",
+     "by": "model",
+     "do": "Ask for two of date of birth, email, phone number and address, and compare them with the record from lookup_user. If fewer than two match, do not reveal or access any account data. Ask again or explain that you cannot proceed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp. It is used for the verification log and for the rolling-window check.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "verify_match"
+     ],
+     "if": "two verification values matched",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "log_verif",
+     "by": "harness",
+     "do": "Log the verification record.",
+     "call": "log_verification",
+     "args": {
+      "name": "lookup_user result",
+      "user_id": "lookup_user result",
+      "address": "lookup_user result",
+      "email": "lookup_user result",
+      "phone_number": "lookup_user result",
+      "date_of_birth": "lookup_user result",
+      "time_verified": "get_time result"
+     },
+     "lookup": [],
+     "after": [
+      "get_time"
+     ],
+     "if": "two verification values matched",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "get_referrals",
+     "by": "harness",
+     "do": "Read all referrals made by the verified user.",
+     "call": "get_referrals_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "log_verif"
+     ],
+     "if": null,
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "classify",
+     "by": "model",
+     "do": "Group each referral record by status (COMPLETE, IN_PROGRESS, NO_PROGRESS, APPLIED, REJECTED, ERROR) and note each record's card type and timestamp. Tell the customer the specific findings for each referral, not general possibilities.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": null,
+     "quote": "REJECTED — the user has too many referral processes going on",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_complete",
+     "by": "model",
+     "do": "For COMPLETE referrals, explain that the bonus is granted per that card's referral program terms. Payout timing is in the card's referral document, for example one to two billing cycles.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "classify"
+     ],
+     "if": "a referral has status COMPLETE",
+     "quote": "COMPLETE: The bonus will be granted per the applicable referral program terms.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_in_progress",
+     "by": "model",
+     "do": "For IN_PROGRESS referrals, explain that the friend opened the account and is still working toward the card's qualifying spend. No action is needed. Quote the spend requirement from that card's referral document.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "classify"
+     ],
+     "if": "a referral has status IN_PROGRESS",
+     "quote": "IN_PROGRESS: No action required; monitor until criteria are met.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_no_progress",
+     "by": "model",
+     "do": "For NO_PROGRESS referrals, tell the customer the invitee has not started an application yet.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "classify"
+     ],
+     "if": "a referral has status NO_PROGRESS",
+     "quote": "NO_PROGRESS: You may remind the referrer that the invitee has not started an application.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "explain_applied",
+     "by": "model",
+     "do": "For APPLIED referrals, explain that the application is awaiting a decision and no manual action is needed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "classify"
+     ],
+     "if": "a referral has status APPLIED",
+     "quote": "APPLIED: Await the application decision; no manual intervention is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "window_check",
+     "by": "model",
+     "do": "For each REJECTED referral, use the referral timestamps to check whether 2 referral bonuses (COMPLETE) fell within the rolling 7-day window before it. Count across all credit card types. Then use the current time from get_time to decide whether fewer than 2 bonuses now fall in the 7 days before now, meaning the window has passed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "get_time"
+     ],
+     "after": [
+      "classify"
+     ],
+     "if": "a referral has status REJECTED",
+     "quote": "A rolling 7-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "explain_rejected",
+     "by": "model",
+     "do": "Explain the specific finding: these referrals were automatically denied because the customer had already received 2 referral bonuses within a rolling 7-day window. Name which completed referrals filled the window. Explain that a denied referral cannot be reinstated within the same window.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "window_check"
+     ],
+     "after": [
+      "window_check"
+     ],
+     "if": "a referral has status REJECTED",
+     "quote": "If you attempt to receive more than 2 referrals in a single week, the third referral (and any subsequent referrals that week) will be automatically denied.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "still_in_window",
+     "by": "model",
+     "do": "If the 7-day window has not yet passed, tell the customer not to retry yet. Give the time when they drop under the cap: 7 days after the older of the two most recent bonuses. Stop there for that referral.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "window_check"
+     ],
+     "after": [
+      "explain_rejected"
+     ],
+     "if": "2 or more referral bonuses still fall within the 7 days before the current time",
+     "quote": "Auto-denied referrals due to the limit cannot be reinstated within the same 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "offer_retry",
+     "by": "model",
+     "do": "If the window has passed, tell the customer they may now send the referral again for the same card type, and ask whether they want to.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "window_check"
+     ],
+     "after": [
+      "explain_rejected"
+     ],
+     "if": "fewer than 2 referral bonuses fall within the 7 days before the current time",
+     "quote": "If a referral is denied for hitting the limit, wait until enough time has passed to drop under the cap before attempting another.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "customer_resubmit",
+     "by": "customer",
+     "do": "The customer submits the referral again with their own submit_referral tool. They pass their user_id and the exact card type of the rejected referral record. Agents must not submit it on the customer's behalf.",
+     "call": "submit_referral",
+     "args": {
+      "user_id": "the verified user",
+      "account_type": "card type of the REJECTED referral record from get_referrals"
+     },
+     "lookup": [
+      "window_check"
+     ],
+     "after": [
+      "offer_retry"
+     ],
+     "if": "window has passed and the customer wants to retry",
+     "quote": "Agents must not generate the link on the customer’s behalf.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "link_precheck",
+     "by": "model",
+     "do": "If the customer instead asks for a new referral link for a card, confirm in the knowledge base that the card has a documented referral program, for example the Silver Rewards Card, Platinum Rewards Card or EcoCard. Correct any wrong terms the customer cites. Make sure the referral would not be auto-rejected by the 7-day limit (window_check) or by the card's annual cap. If any check fails, explain why, do not give the tool and do not transfer.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "get_time"
+     ],
+     "after": [
+      "window_check"
+     ],
+     "if": "the customer asks to generate a new referral link",
+     "quote": "If no referral program is documented for the requested card, or if the user’s claimed terms are incorrect, or if there is reason to believe the referral will be automatically rejected, explain why and do not provide a referral link tool. Do not transfer to a human in these cases.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "give_link_tool",
+     "by": "model",
+     "do": "Give the customer the get_referral_link tool. Tell them to run it with their own user_id and the exact card name. Restate the documented referral terms for that card.",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_referral_link"
+     },
+     "lookup": [
+      "link_precheck"
+     ],
+     "after": [
+      "link_precheck"
+     ],
+     "if": "the customer asked for a new referral link and every link_precheck check passed",
+     "quote": "Tell the customer to pass their own user_id and the exact card name (for example, 'Gold Rewards Card').",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "explain_error",
+     "by": "model",
+     "do": "For ERROR referrals, tell the customer a system error occurred and they can retry later.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "classify"
+     ],
+     "if": "a referral has status ERROR",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "id": "escalate_error",
+     "by": "model",
+     "do": "If the ERROR condition persists and the customer agrees, transfer to a human agent with a summary of the referral records.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "verified user's referral records showing a persistent ERROR status",
+      "reason": "persistent referral ERROR status"
+     },
+     "lookup": [
+      "get_referrals"
+     ],
+     "after": [
+      "explain_error"
+     ],
+     "if": "a referral is still in ERROR after a retry, and the customer agrees to the transfer",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "No more than 2 credit card referral bonuses in any rolling 7-day window. The third and later referrals in that window are automatically denied.",
+     "quote": "You can receive at most 2 referral bonuses in any rolling 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "The 7-day cap counts referrals across all credit card types together.",
+     "quote": "This limit applies across all credit card types; referrals from different cards still count toward the same weekly cap.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "A REJECTED referral is not retried while still inside the window. It may be attempted again only once fewer than 2 bonuses fall in the trailing 7 days.",
+     "quote": "Auto-denied referrals due to the limit cannot be reinstated within the same 7-day window.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Checking account referrals use a different cap: 2 bonuses per rolling 9-day window. Do not apply this to credit cards.",
+     "quote": "You can receive at most 2 referral bonuses in any rolling 9-day window.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "rule": "Silver Rewards Card: 7 bonuses per calendar year at most. The referred person must spend $750 within 60 days.",
+     "quote": "You can earn up to 7 referral bonuses per calendar year",
+     "doc": "doc_credit_cards_silver_rewards_card_011"
+    },
+    {
+     "rule": "Platinum Rewards Card: 7 bonuses per calendar year at most. The referred friend must spend $1,500 within 90 days.",
+     "quote": "You can earn up to 7 referral bonuses per calendar year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "EcoCard: 7 bonuses per calendar year at most. The referred person must spend $500 within 60 days.",
+     "quote": "The referred person must be approved and spend at least $500 within 60 days of account opening",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "The agent never generates a referral link for the customer. The customer runs the tool.",
+     "quote": "Agents must not generate the link on the customer’s behalf.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    }
+   ],
+   "done_when": "The customer is verified and logged. Their referrals have been read with get_referrals_by_user, and each referral's status has been explained with the specific reason, including which bonuses filled the 7-day window for any REJECTED referral. For REJECTED referrals, the customer was told either to wait until a stated time or that they may send the referral again now (and did so if they wanted). Any persistent ERROR was transferred with the customer's consent."
+  }
+ ],
+ "decision": {
+  "investigate_missing_credit_card_referral_bonus": [
+   "understanding_credit_card_referral_statuses"
+  ]
+ },
+ "lock": {
+  "token": 46,
+  "jobs": [
+   "investigate_missing_credit_card_referral_bonus",
+   "understanding_credit_card_referral_statuses"
+  ],
+  "waited_ms": 985,
+  "read": {
+   "understanding_credit_card_referral_statuses": 0
+  },
+  "committed": {
+   "understanding_credit_card_referral_statuses": 1
+  },
+  "error": null
+ }
+}

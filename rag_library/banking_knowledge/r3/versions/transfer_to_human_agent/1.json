@@ -1,0 +1,136 @@
+{
+ "job": "transfer_to_human_agent",
+ "aliases": [
+  "customer demands a supervisor after blocked closures",
+  "escalate_to_human",
+  "supervisor_request"
+ ],
+ "when": {
+  "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: only when the customer asks for a human or supervisor, or agrees to one the agent proposes because the issue cannot be resolved. Never transfer without asking the customer first. Scenario-specific transfer protocols in other jobs (incident or decline protocols) override this job.",
+  "quote": "Do not transfer without asking the user first.",
+  "doc": "policy"
+ },
+ "tools": [
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "transfer",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "transfer_request",
+   "about": "That the customer wants a human or supervisor, and why (frustration, service complaint, an offer the agent cannot give, the closure itself)",
+   "from": "customer",
+   "ask": "Would you like me to transfer you to a human agent?",
+   "may_hold_back": false
+  },
+  {
+   "field": "transfer_request_count",
+   "about": "How many times in this conversation the customer has asked for a human",
+   "from": "customer",
+   "ask": "",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "offer_help_first",
+   "by": "model",
+   "do": "If the customer asks for a human while something they want is still within your tools and documents, say politely that you can help with it and keep helping. Count each request for a human.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer asks for a human agent and a request you can act on remains open",
+   "quote": "If an issue falls within your capabilities and the user still wants to be transferred to a human agent, kindly inform the user that you can help them, and try to help them first.",
+   "doc": "policy"
+  },
+  {
+   "id": "decide_transfer",
+   "by": "model",
+   "do": "Transfer when either: nothing the customer asked for remains that you can act on (every card is closed, kept with an offer, or blocked by a requirement you cannot resolve) and the customer confirms they want the transfer; or the customer has asked for a human 4 times.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "offer_help_first"
+   ],
+   "after": [
+    "offer_help_first"
+   ],
+   "if": "the customer asked for a human agent or supervisor",
+   "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+   "doc": "policy"
+  },
+  {
+   "id": "pick_reason",
+   "by": "model",
+   "do": "Pick the reason code from the highest tier that applies. Tier 1: customer_demands_after_unavailable_offer_refusal when the customer kept demanding an offer that is not available (for example a larger retention credit) and now demands a human; account_closure_request when the customer wants a human to close an account. Tier 3 only if no Tier 1/2 code fits: supervisor_request_service_complaint (unhappy with service quality) or customer_frustrated_demands_human (general frustration).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "decide_transfer"
+   ],
+   "after": [
+    "decide_transfer"
+   ],
+   "if": "decide_transfer allows the transfer",
+   "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "transfer",
+   "by": "model",
+   "do": "Transfer the customer with a summary of what was done for each item (cards closed, credits applied, payments made) and what remains blocked and why.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "per item: what was completed and what is blocked, with the requirement",
+    "reason": "the code chosen in pick_reason"
+   },
+   "lookup": [
+    "decide_transfer",
+    "pick_reason"
+   ],
+   "after": [
+    "pick_reason"
+   ],
+   "if": "the customer requested or agreed to the transfer and decide_transfer allows it",
+   "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Use account_closure_request when the customer is explicitly asking to close their account",
+   "quote": "Customer is explicitly requesting to close their account",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "rule": "Use customer_demands_after_unavailable_offer_refusal when the customer persisted in demanding an offer that does not exist and now demands a human",
+   "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "rule": "supervisor_request_service_complaint is Tier 3: only when no higher-tier code applies",
+   "quote": "Customer wants supervisor due to dissatisfaction with service quality (agent was rude, slow, unhelpful manner)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "rule": "customer_frustrated_demands_human is Tier 3: general frustration",
+   "quote": "Customer is frustrated and demands human, frustration is general",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "rule": "When nothing can be resolved, ask before transferring",
+   "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+   "doc": "policy"
+  }
+ ],
+ "done_when": "The customer was transferred with a reason code from the highest applicable tier and a per-item summary, or chose to stay with the agent."
+}

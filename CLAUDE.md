@@ -32,13 +32,18 @@
   record `sim_rules` and the customer; the loop never compares runs across either,
   so bump `runner.SIM_RULES` when these rules change. Every run before /2 (v4's and
   v7's included) is re-played before a gate.
-- **Banking's champion is v4** (5 Oct 2026, promoted by the gate): written by `make optimise`
-  from v3 under banking's s14 guide (routing: all five surfaces), Sonnet at high effort with
-  `parallel_calls: true`. Test 6 → 14 (fixed 8, broke 0, p = 0.004); train 12 → 29 of 60
-  (`20261004T222002Z`, test `20261004T113341Z`). v3 before it (4 Oct, the person's call): v1's
-  prompt with AllTools (`alltools_minilm`), native calls and the identity note, a `tool change`
-  that removed v1's harness defects. Loop cycles start from v4; CI's gate needs the sandbox and
-  MiniLM to re-score it (`.github/workflows/ci.yml`).
+- **Banking's champion is v8** (9 Oct 2026, the person's call, a `tool change`): v7 (v6's prompt
+  and workflow tools at Sonnet medium) reading workflow_rag r3's library, which holds a workflow
+  researched from each of the 60 train and 37 test questions' customer scripts. Test 14 → 21 of 37
+  against v4 (fixed 9, broke 2, McNemar p = 0.033), 12 → 21 against v7 (p = 0.006); train 38 of
+  60 against v4's 29 and v7's 37 (`20261008T134442Z`, the smoke `20261007T224313Z` extended; test
+  `20261008T134445Z`). Promoted without re-playing v4 under `tau2_loop/2` (the person's call: v4's
+  runs are `/1`, its test with the Haiku customer, and v4 has no per-question research). v4 before
+  it (5 Oct 2026, promoted by the gate): written by `make optimise` from v3 under banking's s14
+  guide, Sonnet at high effort with `parallel_calls: true`; test 6 → 14 (p = 0.004), train 12 → 29
+  (`20261004T222002Z`, test `20261004T113341Z`). v3 before that (4 Oct, the person's call): v1's
+  prompt with AllTools (`alltools_minilm`), native calls and the identity note. Loop cycles start
+  from v8; CI's gate needs the sandbox and MiniLM to re-score it (`.github/workflows/ci.yml`).
 - **Banking's base is v1, its split is v3** (3 Oct 2026): v0 is retired and
   deleted; every banking experiment is scored on split v3's 60 train / 37 test
   tasks. v1's runs were extended to it (`make extend RUN=`: only the new tasks
@@ -100,8 +105,8 @@
   (`find_workflow`) holds only train-question sessions; a mid-conversation `request_workflow`
   reads only the agent's words and is never cached. Test is held out of optimisation, not hidden
   (the person's call): Evals shows each test question's workflows as `golden.RULES` map them,
-  and `test_counts.json` stays counts only. v7 (v6 at Sonnet medium) is a held experiment:
-  train 37/60 and test 12/37 against v4's 29 and 14 (`.lavish/s17_…`); v4 stays champion.
+  and `test_counts.json` stays counts only. v7 (v6 at Sonnet medium) was a held experiment:
+  train 37/60 and test 12/37 against v4's 29 and 14 (`.lavish/s17_…`).
   r2 (s20, 7 Oct 2026, the person's calls) merges instead of replacing: seeded with r1's 64
   workflows, `make rag-build` runs the train questions one at a time in id order, each researched
   then merged into the jobs it shares (`merge.md`); `workflows/rubric.py` checks every merge

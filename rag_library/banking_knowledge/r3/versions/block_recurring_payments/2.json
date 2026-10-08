@@ -1,0 +1,207 @@
+{
+ "job": "block_recurring_payments",
+ "aliases": [
+  "block_recurring_debit_card_payments",
+  "recurring_block",
+  "recurring_payment_disputes_vs_stop_future_payments",
+  "stop future recurring debit charges",
+  "stop_future_recurring_debit_payments"
+ ],
+ "when": {
+  "quote": "To PREVENT future recurring charges on a debit card, use the recurring block feature.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer wants future recurring charges stopped on a debit card that stays in use. If there is also a past charge to dispute, file the dispute first. A customer who only disputes a charge after cancellation, and does not ask to stop future charges, is not offered a block.",
+  "quote": "If customer was charged after cancellation AND wants to prevent future charges:",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+ },
+ "tools": [
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_cards",
+   "not_used": null
+  },
+  {
+   "tool": "set_debit_card_recurring_block_7382",
+   "who": "agent",
+   "step": "set_block",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "set_block",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "set_block",
+   "not_used": null
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": null,
+   "not_used": "Doc 025 is cited only for its note on recurring payments of a closed card. Closing a card happens in closing_cancelling_a_debit_card, never in this job."
+  }
+ ],
+ "info": [
+  {
+   "field": "wants_recurring_block",
+   "about": "Whether the customer wants ALL recurring payments on the card blocked, after hearing the block is not limited to one merchant",
+   "from": "customer",
+   "ask": "This would block all recurring and subscription payments on this card, not just one merchant. Would you like me to set that up?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_to_block",
+   "about": "Which debit card the block applies to",
+   "from": "customer",
+   "ask": "Which debit card should the block apply to? The last 4 digits help.",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "ensure_verified",
+   "by": "model",
+   "do": "If the customer was not verified earlier in this conversation, verify them first, as in filing_a_debit_card_transaction_dispute: lookup, 2 matching values, get_current_time, log_verification. Otherwise reuse the verified user.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "1. Verify customer identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  },
+  {
+   "id": "get_cards",
+   "by": "harness",
+   "do": "Unlock get_debit_cards_by_account_id_7823, then call it for the card's checking account to get its card_id and status.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "account_id": "the card's checking account from the verified user's records"
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "card_closing_check",
+   "by": "model",
+   "do": "If the card is CLOSED or is being closed in this conversation, do not set a block. Tell the customer recurring payments on the old card stop with it, and they must move them to the new card or cancel them with the merchant.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "the card's status is CLOSED or its card action in this conversation is close_and_reissue",
+   "quote": "Any recurring payments linked to this card will need to be updated with new payment information",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "explain_block",
+   "by": "model",
+   "do": "Explain that the block stops ALL recurring payments on the card, not just one merchant. If the customer only wants one merchant stopped, advise cancelling directly with that merchant instead.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "the card stays open",
+   "quote": "Explain that this will block ALL recurring payments on the card, not just one merchant",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  },
+  {
+   "id": "one_merchant_only",
+   "by": "model",
+   "do": "Advise the customer to cancel directly with that merchant. Do not set the block.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "explain_block"
+   ],
+   "after": [
+    "explain_block"
+   ],
+   "if": "the customer only wants one merchant stopped",
+   "quote": "If customer only wants to block one merchant, advise them to cancel directly with that merchant",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  },
+  {
+   "id": "set_block",
+   "by": "harness",
+   "do": "After any dispute for past charges has been filed, unlock set_debit_card_recurring_block_7382 and call it with block_recurring true.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "set_debit_card_recurring_block_7382",
+    "card_id": "card_id from get_cards",
+    "block_recurring": "true"
+   },
+   "lookup": [
+    "get_cards",
+    "explain_block"
+   ],
+   "after": [
+    "explain_block"
+   ],
+   "if": "the customer confirms they want all recurring payments blocked and the card stays open",
+   "quote": "Use set_debit_card_recurring_block_7382 with:",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  },
+  {
+   "id": "inform_block",
+   "by": "model",
+   "do": "Tell the customer four things: the block takes effect within 24 hours; one-time purchases are not affected; it does not cancel subscriptions with merchants; it stays until they ask to remove it. Advise them to confirm the cancellation with the merchant in writing. If the call returned an error, explain that the block was not set.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "set_block"
+   ],
+   "after": [
+    "set_block"
+   ],
+   "if": null,
+   "quote": "Still advise customer to confirm cancellation directly with merchant in writing",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "File the dispute for past charges first, then set the block",
+   "quote": "Then set up the recurring block for future protection",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  },
+  {
+   "rule": "The block takes effect within 24 hours",
+   "quote": "Block takes effect within 24 hours",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  },
+  {
+   "rule": "The block does not cancel subscriptions",
+   "quote": "This does NOT cancel their subscriptions with merchants - they must still contact merchants directly",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  },
+  {
+   "rule": "The block covers every recurring payment on the card. To stop only one merchant, the customer cancels with that merchant.",
+   "quote": "The recurring block affects ALL recurring payments, not just specific merchants",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_034"
+  }
+ ],
+ "done_when": "The block is set and the customer has been informed. Or the customer declined it, wanted only one merchant stopped, or the card is closed, and the customer was told what to do instead."
+}

@@ -1,0 +1,169 @@
+{
+ "job": "apply_for_boosting_credit_card",
+ "aliases": [
+  "add card for savings bonus",
+  "apply_for_credit_card_for_apy_bonus",
+  "credit card application"
+ ],
+ "when": {
+  "quote": "Holding certain Rho-Bank credit cards provides bonus APY on your Platinum Plus Account balance.",
+  "doc": "doc_savings_accounts_platinum_plus_account_009"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: the agent recommends a card only as part of an APY recommendation the customer asked for, and only when the customer is open to a card. The customer submits the application themselves with apply_for_credit_card.",
+  "quote": "These bonuses are automatically applied when you hold both the credit card and savings account under the same customer profile.",
+  "doc": "doc_savings_accounts_platinum_plus_account_009"
+ },
+ "tools": [
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "promo_check",
+   "not_used": null
+  },
+  {
+   "tool": "apply_for_credit_card",
+   "who": "customer",
+   "step": "apply_cc",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "card_check",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": null,
+   "not_used": "The customer applies with their own tool; nothing here needs a human. Transfer only under the general policy."
+  }
+ ],
+ "info": [
+  {
+   "field": "annual_income",
+   "about": "Needed for the customer's application tool",
+   "from": "customer",
+   "ask": "What is your annual income?",
+   "may_hold_back": true
+  },
+  {
+   "field": "rho_bank_subscription",
+   "about": "Whether the customer has Rho-Bank+",
+   "from": "customer",
+   "ask": "Do you have a Rho-Bank+ subscription?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "promo_check",
+   "by": "harness",
+   "do": "Get the current time to see whether the Platinum Rewards first-year fee waiver window (2024-06-01 to 2024-12-31) is open.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the recommended card has an annual fee",
+   "quote": "Apply during the promo window and, if approved, your first year annual fee is $0.00 instead of $200.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "id": "explain_fee",
+   "by": "model",
+   "do": "State the $200.00 annual fee (the first-year waiver promo ended 2024-12-31) and show that the +0.4% bonus on the customer's balance is worth more than the fee. Mention the minimum credit score of 750.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "promo_check"
+   ],
+   "after": [
+    "promo_check"
+   ],
+   "if": null,
+   "quote": "Annual fee: $200.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "id": "apply_cc",
+   "by": "customer",
+   "do": "The customer applies for the recommended card with their own tool",
+   "call": "apply_for_credit_card",
+   "args": {
+    "card_type": "Platinum Rewards Card",
+    "customer_name": "the customer's name",
+    "annual_income": "the customer's income",
+    "rho_bank_subscription": "the customer's subscription status"
+   },
+   "lookup": [],
+   "after": [
+    "explain_fee"
+   ],
+   "if": "the customer accepts",
+   "quote": "| Platinum Rewards Card | +0.4% |",
+   "doc": "doc_savings_accounts_platinum_plus_account_009"
+  },
+  {
+   "id": "card_check",
+   "by": "harness",
+   "do": "Read the customer's credit cards to see whether the new card appears on the profile. Tell the customer the APY bonus applies automatically once they hold both the card and the savings account.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user's id"
+   },
+   "lookup": [],
+   "after": [
+    "apply_cc"
+   ],
+   "if": "the customer reports they applied",
+   "quote": "The system identifies all active Rho-Bank credit cards linked to the customer's profile.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_045"
+  },
+  {
+   "id": "apply_error",
+   "by": "model",
+   "do": "If the customer reports an error or a decline, explain what they saw. Do not promise approval, and do not apply for a different card unless they ask.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "apply_cc"
+   ],
+   "after": [
+    "apply_cc"
+   ],
+   "if": "the customer reports an application error or decline",
+   "quote": "Minimum credit score required: $750.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "The Platinum Rewards Card requires a minimum credit score of 750",
+   "quote": "Minimum credit score required: $750.",
+   "doc": "doc_credit_cards_platinum_rewards_card_001"
+  },
+  {
+   "rule": "The first-year fee waiver applies only to applications inside its window, which has ended",
+   "quote": "End date: 2024-12-31",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "rule": "Crypto-Cash Back has a $75 fee but gives only +0.25% on Platinum Plus. At $100,000 its net benefit ($175) is below Platinum Rewards ($200).",
+   "quote": "Annual fee: $75.00 dollars.",
+   "doc": "doc_credit_cards_crypto-cash_back_008"
+  },
+  {
+   "rule": "Only the single highest card bonus applies, so one card is enough",
+   "quote": "Only the HIGHEST credit card APY bonus is applied to the savings account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_045"
+  },
+  {
+   "rule": "Weigh the Platinum Rewards bonus against its $200.00 annual fee",
+   "quote": "Consider your net rewards after the $200.00 annual fee when planning large purchases.",
+   "doc": "doc_credit_cards_platinum_rewards_card_002"
+  }
+ ],
+ "done_when": "The customer has submitted the credit card application, or has declined it."
+}

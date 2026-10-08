@@ -1,0 +1,235 @@
+{
+ "job": "verify_customer_identity",
+ "aliases": [
+  "authenticate customer",
+  "standard identity verification"
+ ],
+ "when": {
+  "quote": "You should ONLY verify a user's identity if you need to access or modify their customer information in internal databases on their behalf.",
+  "doc": "policy"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: run this before reading or changing the customer's records, such as balances, transactions or the email on file. Do not run it for general questions. Verify only once per conversation.",
+  "quote": "Looking up account balances, transaction history, referral history...",
+  "doc": "policy"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "v_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "v_log",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job never transfers anyone. If verification fails and the customer wants a human, follow the job transfer_to_human_agent."
+  }
+ ],
+ "info": [
+  {
+   "field": "customer_name",
+   "about": "The customer's full name. It is used only to find the record and never counts toward verification.",
+   "from": "customer",
+   "ask": "May I have your full name as it appears on your account?",
+   "may_hold_back": false
+  },
+  {
+   "field": "email",
+   "about": "An email the customer gives for verification",
+   "from": "customer",
+   "ask": "Could you confirm the email address on your account?",
+   "may_hold_back": true
+  },
+  {
+   "field": "phone_number",
+   "about": "A phone number the customer gives for verification",
+   "from": "customer",
+   "ask": "Could you confirm the phone number on your account?",
+   "may_hold_back": true
+  },
+  {
+   "field": "date_of_birth",
+   "about": "A date of birth the customer gives for verification",
+   "from": "customer",
+   "ask": "Could you confirm your date of birth?",
+   "may_hold_back": true
+  },
+  {
+   "field": "address",
+   "about": "A home address the customer gives for verification",
+   "from": "customer",
+   "ask": "Could you confirm the address on your account?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "v_open",
+   "by": "model",
+   "do": "Greet the customer and ask what they need. Then ask for their full name and any two of: date of birth, email, phone number, address. Reveal nothing from the account until verification passes.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Do not leak any information about the user before they are verified.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_lookup",
+   "by": "model",
+   "do": "Find the customer's record with get_user_information_by_name, using the exact name the customer gave (the lookup is case sensitive). If that finds nothing, use get_user_information_by_email with an email the customer gave, or get_user_information_by_id with a user id they gave.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gave"
+   },
+   "lookup": [],
+   "after": [
+    "v_open"
+   ],
+   "if": null,
+   "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_check",
+   "by": "model",
+   "do": "Compare each value the customer gave with the record from v_lookup. Verification passes only if at least 2 of date of birth, email, phone number and address match exactly. A matching name or user id never counts.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "v_lookup"
+   ],
+   "after": [
+    "v_lookup"
+   ],
+   "if": null,
+   "quote": "Knowing full name or userID is not enough to verify.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_retry",
+   "by": "model",
+   "do": "Say only that the details could not be verified, and ask for another value the customer has not given yet. Never read out, hint at or confirm any value on file, including the email on file. A value counts only if the customer gave it before you could have revealed it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "v_lookup",
+    "v_check"
+   ],
+   "after": [
+    "v_check"
+   ],
+   "if": "v_check found fewer than 2 matching values",
+   "quote": "Do not leak any information about the user before they are verified.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_fail",
+   "by": "model",
+   "do": "Tell the customer politely that their identity cannot be verified, so no account information can be accessed or changed. Ask whether they would like to be transferred to a human agent. If they would, follow the job transfer_to_human_agent.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "v_check",
+    "v_retry"
+   ],
+   "after": [
+    "v_retry"
+   ],
+   "if": "still fewer than 2 values match after asking for the remaining fields, or the customer will not give them",
+   "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_time",
+   "by": "harness",
+   "do": "Get the current timestamp for the verification record.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "v_check"
+   ],
+   "if": "v_check found at least 2 matching values",
+   "quote": "If you need the current time, always use the get_current_time() tool.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_log",
+   "by": "harness",
+   "do": "Log the verification using the values from the record.",
+   "call": "log_verification",
+   "args": {
+    "name": "record from v_lookup",
+    "user_id": "record from v_lookup",
+    "address": "record from v_lookup",
+    "email": "record from v_lookup",
+    "phone_number": "record from v_lookup",
+    "date_of_birth": "record from v_lookup",
+    "time_verified": "result of v_time"
+   },
+   "lookup": [
+    "v_check",
+    "v_lookup",
+    "v_time"
+   ],
+   "after": [
+    "v_time"
+   ],
+   "if": "v_check found at least 2 matching values",
+   "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+   "doc": "policy"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Verification passes only when at least 2 of date of birth, email, phone number and address match the record. A name or user id alone is never enough.",
+   "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+   "doc": "policy"
+  },
+  {
+   "rule": "Reveal nothing from the record before verification passes: no email, phone, address, date of birth, account or balance.",
+   "quote": "Do not leak any information about the user before they are verified.",
+   "doc": "policy"
+  },
+  {
+   "rule": "Verify only once per conversation. Later jobs reuse this verification.",
+   "quote": "No need to verify more than once in a single conversation.",
+   "doc": "policy"
+  },
+  {
+   "rule": "A transfer after an identity verification failure that needs a specialist uses the Tier 1 code account_ownership_dispute.",
+   "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "done_when": "The job ends in one of two ways. (a) 2 values matched and log_verification was called with the record's values. (b) The customer was told they cannot be verified, nothing was revealed or changed, and a transfer was offered."
+}

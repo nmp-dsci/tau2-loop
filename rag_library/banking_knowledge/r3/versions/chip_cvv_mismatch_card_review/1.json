@@ -1,0 +1,685 @@
+{
+ "job": "chip_cvv_mismatch_card_review",
+ "aliases": [
+  "card error when inserting chip",
+  "chip error at terminal",
+  "code 82 negative CAM/CVV",
+  "debit_card_chip_cvv_mismatch",
+  "possible cloned debit card"
+ ],
+ "when": {
+  "quote": "The card's chip data or CVV code doesn't match what's on file. This could indicate card damage or potential fraud.",
+  "doc": "doc_checking_accounts_purple_account_007"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start when the customer reports the chip or card failing at terminals. The agent then asks about damage. If the card looks undamaged, the agent must review recent transactions with the customer, as the document says. Disputes, closure and replacement follow only for transactions the customer denies and with the customer's agreement. A freeze is recommended and done only if the customer agrees.",
+  "quote": "Say: 'For your security, I'd like to review some recent transactions with you.'",
+  "doc": "doc_checking_accounts_purple_account_007"
+ },
+ "tools": [
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts_82",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_cards_82",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "review_txns",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_dispute_status_7483",
+   "who": "agent",
+   "step": "check_prefiling_82",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "time_for_dispute",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_dispute",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "file_dispute",
+   "not_used": null
+  },
+  {
+   "tool": "file_debit_card_transaction_dispute_6281",
+   "who": "agent",
+   "step": "file_dispute",
+   "not_used": null
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": "close_card",
+   "not_used": null
+  },
+  {
+   "tool": "freeze_debit_card_3892",
+   "who": "agent",
+   "step": "freeze_undamaged",
+   "not_used": null
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": "order_card",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "action_error_82",
+   "not_used": null
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job never unfreezes a card. Unfreezing is done in freezing_and_unfreezing_a_debit_card when the customer asks."
+  },
+  {
+   "tool": "close_bank_account_7392",
+   "who": "agent",
+   "step": null,
+   "not_used": "Doc 005 is cited only for its tier list. No account is closed."
+  }
+ ],
+ "info": [
+  {
+   "field": "which_checking_account",
+   "about": "Checking account whose card had chip errors",
+   "from": "customer",
+   "ask": "Which account is that card linked to?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_damaged",
+   "about": "Whether the chip or stripe is physically damaged",
+   "from": "customer",
+   "ask": "Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?",
+   "may_hold_back": true
+  },
+  {
+   "field": "unrecognized_transactions",
+   "about": "Which recent transactions the customer does not recognize",
+   "from": "customer",
+   "ask": "I'll read your recent transactions. Can you confirm each one was you?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_in_possession",
+   "about": "Whether the customer still has the physical card",
+   "from": "customer",
+   "ask": "Do you still have your physical debit card in your possession?",
+   "may_hold_back": true
+  },
+  {
+   "field": "pin_compromised",
+   "about": "One of: yes_shared, yes_observed, no, unknown",
+   "from": "customer",
+   "ask": "Do you believe your PIN may have been compromised?",
+   "may_hold_back": true
+  },
+  {
+   "field": "written_statement",
+   "about": "Whether the customer agrees that this conversation serves as their written statement",
+   "from": "customer",
+   "ask": "Are you willing to provide a written statement describing what happened? We can use this conversation as your written statement if you agree.",
+   "may_hold_back": true
+  },
+  {
+   "field": "police_report_filed",
+   "about": "Asked only for fraud disputes over $500",
+   "from": "customer",
+   "ask": "Have you filed a police report?",
+   "may_hold_back": true
+  },
+  {
+   "field": "freeze_consent",
+   "about": "Whether the customer agrees to freeze an undamaged card until a replacement arrives",
+   "from": "customer",
+   "ask": "For your security I recommend freezing this card until a replacement arrives. Would you like me to do that?",
+   "may_hold_back": true
+  },
+  {
+   "field": "delivery_and_design",
+   "about": "Delivery option (STANDARD/EXPEDITED/RUSH), card design (CLASSIC/PREMIUM/CUSTOM) and mailing address for the replacement",
+   "from": "customer",
+   "ask": "Which delivery option and card design would you like, and should we mail it to your address on file?",
+   "may_hold_back": true
+  },
+  {
+   "field": "account_tier",
+   "about": "Tier of the checking account (Entry: Light Blue, Light Green, Green Fee-Free; Mid: Blue, Green (checking); Premium: Evergreen; Elite: Bluest)",
+   "from": "records",
+   "ask": "",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "ensure_verified",
+   "by": "model",
+   "do": "Reuse the verification done earlier in this conversation. If the customer was not verified yet, verify them first (lookup, 2 matching values, get_current_time, log_verification).",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "No need to verify more than once in a single conversation.",
+   "doc": "policy"
+  },
+  {
+   "id": "get_accounts_82",
+   "by": "harness",
+   "do": "Unlock get_all_user_accounts_by_user_id_3847 if needed, then call it to find the checking account the customer names and its class (tier), status and balance.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the verified user"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": "the accounts were not already read in this conversation",
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "ask_damage",
+   "by": "model",
+   "do": "Ask whether the card is physically damaged",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Ask: 'Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?'",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "damaged_replace",
+   "by": "model",
+   "do": "Explain the likely chip or stripe damage and offer a replacement (reason damaged). If accepted, order it in order_replacement_debit_card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "ask_damage"
+   ],
+   "after": [
+    "ask_damage"
+   ],
+   "if": "card is physically damaged",
+   "quote": "Offer / help them to order a replacement.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "get_cards_82",
+   "by": "harness",
+   "do": "Look up the debit cards on that checking account",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "arguments": {
+     "account_id": "the checking account in question"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "ask_damage"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "review_txns",
+   "by": "model",
+   "do": "Say you'd like to review recent transactions for security. Pull the history and read recent transactions to the customer for confirmation.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_bank_account_transactions_9173",
+    "arguments": {
+     "account_id": "the checking account in question"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "ask_damage"
+   ],
+   "if": "card appears undamaged",
+   "quote": "Say: 'For your security, I'd like to review some recent transactions with you.'",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "classify_review",
+   "by": "model",
+   "do": "From the customer's answers, decide: one or more transactions denied → fraud found (follow the stolen card protocol: dispute, close, replace). All transactions confirmed → freeze_undamaged.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "review_txns"
+   ],
+   "after": [
+    "review_txns"
+   ],
+   "if": "card appears undamaged",
+   "quote": "If suspicious transactions found: Follow stolen card protocol to assist the customer.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "freeze_undamaged",
+   "by": "harness",
+   "do": "Recommend freezing the card until a replacement arrives. Tell the customer that new transactions and recurring payments will be declined while it is frozen. If they agree, unlock freeze_debit_card_3892 and freeze the card, then offer a replacement (order_replacement_debit_card).",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "freeze_debit_card_3892",
+    "arguments": {
+     "card_id": "card_id from get_cards_82"
+    }
+   },
+   "lookup": [
+    "get_cards_82",
+    "classify_review"
+   ],
+   "after": [
+    "classify_review"
+   ],
+   "if": "the card is undamaged, the customer confirms all recent transactions, the card status is ACTIVE, and the customer agrees to the freeze",
+   "quote": "Recommend freezing the card until a replacement arrives.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "liability_notice",
+   "by": "model",
+   "do": "Before filing, tell the customer their Reg E liability exposure ($50 / $500 / unlimited by reporting time)",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "review_txns"
+   ],
+   "after": [
+    "review_txns"
+   ],
+   "if": "customer denies one or more transactions",
+   "quote": "Before proceeding, inform the customer of their liability exposure based on when they noticed the unauthorized activity:",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "id": "gather_dispute_info",
+   "by": "model",
+   "do": "Ask about card possession, PIN compromise and the written statement. Ask about a police report if the fraud dispute is over $500.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "liability_notice"
+   ],
+   "if": "customer denies one or more transactions",
+   "quote": "For fraud disputes over $500, ask if customer has filed a police report. If not, recommend they do so.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "id": "time_for_dispute",
+   "by": "harness",
+   "do": "Get the current date for discovery_date and the 60-day check",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "gather_dispute_info"
+   ],
+   "if": "customer denies one or more transactions",
+   "quote": "Transaction must be within 60 days old",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "id": "check_prefiling_82",
+   "by": "model",
+   "do": "Unlock and call get_debit_dispute_status_7483 for the verified user, then check the pre-filing rules for each denied transaction: amount at least $1.00, no more than 60 days old (time_for_dispute), linked account OPEN (get_accounts_82), and open disputes on this account below the tier maximum (Entry 2, Mid 3, Premium 4, Elite 5). If a rule fails, tell the customer what blocks that dispute and do not file it. The full procedure is filing_a_debit_card_transaction_dispute.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_dispute_status_7483",
+    "arguments": {
+     "user_id": "the verified user"
+    }
+   },
+   "lookup": [
+    "review_txns",
+    "time_for_dispute",
+    "get_accounts_82"
+   ],
+   "after": [
+    "time_for_dispute"
+   ],
+   "if": "customer denies one or more transactions",
+   "quote": "To retrieve a customer's debit card dispute history and check the status of open disputes, use the get_debit_dispute_status_7483 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_035"
+  },
+  {
+   "id": "unlock_dispute",
+   "by": "harness",
+   "do": "Unlock the debit dispute tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "file_debit_card_transaction_dispute_6281"
+   },
+   "lookup": [
+    "check_prefiling_82"
+   ],
+   "after": [
+    "time_for_dispute",
+    "check_prefiling_82"
+   ],
+   "if": "customer denies one or more transactions",
+   "quote": "**Tool: file_debit_card_transaction_dispute_6281**",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "id": "file_dispute",
+   "by": "model",
+   "do": "File a dispute for each denied transaction. Category: card_present_fraud (in-store) or card_not_present_fraud (online/phone). card_action: close_and_reissue. provisional_credit_eligible: per the provisional credit guidelines.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "file_debit_card_transaction_dispute_6281",
+    "arguments": {
+     "transaction_id": "from transaction history",
+     "account_id": "the checking account",
+     "card_id": "the card from lookup",
+     "user_id": "the verified user",
+     "dispute_category": "card_present_fraud or card_not_present_fraud",
+     "transaction_date": "from history, MM/DD/YYYY",
+     "discovery_date": "today, MM/DD/YYYY",
+     "disputed_amount": "transaction amount",
+     "transaction_type": "pin_purchase / signature_purchase / online_purchase per circumstances",
+     "card_in_possession": "customer answer",
+     "pin_compromised": "customer answer",
+     "contacted_merchant": "customer answer or false",
+     "police_report_filed": "customer answer",
+     "written_statement_provided": "true if customer agrees",
+     "provisional_credit_eligible": "per doc_bank_accounts_bank_accounts_(general)_032",
+     "card_action": "close_and_reissue"
+    }
+   },
+   "lookup": [
+    "check_prefiling_82",
+    "review_txns",
+    "gather_dispute_info"
+   ],
+   "after": [
+    "unlock_dispute"
+   ],
+   "if": "customer denies one or more transactions",
+   "quote": "'card_present_fraud': Physical card used fraudulently (not by customer) - USE THIS when fraud suspected and card was physically present",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "id": "check_close_82",
+   "by": "model",
+   "do": "Before closing, check: the card belongs to the verified user, its status is ACTIVE or PENDING (get_cards_82), and there are no pending transactions or refunds on it (review_txns). The 14-day card age does not apply to fraud_suspected. If a check fails, tell the customer what must be resolved and do not close.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards_82",
+    "review_txns"
+   ],
+   "after": [
+    "file_dispute"
+   ],
+   "if": "fraud found",
+   "quote": "Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "unlock_close",
+   "by": "harness",
+   "do": "Unlock the debit card close tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "close_debit_card_4721"
+   },
+   "lookup": [
+    "check_close_82"
+   ],
+   "after": [
+    "file_dispute",
+    "check_close_82"
+   ],
+   "if": "fraud found",
+   "quote": "Use close_debit_card_4721 to close the card with parameters: card_id, reason",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "close_card",
+   "by": "harness",
+   "do": "Close the compromised card. This is the card action done after filing; it replaces freezing.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "close_debit_card_4721",
+    "arguments": {
+     "card_id": "the compromised card",
+     "reason": "fraud_suspected"
+    }
+   },
+   "lookup": [
+    "check_close_82"
+   ],
+   "after": [
+    "unlock_close"
+   ],
+   "if": "fraud found",
+   "quote": "the agent must separately perform the indicated card action after filing the dispute.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "id": "explain_close",
+   "by": "model",
+   "do": "Confirm the card is permanently closed. Remind the customer to update recurring payments and to change their online banking password.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "close_card"
+   ],
+   "after": [
+    "close_card"
+   ],
+   "if": "fraud found",
+   "quote": "For fraud_suspected closures, recommend the customer also change their online banking password",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "ask_replacement",
+   "by": "model",
+   "do": "Ask if they want a replacement now. Ask for delivery option, design and mailing address, and state the tier fees that will be deducted from checking.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_82"
+   ],
+   "after": [
+    "close_card"
+   ],
+   "if": null,
+   "quote": "Always inform the customer that the fee will be deducted from their checking account balance before placing the order.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "check_order_82",
+   "by": "model",
+   "do": "Check the replacement rules: the account is OPEN with a balance of at least $25 (get_accounts_82). There is no PENDING card on it (get_cards_82). Count replacements (issue_reason lost, stolen, fraud, damaged) issued in the last 12 months against the tier limit: Entry 2, Mid 3, Premium 5, Elite unlimited. For an Entry-tier account, a replacement waits 48 hours after the closure: give the earliest time and do not order now. If a check fails, explain it and do not order.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_82",
+    "get_cards_82",
+    "time_for_dispute"
+   ],
+   "after": [
+    "ask_replacement"
+   ],
+   "if": "customer wants a replacement",
+   "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "unlock_order",
+   "by": "harness",
+   "do": "Unlock the debit card ordering tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "order_debit_card_5739"
+   },
+   "lookup": [
+    "check_order_82"
+   ],
+   "after": [
+    "ask_replacement",
+    "check_order_82"
+   ],
+   "if": "customer wants a replacement and the tier allows ordering now",
+   "quote": "Use order_debit_card_5739 to order the card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "order_card",
+   "by": "model",
+   "do": "Order the replacement with the exact tier delivery_fee and design_fee and the customer's choices (use the parameter names the unlocked tool shows)",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "order_debit_card_5739",
+    "arguments": {
+     "account_id": "the checking account",
+     "delivery_option": "customer choice",
+     "card_design": "customer choice",
+     "delivery_fee": "per tier table",
+     "design_fee": "per tier table"
+    }
+   },
+   "lookup": [
+    "check_order_82",
+    "ask_replacement"
+   ],
+   "after": [
+    "unlock_order"
+   ],
+   "if": "customer wants a replacement and check_order_82 passed",
+   "quote": "When using order_debit_card_5739, you must provide the exact delivery_fee and design_fee amounts based on the tier rules below.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "confirm_order",
+   "by": "model",
+   "do": "Confirm the dispute(s), closure and replacement, with the delivery timeframe and any fees",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "order_card",
+    "file_dispute",
+    "close_card"
+   ],
+   "after": [
+    "order_card"
+   ],
+   "if": null,
+   "quote": "8) Inform customer of expected delivery timeframe and any applicable fees",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "action_error_82",
+   "by": "model",
+   "do": "If filing, closing, freezing or ordering returns an error, fix the argument and retry once. If it still fails, explain what failed and ask whether the customer wants a human agent; transfer (technical_system_error) only if they agree.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the chip review, the actions done and the error",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "file_dispute",
+    "close_card",
+    "freeze_undamaged",
+    "order_card"
+   ],
+   "after": [
+    "file_dispute"
+   ],
+   "if": "a write call fails after one corrected retry and the customer agrees to a transfer",
+   "quote": "System error or outage preventing completion of the customer's request",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "An undamaged card with chip/CVV errors is a possible clone. Review transactions before simply replacing it.",
+   "quote": "SECURITY CONCERN: This could indicate a cloned or counterfeit card was used.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "rule": "Use fraud categories when fraud is suspected. Use 'unauthorized_transaction' only when fraud is not suspected.",
+   "quote": "Only use 'unauthorized_transaction' when fraud is NOT suspected",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "rule": "Fraud categories map to close_and_reissue.",
+   "quote": "'card_present_fraud' → 'close_and_reissue'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "rule": "Provisional credit is required when the report is timely, the category qualifies, a written statement was given and the account is OPEN with no holds.",
+   "quote": "**Provisional Credit is REQUIRED when ALL of these conditions are met:**",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+  },
+  {
+   "rule": "Fraud/lost/stolen closures skip the 14-day minimum card age.",
+   "quote": "These reasons bypass the minimum card age requirement (requirement 6) for security purposes",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "rule": "Entry tier: 48h wait after closure and standard shipping only. Mid: standard $0 / expedited $15. Premium: standard and expedited $0, rush $35. Elite: all $0. CLASSIC design is $0 for all tiers.",
+   "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "Evergreen Account is Premium tier.",
+   "quote": "PREMIUM TIER (Evergreen Account)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_005"
+  },
+  {
+   "rule": "Dispute open-count limits per account: Entry 2, Mid 3, Premium 4, Elite 5. The transaction must be at least $1.00.",
+   "quote": "Customer cannot exceed the maximum open disputes for their checking account tier: Entry Tier max 2, Mid Tier max 3, Premium Tier max 4, Elite Tier max 5.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "rule": "Only an ACTIVE card can be frozen.",
+   "quote": "Card must currently be in ACTIVE status (cannot freeze PENDING, CLOSED, or already FROZEN cards)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "rule": "A card with pending transactions cannot be closed until they settle.",
+   "quote": "No pending transactions: The card must not have any pending or processing transactions.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  }
+ ],
+ "done_when": "The damage question has been answered. A damaged card: a replacement was offered or ordered. An undamaged card: every recent transaction was confirmed with the customer. Then either (a) a dispute is filed for each denied transaction that passed the pre-filing rules, the compromised card is closed with reason fraud_suspected, and a replacement is ordered with the correct tier fees or the wait explained, with reminders about recurring payments and the password; or (b) all transactions were confirmed, a freeze was recommended (and done if the customer agreed), and a replacement was offered. Any failed call was explained and a transfer offered."
+}

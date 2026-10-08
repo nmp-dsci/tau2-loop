@@ -1,0 +1,377 @@
+{
+ "job": "unlock_and_post_unlock_pin_reset",
+ "aliases": [
+  "PIN lock notifications offer after unlock",
+  "change PIN",
+  "debit card PIN reset",
+  "forgot PIN",
+  "reset_or_change_debit_card_pin",
+  "resetting_or_changing_a_debit_card_pin"
+ ],
+ "when": {
+  "quote": "After unlocking (for eligible cases), complete these steps based on D1 Lock Frequency:",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: runs after the PIN lock investigation allows an unlock. The agent must make the post-unlock offer that matches the card's prior lock count. It resets a PIN only when the customer accepts, or when 3+ prior locks make a reset required. The customer may also start this job by asking to reset or change a PIN, or by accepting a reset offered because they forgot it.",
+  "quote": "After unlocking (for eligible cases), complete these steps based on D1 Lock Frequency:",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+ },
+ "tools": [
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "reread_card",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "pin_reset",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "pin_reset",
+   "not_used": null
+  },
+  {
+   "tool": "reset_debit_card_pin_6284",
+   "who": "agent",
+   "step": "pin_reset",
+   "not_used": null
+  },
+  {
+   "tool": "change_debit_card_pin_6285",
+   "who": "agent",
+   "step": "change_pin",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "pin_error",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "last_4_digits",
+   "about": "Last 4 digits of the card, needed for a PIN reset",
+   "from": "customer",
+   "ask": "For security, can you confirm the last 4 digits of the card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "new_pin",
+   "about": "The new 4-digit PIN the customer chooses",
+   "from": "customer",
+   "ask": "What new 4-digit PIN would you like?",
+   "may_hold_back": true
+  },
+  {
+   "field": "current_pin",
+   "about": "The current PIN, needed only for a change when the customer knows it",
+   "from": "customer",
+   "ask": "Please confirm your current PIN for additional security.",
+   "may_hold_back": true
+  },
+  {
+   "field": "notifications_wanted",
+   "about": "Whether the customer wants PIN lock notifications (offered after an unlock with 1 prior lock)",
+   "from": "customer",
+   "ask": "Would you like me to enable PIN lock notifications so you're alerted if this happens again?",
+   "may_hold_back": true
+  },
+  {
+   "field": "reset_wanted",
+   "about": "Whether the customer wants their PIN reset (offered after an unlock with 2 prior locks, or when they forgot it)",
+   "from": "customer",
+   "ask": "Would you like me to reset your PIN to a new number?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "reread_card",
+   "by": "harness",
+   "do": "Before acting, read the card's account to confirm its card_id, card_number_last_4, user_id, status and pin_locked state. Unlock get_debit_cards_by_account_id_7823 first if needed.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "account_id": "the card's checking account from the PIN lock investigation"
+   },
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Card must be in ACTIVE status (cannot change PIN on FROZEN, PENDING, or CLOSED cards)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "unlock",
+   "by": "model",
+   "do": "Unlock the card only if its score and the answers to the questions make it eligible. No unlock tool is named in the KB, so do not invent one (see open questions).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_card"
+   ],
+   "after": [
+    "reread_card"
+   ],
+   "if": "card eligible per thresholds",
+   "quote": "Unlock after standard identity verification",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "notif_offer",
+   "by": "model",
+   "do": "If the card had 1 prior lock, offer PIN lock notifications.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_card"
+   ],
+   "after": [
+    "unlock"
+   ],
+   "if": "1 prior lock in 90 days",
+   "quote": "After unlock, MUST offer: 'Would you like me to enable PIN lock notifications so you're alerted if this happens again?'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "notif_accept",
+   "by": "model",
+   "do": "If the customer accepts the notifications offer, acknowledge it. No document names a tool that enables PIN lock notifications, so do not claim a tool changed the setting; tell the customer only what you can confirm (see open questions).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "notif_offer"
+   ],
+   "after": [
+    "notif_offer"
+   ],
+   "if": "the customer accepts PIN lock notifications",
+   "quote": "After unlock, MUST offer: 'Would you like me to enable PIN lock notifications so you're alerted if this happens again?'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "reset_offer",
+   "by": "model",
+   "do": "If the card had 2 prior locks, ask whether the customer wants a PIN reset.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_card"
+   ],
+   "after": [
+    "unlock"
+   ],
+   "if": "2 prior locks in 90 days (or 3+, where reset is mandatory)",
+   "quote": "After unlock, MUST ask: 'This is your third PIN lock in 90 days. Would you like me to reset your PIN to a new number? Frequent locks sometimes indicate the current PIN is difficult to remember.'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "three_plus_reset",
+   "by": "model",
+   "do": "With 3 or more prior locks in 90 days, do not unlock. Tell the customer the PIN must be reset, and go to pin_collect.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_card"
+   ],
+   "after": [
+    "reread_card"
+   ],
+   "if": "3+ prior locks in 90 days",
+   "quote": "Cannot unlock. Must reset PIN.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "forgot_or_option_reset",
+   "by": "model",
+   "do": "Offer a PIN reset when the customer forgot their PIN, or when the PIN lock investigation offers it as an option for a card that cannot be unlocked. Go on only if the customer accepts.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_card"
+   ],
+   "after": [
+    "reread_card"
+   ],
+   "if": "the customer forgot the PIN, or a reset is offered as a cannot-unlock option",
+   "quote": "If they've forgotten: Offer/help them PIN reset.",
+   "doc": "doc_checking_accounts_green_account_(checking)_010"
+  },
+  {
+   "id": "check_pin_card",
+   "by": "model",
+   "do": "Check that the card belongs to the verified user and its status is ACTIVE. If it is FROZEN, tell the customer it must be unfrozen first. If it is PENDING or CLOSED, explain that the PIN cannot be changed on it, and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_card"
+   ],
+   "after": [
+    "reread_card"
+   ],
+   "if": "a PIN reset or change is about to be done",
+   "quote": "Card must be in ACTIVE status (cannot change PIN on FROZEN, PENDING, or CLOSED cards)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "pin_collect",
+   "by": "model",
+   "do": "Ask for the last 4 digits of the card and the new PIN. Check the PIN: exactly 4 digits, not sequential, not all the same digit, not the customer's birth year or month/day.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_card",
+    "check_pin_card"
+   ],
+   "after": [
+    "reset_offer",
+    "check_pin_card"
+   ],
+   "if": "customer accepts reset",
+   "quote": "For security, ask customer to confirm the last 4 digits of their card",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "pin_invalid",
+   "by": "model",
+   "do": "If the last 4 digits do not match card_number_last_4, ask again and do not reset. If the new PIN breaks a rule, explain which rule and ask for another PIN. A PIN breaks a rule if it is sequential (like 1234 or 4321), repeats one digit, or matches the birth year or month/day on record. Never read a PIN back.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "pin_collect",
+    "reread_card"
+   ],
+   "after": [
+    "pin_collect"
+   ],
+   "if": "the last 4 do not match or the new PIN is invalid",
+   "quote": "Cannot be sequential (e.g., 1234, 4321)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "pin_reset",
+   "by": "model",
+   "do": "Unlock the tool and reset the PIN. Confirm the change without reading the PIN back.",
+   "call": "reset_debit_card_pin_6284",
+   "args": {
+    "card_id": "the card",
+    "last_4_digits": "customer-confirmed last 4",
+    "new_pin": "customer's new PIN"
+   },
+   "lookup": [
+    "pin_collect",
+    "check_pin_card"
+   ],
+   "after": [
+    "pin_collect"
+   ],
+   "if": "last 4 match the record and PIN valid",
+   "quote": "Use reset_debit_card_pin_6284 with parameters: card_id, last_4_digits, new_pin",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "change_pin",
+   "by": "model",
+   "do": "If the customer knows the current PIN and asks to change it, ask for the current PIN and validate the new PIN. Then unlock and call change_debit_card_pin_6285.",
+   "call": "change_debit_card_pin_6285",
+   "args": {
+    "card_id": "the card from reread_card",
+    "current_pin": "the customer's current PIN",
+    "new_pin": "the customer's validated new PIN"
+   },
+   "lookup": [
+    "check_pin_card",
+    "pin_collect"
+   ],
+   "after": [
+    "check_pin_card"
+   ],
+   "if": "the customer knows the current PIN and asks to change it, the card is ACTIVE, and the new PIN is valid",
+   "quote": "Use change_debit_card_pin_6285 with parameters: card_id, current_pin, new_pin",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "confirm_pin",
+   "by": "model",
+   "do": "Confirm the PIN has been changed and is effective immediately, without repeating it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "pin_reset",
+    "change_pin"
+   ],
+   "after": [
+    "pin_reset"
+   ],
+   "if": "the reset or change succeeded",
+   "quote": "Confirm the PIN has been changed and is effective immediately",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "pin_error",
+   "by": "model",
+   "do": "If the reset or change call returns an error, explain it, fix any wrong argument and retry once. If it still fails, mention that the customer can also change the PIN at any Rho-Bank ATM, and offer a transfer to a human agent. Transfer only if they agree.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "PIN reset or change attempted and the error",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "pin_reset",
+    "change_pin"
+   ],
+   "after": [
+    "pin_reset"
+   ],
+   "if": "the reset or change still fails after one corrected retry and the customer agrees to a transfer",
+   "quote": "Customer can also change their PIN at any Rho-Bank ATM",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "A PIN must be exactly 4 digits, not sequential and not all one digit",
+   "quote": "Cannot be sequential (e.g., 1234, 4321)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "rule": "A PIN cannot be the customer's birth year or birth month/day",
+   "quote": "Cannot be the customer's birth year or birth month/day",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "rule": "A PIN can be reset only on an ACTIVE card",
+   "quote": "Card must be in ACTIVE status (cannot change PIN on FROZEN, PENDING, or CLOSED cards)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "rule": "Never read a PIN back to the customer",
+   "quote": "For security, PINs are never displayed or read back to customers",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "rule": "A PIN cannot be all the same digit",
+   "quote": "Cannot be all the same digit (e.g., 1111)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "rule": "0 prior locks: standard unlock with no further offer",
+   "quote": "0 prior locks**: Standard unlock, no additional steps.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "A frozen card must be unfrozen before its PIN is changed",
+   "quote": "If customer's card is frozen, they must unfreeze it first before changing PIN",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  }
+ ],
+ "done_when": "Each eligible card has been unlocked, or its PIN reset where required, and the post-unlock offer that matches its lock count has been made and carried out if accepted. In addition:\n- Any PIN reset or change was done only on an ACTIVE card owned by the verified user, with a matching last 4 (or current PIN) and a valid new PIN, and was confirmed without reading the PIN back.\n- An invalid PIN was refused, with the rule it breaks explained.\n- A failure was explained and a transfer offered."
+}

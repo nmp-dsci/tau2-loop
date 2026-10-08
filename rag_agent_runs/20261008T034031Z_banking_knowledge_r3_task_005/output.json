@@ -1,0 +1,2239 @@
+{
+ "jobs": [
+  {
+   "job": "verify_customer_identity",
+   "aliases": [
+    "authenticate customer",
+    "standard identity verification"
+   ],
+   "when": {
+    "quote": "You should ONLY verify a user's identity if you need to access or modify their customer information in internal databases on their behalf.",
+    "doc": "policy"
+   },
+   "starts": {
+    "by": "agent",
+    "note": "agent: run this before reading or changing the customer's records, such as balances, transactions or the email on file. Do not run it for general questions. Verify only once per conversation.",
+    "quote": "Looking up account balances, transaction history, referral history...",
+    "doc": "policy"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "v_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "v_log",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": null,
+     "not_used": "This job never transfers anyone. If verification fails and the customer wants a human, follow the job transfer_to_human_agent."
+    }
+   ],
+   "info": [
+    {
+     "field": "customer_name",
+     "about": "The customer's full name. It is used only to find the record and never counts toward verification.",
+     "from": "customer",
+     "ask": "May I have your full name as it appears on your account?",
+     "may_hold_back": false
+    },
+    {
+     "field": "email",
+     "about": "An email the customer gives for verification",
+     "from": "customer",
+     "ask": "Could you confirm the email address on your account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "phone_number",
+     "about": "A phone number the customer gives for verification",
+     "from": "customer",
+     "ask": "Could you confirm the phone number on your account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "date_of_birth",
+     "about": "A date of birth the customer gives for verification",
+     "from": "customer",
+     "ask": "Could you confirm your date of birth?",
+     "may_hold_back": true
+    },
+    {
+     "field": "address",
+     "about": "A home address the customer gives for verification",
+     "from": "customer",
+     "ask": "Could you confirm the address on your account?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "v_open",
+     "by": "model",
+     "do": "Greet the customer and ask what they need. Then ask for their full name and any two of: date of birth, email, phone number, address. Reveal nothing from the account until verification passes.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_lookup",
+     "by": "model",
+     "do": "Find the customer's record with get_user_information_by_name, using the exact name the customer gave (the lookup is case sensitive). If that finds nothing, use get_user_information_by_email with an email the customer gave, or get_user_information_by_id with a user id they gave.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave"
+     },
+     "lookup": [],
+     "after": [
+      "v_open"
+     ],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_check",
+     "by": "model",
+     "do": "Compare each value the customer gave with the record from v_lookup. Verification passes only if at least 2 of date of birth, email, phone number and address match exactly. A matching name or user id never counts.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_lookup"
+     ],
+     "after": [
+      "v_lookup"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_retry",
+     "by": "model",
+     "do": "Say only that the details could not be verified, and ask for another value the customer has not given yet. Never read out, hint at or confirm any value on file, including the email on file. A value counts only if the customer gave it before you could have revealed it.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_lookup",
+      "v_check"
+     ],
+     "after": [
+      "v_check"
+     ],
+     "if": "v_check found fewer than 2 matching values",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_fail",
+     "by": "model",
+     "do": "Tell the customer politely that their identity cannot be verified, so no account information can be accessed or changed. Ask whether they would like to be transferred to a human agent. If they would, follow the job transfer_to_human_agent.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_check",
+      "v_retry"
+     ],
+     "after": [
+      "v_retry"
+     ],
+     "if": "still fewer than 2 values match after asking for the remaining fields, or the customer will not give them",
+     "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification record.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "v_check"
+     ],
+     "if": "v_check found at least 2 matching values",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_log",
+     "by": "harness",
+     "do": "Log the verification using the values from the record.",
+     "call": "log_verification",
+     "args": {
+      "name": "record from v_lookup",
+      "user_id": "record from v_lookup",
+      "address": "record from v_lookup",
+      "email": "record from v_lookup",
+      "phone_number": "record from v_lookup",
+      "date_of_birth": "record from v_lookup",
+      "time_verified": "result of v_time"
+     },
+     "lookup": [
+      "v_check",
+      "v_lookup",
+      "v_time"
+     ],
+     "after": [
+      "v_time"
+     ],
+     "if": "v_check found at least 2 matching values",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Verification passes only when at least 2 of date of birth, email, phone number and address match the record. A name or user id alone is never enough.",
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "rule": "Reveal nothing from the record before verification passes: no email, phone, address, date of birth, account or balance.",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "rule": "Verify only once per conversation. Later jobs reuse this verification.",
+     "quote": "No need to verify more than once in a single conversation.",
+     "doc": "policy"
+    },
+    {
+     "rule": "A transfer after an identity verification failure that needs a specialist uses the Tier 1 code account_ownership_dispute.",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "The job ends in one of two ways. (a) 2 values matched and log_verification was called with the record's values. (b) The customer was told they cannot be verified, nothing was revealed or changed, and a transfer was offered."
+  },
+  {
+   "job": "check_credit_card_balance",
+   "aliases": [
+    "account balance inquiry",
+    "check balance on a rewards card",
+    "credit card balance lookup"
+   ],
+   "when": {
+    "quote": "3. Look up the customer's credit card account to confirm the outstanding balance.",
+    "doc": "doc_credit_cards_credit_card_account_logistics_009"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks for a credit card balance. The agent never volunteers balances.",
+    "quote": "Looking up account balances, transaction history, referral history...",
+    "doc": "policy"
+   },
+   "tools": [
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "b_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "pay_credit_card_from_checking_9182",
+     "who": "agent",
+     "step": null,
+     "not_used": "A balance inquiry moves no money. Use this tool only if the customer separately asks to pay the card from checking, under paying_off_credit_card_balance_from_checking_account."
+    }
+   ],
+   "info": [
+    {
+     "field": "card_type",
+     "about": "Which Rho-Bank credit card the customer is asking about",
+     "from": "customer",
+     "ask": "Which of your Rho-Bank credit cards would you like the balance for?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "b_verify",
+     "by": "model",
+     "do": "Confirm the customer passed standard verification (job verify_customer_identity). A bypass-code verification does not count, because a bypass code may be used only for account recovery. If the customer is not verified, do not look up or state any balance.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "Use the bypass code only for account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "b_lookup",
+     "by": "harness",
+     "do": "Read the verified user's credit card accounts.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "b_verify"
+     ],
+     "if": "the customer passed standard verification",
+     "quote": "Use get_credit_card_accounts_by_user to retrieve any credit card accounts for the customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "id": "b_answer",
+     "by": "model",
+     "do": "Match the card the customer named to an account from b_lookup and tell them its current balance. Say so if the account is closed. If several accounts match, ask which one they mean. If none matches, say so and list the card types they hold.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "b_lookup"
+     ],
+     "after": [
+      "b_lookup"
+     ],
+     "if": null,
+     "quote": "This will return all active and closed credit card accounts.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "id": "b_error",
+     "by": "model",
+     "do": "If the lookup returns an error, retry once. If it still fails, explain that the balance cannot be retrieved right now and ask whether the customer wants a human agent. Follow transfer_to_human_agent only if they agree, with reason technical_system_error.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "b_lookup"
+     ],
+     "after": [
+      "b_lookup"
+     ],
+     "if": "the account lookup returned an error that a retry did not fix",
+     "quote": "System error or outage preventing completion of the customer's request",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Account ids and balances used must belong to the authenticated customer.",
+     "quote": "ensuring the account IDs and user_id match the authenticated customer",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "rule": "A bypass-code verification does not authorize a balance inquiry. Standard verification is required.",
+     "quote": "Use the bypass code only for account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    }
+   ],
+   "done_when": "The job ends in one of three ways: the verified customer was told the balance of the card they asked about; they were told no matching card exists; or they were told the lookup failed and were offered a transfer."
+  },
+  {
+   "job": "change_user_email",
+   "aliases": [
+    "account_recovery_bypass_code",
+    "change account email",
+    "change email when identity verification fails",
+    "customer recently changed their email and wants it updated",
+    "recovery code email change",
+    "special support code",
+    "supervisor bypass code",
+    "update contact email on file",
+    "update email address"
+   ],
+   "when": {
+    "quote": "Changing account settings (e.g., address, phone number, email)",
+    "doc": "policy"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks to change the email on their account. No document tells the agent to offer an email change, so the agent never offers it. The bypass-code branch also starts only when the customer presents a code themselves. The agent never mentions a code or asks for one.",
+    "quote": "Changing account settings (e.g., address, phone number, email)",
+    "doc": "policy"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "change_user_email",
+     "who": "agent",
+     "step": "change_email",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "transfer",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "full_name",
+     "about": "The customer's full name. It is used only to find the record and does not count toward verification.",
+     "from": "customer",
+     "ask": "Could you please tell me your full name as it appears on your account?",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_values",
+     "about": "At least 2 of: date of birth, email on file, phone number on file, address on file. Each one is compared with the record.",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, the email address on file, the phone number on file, or your home address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "current_email_on_file",
+     "about": "The email the customer believes is on the account now. It counts toward verification only if it exactly matches the record's email. The email the customer wants to change to does NOT count.",
+     "from": "customer",
+     "ask": "Which email address is currently on file with us, that is, the old one from before your change?",
+     "may_hold_back": true
+    },
+    {
+     "field": "new_email",
+     "about": "The email address the customer wants on the account",
+     "from": "customer",
+     "ask": "What new email address would you like on your account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "transfer_request_count",
+     "about": "How many times the customer has asked for a human agent in this conversation",
+     "from": "customer",
+     "ask": "Do not ask. Count each time the customer asks for a human agent.",
+     "may_hold_back": false
+    },
+    {
+     "field": "user_record",
+     "about": "user_id, name, date of birth, email, phone and address on file",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "bypass_code_value",
+     "about": "The complete Account Recovery Bypass Code, if the customer offers one on their own. It is compared character for character with 9K2X7M4P1N8Q3R5T6A.",
+     "from": "customer",
+     "ask": "Could you give me the complete code?",
+     "may_hold_back": false
+    },
+    {
+     "field": "recovery_request",
+     "about": "What the customer needs to recover with the bypass code, for example changing the email on file to regain access. The bypass covers account recovery only.",
+     "from": "customer",
+     "ask": "What do you need help recovering on your account?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "ask_identity",
+     "by": "model",
+     "do": "Greet the customer. Before you discuss or change anything, ask for their full name and for 2 of: date of birth, the email currently on file, the phone number on file, or the address on file. Say nothing about what is on file.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Look up the customer's record.\n- Use get_user_information_by_name with the exact full name the customer gave (case sensitive).\n- If that returns nothing, use get_user_information_by_email with an email the customer gave, or get_user_information_by_id if they gave a user ID.\n- The customer is changing their email, so the email they give may be the new one and may not find the record. In that case, use the name lookup.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the full name the customer gave (or the email / user_id with the other lookup tools)"
+     },
+     "lookup": [],
+     "after": [
+      "ask_identity"
+     ],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "check_identity",
+     "by": "model",
+     "do": "Compare each value the customer gave with the record from lookup_user. Count exact matches among date of birth, email, phone number and address. The name or user ID never counts. An email that differs from the record's email (for example the customer's new email) is NOT a match. The customer is verified only if at least 2 values match. Never say which value matched or failed, and never read back values on file.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "id": "bypass_code",
+     "by": "model",
+     "do": "Use this only if the customer offers an Account Recovery Bypass Code on their own; never ask for one. The code is only for account recovery. It counts only if it exactly matches 9K2X7M4P1N8Q3R5T6A. If so, log_verification uses the code in every field except time_verified. If it does not match, return to standard verification (check_identity).",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "ask_identity"
+     ],
+     "after": [
+      "ask_identity"
+     ],
+     "if": "the customer presents an Account Recovery Bypass Code for account recovery",
+     "quote": "If the provided code does not exactly match, do not proceed with bypass; follow standard identity procedures or escalate per your queue policy.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "bypass_ask_full_code",
+     "by": "model",
+     "do": "If the customer mentions a bypass or recovery code but has not given all of it, ask for the complete code before comparing it. Do not read the code back unless the customer asks for confirmation.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "bypass_code"
+     ],
+     "if": "the customer offers a bypass code but has not given it in full",
+     "quote": "Ask the customer to provide the complete code.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "bypass_scope_check",
+     "by": "model",
+     "do": "Confirm that the bypass request is account recovery, such as changing the email on file to regain access. For any other request the code gives no access: explain that standard verification is needed for it, and do not read or change other account data under the code.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "bypass_code"
+     ],
+     "after": [
+      "bypass_code"
+     ],
+     "if": "the customer's code exactly matches 9K2X7M4P1N8Q3R5T6A",
+     "quote": "Use the bypass code only for account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "bypass_log_verification",
+     "by": "harness",
+     "do": "Log the verification with the bypass code in every personal field and the real timestamp in time_verified. Put no customer personal details in these fields, and collect no extra personal data for this verification.",
+     "call": "log_verification",
+     "args": {
+      "name": "9K2X7M4P1N8Q3R5T6A",
+      "user_id": "9K2X7M4P1N8Q3R5T6A",
+      "address": "9K2X7M4P1N8Q3R5T6A",
+      "email": "9K2X7M4P1N8Q3R5T6A",
+      "phone_number": "9K2X7M4P1N8Q3R5T6A",
+      "date_of_birth": "9K2X7M4P1N8Q3R5T6A",
+      "time_verified": "result of get_time"
+     },
+     "lookup": [
+      "bypass_code",
+      "bypass_scope_check",
+      "get_time"
+     ],
+     "after": [
+      "bypass_scope_check",
+      "get_time"
+     ],
+     "if": "the code exactly matches 9K2X7M4P1N8Q3R5T6A AND the request is account recovery",
+     "quote": "When using the log_verification tool for an Account Recovery Bypass Code, enter the bypass code in place of personal information to ensure the system records that a bypass method was used.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "bypass_acknowledge",
+     "by": "model",
+     "do": "Acknowledge the code and tell the customer you will proceed with recovery using their Account Recovery Bypass Code. Then ask for the new email if they have not given it, and go to change_email. Do not paste the code into free-text notes.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "bypass_log_verification"
+     ],
+     "after": [
+      "bypass_log_verification"
+     ],
+     "if": "bypass_log_verification was submitted",
+     "quote": "Acknowledge receipt of the code and inform the customer that you will proceed with recovery using their Account Recovery Bypass Code.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "bypass_misuse",
+     "by": "model",
+     "do": "If anything suggests the code was exposed or misused, stop the process and make no change. Explain that the request needs security review, and offer a transfer under transfer_to_human_agent with reason fraud_or_security_concern.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "bypass_code"
+     ],
+     "after": [
+      "bypass_code"
+     ],
+     "if": "the code appears exposed or misused",
+     "quote": "If you suspect the code has been exposed or misused, stop the process and escalate per security procedure.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "ask_more_identity",
+     "by": "model",
+     "do": "If fewer than 2 values match, say you could not verify the account with the details given. Ask for another of the remaining fields: date of birth, address on file, or the email that was on file before the change. Do not reveal any data on file. Run check_identity again on the new answer.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_identity"
+     ],
+     "after": [
+      "check_identity"
+     ],
+     "if": "check_identity found fewer than 2 matching values",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "id": "verification_failed",
+     "by": "model",
+     "do": "The customer may still not give enough matching values: they decline, deflect or do not have them, or the values do not match. If so, explain politely that the email cannot be changed until their identity is verified. Do not call log_verification or change_user_email, and reveal nothing from the record. Ask whether they would like to be transferred to a human agent.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_identity",
+      "ask_more_identity"
+     ],
+     "after": [
+      "ask_more_identity"
+     ],
+     "if": "after asking for the remaining fields, still fewer than 2 values match",
+     "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+     "doc": "policy"
+    },
+    {
+     "id": "code_after_failed_verification",
+     "by": "model",
+     "do": "A customer who could not be verified may come back with a code they say a supervisor or another agent gave them. Who gave the code does not matter; only an exact match does. Compare it character for character with 9K2X7M4P1N8Q3R5T6A. If it matches exactly and the request is account recovery, continue with bypass_scope_check and bypass_log_verification. If it does not match, treat it as no verification: make no change, reveal nothing, and return to standard verification or offer a transfer (verification_failed).",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "bypass_code",
+      "check_identity"
+     ],
+     "after": [
+      "verification_failed"
+     ],
+     "if": "the customer presents a code after standard verification failed",
+     "quote": "Only proceed if the code matches; otherwise, revert to standard verification or escalate.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification log.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "check_identity"
+     ],
+     "if": "check_identity found at least 2 matching values (or a matching bypass code)",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification using the values on file in the record, not the customer's new email.",
+     "call": "log_verification",
+     "args": {
+      "name": "record name from lookup_user",
+      "user_id": "record user_id from lookup_user",
+      "address": "record address from lookup_user",
+      "email": "record email from lookup_user",
+      "phone_number": "record phone from lookup_user",
+      "date_of_birth": "record date_of_birth from lookup_user",
+      "time_verified": "result of get_time"
+     },
+     "lookup": [
+      "check_identity",
+      "lookup_user",
+      "get_time"
+     ],
+     "after": [
+      "get_time"
+     ],
+     "if": "check_identity found at least 2 matching values",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "ask_new_email",
+     "by": "model",
+     "do": "Ask for the new email address if the customer has not given it, and read it back for confirmation.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": "the customer is verified",
+     "quote": "Make sure your contact information is up to date so you receive notifications without delay.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_004"
+    },
+    {
+     "id": "change_email",
+     "by": "model",
+     "do": "Change the email on the customer's account to the confirmed new address. On the bypass path, use the user_id from the record already found by the name the customer gave in lookup_user.",
+     "call": "change_user_email",
+     "args": {
+      "user_id": "the user_id from lookup_user",
+      "new_email": "the new email the customer confirmed"
+     },
+     "lookup": [
+      "check_identity",
+      "ask_new_email",
+      "bypass_log_verification"
+     ],
+     "after": [
+      "ask_new_email"
+     ],
+     "if": "either (a) the customer is verified (log_verification done) AND has confirmed the new email address, or (b) an exactly matching bypass code was logged in bypass_log_verification for an account-recovery email change",
+     "quote": "Changing account settings (e.g., address, phone number, email)",
+     "doc": "policy"
+    },
+    {
+     "id": "confirm_change",
+     "by": "model",
+     "do": "Tell the customer the email on their account has been updated. If change_user_email returned an error, explain that the change could not be completed and offer a transfer to a human agent.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "change_email"
+     ],
+     "after": [
+      "change_email"
+     ],
+     "if": null,
+     "quote": "System error or outage preventing completion of the customer's request",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "human_request_while_resolvable",
+     "by": "model",
+     "do": "The customer may ask for a human while the email change can still be completed (they are verified, or verification is still in progress). If so, say politely that you can help with this, and continue. Count each request, and transfer on the 4th.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_identity"
+     ],
+     "after": [
+      "ask_identity"
+     ],
+     "if": "the customer asks for a human agent and the request is still resolvable",
+     "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "transfer",
+     "by": "model",
+     "do": "Transfer to a human agent only after the customer asks for it or agrees to it. Choose the reason from the highest tier that applies:\n- 'account_ownership_dispute' when identity verification could not be completed;\n- 'technical_system_error' when change_user_email failed;\n- 'request_completed_customer_wants_human_followup' when the change succeeded but the customer still wants a human;\n- on a 4th request while the request was still resolvable, 'customer_frustrated_demands_human' or 'customer_requests_human_no_specific_reason'.\nIn the summary, describe the request and its status. Never include a bypass code.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "a short description of the email-change request and why it could not be completed",
+      "reason": "a reason code chosen from the tiers in doc_bank_accounts_bank_accounts_(general)_042"
+     },
+     "lookup": [
+      "check_identity",
+      "change_email",
+      "human_request_while_resolvable"
+     ],
+     "after": [
+      "check_identity"
+     ],
+     "if": "the customer asks for or agrees to a transfer AND (verification failed, OR change_user_email errored, OR the change is done, OR the customer has asked 4 times)",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below. Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Identity is verified only when at least 2 of date of birth, email on file, phone on file and address on file exactly match the record. A name or user ID alone never verifies. A new email the customer wants to switch to is not the email on file and does not count.",
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "rule": "Never call change_user_email for an unverified customer, and never reveal data on file to an unverified customer.",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "rule": "Never transfer without asking the customer first.",
+     "quote": "Do not transfer without asking the user first.",
+     "doc": "policy"
+    },
+    {
+     "rule": "An Account Recovery Bypass Code (exactly 9K2X7M4P1N8Q3R5T6A) is used only for account recovery. When it is used, every log_verification field except time_verified is set to the code.",
+     "quote": "Use the bypass code only for account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "A code that does not match exactly gives no access, whoever the customer says gave it to them. Fall back to standard verification or escalate.",
+     "quote": "If the provided code does not exactly match, do not proceed with bypass; follow standard identity procedures or escalate per your queue policy.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "Proceed with recovery only after the code matches and the log_verification entry is submitted.",
+     "quote": "Once the code is confirmed and the log_verification entry is submitted, continue with the account recovery workflow appropriate to the channel.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "Never collect extra personal details in the same verification event as a bypass code.",
+     "quote": "Never combine bypass code handling with additional personal data collection in the same verification event.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "Do not read the code aloud unless the customer asks for confirmation.",
+     "quote": "Do not read the code aloud unless the customer requests confirmation.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "If the transfer is due to failed identity verification, use the Tier 1 code 'account_ownership_dispute' before any Tier 3 disposition code.",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "If frustration is the only reason and no higher tier applies, use 'customer_frustrated_demands_human'.",
+     "quote": "Customer is frustrated and demands human, frustration is general",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "If the change succeeded and the customer still wants a human, use 'request_completed_customer_wants_human_followup'.",
+     "quote": "Agent completed the request successfully, but customer wants human for additional questions or confirmation",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "The job ends in one of three ways.\n(a) The customer was verified with 2 matching values, the verification was logged, change_user_email succeeded with the confirmed new address, and the customer was told.\n(b) The customer presented a code that exactly matches 9K2X7M4P1N8Q3R5T6A for account recovery. bypass_log_verification was submitted with the code in every personal field and the real timestamp. The recovery email change was completed and confirmed, and no extra personal data was collected.\n(c) Verification could not be completed (including a code that did not match exactly) or the change failed. Nothing was changed or revealed, and the customer either declined a transfer or was transferred with transfer_to_human_agents using the correct reason code."
+  },
+  {
+   "job": "transfer_to_human_agent",
+   "aliases": [
+    "customer asks for a human to confirm completed work after earlier requests",
+    "customer demands a supervisor after blocked closures",
+    "customer_requests_human_agent",
+    "escalate_to_human",
+    "human_agent_transfer",
+    "human_agent_transfer_request",
+    "supervisor_request",
+    "transfer after identity verification fails"
+   ],
+   "when": {
+    "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks for a human or supervisor, or agrees to one the agent proposes because the issue cannot be resolved. Never transfer without asking the customer first. Scenario-specific transfer protocols in other jobs (incident or decline protocols) override this job.",
+    "quote": "Do not transfer without asking the user first.",
+    "doc": "policy"
+   },
+   "tools": [
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "transfer",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "transfer_request",
+     "about": "That the customer wants a human or supervisor, and why: frustration, a service complaint, an offer the agent cannot give, the closure itself, confirmation of completed work, or failed identity verification",
+     "from": "customer",
+     "ask": "Would you like me to transfer you to a human agent?",
+     "may_hold_back": false
+    },
+    {
+     "field": "transfer_request_count",
+     "about": "How many times in this conversation the customer has asked for a human",
+     "from": "customer",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_outcome",
+     "about": "Whether the customer's identity could be verified in this conversation. If it failed, the transfer reason is the Tier 1 code account_ownership_dispute.",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "count_all_requests",
+     "by": "model",
+     "do": "Keep one count of the customer's requests for a human across the whole conversation, from the opening message on, including requests made before verification or during other jobs. Each new request adds 1; the count is never reset when the topic changes.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "the customer asks for a human agent",
+     "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "offer_help_first",
+     "by": "model",
+     "do": "If the customer asks for a human while something they want is still within your tools and documents, say politely that you can help with it and keep helping. Count each request for a human.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "the customer asks for a human agent and a request you can act on remains open",
+     "quote": "If an issue falls within your capabilities and the user still wants to be transferred to a human agent, kindly inform the user that you can help them, and try to help them first.",
+     "doc": "policy"
+    },
+    {
+     "id": "decide_transfer",
+     "by": "model",
+     "do": "Transfer in either of two cases: nothing the customer asked for remains that you can act on (every card is closed, kept with an offer, or blocked by a requirement you cannot resolve) and the customer confirms they want the transfer; or the customer has asked for a human 4 times.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "offer_help_first"
+     ],
+     "after": [
+      "offer_help_first"
+     ],
+     "if": "the customer asked for a human agent or supervisor",
+     "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "decide_transfer_unverified",
+     "by": "model",
+     "do": "If the customer's identity could not be verified, nothing can be read or changed, so the request is outside what you can do. Say so without revealing any account data. Transfer as soon as the customer asks for or agrees to it, without waiting for a 4th request.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "count_all_requests"
+     ],
+     "after": [
+      "count_all_requests"
+     ],
+     "if": "identity verification failed and the customer asks for or agrees to a human agent",
+     "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+     "doc": "policy"
+    },
+    {
+     "id": "pick_reason",
+     "by": "model",
+     "do": "Pick the reason code from the highest tier that applies. Tier 1: customer_demands_after_unavailable_offer_refusal when the customer kept demanding an offer that is not available (for example a larger retention credit) and now demands a human; account_closure_request when the customer wants a human to close an account. Tier 3 only if no Tier 1/2 code fits: supervisor_request_service_complaint (unhappy with service quality) or customer_frustrated_demands_human (general frustration).",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide_transfer"
+     ],
+     "after": [
+      "decide_transfer"
+     ],
+     "if": "decide_transfer allows the transfer",
+     "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "pick_reason_verification_failure",
+     "by": "model",
+     "do": "If the transfer follows an identity verification failure, use the Tier 1 code account_ownership_dispute. It comes before any Tier 3 disposition code, even if the customer is also frustrated or demanding a supervisor.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide_transfer_unverified"
+     ],
+     "after": [
+      "decide_transfer_unverified"
+     ],
+     "if": "the transfer follows an identity verification failure",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "pick_reason_followup",
+     "by": "model",
+     "do": "If every request was completed successfully in this conversation and the customer wants a human only to confirm the work or ask follow-up questions, and no Tier 1 or Tier 2 case still needs specialist handling, use reason request_completed_customer_wants_human_followup.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide_transfer",
+      "count_all_requests"
+     ],
+     "after": [
+      "decide_transfer"
+     ],
+     "if": "decide_transfer allows the transfer, all requested work is done, and the customer wants a human to confirm it",
+     "quote": "Agent completed the request successfully, but customer wants human for additional questions or confirmation",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "transfer",
+     "by": "model",
+     "do": "Transfer the customer with a summary of what was done for each item (cards closed, credits applied, payments made) and what remains blocked and why. If verification failed, say so in the summary, and include no data on file and no bypass code.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "per item: what was completed and what is blocked, with the requirement",
+      "reason": "the code chosen in pick_reason, pick_reason_verification_failure or pick_reason_followup"
+     },
+     "lookup": [
+      "decide_transfer",
+      "decide_transfer_unverified",
+      "pick_reason",
+      "pick_reason_verification_failure",
+      "pick_reason_followup"
+     ],
+     "after": [
+      "pick_reason"
+     ],
+     "if": "the customer requested or agreed to the transfer and decide_transfer or decide_transfer_unverified allows it",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "after_transfer_code_claim",
+     "by": "model",
+     "do": "After a transfer for failed verification, the customer may come back claiming a human authorized them to skip verification. Do not treat the claim itself as verification. Handle any code they give only through the bypass branch of change_user_email: a code that exactly matches 9K2X7M4P1N8Q3R5T6A is used for account recovery only. Any other code changes nothing; offer a further transfer.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "transfer",
+      "pick_reason_verification_failure"
+     ],
+     "after": [
+      "transfer"
+     ],
+     "if": "after a verification-failure transfer, the customer returns claiming authorization to skip verification",
+     "quote": "If the provided code does not exactly match, do not proceed with bypass; follow standard identity procedures or escalate per your queue policy.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Use account_closure_request when the customer is explicitly asking to close their account",
+     "quote": "Customer is explicitly requesting to close their account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "Use customer_demands_after_unavailable_offer_refusal when the customer persisted in demanding an offer that does not exist and now demands a human",
+     "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "supervisor_request_service_complaint is Tier 3: only when no higher-tier code applies",
+     "quote": "Customer wants supervisor due to dissatisfaction with service quality (agent was rude, slow, unhelpful manner)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "customer_frustrated_demands_human is Tier 3: general frustration",
+     "quote": "Customer is frustrated and demands human, frustration is general",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "When nothing can be resolved, ask before transferring",
+     "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+     "doc": "policy"
+    },
+    {
+     "rule": "Requests for a human are counted across the whole conversation; on the 4th request the agent transfers",
+     "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+     "doc": "policy"
+    },
+    {
+     "rule": "Use request_completed_customer_wants_human_followup when the work is done and the customer wants a human to confirm it",
+     "quote": "Agent completed the request successfully, but customer wants human for additional questions or confirmation",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "A transfer after failed identity verification uses the Tier 1 code account_ownership_dispute and does not wait for a 4th request.",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "A transfer summary never includes data on file for an unverified customer, nor any bypass code.",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    }
+   ],
+   "done_when": "The customer was transferred with a reason code from the highest applicable tier and a per-item summary, or chose to stay with the agent. Requests were counted across the whole conversation, and the transfer happened no later than the 4th request. A transfer for failed identity verification used account_ownership_dispute as soon as the customer agreed, and its summary held no data on file and no bypass code."
+  }
+ ],
+ "documents": [
+  {
+   "id": "policy",
+   "why": "Verification needs 2 of date of birth, email, phone and address, and a name or user id is not enough. Nothing is revealed before verification, and the current time comes from get_current_time. Transfers are offered, not imposed, and the policy sets the 4-request rule."
+  },
+  {
+   "id": "doc_customer_support_special_support_codes_001",
+   "why": "The Account Recovery Bypass Code procedure: the exact code, the log_verification field mapping, recovery-only scope, no extra personal data, the acknowledgement wording, not reading the code aloud, and escalation on misuse."
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_009",
+   "why": "Looking up the credit card account to confirm the outstanding balance, and account ids that must match the authenticated customer."
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_030",
+   "why": "Names get_credit_card_accounts_by_user, which returns all active and closed credit card accounts."
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_042",
+   "why": "Transfer reason codes and their tiers, including account_ownership_dispute for identity verification failures and technical_system_error for system errors."
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_004",
+   "why": "Keeping contact information up to date, cited by the step that asks for the new email."
+  }
+ ],
+ "open_questions": [
+  "No document defines the 'account recovery workflow appropriate to the channel'. Using change_user_email after a matching bypass code is the closest documented recovery action, but that mapping is inferred.",
+  "The bypass document does not say how to find the account to recover without collecting personal data. This workflow uses the record already found from the name the customer gave.",
+  "No document gives a dedicated procedure for a credit card balance inquiry. The balance job rests on the policy's verification requirement and on the balance-lookup sentences in the payoff and cross-product documents."
+ ],
+ "merge": [
+  {
+   "job": "verify_customer_identity",
+   "into": [],
+   "previous_sessions": [],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "verify_customer_identity (new job)",
+     "why": "No library job held standard verification on its own. Any job that reads records before acting reuses it.",
+     "quote": "You should ONLY verify a user's identity if you need to access or modify their customer information in internal databases on their behalf.",
+     "doc": "policy"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 14,
+     "n": 14,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [],
+     "missing": [],
+     "n": 0
+    },
+    "D3": {
+     "with_condition": 0,
+     "n": 0
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 5,
+     "n": 5,
+     "done_when": true
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  },
+  {
+   "job": "check_credit_card_balance",
+   "into": [],
+   "previous_sessions": [],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "check_credit_card_balance (new job)",
+     "why": "No library job answered a plain credit card balance question. The existing balance reads sit inside the payment, closure and transaction-review jobs.",
+     "quote": "3. Look up the customer's credit card account to confirm the outstanding balance.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 9,
+     "n": 9,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [
+      "pay_credit_card_from_checking_9182"
+     ],
+     "missing": [],
+     "n": 1
+    },
+    "D3": {
+     "with_condition": 0,
+     "n": 0
+    },
+    "D4": {
+     "named": 1,
+     "n": 1
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 1,
+     "n": 1,
+     "done_when": true
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  },
+  {
+   "job": "change_user_email",
+   "into": [
+    "change_user_email"
+   ],
+   "previous_sessions": [
+    "20261007T232610Z_banking_knowledge_r3_task_004"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "bypass_ask_full_code",
+     "why": "The bypass document requires the complete code before any comparison.",
+     "quote": "Ask the customer to provide the complete code.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "bypass_scope_check",
+     "why": "The bypass covers account recovery only, so other requests still need standard verification.",
+     "quote": "Use the bypass code only for account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "bypass_log_verification",
+     "why": "The step bypass_code described the field mapping, but no step called log_verification with the code. This step makes that write explicit, with its condition.",
+     "quote": "When using the log_verification tool for an Account Recovery Bypass Code, enter the bypass code in place of personal information to ensure the system records that a bypass method was used.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "bypass_acknowledge",
+     "why": "The document prescribes this acknowledgement to the customer.",
+     "quote": "Acknowledge receipt of the code and inform the customer that you will proceed with recovery using their Account Recovery Bypass Code.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "bypass_misuse",
+     "why": "New failure path: if the code seems exposed or misused, the agent stops and escalates.",
+     "quote": "If you suspect the code has been exposed or misused, stop the process and escalate per security procedure.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "code_after_failed_verification",
+     "why": "This customer returns after failed verification with a code said to come from a supervisor. Only an exact match decides access, whoever gave the code.",
+     "quote": "Only proceed if the code matches; otherwise, revert to standard verification or escalate.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "changed",
+     "what": "change_email",
+     "why": "Added the bypass branch (b) to the step's condition and lookup. The standard-verification path is unchanged.",
+     "quote": "Once the code is confirmed and the log_verification entry is submitted, continue with the account recovery workflow appropriate to the channel.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "changed",
+     "what": "transfer",
+     "why": "Added that the summary must never contain a bypass code. The rest of the step is unchanged.",
+     "quote": "Do not paste the code into free-text notes; the code should only appear within the log_verification fields as specified above.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "info bypass_code_value and recovery_request",
+     "why": "The bypass branch needs the full code and the recovery scope as named facts.",
+     "quote": "Ask the customer to provide the complete code.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "rules on non-matching codes, proceeding only after logging, no extra personal data, not reading the code aloud",
+     "why": "These bypass constraints appear in the document but were not yet stated as checkable rules.",
+     "quote": "Never combine bypass code handling with additional personal data collection in the same verification event.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "changed",
+     "what": "done_when",
+     "why": "Added outcome (b) for a successful bypass recovery. A non-matching code is folded into the failure outcome. Outcomes (a) and (c) keep their earlier meaning.",
+     "quote": "Only proceed if the code matches; otherwise, revert to standard verification or escalate.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "added",
+     "what": "aliases account_recovery_bypass_code, supervisor bypass code, special support code, recovery code email change",
+     "why": "The drafted bypass job merges here, so its names must find this job.",
+     "quote": "Use this guide when a customer presents an Account Recovery Bypass Code during identity verification for Rho-Bank account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 44,
+     "n": 44,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [],
+     "missing": [],
+     "n": 0
+    },
+    "D3": {
+     "with_condition": 1,
+     "n": 1
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 7,
+     "n": 7,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  },
+  {
+   "job": "transfer_to_human_agent",
+   "into": [
+    "transfer_to_human_agent"
+   ],
+   "previous_sessions": [
+    "20261007T233934Z_banking_knowledge_r3_task_081"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "decide_transfer_unverified",
+     "why": "A customer who cannot be verified is outside the agent's capabilities, so the transfer need not wait for a 4th request.",
+     "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+     "doc": "policy"
+    },
+    {
+     "change": "added",
+     "what": "pick_reason_verification_failure",
+     "why": "The library version listed only the Tier 1 closure and offer codes plus the Tier 3 dispositions. A verification failure has its own Tier 1 code.",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "after_transfer_code_claim",
+     "why": "This customer returns after a transfer claiming a human authorized a bypass. Only an exact code match counts.",
+     "quote": "If the provided code does not exactly match, do not proceed with bypass; follow standard identity procedures or escalate per your queue policy.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "change": "changed",
+     "what": "transfer",
+     "why": "Added the verification-failure path to the step's condition, lookup and summary guidance. The per-item summary behaviour is unchanged.",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "change": "added",
+     "what": "info verification_outcome",
+     "why": "The choice of reason code now depends on whether verification succeeded.",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "rules on account_ownership_dispute after verification failure and on summaries holding no data on file",
+     "why": "These make the new branch checkable and keep unverified data out of the transfer summary.",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "change": "changed",
+     "what": "done_when",
+     "why": "Added the verification-failure outcome. The earlier conditions are kept.",
+     "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "added",
+     "what": "aliases human_agent_transfer, transfer after identity verification fails",
+     "why": "The drafted job merges here and must still be found by its names.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 28,
+     "n": 28,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [],
+     "missing": [],
+     "n": 0
+    },
+    "D3": {
+     "with_condition": 0,
+     "n": 0
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 1,
+     "n": 2,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 0.5
+    }
+   },
+   "failed": [],
+   "taken": true
+  }
+ ],
+ "rejected": [],
+ "draft": [
+  {
+   "job": "verify_customer_identity",
+   "aliases": [
+    "standard identity verification",
+    "authenticate customer"
+   ],
+   "when": {
+    "quote": "1. Verify the customer's identity using standard procedures.",
+    "doc": "doc_credit_cards_credit_card_account_logistics_009"
+   },
+   "starts": {
+    "by": "agent",
+    "note": "agent: required before any lookup or change to the customer's records (balances, transactions, email change). Not needed for general questions.",
+    "quote": "1. Verify the customer's identity using standard procedures.",
+    "doc": "doc_credit_cards_credit_card_account_logistics_009"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "v_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "v_log",
+     "not_used": null
+    },
+    {
+     "tool": "pay_credit_card_from_checking_9182",
+     "who": "agent",
+     "step": null,
+     "not_used": "Named in the cited payoff document, but that document is only cited here for its verification prerequisite. Verification never makes a payment."
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": null,
+     "not_used": "Verification never transfers by itself. If verification fails and the customer wants a human, go to the job human_agent_transfer."
+    }
+   ],
+   "info": [
+    {
+     "field": "customer_name",
+     "about": "customer's full name, used only to find the record (it does not count toward verification)",
+     "from": "customer",
+     "ask": "May I have your full name as it appears on your account?",
+     "may_hold_back": false
+    },
+    {
+     "field": "email",
+     "about": "email the customer gives as a verification value",
+     "from": "customer",
+     "ask": "Could you confirm the email address on your account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "phone_number",
+     "about": "phone number the customer gives as a verification value",
+     "from": "customer",
+     "ask": "Could you confirm the phone number on your account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "date_of_birth",
+     "about": "date of birth the customer gives as a verification value",
+     "from": "customer",
+     "ask": "Could you confirm your date of birth?",
+     "may_hold_back": true
+    },
+    {
+     "field": "address",
+     "about": "home address the customer gives as a verification value",
+     "from": "customer",
+     "ask": "Could you confirm the address on your account?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "v_open",
+     "by": "model",
+     "do": "Greet the customer, ask what they need, then ask for their full name and any two of: date of birth, email, phone number, address. Do not reveal any account information before verification succeeds.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "v_lookup",
+     "by": "model",
+     "do": "Find the customer's record with get_user_information_by_name (exact case, as the customer gave it). If no record is found, use get_user_information_by_email with the email the customer gave, or get_user_information_by_id if the customer gave a user id.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gave"
+     },
+     "lookup": [],
+     "after": [
+      "v_open"
+     ],
+     "if": null,
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "v_check",
+     "by": "model",
+     "do": "Compare each value the customer gave with the record from v_lookup. Verification passes only if at least 2 of date of birth, email, phone number and address match exactly. A matching name or user id does not count.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_lookup"
+     ],
+     "after": [
+      "v_lookup"
+     ],
+     "if": null,
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "v_retry",
+     "by": "model",
+     "do": "If fewer than 2 values match, say only that the details could not be verified, and ask for another value the customer has not yet given (date of birth, address, phone or email). Never read out, hint at or confirm any value on file, including the email on file. If the customer then 'corrects' an answer to match something you said, it does not count, because you must not have said it.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_lookup",
+      "v_check"
+     ],
+     "after": [
+      "v_check"
+     ],
+     "if": "fewer than 2 values match",
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "v_fail",
+     "by": "model",
+     "do": "If the customer cannot or will not give 2 matching values, tell them you cannot verify their identity, so you cannot access or change their account. Ask whether they would like to be transferred to a human agent. If they say yes, go to the job human_agent_transfer.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_check"
+     ],
+     "after": [
+      "v_retry"
+     ],
+     "if": "verification still fails after asking for the remaining values",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "v_time",
+     "by": "harness",
+     "do": "Get the current timestamp for the verification log.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "v_check"
+     ],
+     "if": "at least 2 values matched",
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "v_log",
+     "by": "harness",
+     "do": "Log the verification using the record's values.",
+     "call": "log_verification",
+     "args": {
+      "name": "record from v_lookup",
+      "user_id": "record from v_lookup",
+      "address": "record from v_lookup",
+      "email": "record from v_lookup",
+      "phone_number": "record from v_lookup",
+      "date_of_birth": "record from v_lookup",
+      "time_verified": "result of v_time"
+     },
+     "lookup": [
+      "v_check"
+     ],
+     "after": [
+      "v_time"
+     ],
+     "if": "at least 2 values matched",
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Verification passes only if 2 or more of date of birth, email, phone and address match the record. Name or user id alone is never enough. Verify only once per conversation.",
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "rule": "Before verification succeeds, reveal nothing from the record: no email, phone, address, date of birth or accounts.",
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "rule": "An identity verification failure that needs a specialist is transferred with reason account_ownership_dispute (Tier 1).",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "Either log_verification has been called with the record's values after 2 values matched, or the customer has been told they cannot be verified and has been offered a transfer (and transferred if they accepted)."
+  },
+  {
+   "job": "check_credit_card_balance",
+   "aliases": [
+    "account balance inquiry",
+    "credit card balance lookup"
+   ],
+   "when": {
+    "quote": "3. Look up the customer's credit card account to confirm the outstanding balance.",
+    "doc": "doc_credit_cards_credit_card_account_logistics_009"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks for a credit card balance.",
+    "quote": null,
+    "doc": null
+   },
+   "tools": [
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "b_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "pay_credit_card_from_checking_9182",
+     "who": "agent",
+     "step": null,
+     "not_used": "A balance inquiry makes no payment. Use it only if the customer separately asks to pay the card from checking, under that document's own procedure."
+    }
+   ],
+   "info": [
+    {
+     "field": "card_type",
+     "about": "which credit card the customer is asking about",
+     "from": "customer",
+     "ask": "Which of your Rho-Bank credit cards would you like the balance for?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "b_verify",
+     "by": "model",
+     "do": "Make sure the customer was verified through standard verification (verify_customer_identity). A bypass-code verification is not enough, because a bypass code may be used only for account recovery. If the customer is not verified, do not look up any balance.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "1. Verify the customer's identity using standard procedures.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "id": "b_lookup",
+     "by": "harness",
+     "do": "Get the verified user's credit card accounts.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "b_verify"
+     ],
+     "if": "the customer passed standard verification",
+     "quote": "Use get_credit_card_accounts_by_user to retrieve any credit card accounts for the customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "id": "b_answer",
+     "by": "model",
+     "do": "Find the account whose card type matches the card the customer named, and tell them its current balance. If the customer has more than one matching account, ask which one they mean. If no account matches, say so and list the card types they do hold.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "b_lookup"
+     ],
+     "after": [
+      "b_lookup"
+     ],
+     "if": null,
+     "quote": "3. Look up the customer's credit card account to confirm the outstanding balance.",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Account IDs used must belong to the verified customer.",
+     "quote": "ensuring the account IDs and user_id match the authenticated customer",
+     "doc": "doc_credit_cards_credit_card_account_logistics_009"
+    },
+    {
+     "rule": "The lookup returns both active and closed credit card accounts; report the one the customer asked about and say if it is closed.",
+     "quote": "This will return all active and closed credit card accounts.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    }
+   ],
+   "done_when": "The verified customer has been told the balance of the card they asked about, or told that no matching card exists."
+  },
+  {
+   "job": "human_agent_transfer",
+   "aliases": [
+    "transfer to human agent",
+    "escalate to supervisor"
+   ],
+   "when": {
+    "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+    "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: transfer only when the customer agrees or asks. Always ask first. If the agent could still help, try to help first and transfer after the 4th request.",
+    "quote": null,
+    "doc": null
+   },
+   "tools": [
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "t_transfer",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "wants_transfer",
+     "about": "whether the customer wants to be transferred to a human agent",
+     "from": "customer",
+     "ask": "Would you like me to transfer you to a human agent?",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "t_confirm",
+     "by": "model",
+     "do": "Confirm that the customer wants a transfer. If their request is something you can still handle (for example, they can still be verified), offer to help first. Only verification failure or the customer's 4th request justifies a transfer for an issue you could otherwise handle.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "t_reason",
+     "by": "model",
+     "do": "Choose the reason code from the highest tier that applies: account_ownership_dispute for an identity verification failure; fraud_or_security_concern for a suspected security issue; customer_frustrated_demands_human, supervisor_request_service_complaint or customer_requests_human_no_specific_reason only if no Tier 1 or Tier 2 code fits; otherwise other, with details.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "t_confirm"
+     ],
+     "after": [
+      "t_confirm"
+     ],
+     "if": null,
+     "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "id": "t_transfer",
+     "by": "model",
+     "do": "Tell the customer you are transferring them, then call transfer_to_human_agents with a short summary of the request and what happened (do not include any bypass code) and the reason chosen in t_reason.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "agent-written summary of the conversation",
+      "reason": "result of t_reason"
+     },
+     "lookup": [
+      "t_reason"
+     ],
+     "after": [
+      "t_reason"
+     ],
+     "if": "the customer has said yes to a transfer and the transfer is justified per t_confirm",
+     "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Always use the highest tier reason that applies. An identity verification failure is account_ownership_dispute (Tier 1), not a Tier 3 disposition code.",
+     "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "rule": "Use customer_frustrated_demands_human only when the frustration is general and no higher-tier reason applies.",
+     "quote": "Customer is frustrated and demands human, frustration is general",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ],
+   "done_when": "transfer_to_human_agents has been called with the highest-tier applicable reason after the customer agreed, or the customer declined the transfer."
+  },
+  {
+   "job": "account_recovery_bypass_code",
+   "aliases": [
+    "supervisor bypass code",
+    "special support code",
+    "recovery code email change"
+   ],
+   "when": {
+    "quote": "Use this guide when a customer presents an Account Recovery Bypass Code during identity verification for Rho-Bank account recovery.",
+    "doc": "doc_customer_support_special_support_codes_001"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer presents a bypass code themselves. Never offer or suggest one.",
+    "quote": "Use this guide when a customer presents an Account Recovery Bypass Code during identity verification for Rho-Bank account recovery.",
+    "doc": "doc_customer_support_special_support_codes_001"
+   },
+   "tools": [
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "r_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "r_log",
+     "not_used": null
+    },
+    {
+     "tool": "change_user_email",
+     "who": "agent",
+     "step": "r_change_email",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "r_target",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "r_mismatch",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "bypass_code",
+     "about": "the complete Account Recovery Bypass Code the customer gives",
+     "from": "customer",
+     "ask": "Please provide the complete bypass code.",
+     "may_hold_back": false
+    },
+    {
+     "field": "recovery_request",
+     "about": "what the customer needs to recover (for example, an email change to regain access)",
+     "from": "customer",
+     "ask": "What do you need help recovering on your account?",
+     "may_hold_back": false
+    },
+    {
+     "field": "new_email",
+     "about": "the email address the customer wants on the account",
+     "from": "customer",
+     "ask": "What email address would you like on the account?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "r_ask_code",
+     "by": "model",
+     "do": "Ask the customer for the complete code if they have not given it in full.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "the customer says they have a bypass/recovery code",
+     "quote": "Ask the customer to provide the complete code.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_match",
+     "by": "model",
+     "do": "Compare the code character for character with 9K2X7M4P1N8Q3R5T6A.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "r_ask_code"
+     ],
+     "after": [
+      "r_ask_code"
+     ],
+     "if": null,
+     "quote": "Verify the code exactly matches 9K2X7M4P1N8Q3R5T6A.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_mismatch",
+     "by": "model",
+     "do": "If the code does not match exactly, do not use the bypass. Return to standard verification (verify_customer_identity). If that fails and the customer wants a human, transfer under human_agent_transfer.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "agent-written summary",
+      "reason": "account_ownership_dispute"
+     },
+     "lookup": [
+      "r_match"
+     ],
+     "after": [
+      "r_match"
+     ],
+     "if": "the code does not exactly match, standard verification fails, and the customer agrees to a transfer",
+     "quote": "If the provided code does not exactly match, do not proceed with bypass; follow standard identity procedures or escalate per your queue policy.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_scope",
+     "by": "model",
+     "do": "Confirm that the request is account recovery (for example, changing the email on file to regain access). For anything else, such as balances or transactions, the bypass does not apply: explain that standard verification is required.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "r_match"
+     ],
+     "after": [
+      "r_match"
+     ],
+     "if": "the code matches",
+     "quote": "Use the bypass code only for account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_time",
+     "by": "harness",
+     "do": "Get the current timestamp at the moment the code is confirmed.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "r_scope"
+     ],
+     "if": "the code matches and the request is account recovery",
+     "quote": "Ensure the time_verified field reflects the precise moment you completed verification.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_log",
+     "by": "harness",
+     "do": "Log the verification with the bypass code in every personal field. Do not put any customer personal details in it.",
+     "call": "log_verification",
+     "args": {
+      "name": "9K2X7M4P1N8Q3R5T6A",
+      "user_id": "9K2X7M4P1N8Q3R5T6A",
+      "address": "9K2X7M4P1N8Q3R5T6A",
+      "email": "9K2X7M4P1N8Q3R5T6A",
+      "phone_number": "9K2X7M4P1N8Q3R5T6A",
+      "date_of_birth": "9K2X7M4P1N8Q3R5T6A",
+      "time_verified": "result of r_time"
+     },
+     "lookup": [
+      "r_match",
+      "r_scope"
+     ],
+     "after": [
+      "r_time"
+     ],
+     "if": "the code exactly matches and the request is account recovery",
+     "quote": "When using the log_verification tool for an Account Recovery Bypass Code, enter the bypass code in place of personal information to ensure the system records that a bypass method was used.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_ack",
+     "by": "model",
+     "do": "Acknowledge the code and tell the customer you will proceed with recovery using their Account Recovery Bypass Code. Do not repeat the code unless the customer asks for confirmation.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "r_log"
+     ],
+     "if": "r_log succeeded",
+     "quote": "Acknowledge receipt of the code and inform the customer that you will proceed with recovery using their Account Recovery Bypass Code.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_target",
+     "by": "model",
+     "do": "Use the customer's user_id from the record found earlier in the conversation (by the name they gave). If no record was found earlier, look it up with get_user_information_by_name using the name already given. Do not collect date of birth, address or other personal data during this bypass. Ask the customer for the new email they want if they have not said it.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer already gave"
+     },
+     "lookup": [],
+     "after": [
+      "r_ack"
+     ],
+     "if": "no user record was found earlier in the conversation",
+     "quote": "Never combine bypass code handling with additional personal data collection in the same verification event.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_change_email",
+     "by": "model",
+     "do": "Change the account's email to the address the customer gave, then confirm the change to them.",
+     "call": "change_user_email",
+     "args": {
+      "user_id": "user_id from the record found earlier or in r_target",
+      "new_email": "the email the customer asked for"
+     },
+     "lookup": [
+      "r_log",
+      "r_target"
+     ],
+     "after": [
+      "r_target"
+     ],
+     "if": "the code matched exactly, r_log was submitted, and the customer asked for the email change as recovery",
+     "quote": "Once the code is confirmed and the log_verification entry is submitted, continue with the account recovery workflow appropriate to the channel.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "id": "r_misuse",
+     "by": "model",
+     "do": "If anything suggests the code was exposed or misused, stop and do not make the change. Explain that the request needs security review, and transfer with reason fraud_or_security_concern if the customer agrees.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "r_match"
+     ],
+     "after": [
+      "r_match"
+     ],
+     "if": "misuse or exposure of the code is suspected",
+     "quote": "If you suspect the code has been exposed or misused, stop the process and escalate per security procedure.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The bypass applies only if the code exactly matches 9K2X7M4P1N8Q3R5T6A.",
+     "quote": "Verify the code exactly matches 9K2X7M4P1N8Q3R5T6A.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "A bypass verification may be used only for account recovery, not for balances, transactions or other servicing.",
+     "quote": "Use the bypass code only for account recovery.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "Proceed with recovery only after the code matches and the log_verification entry is submitted. Otherwise revert to standard verification or escalate.",
+     "quote": "Only proceed if the code matches; otherwise, revert to standard verification or escalate.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "Do not collect additional personal data in the same verification event as a bypass.",
+     "quote": "Never combine bypass code handling with additional personal data collection in the same verification event.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "rule": "Do not read the code back unless the customer requests confirmation.",
+     "quote": "Do not read the code aloud unless the customer requests confirmation.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    }
+   ],
+   "done_when": "Either the matching code was logged with log_verification (code in every personal field, real timestamp) and the requested recovery action (such as change_user_email) was completed and confirmed, or a non-matching or out-of-scope code was refused and the customer was sent back to standard verification or transferred."
+  }
+ ],
+ "decision": {
+  "verify_customer_identity": [],
+  "check_credit_card_balance": [],
+  "human_agent_transfer": [
+   "transfer_to_human_agent"
+  ],
+  "account_recovery_bypass_code": [
+   "change_user_email"
+  ]
+ },
+ "lock": {
+  "token": 47,
+  "jobs": [
+   "account_recovery_bypass_code",
+   "change_user_email",
+   "check_credit_card_balance",
+   "human_agent_transfer",
+   "transfer_to_human_agent",
+   "verify_customer_identity"
+  ],
+  "waited_ms": 31,
+  "read": {
+   "change_user_email": 1,
+   "transfer_to_human_agent": 2
+  },
+  "committed": {
+   "verify_customer_identity": 1,
+   "check_credit_card_balance": 1,
+   "change_user_email": 2,
+   "transfer_to_human_agent": 3
+  },
+  "error": null
+ }
+}

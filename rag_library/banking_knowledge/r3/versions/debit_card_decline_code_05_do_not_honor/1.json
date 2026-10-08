@@ -1,0 +1,922 @@
+{
+ "job": "debit_card_decline_code_05_do_not_honor",
+ "aliases": [
+  "clear customer-initiated fraud alert on a declined card",
+  "clear velocity block on a declined card",
+  "debit card declined code 05",
+  "do not honor decline",
+  "managing_debit_card_security_alerts_and_blocks",
+  "several debit cards declined on the same day",
+  "unfreeze a card found frozen during a decline review"
+ ],
+ "when": {
+  "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+  "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer says one or more debit cards were declined with CODE 05 (Do Not Honor) or a generic decline. Check one card at a time, starting with the card the customer picks. Each fix is made only when its check finds that cause, and only after the customer says yes. That covers unfreezing, clearing a customer-initiated fraud alert after every transaction is confirmed, and lifting a velocity block. The agent only offers a dispute when the customer denies a transaction. A bank-initiated alert is transferred to security without an offer, because the document says to.",
+  "quote": "If status is FROZEN → Ask customer if they want to unfreeze. If yes, follow the freezing/unfreezing card protocol.",
+  "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verification",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_cards",
+   "not_used": null
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": "unfreeze",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "get_transactions",
+   "not_used": null
+  },
+  {
+   "tool": "clear_debit_card_fraud_alert_4892",
+   "who": "agent",
+   "step": "clear_fraud_alert",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "bank_alert_transfer",
+   "not_used": null
+  },
+  {
+   "tool": "activate_debit_card_8291",
+   "who": "agent",
+   "step": null,
+   "not_used": "Used only for a PENDING card. branch_pending hands that card to activating_a_debit_card, which picks the tool by issue_reason."
+  },
+  {
+   "tool": "activate_debit_card_8292",
+   "who": "agent",
+   "step": null,
+   "not_used": "Used only for a PENDING replacement card. It is handed to activating_a_debit_card."
+  },
+  {
+   "tool": "activate_debit_card_8293",
+   "who": "agent",
+   "step": null,
+   "not_used": "Used only for a PENDING reissued card. It is handed to activating_a_debit_card."
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": null,
+   "not_used": "A replacement for a CLOSED card, or after a fraud closure, is ordered in order_replacement_debit_card."
+  },
+  {
+   "tool": "file_debit_card_transaction_dispute_6281",
+   "who": "agent",
+   "step": null,
+   "not_used": "A transaction the customer denies during the alert review is disputed in filing_a_debit_card_transaction_dispute (go_to_dispute)."
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": null,
+   "not_used": "A card is closed after a fraud dispute in closing_cancelling_a_debit_card, never in this job."
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_values",
+   "about": "Any 2 of: date of birth, email, phone number, address. They must match the customer's records",
+   "from": "customer",
+   "ask": "To verify your identity, could you please give me two of these: your date of birth, email, phone number or address on file?",
+   "may_hold_back": true
+  },
+  {
+   "field": "declined_cards",
+   "about": "Which debit cards were declined, which checking account each card belongs to, and which card to start with",
+   "from": "customer",
+   "ask": "Which card or account would you like to start with?",
+   "may_hold_back": false
+  },
+  {
+   "field": "decline_code",
+   "about": "The decline code or message shown for each card",
+   "from": "customer",
+   "ask": "What decline code or message did you see?",
+   "may_hold_back": true
+  },
+  {
+   "field": "decline_details",
+   "about": "Where each declined transaction happened, how the card was used, and roughly how much it was for",
+   "from": "customer",
+   "ask": "Where were you, how did you pay, and about how much was the purchase?",
+   "may_hold_back": true
+  },
+  {
+   "field": "wants_unfreeze",
+   "about": "Whether the customer wants a FROZEN card unfrozen",
+   "from": "customer",
+   "ask": "This card is currently frozen. Would you like me to unfreeze it?",
+   "may_hold_back": true
+  },
+  {
+   "field": "velocity_explanation",
+   "about": "The customer's reason for the unusual activity, if a card has a velocity block",
+   "from": "customer",
+   "ask": "Our system saw an unusual pattern of activity on this card. Can you tell me about your recent purchases?",
+   "may_hold_back": true
+  },
+  {
+   "field": "recent_transactions_confirmed",
+   "about": "Whether the customer confirms every recent transaction on a card that has a customer-initiated fraud alert",
+   "from": "customer",
+   "ask": "Before I remove the alert, can you confirm whether each of these recent transactions was yours?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_records",
+   "about": "Each card's card_id, status, fraud_alert_active, alert_source and velocity_blocked, plus the linked account's status and account_class",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "greet",
+   "by": "model",
+   "do": "Greet the customer and ask which declined card to start with and what code it showed",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "ask_decline_details",
+   "by": "model",
+   "do": "For the card being checked, ask what decline code it showed, how it was used (in person, online or ATM) and roughly how much the purchase was. If several cards were declined, check them one at a time, in the order the customer chooses.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "greet"
+   ],
+   "if": "the code or details for the current card are not yet known",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "other_code_route",
+   "by": "model",
+   "do": "If the customer reports a code other than 05 for a card, handle that card with that code's section through debit_card_decline_diagnosis. Do not use the CODE 05 order for it.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "ask_decline_details"
+   ],
+   "if": "the reported code for the card is not 05 / Do Not Honor",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "lookup_user",
+   "by": "harness",
+   "do": "Look up the customer's records by name, email or user id",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gave"
+   },
+   "lookup": [],
+   "after": [
+    "greet"
+   ],
+   "if": null,
+   "quote": "1. Customer must be verified",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "verify",
+   "by": "model",
+   "do": "Ask for 2 of: date of birth, email, phone or address, and check them against the records",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "lookup_user"
+   ],
+   "after": [
+    "lookup_user"
+   ],
+   "if": null,
+   "quote": "1. Verify customer identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "verify_failed",
+   "by": "model",
+   "do": "If fewer than 2 values match the records, share no account details. Ask once more. If the values still do not match, say you cannot verify the customer and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "lookup_user",
+    "verify"
+   ],
+   "after": [
+    "verify"
+   ],
+   "if": "fewer than 2 identity values match the records",
+   "quote": "Always verify the customer's identity before using this tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current time for the verification log",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "verify"
+   ],
+   "if": "the customer is verified",
+   "quote": "1. Verify customer identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "log_verification",
+   "by": "harness",
+   "do": "Log the verification",
+   "call": "log_verification",
+   "args": {
+    "name": "the verified user's name",
+    "user_id": "the verified user's id",
+    "address": "from records",
+    "email": "from records",
+    "phone_number": "from records",
+    "date_of_birth": "from records",
+    "time_verified": "the time from get_current_time"
+   },
+   "lookup": [
+    "verify"
+   ],
+   "after": [
+    "get_time"
+   ],
+   "if": null,
+   "quote": "1. Verify customer identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "unlock_accounts",
+   "by": "harness",
+   "do": "Unlock the account lookup tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Get all of the customer's accounts, including each checking account's id, account_class and status",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the verified user's id"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "unlock_accounts"
+   ],
+   "if": null,
+   "quote": "2. **Account Status**: Look up the customer's accounts to check the linked checking account.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "pick_account",
+   "by": "model",
+   "do": "Find the checking account whose account_class matches the card the customer named. If no account matches, or several do, ask the customer which account they mean.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts"
+   ],
+   "after": [
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Look up the customer's accounts to check the linked checking account.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "unlock_cards",
+   "by": "harness",
+   "do": "Unlock the debit card lookup tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823"
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "get_cards",
+   "by": "harness",
+   "do": "For each declined card's checking account, get its debit cards",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "arguments": {
+     "account_id": "the checking account id of the card being checked"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "unlock_cards",
+    "pick_account"
+   ],
+   "if": "repeat for each declined card, one card at a time",
+   "quote": "1. **Card Status**: Look up the debit card information and check the card's status field.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "ask_unfreeze",
+   "by": "model",
+   "do": "Tell the customer the card is frozen and ask whether they want it unfrozen",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "the card status is FROZEN",
+   "quote": "If status is FROZEN → Ask customer if they want to unfreeze. If yes, follow the freezing/unfreezing card protocol.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "branch_closed",
+   "by": "model",
+   "do": "Tell the customer this card is no longer active. Check get_cards for another ACTIVE card on the account and point the customer to it. If there is none, offer a replacement and order it only if they accept (order_replacement_debit_card).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "the card status is CLOSED",
+   "quote": "If status is CLOSED → Inform customer this card is no longer active. Check if they have another active card or offer to order a replacement.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "branch_pending",
+   "by": "model",
+   "do": "Tell the customer the card has not been activated yet. If they want to activate it, go to activating_a_debit_card, which picks the activation tool by issue_reason.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "the card status is PENDING",
+   "quote": "If status is PENDING → Card not yet activated. Follow protocol to activate it.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "unlock_unfreeze",
+   "by": "harness",
+   "do": "Unlock the unfreeze tool",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "unfreeze_debit_card_3893"
+   },
+   "lookup": [
+    "get_cards",
+    "get_accounts",
+    "ask_unfreeze"
+   ],
+   "after": [
+    "ask_unfreeze"
+   ],
+   "if": "the customer wants the card unfrozen, the card is FROZEN and the linked checking account is OPEN",
+   "quote": "2. Use unfreeze_debit_card_3893 with the card_id",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "unfreeze",
+   "by": "harness",
+   "do": "Unfreeze the card",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "unfreeze_debit_card_3893",
+    "arguments": {
+     "card_id": "the frozen card's card_id"
+    }
+   },
+   "lookup": [
+    "get_cards",
+    "get_accounts",
+    "ask_unfreeze"
+   ],
+   "after": [
+    "unlock_unfreeze"
+   ],
+   "if": "the customer agreed to unfreeze",
+   "quote": "2. Use unfreeze_debit_card_3893 with the card_id",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "after_unfreeze_continue",
+   "by": "model",
+   "do": "Do not tell the customer the card is all set yet. Unfreezing only finishes the first check. Using the same get_cards result, go on to check_account_status, check_fraud_alert and check_velocity for this card, and tell the customer about any other block you find.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards",
+    "unfreeze"
+   ],
+   "after": [
+    "unfreeze"
+   ],
+   "if": "the card was just unfrozen",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "check_account_status",
+   "by": "model",
+   "do": "Check that the linked checking account is OPEN. If it is not, give only the scripted restriction message",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "the card is ACTIVE or has just been unfrozen",
+   "quote": "If account status is not OPEN → Inform customer their account has a restriction. DO NOT provide specific details if status is SUSPENDED or RESTRICTED.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "account_restricted",
+   "by": "model",
+   "do": "Say only: 'Your account has a restriction that is preventing transactions. Please visit a branch or call our dedicated account services line at 1-800-RHO-ACCT for assistance.' Give no further details and stop checking this card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "check_account_status"
+   ],
+   "after": [
+    "check_account_status"
+   ],
+   "if": "the linked checking account status is not OPEN",
+   "quote": "Your account has a restriction that is preventing transactions. Please visit a branch or call our dedicated account services line at 1-800-RHO-ACCT for assistance.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "check_fraud_alert",
+   "by": "model",
+   "do": "Check fraud_alert_active and alert_source. If the alert is customer-initiated, show the card's recent transactions to the customer and ask them to confirm each one",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "check_account_status"
+   ],
+   "if": "fraud_alert_active is TRUE",
+   "quote": "If fraud_alert_active is TRUE and alert_source is 'customer_initiated' → Ask customer to verify recent transactions. If they confirm all transactions are legitimate, clear the alert.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "unlock_txns",
+   "by": "harness",
+   "do": "Unlock the transaction history tool, unless it is already unlocked",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_bank_account_transactions_9173"
+   },
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "check_fraud_alert"
+   ],
+   "if": "fraud_alert_active is TRUE and alert_source is 'customer_initiated'",
+   "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "get_transactions",
+   "by": "harness",
+   "do": "Get the linked checking account's transactions so the customer can review them",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_bank_account_transactions_9173",
+    "arguments": {
+     "account_id": "the card's checking account id"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "check_fraud_alert",
+    "unlock_txns"
+   ],
+   "if": "fraud_alert_active is TRUE and alert_source is 'customer_initiated' (unlock get_bank_account_transactions_9173 first)",
+   "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "review_transactions",
+   "by": "model",
+   "do": "Read the recent transactions from get_transactions (merchant, date, amount) to the customer, and ask them to confirm, one by one, whether each was theirs. Record which ones they confirm and which they deny.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_transactions"
+   ],
+   "after": [
+    "get_transactions"
+   ],
+   "if": "fraud_alert_active is TRUE and alert_source is 'customer_initiated'",
+   "quote": "Ask customer to verify recent transactions.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "bank_alert_transfer",
+   "by": "model",
+   "do": "Do not clear the alert. Tell the customer about the security review and transfer to a human agent",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "bank-initiated fraud alert on a debit card",
+    "reason": "security team review"
+   },
+   "lookup": [
+    "get_cards",
+    "check_fraud_alert"
+   ],
+   "after": [
+    "check_fraud_alert"
+   ],
+   "if": "fraud_alert_active is TRUE and alert_source is 'bank_initiated'",
+   "quote": "If fraud_alert_active is TRUE and alert_source is 'bank_initiated' → Do NOT clear it.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "unlock_clear",
+   "by": "harness",
+   "do": "Unlock clear_debit_card_fraud_alert_4892, unless it is already unlocked",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "clear_debit_card_fraud_alert_4892"
+   },
+   "lookup": [
+    "review_transactions",
+    "check_velocity"
+   ],
+   "after": [
+    "review_transactions"
+   ],
+   "if": "a customer-initiated alert is to be cleared (all transactions confirmed), or a velocity block is to be lifted (the customer agreed and gave a reasonable explanation)",
+   "quote": "Use this tool to clear fraud alerts or velocity blocks on a customer's debit card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "clear_fraud_alert",
+   "by": "harness",
+   "do": "Clear the customer-initiated fraud alert",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "clear_debit_card_fraud_alert_4892",
+    "arguments": {
+     "card_id": "the card's card_id",
+     "reason": "customer_verified"
+    }
+   },
+   "lookup": [
+    "get_cards",
+    "get_transactions",
+    "review_transactions"
+   ],
+   "after": [
+    "get_transactions",
+    "unlock_clear"
+   ],
+   "if": "the customer confirms ALL recent transactions are legitimate (unlock clear_debit_card_fraud_alert_4892 first)",
+   "quote": "For fraud alerts: The alert was customer-initiated AND customer confirms their recent transactions are legitimate",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "go_to_dispute",
+   "by": "model",
+   "do": "Do not clear the alert. Offer to file a debit card dispute for each transaction the customer did not make (job 2)",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_transactions",
+    "review_transactions"
+   ],
+   "after": [
+    "get_transactions"
+   ],
+   "if": "the customer says one or more recent transactions were not theirs",
+   "quote": "If fraud is suspected, advise customer to review recent transactions and file disputes for any unauthorized charges",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "alert_card_after_dispute",
+   "by": "model",
+   "do": "Once the fraud dispute is filed, the card's action comes from the dispute's category (close_and_reissue for a fraud category). Hand the card to closing_cancelling_a_debit_card, and then to order_replacement_debit_card if the customer wants a new card. Never clear the alert on a card with a denied transaction. Tell the customer the old card will not work again and a replacement is on its way.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "review_transactions",
+    "get_cards"
+   ],
+   "after": [
+    "go_to_dispute"
+   ],
+   "if": "the customer denied a transaction and a dispute was filed for it",
+   "quote": "This parameter records metadata only; the agent must separately perform the indicated card action after filing the dispute.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+  },
+  {
+   "id": "check_velocity",
+   "by": "model",
+   "do": "Check velocity_blocked. If it is TRUE, read the scripted velocity message, ask whether to lift the block now, and ask about the recent activity",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards"
+   ],
+   "after": [
+    "check_fraud_alert"
+   ],
+   "if": "velocity_blocked is TRUE (check this even on a card that was just unfrozen)",
+   "quote": "If velocity_blocked is TRUE, inform customer: 'Your card was temporarily blocked because our security system detected unusual activity patterns. This block automatically lifts after 30 minutes. Would you like me to verify your identity and lift it now?'",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "velocity_not_lifted",
+   "by": "model",
+   "do": "If the customer does not want the block lifted now, tell them it lifts by itself after 30 minutes. Do not clear it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_velocity"
+   ],
+   "after": [
+    "check_velocity"
+   ],
+   "if": "velocity_blocked is TRUE and the customer declines the early lift",
+   "quote": "Velocity blocks automatically expire after 30 minutes, but can be cleared earlier by a customer service agent after identity verification.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "clear_velocity",
+   "by": "harness",
+   "do": "Clear the velocity block",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "clear_debit_card_fraud_alert_4892",
+    "arguments": {
+     "card_id": "the card's card_id",
+     "reason": "velocity_clear"
+    }
+   },
+   "lookup": [
+    "get_cards",
+    "check_velocity"
+   ],
+   "after": [
+    "check_velocity",
+    "unlock_clear"
+   ],
+   "if": "the customer wants the block lifted and gives a reasonable explanation (unlock clear_debit_card_fraud_alert_4892 first)",
+   "quote": "For velocity blocks: Customer provides a reasonable explanation for the unusual activity (e.g., shopping spree, travel)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "velocity_suspicious",
+   "by": "model",
+   "do": "Do not lift the block. Tell the customer the activity needs review by the security team, ask whether they want to be transferred, and transfer only if they say yes.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "velocity block on a debit card; the customer's explanation was suspicious or inconsistent",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "check_velocity"
+   ],
+   "after": [
+    "check_velocity"
+   ],
+   "if": "velocity_blocked is TRUE and the customer's explanation is suspicious or inconsistent, and the customer agrees to a transfer",
+   "quote": "The customer's explanation for unusual activity is suspicious or inconsistent",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "clear_error",
+   "by": "model",
+   "do": "If clear_debit_card_fraud_alert_4892 returns an error (for example, the alert is bank-initiated), do not retry. Say there is a security flag that needs further review, and transfer to the security team.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card and the alert or block that could not be cleared, and the error",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "clear_fraud_alert",
+    "clear_velocity"
+   ],
+   "after": [
+    "clear_fraud_alert",
+    "clear_velocity"
+   ],
+   "if": "clear_debit_card_fraud_alert_4892 returned an error",
+   "quote": "This tool CANNOT clear bank-initiated fraud alerts. If you attempt to clear a bank-initiated alert, you will receive an error. In this case, you must transfer the customer to the security team.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "confirm_card",
+   "by": "model",
+   "do": "Tell the customer the card is active and ready to use, then move to the next declined card",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards",
+    "check_account_status",
+    "check_fraud_alert",
+    "check_velocity"
+   ],
+   "after": [
+    "check_velocity"
+   ],
+   "if": "all checks for this card are resolved",
+   "quote": "3. Confirm the card is now active and ready to use immediately",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "no_cause_found",
+   "by": "model",
+   "do": "If all four checks pass on an ACTIVE card and nothing is blocking it, tell the customer that no block was found on the card and suggest trying again. Do not invent a cause.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards",
+    "get_accounts"
+   ],
+   "after": [
+    "check_velocity"
+   ],
+   "if": "the card is ACTIVE, the account is OPEN, and there is no fraud alert and no velocity block",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "next_card",
+   "by": "model",
+   "do": "Repeat ask_decline_details and pick_account through confirm_card for each remaining declined card the customer named. Reuse the verification and the accounts lookup. Close only when every card has been handled.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts"
+   ],
+   "after": [
+    "confirm_card"
+   ],
+   "if": "another declined card remains",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Check every CODE 05 card in this order: card status, then account status, then fraud alert, then velocity block. Unfreezing a card does not end the check: continue to the fraud alert and velocity checks.",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "rule": "A card can be unfrozen only if it is FROZEN and its linked checking account is OPEN.",
+   "quote": "4. The linked checking account must still be OPEN",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "rule": "Never clear a bank-initiated fraud alert. Transfer to the security team instead.",
+   "quote": "Bank-Initiated Alerts**: Placed by Rho-Bank's fraud detection systems when high-risk patterns are identified. These CANNOT be cleared by customer service agents and require review by the security team.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "rule": "Clear a customer-initiated fraud alert only if the customer confirms that all recent transactions are legitimate.",
+   "quote": "If they confirm all transactions are legitimate, clear the alert.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "rule": "Use reason 'customer_verified' to clear a fraud alert and reason 'velocity_clear' to clear a velocity block.",
+   "quote": "Use this tool to clear fraud alerts or velocity blocks on a customer's debit card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "rule": "Account tiers: Entry is Light Blue, Light Green and Green Fee-Free. Mid is Blue and Green (checking). Premium is Evergreen. Elite is Bluest.",
+   "quote": "PREMIUM TIER (Evergreen Account)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_005"
+  },
+  {
+   "rule": "A velocity block lifts by itself after 30 minutes. It may be lifted earlier after verification.",
+   "quote": "Velocity blocks automatically expire after 30 minutes, but can be cleared earlier by a customer service agent after identity verification.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "rule": "If the clear tool returns an error for a bank-initiated alert, transfer to the security team.",
+   "quote": "This tool CANNOT clear bank-initiated fraud alerts. If you attempt to clear a bank-initiated alert, you will receive an error. In this case, you must transfer the customer to the security team.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "rule": "A CLOSED card cannot be used. Point the customer to another active card, or offer a replacement.",
+   "quote": "If status is CLOSED → Inform customer this card is no longer active. Check if they have another active card or offer to order a replacement.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "rule": "If the account is SUSPENDED or RESTRICTED, give no details. Use only the scripted message.",
+   "quote": "DO NOT provide specific details if status is SUSPENDED or RESTRICTED.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  }
+ ],
+ "done_when": "Every declined card has been checked in order (status, account, fraud alert, velocity block). Each issue found has been resolved or routed: frozen cards unfrozen if the customer wanted (and still checked for an alert and a velocity block), velocity blocks cleared after an explanation, and customer-initiated alerts cleared only when all transactions are confirmed, otherwise sent to the dispute job, after which the card was closed and a replacement offered. Bank-initiated alerts have been transferred. CLOSED and PENDING cards have been explained and routed."
+}

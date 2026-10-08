@@ -1,0 +1,1261 @@
+{
+ "jobs": [
+  {
+   "job": "generating_a_credit_card_referral_link",
+   "aliases": [
+    "credit card referral program inquiry",
+    "credit_card_referral_bonus_inquiry",
+    "credit_card_referral_link",
+    "credit_card_referral_link_request",
+    "get credit card referral link",
+    "refer a friend to a credit card",
+    "refer_a_friend_credit_card",
+    "referral offer from a letter or mailer",
+    "referral offers for several cards asked one after another"
+   ],
+   "when": {
+    "quote": "Search the knowledge base to confirm the specific card has a documented referral program.",
+    "doc": "doc_credit_cards_credit_cards_(general)_009"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks for a credit card referral link or asks about a card's referral program. The agent does not offer a referral link unprompted. The customer generates the link with get_referral_link; the agent never does. If the customer asks about several cards one after another, run the checks for each card separately.",
+    "quote": "To refer a friend, you'll need to generate a unique referral link that's tied to your account. You can do this through the Rho-Bank mobile app, online banking portal, or by contacting our customer service team.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "tools": [
+    {
+     "tool": "KB_search_bm25",
+     "who": "agent",
+     "step": "kb_find_program",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_dense",
+     "who": "agent",
+     "step": "kb_find_program",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "get_referrals_by_user",
+     "who": "agent",
+     "step": "get_referrals",
+     "not_used": null
+    },
+    {
+     "tool": "give_discoverable_user_tool",
+     "who": "agent",
+     "step": "give_link_tool",
+     "not_used": null
+    },
+    {
+     "tool": "get_referral_link",
+     "who": "customer",
+     "step": "customer_generates_link",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_user_tool",
+     "who": "customer",
+     "step": "customer_generates_link",
+     "not_used": null
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used in this job. The document says 'Do not transfer to a human in these cases' when the card has no documented referral program, the customer's claimed terms are wrong, or the referral would be rejected automatically. This holds even if the customer insists on an offer they received by mail, and even after several cards in a row fail the checks."
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used here. get_referral_link is a customer tool that the agent gives with give_discoverable_user_tool. The agent must not generate the link itself."
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used here. Agents must not generate the link on the customer's behalf."
+    }
+   ],
+   "info": [
+    {
+     "field": "card_name",
+     "about": "the exact Rho-Bank credit card the customer wants to refer people to",
+     "from": "customer",
+     "ask": "Which Rho-Bank credit card would you like to refer your friends to?",
+     "may_hold_back": false
+    },
+    {
+     "field": "claimed_terms",
+     "about": "the referral terms the customer believes apply (bonus amount, qualifying spend, time window) and where they saw them (for example a letter, email, ad or in-app notification)",
+     "from": "customer",
+     "ask": "What terms do you have for this referral offer: the bonus amount, how much your friend needs to spend, and within what time? Where did you see the offer?",
+     "may_hold_back": true
+    },
+    {
+     "field": "verification_values",
+     "about": "any 2 of date of birth, email, phone number and address, compared against the record",
+     "from": "customer",
+     "ask": "To verify your identity, could you please give me two of the following: your date of birth, email, phone number, or address on file?",
+     "may_hold_back": true
+    },
+    {
+     "field": "user_id",
+     "about": "the customer's user ID. The agent uses it for the lookup, and the customer passes it to get_referral_link.",
+     "from": "customer",
+     "ask": "Could you please give me your user ID?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referral_history",
+     "about": "the customer's existing referrals, with their statuses and timing",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "current_time",
+     "about": "today's date and time, used for program cut-off dates and the rolling 7-day window",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Greet the customer politely and ask how you can help. Share no account information before the customer is verified.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "ask_card_and_terms",
+     "by": "model",
+     "do": "If the customer has not already said, ask which credit card they want to refer people to and what referral terms they believe apply: the bonus, the qualifying spend and the time window.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": null,
+     "quote": "Verify the customer’s understanding of referral terms. If the customer cites terms that do not match any documented program, clarify the discrepancy.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "kb_find_program",
+     "by": "model",
+     "do": "Search the knowledge base, by keyword and by meaning, for a referral program document for that exact card (for example '<card name> Referral Program'), and open the full document. Referral program documents exist for: EcoCard, Silver Rewards Card, Platinum Rewards Card, Business Bronze Rewards Card, Business Silver Rewards Card, Business Gold Rewards Card, Business Platinum Rewards Card, Green Rewards Card and Silver Zoom Card. No referral program document was found for Crypto-Cash Back, Bronze Rewards Card, Gold Rewards Card or Diamond Elite Card.",
+     "call": "KB_search_bm25",
+     "args": {
+      "query": "the card name from ask_card_and_terms plus 'referral program'"
+     },
+     "lookup": [],
+     "after": [
+      "ask_card_and_terms"
+     ],
+     "if": null,
+     "quote": "Search the knowledge base to confirm the specific card has a documented referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time. Use it to check program end dates and the rolling 7-day window.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "kb_find_program"
+     ],
+     "if": null,
+     "quote": "The referral program accepts new referrals until 2025-09-15. Referrals submitted after this date are not eligible.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_010"
+    },
+    {
+     "id": "decide_program_exists",
+     "by": "model",
+     "do": "Decide whether the card has a documented referral program that still accepts new referrals at the current time. The Business Gold Rewards Card accepts new referrals only until 2025-09-15. The Silver Zoom Card accepts none after 2025-10-01.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "kb_find_program",
+      "get_time"
+     ],
+     "after": [
+      "get_time"
+     ],
+     "if": null,
+     "quote": "No new referrals are accepted after 2025-10-01",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "id": "explain_no_program",
+     "by": "model",
+     "do": "Tell the customer politely that you could not find a documented Rho-Bank referral program for this card, or that its program no longer accepts new referrals, so you cannot provide a referral link. Do not give the referral tool. Do not offer or make a transfer to a human, even if the customer says they have an official letter or offer. Share another card's documented terms only if the customer asks. Then stop for this card.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide_program_exists"
+     ],
+     "after": [
+      "decide_program_exists"
+     ],
+     "if": "no documented referral program exists for the card, or its program has closed to new referrals",
+     "quote": "If no referral program is documented for the requested card, or if the user’s claimed terms are incorrect, or if there is reason to believe the referral will be automatically rejected, explain why and do not provide a referral link tool. Do not transfer to a human in these cases.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "compare_terms",
+     "by": "model",
+     "do": "Compare the customer's claimed terms with the documented program of the card they named: bonus amount, qualifying spend, time window and annual cap. Compare only against that card's own document. Terms that match a different card's program (for example $100 for $3,000 within 90 days is the Business Silver Rewards Card, not the Silver Zoom Card) are still a mismatch. If they differ, explain the correct documented terms. Give no referral tool and do not transfer. Stop for this card, unless the customer then accepts the correct documented terms and still wants the link.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "ask_card_and_terms",
+      "kb_find_program"
+     ],
+     "after": [
+      "decide_program_exists"
+     ],
+     "if": "a documented, open program exists for the card",
+     "quote": "Verify the customer’s understanding of referral terms. If the customer cites terms that do not match any documented program, clarify the discrepancy.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "ask_verification",
+     "by": "model",
+     "do": "Ask for the customer's user ID (or their name or email) and for any 2 of: date of birth, email, phone number, address. Skip this if the customer was already verified earlier in this conversation.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "compare_terms"
+     ],
+     "if": "the program exists and the customer's understanding matches the documented terms",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "lookup_user",
+     "by": "harness",
+     "do": "Look up the customer's record using the identifier they gave.",
+     "call": "get_user_information_by_id",
+     "args": {
+      "user_id": "the user ID the customer gave (or use get_user_information_by_name / get_user_information_by_email with the name or email they gave)"
+     },
+     "lookup": [],
+     "after": [
+      "ask_verification"
+     ],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "check_verification",
+     "by": "model",
+     "do": "Confirm that at least 2 of the values the customer gave match the record. If they do not, share no account information and ask once more. If they still do not match, tell the customer you cannot verify them and stop.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "get_verification_time",
+     "by": "harness",
+     "do": "Get the current time for the verification log.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "check_verification"
+     ],
+     "if": "verification succeeded",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification.",
+     "call": "log_verification",
+     "args": {
+      "name": "lookup_user result",
+      "user_id": "lookup_user result",
+      "address": "lookup_user result",
+      "email": "lookup_user result",
+      "phone_number": "lookup_user result",
+      "date_of_birth": "lookup_user result",
+      "time_verified": "get_verification_time result"
+     },
+     "lookup": [],
+     "after": [
+      "get_verification_time"
+     ],
+     "if": "verification succeeded",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "id": "get_referrals",
+     "by": "harness",
+     "do": "Read the customer's existing referrals.",
+     "call": "get_referrals_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": "verification succeeded",
+     "quote": "Track the timing of your last two successful referral bonuses before sending additional referrals.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "check_auto_reject",
+     "by": "model",
+     "do": "Decide whether a new referral would be rejected automatically. Count the referral bonuses received in the rolling 7 days before the current time, across all credit card types. If there are 2 or more, a new referral would be denied. Also review any REJECTED or ERROR statuses.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "get_time"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": null,
+     "quote": "This limit applies across all credit card types; referrals from different cards still count toward the same weekly cap.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "explain_auto_reject",
+     "by": "model",
+     "do": "Explain that the customer has reached the limit of 2 referral bonuses in a rolling 7-day window, so a new referral would be denied automatically. Tell them to wait until enough time has passed to drop under the cap. Give no referral tool and do not transfer. Stop.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_auto_reject"
+     ],
+     "after": [
+      "check_auto_reject"
+     ],
+     "if": "a new referral would be rejected automatically",
+     "quote": "If a referral is denied for hitting the limit, wait until enough time has passed to drop under the cap before attempting another.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "give_link_tool",
+     "by": "model",
+     "do": "Give the customer the get_referral_link tool. Tell them to run it themselves with their own user_id and the exact card name (for example 'Gold Rewards Card'). Never generate the link for them.",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_referral_link"
+     },
+     "lookup": [
+      "decide_program_exists",
+      "compare_terms",
+      "check_verification",
+      "check_auto_reject"
+     ],
+     "after": [
+      "check_auto_reject"
+     ],
+     "if": "the card has a documented open program, the customer's understanding matches the documented terms, the customer is verified, and no automatic rejection is expected",
+     "quote": "Provide the customer with this tool and instruct them to run it themselves:",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "customer_generates_link",
+     "by": "customer",
+     "do": "The customer runs get_referral_link with their own user_id and the exact card name.",
+     "call": "get_referral_link",
+     "args": {
+      "user_id": "the customer's own user id",
+      "card_name": "the exact card name, e.g. 'Platinum Rewards Card'"
+     },
+     "lookup": [],
+     "after": [
+      "give_link_tool"
+     ],
+     "if": null,
+     "quote": "Tell the customer to pass their own user_id and the exact card name (for example, 'Gold Rewards Card').",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "reiterate_terms",
+     "by": "model",
+     "do": "Repeat the card's documented referral terms: the bonus, the qualifying spend and its window, and the annual cap. Also repeat the limit of 2 bonuses in a rolling 7-day window. Explain that the referral shows status NO_PROGRESS until the friend applies through the link. If the tool returns an error, tell the customer to try again later.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "kb_find_program",
+      "customer_generates_link"
+     ],
+     "after": [
+      "customer_generates_link"
+     ],
+     "if": null,
+     "quote": "Reiterate the correct referral terms as documented to prevent confusion and complaints.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "next_card",
+     "by": "model",
+     "do": "If the customer then asks about a different card, start again from ask_card_and_terms for that card. Run kb_find_program, decide_program_exists and compare_terms against that card's own referral document. Do not verify again if the customer is already verified. Do not transfer because several cards in a row failed the checks.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide_program_exists",
+      "compare_terms"
+     ],
+     "after": [
+      "explain_no_program",
+      "compare_terms"
+     ],
+     "if": "the customer asks about a different card after a check failed for the previous card or after a link was created",
+     "quote": "Each credit card type has its own referral bonus and eligibility requirements that are not detailed here.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Give the referral link tool only for a card with a documented referral program. Otherwise explain why, give no tool and do not transfer.",
+     "quote": "If no referral program is documented for the requested card, or if the user’s claimed terms are incorrect, or if there is reason to believe the referral will be automatically rejected, explain why and do not provide a referral link tool. Do not transfer to a human in these cases.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "The agent never generates the referral link. The customer runs get_referral_link.",
+     "quote": "Agents must not generate the link on the customer’s behalf.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "At most 2 referral bonuses in any rolling 7-day window, across all credit cards. The third and later ones are denied automatically.",
+     "quote": "Weekly limit: Customers can receive at most 2 referral bonuses in any rolling 7-day window; the third and subsequent referrals in that window are automatically denied.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "Not every card has a referral program. Crypto-Cash Back, Bronze Rewards, Gold Rewards and Diamond Elite have no referral program document.",
+     "quote": "**Eligibility**: Not all credit cards participate in the referral program. Before sharing your link, make sure the card you're referring has an active referral offer.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "rule": "EcoCard: 50 per referral. The referred person spends at least $500 within 60 days. Up to 7 bonuses per year.",
+     "quote": "The referred person must be approved and spend at least $500 within 60 days of account opening",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "EcoCard bonus amount is 50. A claimed bonus of any other amount (for example 200) is incorrect.",
+     "quote": "Receive 50 for each successful referral",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "Silver Rewards Card: 75 per referral, at least $750 within 60 days, up to 7 per year.",
+     "quote": "The referred person must be approved and spend at least $750 within 60 days of account opening",
+     "doc": "doc_credit_cards_silver_rewards_card_011"
+    },
+    {
+     "rule": "Platinum Rewards Card: $100 per referral, at least $1,500 within 90 days, up to 7 per year.",
+     "quote": "The referred friend must spend at least $1,500 within 90 days of account opening to qualify you for the bonus.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "Business Bronze Rewards Card: $75 per referral, $1,750 in net purchases within 90 days, up to 7 per year.",
+     "quote": "The referred business must complete at least $1,750 in net purchases within 90 days of account opening.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_011"
+    },
+    {
+     "rule": "Business Silver Rewards Card: $100 per referral, at least $3,000 within 90 days, up to 10 per year.",
+     "quote": "The referred business must spend at least $3,000 within 90 days of account opening for you to receive the bonus",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_013"
+    },
+    {
+     "rule": "Business Gold Rewards Card: $200 per referral, $7,500 within 90 days, up to 8 per year. No referrals accepted after 2025-09-15.",
+     "quote": "The referral program accepts new referrals until 2025-09-15. Referrals submitted after this date are not eligible.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_010"
+    },
+    {
+     "rule": "Business Platinum Rewards Card: $300 per referral, $15,000 within 135 days, up to 11 per year.",
+     "quote": "When the referred business is approved and completes qualifying spend of $15,000 within 135 days from account opening, you earn a bonus of $300.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_012"
+    },
+    {
+     "rule": "Green Rewards Card: 75 per referral, at least $2,250 within 90 days, up to 7 per year.",
+     "quote": "The referred business must spend at least $2,250 within 90 days from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_green_rewards_card_010"
+    },
+    {
+     "rule": "Silver Zoom Card: $150 per referral, $7,500 within 90 days, up to 10 per year. No new referrals after 2025-10-01.",
+     "quote": "No new referrals are accepted after 2025-10-01",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "rule": "Silver Zoom Card bonus is $150 per referred logistics business. Claims of a different bonus or spend for this card (for example $100 for $3,000) are incorrect.",
+     "quote": "Earn a referral bonus of $150 for each referred logistics business that is approved and meets the qualifying spend requirement",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "rule": "Check claimed terms against the requested card's own program. Terms that belong to another card's program are still incorrect for the requested card: explain the discrepancy and give no link.",
+     "quote": "If no referral program is documented for the requested card, or if the user’s claimed terms are incorrect, or if there is reason to believe the referral will be automatically rejected, explain why and do not provide a referral link tool. Do not transfer to a human in these cases.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "Each credit card has its own referral terms, so every card the customer asks about is checked separately.",
+     "quote": "Each credit card type has its own referral bonus and eligibility requirements that are not detailed here.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Once the limit is hit, a third or later referral within the same week is denied automatically.",
+     "quote": "If you attempt to receive more than 2 referrals in a single week, the third referral (and any subsequent referrals that week) will be automatically denied.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "A new referral record starts with status NO_PROGRESS.",
+     "quote": "When the tool is called successfully, a referral record is created with status 'NO_PROGRESS'. The referred person can then use the generated link to apply.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "An ERROR status means retry later.",
+     "quote": "ERROR: Retry later or escalate internally if the condition persists.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    },
+    {
+     "rule": "A REJECTED status means: do not retry immediately, and review the existing referral activity before advising.",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    }
+   ],
+   "done_when": "For every card the customer asked about, one of two outcomes holds. (a) The customer has been told why no referral link can be provided for that card: no documented program, program closed, claimed terms incorrect, or the referral would be rejected automatically. No tool was given for it and there was no transfer. (b) The customer is verified and logged, has received get_referral_link, has run it with their own user_id and the exact card name, and has heard the correct documented terms."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_009",
+   "why": "Internal procedure: pre-checks (program exists, terms match, no auto-rejection), the no-transfer rule, the customer tool get_referral_link, and the ban on agents generating links"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_002",
+   "why": "Limit of 2 referral bonuses per rolling 7-day window across all card types; each card has its own terms"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_001",
+   "why": "Referral status meanings (NO_PROGRESS, REJECTED, ERROR)"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_020",
+   "why": "Customer-facing overview: links can be generated via customer service, and not all cards participate"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_008",
+   "why": "Platinum Rewards referral terms ($100, $1,500 within 90 days, 7 per year)"
+  },
+  {
+   "id": "doc_credit_cards_ecocard_011",
+   "why": "EcoCard referral terms (50, $500 within 60 days)"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_011",
+   "why": "Silver Rewards referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_gold_rewards_card_010",
+   "why": "Business Gold referral terms and the 2025-09-15 cut-off"
+  },
+  {
+   "id": "doc_business_credit_cards_silver_zoom_card_011",
+   "why": "Silver Zoom referral terms ($150, $7,500 within 90 days) and the 2025-10-01 cut-off"
+  },
+  {
+   "id": "doc_business_credit_cards_business_silver_rewards_card_013",
+   "why": "Business Silver referral terms ($100, $3,000 within 90 days)"
+  },
+  {
+   "id": "doc_business_credit_cards_business_bronze_rewards_card_011",
+   "why": "Business Bronze referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_business_platinum_rewards_card_012",
+   "why": "Business Platinum referral terms"
+  },
+  {
+   "id": "doc_business_credit_cards_green_rewards_card_010",
+   "why": "Green Rewards referral terms"
+  }
+ ],
+ "open_questions": [
+  "The Crypto-Cash Back documents (doc_credit_cards_crypto-cash_back_001 to 009) never mention a referral program. The workflow treats this as 'no documented program'.",
+  "The documents do not say which get_referrals_by_user statuses count as a 'received bonus' for the rolling 7-day limit (COMPLETE only, or pending ones too).",
+  "No document says whether the referrer must hold the card they refer people to.",
+  "If a customer accepts the corrected documented terms after a mismatch, doc 009 does not say clearly whether the tool may then be given. The library allows it when the customer accepts the correct terms and still wants the link.",
+  "Annual per-card caps are documented, but no document says the agent must check them before giving the link."
+ ],
+ "merge": [
+  {
+   "job": "generating_a_credit_card_referral_link",
+   "into": [
+    "generating_a_credit_card_referral_link"
+   ],
+   "previous_sessions": [
+    "20261007T234237Z_banking_knowledge_r3_task_014"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "next_card",
+     "why": "Customers may ask about several cards in a row. Each card is checked against its own referral program without verifying again and without a transfer.",
+     "quote": "Each credit card type has its own referral bonus and eligibility requirements that are not detailed here.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "changed",
+     "what": "compare_terms",
+     "why": "Added only a clarification: terms are compared against the requested card's own document, so terms that belong to a different card's program still count as a mismatch. The branch logic is unchanged.",
+     "quote": "Verify the customer’s understanding of referral terms. If the customer cites terms that do not match any documented program, clarify the discrepancy.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "change": "changed",
+     "what": "ask_verification",
+     "why": "Added: skip it when the customer was already verified earlier in the conversation, for example on a previous card.",
+     "quote": null,
+     "doc": null
+    },
+    {
+     "change": "added",
+     "what": "unlock_discoverable_agent_tool, call_discoverable_agent_tool (not_used)",
+     "why": "States that the agent never generates the link itself.",
+     "quote": "Agents must not generate the link on the customer’s behalf.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "change": "added",
+     "what": "rules: EcoCard bonus amount, Silver Zoom $150 bonus, terms checked per requested card, per-card terms, auto-denial in a week, REJECTED handling",
+     "why": "Lets the agent judge the wrong-amount and wrong-card claims a customer may cite.",
+     "quote": "Receive 50 for each successful referral",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "change": "added",
+     "what": "info current_time",
+     "why": "Needed to judge program cut-off dates and the 7-day window.",
+     "quote": "A rolling 7-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "change": "changed",
+     "what": "done_when",
+     "why": "Now covers each card asked about in turn.",
+     "quote": null,
+     "doc": null
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 41,
+     "n": 41,
+     "new_unfound": []
+    },
+    "D2": {
+     "named": [
+      "get_referral_link"
+     ],
+     "missing": [],
+     "n": 1
+    },
+    "D3": {
+     "with_condition": 1,
+     "n": 1
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 4,
+     "n": 4,
+     "done_when": true
+    },
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    }
+   },
+   "failed": [],
+   "taken": true
+  }
+ ],
+ "rejected": [],
+ "draft": [
+  {
+   "job": "generating_a_credit_card_referral_link",
+   "aliases": [
+    "credit_card_referral_link",
+    "refer_a_friend_credit_card",
+    "credit_card_referral_bonus_inquiry"
+   ],
+   "when": {
+    "quote": "Provide the customer with this tool and instruct them to run it themselves:",
+    "doc": "doc_credit_cards_credit_cards_(general)_009"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks for a credit card referral link or asks about a card's referral offer. No document tells the agent to offer a referral link on its own.",
+    "quote": "To refer a friend, you'll need to generate a unique referral link that's tied to your account.",
+    "doc": "doc_credit_cards_credit_cards_(general)_020"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "lookup_user",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "get_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "log_verification",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_bm25",
+     "who": "agent",
+     "step": "kb_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_dense",
+     "who": "agent",
+     "step": "kb_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_referrals_by_user",
+     "who": "agent",
+     "step": "get_referrals",
+     "not_used": null
+    },
+    {
+     "tool": "give_discoverable_user_tool",
+     "who": "agent",
+     "step": "give_tool",
+     "not_used": null
+    },
+    {
+     "tool": "get_referral_link",
+     "who": "customer",
+     "step": "customer_runs_tool",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_user_tool",
+     "who": "customer",
+     "step": "customer_runs_tool",
+     "not_used": null
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used here. get_referral_link is a customer tool, and the agent must not generate the link for the customer."
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used here. Agents must not generate the link on the customer's behalf."
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used when a pre-check fails (no documented program, wrong terms, program closed, or the referral would be auto-rejected), because doc 009 says not to transfer in these cases. Use it only under the general policy, for an issue outside this job."
+    }
+   ],
+   "info": [
+    {
+     "field": "identity_lookup_key",
+     "about": "the customer's user id, full name or email, used to find their record",
+     "from": "customer",
+     "ask": "Could you give me your user ID, or the full name or email on your account?",
+     "may_hold_back": true
+    },
+    {
+     "field": "verification_values",
+     "about": "any 2 of date of birth, email, phone number, address, checked against the records",
+     "from": "customer",
+     "ask": "To verify your identity, please give me two of these: date of birth, email, phone number, or address on file.",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_name",
+     "about": "the credit card the customer wants to refer people to",
+     "from": "customer",
+     "ask": "Which Rho-Bank credit card would you like to refer people to?",
+     "may_hold_back": false
+    },
+    {
+     "field": "claimed_terms",
+     "about": "the bonus amount, required spend and time window the customer believes apply",
+     "from": "customer",
+     "ask": "What referral terms did you see for that card: the bonus amount, and how much your referral has to spend and in what time?",
+     "may_hold_back": true
+    },
+    {
+     "field": "referral_history",
+     "about": "the customer's existing referrals, their statuses and timestamps",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    },
+    {
+     "field": "current_time",
+     "about": "today's date and time, used for program cut-off dates and the rolling 7-day window",
+     "from": "records",
+     "ask": "",
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "ask_identity",
+     "by": "model",
+     "do": "Greet the customer. Ask for a lookup key (user ID, full name, or email) and any two of: date of birth, email, phone number, address.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "You can do this through the Rho-Bank mobile app, online banking portal, or by contacting our customer service team.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "lookup_user",
+     "by": "model",
+     "do": "Look up the customer's record using the key they gave: get_user_information_by_id for a user ID, get_user_information_by_name for a name, or get_user_information_by_email for an email.",
+     "call": "get_user_information_by_id",
+     "args": {
+      "user_id": "the customer's stated user ID (or customer_name / email for the other lookup tools)"
+     },
+     "lookup": [],
+     "after": [
+      "ask_identity"
+     ],
+     "if": null,
+     "quote": "You can do this through the Rho-Bank mobile app, online banking portal, or by contacting our customer service team.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "check_identity",
+     "by": "model",
+     "do": "Check that at least 2 of the values the customer gave match the record exactly. If they do not match, share no account information, ask again, and do not continue until the customer is verified.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "lookup_user"
+     ],
+     "after": [
+      "lookup_user"
+     ],
+     "if": null,
+     "quote": "You can do this through the Rho-Bank mobile app, online banking portal, or by contacting our customer service team.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "get_time",
+     "by": "harness",
+     "do": "Get the current time.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "check_identity"
+     ],
+     "if": null,
+     "quote": "A rolling 7-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "log_verification",
+     "by": "harness",
+     "do": "Log the verification record.",
+     "call": "log_verification",
+     "args": {
+      "name": "lookup_user result",
+      "user_id": "lookup_user result",
+      "address": "lookup_user result",
+      "email": "lookup_user result",
+      "phone_number": "lookup_user result",
+      "date_of_birth": "lookup_user result",
+      "time_verified": "get_time result"
+     },
+     "lookup": [
+      "lookup_user",
+      "check_identity"
+     ],
+     "after": [
+      "get_time"
+     ],
+     "if": "the customer passed check_identity",
+     "quote": "You can do this through the Rho-Bank mobile app, online banking portal, or by contacting our customer service team.",
+     "doc": "doc_credit_cards_credit_cards_(general)_020"
+    },
+    {
+     "id": "ask_card_and_terms",
+     "by": "model",
+     "do": "Ask which credit card the customer wants a referral link for, and what referral terms they believe apply (bonus amount, required spend, time window).",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "log_verification"
+     ],
+     "if": null,
+     "quote": "Verify the customer’s understanding of referral terms.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "kb_lookup",
+     "by": "model",
+     "do": "Search the knowledge base for that card's own referral program document (for example '<card name> referral program') and read it in full: bonus, qualifying spend, window, annual cap, and any cut-off date.",
+     "call": "KB_search_bm25",
+     "args": {
+      "query": "the card name from ask_card_and_terms + 'referral program'"
+     },
+     "lookup": [],
+     "after": [
+      "ask_card_and_terms"
+     ],
+     "if": null,
+     "quote": "Search the knowledge base to confirm the specific card has a documented referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "check_program_exists",
+     "by": "model",
+     "do": "Decide whether the card has its own documented referral program. If none exists (for example, a card whose documents never mention a referral program), tell the customer no referral program is documented for that card, do not give the referral link tool, do not transfer, and offer to check another card.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "kb_lookup"
+     ],
+     "after": [
+      "kb_lookup"
+     ],
+     "if": null,
+     "quote": "If no referral program is documented for the requested card, or if the user’s claimed terms are incorrect, or if there is reason to believe the referral will be automatically rejected, explain why and do not provide a referral link tool. Do not transfer to a human in these cases.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "check_terms",
+     "by": "model",
+     "do": "Compare the customer's claimed bonus, spend and time window with the card's documented terms. If any of them differs, explain the discrepancy, state the documented terms, do not give the referral link tool, and do not transfer.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "kb_lookup",
+      "ask_card_and_terms"
+     ],
+     "after": [
+      "check_program_exists"
+     ],
+     "if": "a documented program exists",
+     "quote": "If the customer cites terms that do not match any documented program, clarify the discrepancy.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "check_program_open",
+     "by": "model",
+     "do": "If the card's referral document states a cut-off date for new referrals, compare it with the current time. If that date has passed, explain that the program no longer accepts new referrals, do not give the tool, and do not transfer.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "kb_lookup",
+      "get_time"
+     ],
+     "after": [
+      "check_terms"
+     ],
+     "if": "the terms match",
+     "quote": "The referral program accepts new referrals until 2025-09-15. Referrals submitted after this date are not eligible.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_010"
+    },
+    {
+     "id": "get_referrals",
+     "by": "harness",
+     "do": "Read the customer's existing referrals and their statuses and timestamps.",
+     "call": "get_referrals_by_user",
+     "args": {
+      "user_id": "the verified user's user_id from lookup_user"
+     },
+     "lookup": [],
+     "after": [
+      "check_program_open"
+     ],
+     "if": "the program exists, the terms match, and it is still open",
+     "quote": "Track the timing of your last two successful referral bonuses before sending additional referrals.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "check_weekly_limit",
+     "by": "model",
+     "do": "Count the referral bonuses (all credit card types) the customer received in the 7 days before the current time. If there are already 2, a new referral would be automatically denied: explain this, tell them to wait until the oldest one is more than 7 days old, do not give the tool, and do not transfer. If recent referrals show REJECTED, review that activity before advising.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "get_referrals",
+      "get_time"
+     ],
+     "after": [
+      "get_referrals"
+     ],
+     "if": null,
+     "quote": "This limit applies across all credit card types; referrals from different cards still count toward the same weekly cap.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "id": "give_tool",
+     "by": "model",
+     "do": "Give the customer the get_referral_link tool. Tell them to run it with their own user_id and the exact card name (for example 'Platinum Rewards Card'). Restate the documented terms and the 2-per-rolling-7-day limit.",
+     "call": "give_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_referral_link (fixed value from doc 009)"
+     },
+     "lookup": [
+      "check_program_exists",
+      "check_terms",
+      "check_program_open",
+      "check_weekly_limit"
+     ],
+     "after": [
+      "check_weekly_limit"
+     ],
+     "if": "a documented program exists, the customer's claimed terms match it, the program is still open, and the referral would not be auto-rejected under the weekly limit",
+     "quote": "Tell the customer to pass their own user_id and the exact card name (for example, 'Gold Rewards Card').",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "customer_runs_tool",
+     "by": "customer",
+     "do": "The customer runs get_referral_link with their own user_id and the exact card name.",
+     "call": "call_discoverable_user_tool",
+     "args": {
+      "discoverable_tool_name": "get_referral_link",
+      "user_id": "the customer's own user_id",
+      "card_name": "the exact card name"
+     },
+     "lookup": [],
+     "after": [
+      "give_tool"
+     ],
+     "if": null,
+     "quote": "get_referral_link(user_id: str, card_name: str)",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "confirm",
+     "by": "model",
+     "do": "Confirm the link was created (the referral record starts as NO_PROGRESS, and the referred person uses the link to apply). Remind the customer of the documented terms. If the tool returns an error, ask them to check the user_id and exact card name and run it again; never generate the link for them.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "customer_runs_tool"
+     ],
+     "after": [
+      "customer_runs_tool"
+     ],
+     "if": null,
+     "quote": "When the tool is called successfully, a referral record is created with status 'NO_PROGRESS'. The referred person can then use the generated link to apply.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "id": "next_card",
+     "by": "model",
+     "do": "If the customer then asks about another card, repeat from ask_card_and_terms for that card. Do not verify again.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "check_program_exists"
+     ],
+     "if": "the customer asks about a different card after a check failed or a link was created",
+     "quote": "Each credit card type has its own referral bonus and eligibility requirements that are not detailed here.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Give the referral link tool only when the card has a documented referral program, the customer's claimed terms match it, and the referral would not be auto-rejected. Otherwise explain why, do not give the tool, and do not transfer.",
+     "quote": "If no referral program is documented for the requested card, or if the user’s claimed terms are incorrect, or if there is reason to believe the referral will be automatically rejected, explain why and do not provide a referral link tool. Do not transfer to a human in these cases.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "The agent never generates the link. The customer runs get_referral_link.",
+     "quote": "Agents must not generate the link on the customer’s behalf.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "At most 2 referral bonuses in any rolling 7-day window, across all credit card types. The 3rd and later referrals are automatically denied and cannot be reinstated within that window.",
+     "quote": "If you attempt to receive more than 2 referrals in a single week, the third referral (and any subsequent referrals that week) will be automatically denied.",
+     "doc": "doc_credit_cards_credit_cards_(general)_002"
+    },
+    {
+     "rule": "Platinum Rewards Card: $100 bonus. The referral must spend at least $1,500 within 90 days. Up to 7 bonuses per calendar year.",
+     "quote": "The referred friend must spend at least $1,500 within 90 days of account opening to qualify you for the bonus.",
+     "doc": "doc_credit_cards_platinum_rewards_card_008"
+    },
+    {
+     "rule": "EcoCard: bonus of 50 per referral. The referral must spend at least $500 within 60 days. Up to 7 per year.",
+     "quote": "Receive 50 for each successful referral",
+     "doc": "doc_credit_cards_ecocard_011"
+    },
+    {
+     "rule": "Silver Rewards Card: bonus of 75. The referral must spend at least $750 within 60 days. Up to 7 per year.",
+     "quote": "The referred person must be approved and spend at least $750 within 60 days of account opening",
+     "doc": "doc_credit_cards_silver_rewards_card_011"
+    },
+    {
+     "rule": "Business Gold Rewards Card: $200 bonus for $7,500 spend within 90. Up to 8 per year. No new referrals accepted after 2025-09-15.",
+     "quote": "The referral program accepts new referrals until 2025-09-15. Referrals submitted after this date are not eligible.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_010"
+    },
+    {
+     "rule": "Silver Zoom Card: $150 bonus for a logistics business that spends $7,500 within 90 days. Capped at 10 per year. No new referrals after 2025-10-01.",
+     "quote": "No new referrals are accepted after 2025-10-01",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "rule": "Silver Zoom Card bonus amount is $150.",
+     "quote": "Earn a referral bonus of $150 for each referred logistics business that is approved and meets the qualifying spend requirement",
+     "doc": "doc_business_credit_cards_silver_zoom_card_011"
+    },
+    {
+     "rule": "Business Silver Rewards Card: $100 bonus. The business must spend at least $3,000 within 90 days. Up to 10 per year.",
+     "quote": "The referred business must spend at least $3,000 within 90 days of account opening for you to receive the bonus",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_013"
+    },
+    {
+     "rule": "Business Bronze Rewards Card: $75 bonus. The business needs $1,750 in net purchases within 90 days. Up to 7 per year.",
+     "quote": "The referred business must complete at least $1,750 in net purchases within 90 days of account opening.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_011"
+    },
+    {
+     "rule": "Business Platinum Rewards Card: $300 bonus for $15,000 spend within 135 days. Up to 11 per year.",
+     "quote": "When the referred business is approved and completes qualifying spend of $15,000 within 135 days from account opening, you earn a bonus of $300.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_012"
+    },
+    {
+     "rule": "Green Rewards Card: bonus of 75. The business must spend at least $2,250 within 90 days. Up to 7 per year.",
+     "quote": "The referred business must spend at least $2,250 within 90 days from account opening to qualify your bonus.",
+     "doc": "doc_business_credit_cards_green_rewards_card_010"
+    },
+    {
+     "rule": "A card with no referral program document in the KB (for example Crypto-Cash Back, whose documents cover only crypto rewards) has no documented referral program, so no link is given.",
+     "quote": "Search the knowledge base to confirm the specific card has a documented referral program.",
+     "doc": "doc_credit_cards_credit_cards_(general)_009"
+    },
+    {
+     "rule": "How to read referral statuses: REJECTED means the user has too many referral processes going on. Review existing activity before advising, and do not retry immediately.",
+     "quote": "REJECTED: Do not retry immediately; review the user’s existing referral activity before advising next steps.",
+     "doc": "doc_credit_cards_credit_cards_(general)_001"
+    }
+   ],
+   "done_when": "The customer is verified and logged, and one of these is true: (a) the customer received get_referral_link, ran it with their own user_id and the exact card name, and was told the documented terms; or (b) for each card asked about, the agent explained why no link could be given (no documented program, wrong terms, program closed, or weekly limit) without transferring for those reasons."
+  }
+ ],
+ "decision": {
+  "generating_a_credit_card_referral_link": [
+   "generating_a_credit_card_referral_link"
+  ]
+ },
+ "lock": {
+  "token": 52,
+  "jobs": [
+   "generating_a_credit_card_referral_link"
+  ],
+  "waited_ms": 57,
+  "read": {
+   "generating_a_credit_card_referral_link": 1
+  },
+  "committed": {
+   "generating_a_credit_card_referral_link": 2
+  },
+  "error": null
+ }
+}

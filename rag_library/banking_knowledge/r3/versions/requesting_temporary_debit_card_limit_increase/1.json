@@ -1,0 +1,505 @@
+{
+ "job": "requesting_temporary_debit_card_limit_increase",
+ "aliases": [
+  "raise_daily_atm_limit_24_hours",
+  "temporary_atm_limit_increase"
+ ],
+ "when": {
+  "quote": "Procedure for when a customer requests a temporary increase to their debit card's daily ATM withdrawal or purchase limit.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: may offer it when a non-teen card was declined for its daily limit and the customer needs more than what is left. The increase is requested only after the customer accepts, or when the customer asks for it. Never offer it for a Light Green Account card.",
+  "quote": "Tell customer: 'I can request a temporary increase that lasts 24 hours. Would you like me to do that?'",
+  "doc": "doc_checking_accounts_light_green_account_005"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "identify",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "identify",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "identify",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verif",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_increase_tool",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "request_increase",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_card",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "get_txns",
+   "not_used": null
+  },
+  {
+   "tool": "request_temporary_debit_card_limit_increase_8374",
+   "who": "agent",
+   "step": "request_increase",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "request_failed",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_values",
+   "about": "Any 2 of: date of birth, email, phone number, address. They must match the records.",
+   "from": "customer",
+   "ask": "To verify your identity, could you give me your full name and two of these: date of birth, email, phone number or address?",
+   "may_hold_back": true
+  },
+  {
+   "field": "cards_declined",
+   "about": "Which debit cards were declined, given by account type (for example Green, Blue or Light Green), and the order the customer wants them handled",
+   "from": "customer",
+   "ask": "Which cards were declined, and which one should we start with?",
+   "may_hold_back": false
+  },
+  {
+   "field": "decline_message",
+   "about": "The exact decline message or code shown at the ATM, if the customer saw one",
+   "from": "customer",
+   "ask": "Did the ATM show a specific error message or decline code?",
+   "may_hold_back": true
+  },
+  {
+   "field": "attempted_amount",
+   "about": "How much the customer tried to withdraw on each card",
+   "from": "customer",
+   "ask": "How much did you try to withdraw with this card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "limit_type",
+   "about": "'atm' for a cash withdrawal decline, 'purchase' for a card purchase decline",
+   "from": "customer",
+   "ask": "Was this an ATM withdrawal or a card purchase?",
+   "may_hold_back": false
+  },
+  {
+   "field": "accounts",
+   "about": "Each checking account's account_id, account_class, status and date_opened",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "card_record",
+   "about": "The card's card_id, status, daily_atm_limit and daily_atm_used (if returned), and its fraud_alert_active and velocity_blocked fields",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "todays_atm_withdrawals",
+   "about": "ATM withdrawals (type atm_withdrawal) already made today. Also any overdraft_fee transactions in the last 30 days.",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "wants_increase",
+   "about": "Whether the customer wants a temporary 24-hour limit increase",
+   "from": "customer",
+   "ask": "I can request a temporary increase that lasts 24 hours. Would you like me to do that?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "reuse_verification",
+   "by": "model",
+   "do": "If the customer was already verified and logged earlier in this conversation (for example in debit_card_decline_code_61_exceeds_withdrawal_amount_limit), skip identify, time and log_verif. Reuse the earlier account, card and transaction lookups if you already have them.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer was verified earlier in this conversation",
+   "quote": "No need to verify more than once in a single conversation.",
+   "doc": "policy"
+  },
+  {
+   "id": "identify",
+   "by": "model",
+   "do": "Ask for name plus 2 of DOB/email/phone/address, then look the customer up",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gives"
+   },
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address",
+   "doc": "policy"
+  },
+  {
+   "id": "time",
+   "by": "harness",
+   "do": "Get the current time for the verification log and for working out 'today' and 'last 30 days'",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "identify"
+   ],
+   "if": null,
+   "quote": "If you need the current time, always use the get_current_time() tool.",
+   "doc": "policy"
+  },
+  {
+   "id": "log_verif",
+   "by": "harness",
+   "do": "Log the verification",
+   "call": "log_verification",
+   "args": {
+    "name": "verified user's name",
+    "user_id": "verified user's id",
+    "address": "from records",
+    "email": "from records",
+    "phone_number": "from records",
+    "date_of_birth": "from records",
+    "time_verified": "from get_current_time"
+   },
+   "lookup": [
+    "identify",
+    "time"
+   ],
+   "after": [
+    "time"
+   ],
+   "if": "2 values matched",
+   "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+   "doc": "policy"
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Unlock and call the accounts lookup to find each checking account (account_class, status, date_opened)",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "log_verif"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "get_card",
+   "by": "harness",
+   "do": "For the card being handled, look up its debit card (card_id, status, daily_atm_limit)",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "the checking account linked to the declined card"
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "get_txns",
+   "by": "harness",
+   "do": "Get that account's transactions. Add up today's atm_withdrawal amounts and look for overdraft_fee entries in the last 30 days.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "the same checking account"
+   },
+   "lookup": [],
+   "after": [
+    "get_card"
+   ],
+   "if": null,
+   "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "status_checks",
+   "by": "model",
+   "do": "Check that the card status is ACTIVE and the account is OPEN, and look for a fraud alert or velocity block. If any problem is found, follow the Code 05 path instead of the limit path.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_card"
+   ],
+   "after": [
+    "get_txns"
+   ],
+   "if": "the decline reason is not yet clear",
+   "quote": "1. **Card Status**: Look up the debit card information and check the card's status field.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "ask_amount",
+   "by": "model",
+   "do": "Ask how much the customer tried to withdraw on this card",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "status_checks"
+   ],
+   "if": "not already given",
+   "quote": "Transaction exceeds the card's daily purchase or ATM limit. Check limits from the debit card lookup:",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "explain_remaining",
+   "by": "model",
+   "do": "Tell the customer the limit, the amount used today and what is left (remaining = daily_atm_limit - used today). Explain that the attempt was more than the remaining amount.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_card",
+    "get_txns",
+    "time"
+   ],
+   "after": [
+    "ask_amount"
+   ],
+   "if": "attempted amount > remaining",
+   "quote": "1. Calculate remaining: 'Your daily [purchase/ATM] limit is $[limit]. You've used $[used] today, leaving $[remaining] available.'",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "check_eligibility",
+   "by": "model",
+   "do": "Check eligibility for the increase: account OPEN, opened at least 60 days ago, no overdraft_fee in the last 30 days, card ACTIVE, and no temporary increase on this card in the past 24h",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_card",
+    "get_txns",
+    "time"
+   ],
+   "after": [
+    "explain_remaining"
+   ],
+   "if": "customer needs more cash than remains and account_class is not Light Green Account",
+   "quote": "Before granting a temporary limit increase, verify ALL of the following:",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "id": "offer_increase",
+   "by": "model",
+   "do": "Offer a temporary 24-hour increase",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_eligibility"
+   ],
+   "after": [
+    "check_eligibility"
+   ],
+   "if": "all eligibility checks pass",
+   "quote": "Tell customer: 'I can request a temporary increase that lasts 24 hours. Would you like me to do that?'",
+   "doc": "doc_checking_accounts_light_green_account_005"
+  },
+  {
+   "id": "explain_ineligible",
+   "by": "model",
+   "do": "Say that no increase is possible and give the reason (for example a recent overdraft fee). Tell the customer they can withdraw up to the remaining amount.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_eligibility"
+   ],
+   "after": [
+    "check_eligibility"
+   ],
+   "if": "any eligibility check fails",
+   "quote": "3) **Overdraft History**: No overdraft fees in the last 30 days",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "id": "unlock_increase_tool",
+   "by": "harness",
+   "do": "Unlock the temporary limit increase tool, unless it is already unlocked in this conversation.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "request_temporary_debit_card_limit_increase_8374"
+   },
+   "lookup": [
+    "check_eligibility"
+   ],
+   "after": [
+    "offer_increase"
+   ],
+   "if": "all eligibility checks pass and the customer accepts",
+   "quote": "Tool: request_temporary_debit_card_limit_increase_8374",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "id": "request_increase",
+   "by": "model",
+   "do": "Unlock and call the increase tool with limit_type 'atm' for an ATM decline ('purchase' for a purchase decline). Set new_limit no higher than 150% of the current limit of that type: enough to cover used + requested, capped at 150%. If the cap is below what the customer needs, tell them how much they can withdraw after the increase.",
+   "call": "request_temporary_debit_card_limit_increase_8374",
+   "args": {
+    "card_id": "the card's card_id",
+    "limit_type": "atm (or 'purchase' for a purchase decline)",
+    "new_limit": "min(1.5 x daily_atm_limit, used today + attempted amount); for purchase use daily_purchase_limit"
+   },
+   "lookup": [
+    "check_eligibility",
+    "get_card",
+    "get_txns"
+   ],
+   "after": [
+    "offer_increase",
+    "unlock_increase_tool"
+   ],
+   "if": "customer accepts",
+   "quote": "Tool: request_temporary_debit_card_limit_increase_8374",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "id": "confirm",
+   "by": "model",
+   "do": "Confirm the new limit, the new remaining amount and the 24-hour duration. Warn that third-party ATMs may have their own limits. Then move on to the next card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "request_increase"
+   ],
+   "after": [
+    "request_increase"
+   ],
+   "if": null,
+   "quote": "Note: Third-party ATMs may have their own limits that Rho-Bank cannot override.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "id": "request_failed",
+   "by": "model",
+   "do": "If the increase tool returns an error (for example because an increase was already granted on this card in the last 24 hours), tell the customer the increase could not be applied and that they can withdraw up to the remaining amount. If the cause is unclear and the customer wants a human agent, transfer only after they agree.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card, the requested new_limit and the error returned",
+    "reason": "temporary debit limit increase failed"
+   },
+   "lookup": [
+    "request_increase"
+   ],
+   "after": [
+    "request_increase"
+   ],
+   "if": "request_temporary_debit_card_limit_increase_8374 returned an error and the customer agrees to a transfer",
+   "quote": "**Frequency**: Only one temporary increase per 24-hour period per card",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "The linked checking account status must be OPEN",
+   "quote": "1) **Account Status**: The linked checking account must be OPEN (in good standing)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "date_opened must be at least 60 days before the current time",
+   "quote": "2) **Account Age**: The account must be at least 60 days old",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "No overdraft_fee transaction in the 30 days before the current time",
+   "quote": "3) **Overdraft History**: No overdraft fees in the last 30 days",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "Card status must be ACTIVE",
+   "quote": "4) **Card Status**: The debit card must be ACTIVE",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "new_limit <= 1.5 x current daily_atm_limit",
+   "quote": "**Maximum Increase**: New limit cannot exceed 150% of current limit (50% boost maximum)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "At most one temporary increase per card per 24 hours; it reverts after 24 hours",
+   "quote": "**Frequency**: Only one temporary increase per 24-hour period per card",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "The increase lasts 24 hours and then reverts automatically",
+   "quote": "**Duration**: Temporary increases last 24 hours, then automatically revert",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "limit_type is 'atm' for ATM limits and 'purchase' for purchase limits",
+   "quote": "limit_type: 'atm' or 'purchase'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_040"
+  },
+  {
+   "rule": "Light Green (teen) limits cannot be increased",
+   "quote": "These safeguards are built into the account and cannot be removed for a minor.",
+   "doc": "doc_checking_accounts_light_green_account_011"
+  },
+  {
+   "rule": "Green Account (checking) daily ATM limit is $600, counting all withdrawals within 24 hours",
+   "quote": "Your Green Account (checking) debit card has a daily ATM withdrawal limit of $600. This limit applies to all ATM withdrawals combined (domestic and foreign) within a 24-hour period.",
+   "doc": "doc_checking_accounts_green_account_(checking)_012"
+  },
+  {
+   "rule": "Blue Account daily ATM limit is $500, counting all withdrawals within 24 hours",
+   "quote": "Your Blue Account debit card has a daily ATM withdrawal limit of $500. This limit applies to all ATM withdrawals combined (domestic and international) within a 24-hour period.",
+   "doc": "doc_checking_accounts_blue_account_012"
+  }
+ ],
+ "done_when": "For every declined non-teen card: the remaining limit has been explained, and either the temporary ATM increase was requested and confirmed or the customer was told why it cannot be done (or declined the offer). If the tool returned an error, the customer was told so and offered a transfer."
+}

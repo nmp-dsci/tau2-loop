@@ -1,0 +1,486 @@
+{
+ "job": "lost_stolen_card_cross_product_security_protocol",
+ "aliases": [
+  "credit card check after a lost wallet where some debit cards were closed and one stayed frozen",
+  "credit card check after debit cards frozen while customer still searches for wallet",
+  "credit card check after several debit cards were stolen",
+  "credit card in the lost wallet",
+  "customer already reported credit cards stolen with the debit cards",
+  "lost_stolen_card_cross_product_security_protocol_credit_card_replacement",
+  "offer_credit_card_replacement_after_lost_wallet",
+  "order_replacement_credit_card_after_wallet_theft",
+  "ordering_a_replacement_credit_card",
+  "replace several stolen credit cards after a wallet theft"
+ ],
+ "when": {
+  "quote": "When a customer reports a lost or stolen debit card, there is a risk that other cards in their wallet were also compromised.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: once the lost or stolen debit card has been frozen or closed, the agent checks for Rho-Bank credit cards and proactively offers a replacement. Order a replacement only if the customer accepts. A customer who already said their credit cards were stolen is asking for it. Run it once per conversation: after the first freeze or close of the lost cards, not again after later closures.",
+  "quote": "If yes, proactively offer to order a replacement credit card as a security precaution",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+ },
+ "tools": [
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "check_cc",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "get_user_address",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_pending",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "pending_check",
+   "not_used": null
+  },
+  {
+   "tool": "get_pending_replacement_orders_5765",
+   "who": "agent",
+   "step": "pending_check",
+   "not_used": null
+  },
+  {
+   "tool": "order_replacement_credit_card_7291",
+   "who": "agent",
+   "step": "order_cc",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "order_cc_error",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "credit_card_in_wallet",
+   "about": "Whether each of the customer's Rho-Bank credit cards was also in the lost or stolen wallet",
+   "from": "customer",
+   "ask": "I see you also have a credit card with us. Was that card also in your lost wallet?",
+   "may_hold_back": true
+  },
+  {
+   "field": "cc_shipping_speed",
+   "about": "Standard or expedited",
+   "from": "customer",
+   "ask": "Would you like standard or expedited shipping for the replacement credit cards?",
+   "may_hold_back": true
+  },
+  {
+   "field": "cc_replacement_reason",
+   "about": "fraud_suspected, lost, stolen, damaged, expired or other",
+   "from": "customer",
+   "ask": "What is the reason for the replacement?",
+   "may_hold_back": false
+  },
+  {
+   "field": "cc_shipping_address",
+   "about": "Where to ship the replacement credit card: the primary or an alternate address, with any unit or suite",
+   "from": "customer",
+   "ask": "Should we ship it to your address on file?",
+   "may_hold_back": true
+  },
+  {
+   "field": "expedited_fee_consent",
+   "about": "The customer's agreement to the expedited fee for each card whose tier charges one",
+   "from": "customer",
+   "ask": "Expedited shipping for this card carries a fee. Do you agree to it?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "once_after_all_debit_cards",
+   "by": "model",
+   "do": "When several debit cards were lost or stolen, finish the freeze or close work (and any replacement ordering) for all of them first. A card whose closure was blocked but that is frozen counts as handled. Then run this job once for the customer, not once per debit card.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer reported more than one lost or stolen debit card",
+   "quote": "Complete the standard debit card freeze/close procedure",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "already_run",
+   "by": "model",
+   "do": "If this check already ran in this conversation (for example right after the cards were frozen while the customer was still searching), do not run it again after the cards are later closed. Do not ask about the credit card again and do not order a second replacement.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the cross-product check already ran earlier in this conversation",
+   "quote": "Check if the customer has any Rho-Bank credit cards on file",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "check_cc",
+   "by": "harness",
+   "do": "Check whether the customer has any Rho-Bank credit cards, and read each one's account id, card type (tier) and status.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [],
+   "if": "a lost or stolen debit card has been frozen or closed",
+   "quote": "Use get_credit_card_accounts_by_user to retrieve any credit card accounts for the customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "no_cc",
+   "by": "model",
+   "do": "If the customer has no active Rho-Bank credit card, skip the rest of this job.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_cc"
+   ],
+   "after": [
+    "check_cc"
+   ],
+   "if": "check_cc returns no active credit card",
+   "quote": "Check if the customer has any Rho-Bank credit cards on file",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "offer_cc",
+   "by": "model",
+   "do": "Mention the credit card and ask whether it was also in the wallet. Explain that wallet theft often involves several cards, and offer a replacement with a new number.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_cc"
+   ],
+   "after": [
+    "check_cc"
+   ],
+   "if": "the customer has an active credit card",
+   "quote": "Offer to order a replacement credit card with a new card number to prevent any unauthorized charges",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "already_reported_cc",
+   "by": "model",
+   "do": "If the customer already said which credit cards were in the stolen or lost wallet, do not ask again: match each named card to an account in check_cc and treat the customer's statement as the answer to the wallet question. Ask only about any other active credit card the customer did not mention.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_cc"
+   ],
+   "after": [
+    "check_cc"
+   ],
+   "if": "the customer already said earlier in the conversation that specific credit cards were in the lost or stolen wallet",
+   "quote": "Ask if their credit card was also in the lost/stolen wallet",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "declined",
+   "by": "model",
+   "do": "If the customer declines, note that the offer was made, and order nothing.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "offer_cc"
+   ],
+   "after": [
+    "offer_cc"
+   ],
+   "if": "the customer declines the replacement",
+   "quote": "If they decline, note in the account that the offer was made",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "per_card",
+   "by": "model",
+   "do": "When several credit cards were in the wallet, handle each card separately with its own tier: its own pending check, expedited fee and order call. Never apply one card's fee to another.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_cc"
+   ],
+   "after": [
+    "offer_cc"
+   ],
+   "if": "the customer accepts replacements for more than one credit card",
+   "quote": "Ask whether they want expedited shipping (advise on possible fees by tier; see Shipping selection).",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "cc_reason",
+   "by": "model",
+   "do": "Ask for the replacement reason for each card and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, other. A card that was in a stolen wallet is stolen; one in a lost wallet is lost.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "offer_cc"
+   ],
+   "if": "the customer accepts the replacement",
+   "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "unlock_pending",
+   "by": "harness",
+   "do": "Unlock the pending replacement orders tool.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_pending_replacement_orders_5765"
+   },
+   "lookup": [],
+   "after": [
+    "offer_cc"
+   ],
+   "if": "the customer accepts the replacement",
+   "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+   "doc": "doc_credit_cards_credit_card_replacements_005"
+  },
+  {
+   "id": "pending_check",
+   "by": "harness",
+   "do": "Check each credit card account being replaced for pending replacement orders.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_pending_replacement_orders_5765",
+    "credit_card_account_id": "each credit card account id from check_cc"
+   },
+   "lookup": [],
+   "after": [
+    "unlock_pending"
+   ],
+   "if": "the customer accepts the replacement",
+   "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+   "doc": "doc_credit_cards_credit_card_replacements_005"
+  },
+  {
+   "id": "cc_eligibility",
+   "by": "model",
+   "do": "If an order is still pending or shipped, or the tier's 60-day limit (Entry 2, Mid 3, Premium and above 4) is reached, explain that a new replacement cannot be submitted now. Do not unlock or call the order tool.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "pending_check",
+    "check_cc"
+   ],
+   "after": [
+    "pending_check"
+   ],
+   "if": null,
+   "quote": "You cannot submit another replacement while an existing request is still being processed.",
+   "doc": "doc_credit_cards_credit_card_replacements_004"
+  },
+  {
+   "id": "get_user_address",
+   "by": "harness",
+   "do": "Read the address on file so the customer can confirm it, if it was not already read during verification.",
+   "call": "get_user_information_by_id",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "cc_eligibility"
+   ],
+   "if": "the customer accepts, cc_eligibility passed, and the address on file has not been read yet in this conversation",
+   "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "ship_fee",
+   "by": "model",
+   "do": "Confirm the address and reason. Recommend expedited shipping for stolen or fraud_suspected, and state the expedited fee by tier: Entry (e.g. EcoCard, Bronze) $15, Mid $10, Premium and above (e.g. Gold) $0. Get the customer's consent to any fee.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_cc",
+    "get_user_address"
+   ],
+   "after": [
+    "cc_eligibility"
+   ],
+   "if": "the customer accepts and cc_eligibility passed",
+   "quote": "- If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "unlock_cc_order",
+   "by": "harness",
+   "do": "Unlock the credit card replacement tool.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "order_replacement_credit_card_7291"
+   },
+   "lookup": [
+    "cc_eligibility"
+   ],
+   "after": [
+    "ship_fee"
+   ],
+   "if": "the customer accepts the replacement and cc_eligibility passed",
+   "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "order_cc",
+   "by": "model",
+   "do": "Order a replacement for each card the customer accepted, with the confirmed details. Strongly recommend expedited shipping when the card was stolen.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "order_replacement_credit_card_7291",
+    "account": "the credit card account id from check_cc",
+    "reason": "stolen or lost (as the customer said)",
+    "shipping_address": "the confirmed address",
+    "shipping_speed": "standard or expedited",
+    "expedited_fee_acknowledgement": "customer consent if a fee applies",
+    "notes": "wallet lost/stolen"
+   },
+   "lookup": [
+    "cc_eligibility",
+    "ship_fee"
+   ],
+   "after": [
+    "unlock_cc_order"
+   ],
+   "if": "the customer accepts the replacement and cc_eligibility passed",
+   "quote": "Use call_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291 and include:",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "after_cc",
+   "by": "model",
+   "do": "Tell the customer the old card is cancelled, give the delivery window (standard 7-10, expedited 2-3 business days), and remind them to review their transactions. If the order returned an error, explain it instead.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "order_cc"
+   ],
+   "after": [
+    "order_cc"
+   ],
+   "if": null,
+   "quote": "- The old card is automatically cancelled for security and will no longer work for new purchases.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "after_cc_notices",
+   "by": "model",
+   "do": "Also tell the customer to watch for emails when the order is placed and when the card ships, and to dispute any unauthorized charges they find. If they then ask to dispute charges, go to filing_a_credit_card_transaction_dispute, where card_action is cancel_and_reissue for these cards.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "order_cc"
+   ],
+   "after": [
+    "after_cc"
+   ],
+   "if": "order_cc succeeded",
+   "quote": "Advise the customer to watch for email notifications when the order is placed and when the card ships.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "return_to_debit_cards",
+   "by": "model",
+   "do": "If this check ran right after a freeze while the customer was still searching, go back to the debit cards: when the customer confirms they are gone and asks to cancel and replace them, continue with closing_cancelling_a_debit_card and order_replacement_debit_card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_cc"
+   ],
+   "after": [
+    "after_cc"
+   ],
+   "if": "the debit cards were only frozen so far and the customer later asks to cancel and replace them",
+   "quote": "CLOSE: Permanent deactivation - cannot be reversed. Use when card is confirmed lost/stolen or customer wants to cancel.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "order_cc_error",
+   "by": "model",
+   "do": "If the order is rejected (pending replacement or tier limit), explain the reason and what must happen. If the customer has a legitimate need beyond the limit and wants a manual review, ask whether they want a human agent and transfer only if they agree.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "credit card replacement attempted after wallet theft, and the rejection",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "order_cc"
+   ],
+   "after": [
+    "order_cc"
+   ],
+   "if": "order_cc returned an error or rejection that cannot be resolved and the customer agrees to a transfer",
+   "quote": "If you believe you have a legitimate need for an additional replacement beyond these limits, contact customer support to request a manual review of your case.",
+   "doc": "doc_credit_cards_credit_card_replacements_004"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "After handling a lost or stolen debit card, always check for credit cards and offer a replacement if any exist",
+   "quote": "If yes, proactively offer to order a replacement credit card as a security precaution",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "rule": "If the customer has a credit card, proactively offer a replacement as a security precaution",
+   "quote": "3) If yes, proactively offer to order a replacement credit card as a security precaution",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "rule": "For a stolen or fraud_suspected card, strongly recommend expedited shipping and remind the customer to review recent transactions",
+   "quote": "If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "rule": "Expedited fee: Entry tier (EcoCard, Bronze) $15.00; Mid tier $10.00; Premium tier and above (Gold, Platinum, Diamond Elite) $0.00",
+   "quote": "  - Entry-tier (Bronze Rewards, EcoCard, Business Bronze): $15.00.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "rule": "Expedited shipping for the Gold Rewards Card (Premium tier) is $0.00",
+   "quote": "Premium-tier and above (Gold, Platinum, Diamond Elite): $0.00 (complimentary).",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "rule": "No new replacement while one is pending. Limits per 60 days: Entry 2, Mid 3, Premium and above 4.",
+   "quote": "- Replacement requests are limited within a 60-day period to help protect your account.",
+   "doc": "doc_credit_cards_credit_card_replacements_004"
+  },
+  {
+   "rule": "Do not unlock or call the order tool unless the customer is eligible",
+   "quote": "Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "rule": "Freeze or close the debit card first, then do the credit card check",
+   "quote": "Complete the standard debit card freeze/close procedure",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "rule": "Record exactly one replacement reason for each credit card",
+   "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "rule": "Mid-tier credit cards (Silver Rewards, Business Silver, Green Rewards, Silver Zoom) pay $10.00 for expedited replacement shipping",
+   "quote": "Mid-tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom): $10.00.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  }
+ ],
+ "done_when": "The credit card check is done (once per conversation, after all lost or stolen debit cards were frozen or closed, including any that could only be frozen). If the customer has credit cards, the replacement offer has been made (or the customer had already named the stolen cards), and for each card one of these is true: it was ordered with agreed shipping, its recorded reason and its own tier fee, and the customer was told the delivery window and reminders; it was explained as not possible now; or it was declined and noted."
+}

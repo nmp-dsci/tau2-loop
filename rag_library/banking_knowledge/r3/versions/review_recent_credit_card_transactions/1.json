@@ -1,0 +1,394 @@
+{
+ "job": "review_recent_credit_card_transactions",
+ "aliases": [
+  "balance higher than expected",
+  "check credit card charges",
+  "check_unrecognized_charges",
+  "credit_card_transaction_history",
+  "review_credit_card_transactions",
+  "show recent credit card transactions",
+  "statement balance looks wrong",
+  "unrecognized credit card charges"
+ ],
+ "when": {
+  "quote": "Review recent transaction history to check for suspicious activity.",
+  "doc": "doc_checking_accounts_purple_account_007"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks to see their credit card transactions, or questions their balance or charges. If unauthorized charges are found, the agent may offer a card replacement, but orders one only when the customer agrees. The agent does not file a dispute unless the customer asks for one.",
+  "quote": "You see a charge you didn't make or don't recognize",
+  "doc": "doc_credit_cards_credit_cards_(general)_018"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verification",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_transactions_by_user",
+   "who": "agent",
+   "step": "get_transactions",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "handle_errors",
+   "not_used": null
+  },
+  {
+   "tool": "order_replacement_credit_card_7291",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. This job only reviews transactions. A replacement is ordered in order_replacement_credit_card, and only when the customer asks for it or agrees to it."
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. Reviewing transactions needs only the standard read tools. Unlocking happens in the replacement and dispute jobs."
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. Discoverable tools are called only in the replacement and dispute jobs."
+  },
+  {
+   "tool": "file_credit_card_transaction_dispute_4829",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. Disputes are filed only in filing_a_credit_card_transaction_dispute, and only when the customer asks for them."
+  }
+ ],
+ "info": [
+  {
+   "field": "customer_identifier",
+   "about": "The customer's full name, email or user id, used to find their record. The name lookup is case sensitive.",
+   "from": "customer",
+   "ask": "Could you please give me your full name or the email on your account so I can find it?",
+   "may_hold_back": false
+  },
+  {
+   "field": "identity_details",
+   "about": "Any 2 of: date of birth, email, phone number, home address. These must match the records the lookup returns.",
+   "from": "customer",
+   "ask": "To verify your identity, could you give me your full name and two of the following: your date of birth, email address, phone number or home address?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_in_question",
+   "about": "Which Rho-Bank credit card the customer wants to review. Use this if more than one credit card account is returned.",
+   "from": "customer",
+   "ask": "Which of your Rho-Bank credit cards would you like me to review?",
+   "may_hold_back": false
+  },
+  {
+   "field": "unrecognized_transactions",
+   "about": "Which of the listed transactions the customer did not make or does not recognize",
+   "from": "customer",
+   "ask": "Do you recognize all of these charges, or are there any you did not make?",
+   "may_hold_back": true
+  },
+  {
+   "field": "next_requests_order",
+   "about": "When the customer wants both a replacement card and disputes: the order they want them done in",
+   "from": "customer",
+   "ask": "Would you like me to replace the card first and then file the disputes?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "greet",
+   "by": "model",
+   "do": "Greet the customer politely and ask how you can help. Ask for their full name or email and two of: date of birth, email, phone number, home address.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Verify the customer's identity using standard verification procedures.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "lookup_user",
+   "by": "harness",
+   "do": "Look up the customer's record with the email or full name they gave (the name lookup is case sensitive; use get_user_information_by_id if they gave a user id). If no record is found, ask for another identifier.",
+   "call": "get_user_information_by_email",
+   "args": {
+    "email": "the email the customer gave (or use get_user_information_by_name with the full name)"
+   },
+   "lookup": [],
+   "after": [
+    "greet"
+   ],
+   "if": null,
+   "quote": "Verify the customer's identity using standard verification procedures.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "check_identity",
+   "by": "model",
+   "do": "Check that at least 2 of DOB, email, phone and address match the record. Share no account details before this check passes. If fewer than 2 match, ask again and do not continue.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "lookup_user"
+   ],
+   "after": [
+    "lookup_user"
+   ],
+   "if": null,
+   "quote": "Verify the customer's identity using standard verification procedures.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current timestamp for the verification log",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "check_identity"
+   ],
+   "if": "identity verified",
+   "quote": "Verify the customer's identity using standard verification procedures.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "log_verification",
+   "by": "harness",
+   "do": "Log the verification record once per conversation, using the values from the record",
+   "call": "log_verification",
+   "args": {
+    "name": "the verified user's name from records",
+    "user_id": "the verified user's id",
+    "address": "address from records",
+    "email": "email from records",
+    "phone_number": "phone from records",
+    "date_of_birth": "DOB from records",
+    "time_verified": "timestamp from get_current_time"
+   },
+   "lookup": [
+    "lookup_user",
+    "check_identity"
+   ],
+   "after": [
+    "get_time"
+   ],
+   "if": "identity verified",
+   "quote": "Verify the customer's identity using standard verification procedures.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Get the customer's credit card accounts to find the card in question and its tier",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user's id"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": null,
+   "quote": "Look up the customer's credit card account.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "get_transactions",
+   "by": "harness",
+   "do": "Get the customer's credit card transactions",
+   "call": "get_credit_card_transactions_by_user",
+   "args": {
+    "user_id": "the verified user's id"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": null,
+   "quote": "Review recent transaction history to check for suspicious activity.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "present_transactions",
+   "by": "model",
+   "do": "List the recent transactions on the card in question, most recent first, with merchant, amount and date. Include every one, unusual ones too, and leave none out. Then ask whether the customer recognizes them all. If the customer asks for more transactions, show any that remain. If there are none, say so.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_transactions"
+   ],
+   "after": [
+    "get_transactions",
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Review recent transactions and note anything unfamiliar.",
+   "doc": "doc_credit_cards_platinum_rewards_card_004"
+  },
+  {
+   "id": "record_unrecognized",
+   "by": "model",
+   "do": "For each charge the customer says they did not make, note its transaction id, date, merchant, amount and card account from get_transactions. The replacement and dispute jobs use these later. Do not ask the customer for them again.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_transactions",
+    "get_accounts"
+   ],
+   "after": [
+    "present_transactions"
+   ],
+   "if": "the customer reports one or more unrecognized or unauthorized charges",
+   "quote": "Please have your account information ready, along with any details about the transaction in question such as the purchase date, merchant name, and amount.",
+   "doc": "doc_credit_cards_credit_cards_(general)_018"
+  },
+  {
+   "id": "route_suspicious",
+   "by": "model",
+   "do": "If the customer says there are charges they did not make, treat the card as compromised and offer to cancel and replace it (next job: order_replacement_credit_card). Order it only if the customer agrees or asks.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "present_transactions",
+    "get_transactions"
+   ],
+   "after": [
+    "present_transactions"
+   ],
+   "if": "customer reports unrecognized or unauthorized charges",
+   "quote": "If suspicious transactions found: Follow stolen card protocol to assist the customer.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "route_dispute_request",
+   "by": "model",
+   "do": "If the customer asks to dispute the unrecognized charges, follow the separate credit card transaction dispute job. Do not file a dispute the customer has not asked for.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "present_transactions",
+    "get_transactions"
+   ],
+   "after": [
+    "present_transactions"
+   ],
+   "if": "the customer asks to dispute one or more charges",
+   "quote": "Our representatives will walk you through the process, gather the necessary information, and file the dispute on your behalf.",
+   "doc": "doc_credit_cards_credit_cards_(general)_018"
+  },
+  {
+   "id": "requests_in_order",
+   "by": "model",
+   "do": "If the customer wants both a replacement card and disputes, do them in the order the customer asks: usually order_replacement_credit_card first, then filing_a_credit_card_transaction_dispute. Reuse the verification. If the replacement was ordered first, every dispute on that card uses card_action cancel_and_reissue, and no second replacement is ordered.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "record_unrecognized"
+   ],
+   "after": [
+    "route_suspicious",
+    "route_dispute_request"
+   ],
+   "if": "the customer wants both a replacement card and disputes for the unrecognized charges",
+   "quote": "'cancel_and_reissue': The card is being cancelled and a replacement issued (use when user wants card replaced - whether you've already ordered a replacement card via order_replacement_credit_card_7291 or the cancellation is happening as part of this dispute)",
+   "doc": "doc_credit_cards_credit_cards_(general)_014"
+  },
+  {
+   "id": "all_recognized",
+   "by": "model",
+   "do": "If the customer recognizes every charge, answer any questions about the balance and close the request.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "present_transactions",
+    "get_transactions"
+   ],
+   "after": [
+    "present_transactions"
+   ],
+   "if": "the customer recognizes every transaction",
+   "quote": "Review recent transactions and note anything unfamiliar.",
+   "doc": "doc_credit_cards_platinum_rewards_card_004"
+  },
+  {
+   "id": "handle_errors",
+   "by": "model",
+   "do": "If a lookup returns an error, retry once with corrected inputs. If it still fails, explain that and ask whether the customer wants a human agent. Transfer only if they say yes, with reason code technical_system_error.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "what was verified and which lookup failed",
+    "reason": "technical_system_error"
+   },
+   "lookup": [],
+   "after": [
+    "get_transactions"
+   ],
+   "if": "a lookup returns an error that a retry does not fix, and the customer agrees to a transfer",
+   "quote": "If they do, invoke the appropriate transfer_to_human_agents tool.",
+   "doc": "policy"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Do not look up or reveal transactions until the customer has matched 2 of DOB, email, phone and address and the verification is logged",
+   "quote": "Verify the customer's identity using standard verification procedures.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "rule": "Charges the customer did not make or does not recognize count as unauthorized or fraudulent",
+   "quote": "**Unauthorized or Fraudulent Charges**: You see a charge you didn't make or don't recognize",
+   "doc": "doc_credit_cards_credit_cards_(general)_018"
+  },
+  {
+   "rule": "Once unauthorized activity is confirmed, a card number replacement is the remedy. Disputes are a separate step, taken when the customer asks for them.",
+   "quote": "If unauthorized activity is confirmed, we will replace your card number and assist with disputes for impacted transactions.",
+   "doc": "doc_credit_cards_platinum_rewards_card_004"
+  },
+  {
+   "rule": "A transfer after a lookup error that will not clear uses reason code technical_system_error",
+   "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "done_when": "The customer is verified and logged, has seen every recent transaction on the card in question, and has said whether any are unauthorized. If any are, their transaction ids are noted and they have been offered a replacement (order_replacement_credit_card). If they asked, they have been routed to a dispute, in the order they chose. Otherwise their questions are answered."
+}

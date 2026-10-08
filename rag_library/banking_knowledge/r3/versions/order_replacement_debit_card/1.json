@@ -1,0 +1,444 @@
+{
+ "job": "order_replacement_debit_card",
+ "aliases": [
+  "debit_card_replacement_options_by_account_tier",
+  "new debit card with a new number",
+  "ordering_a_debit_card_for_a_bank_account",
+  "reissue_debit_card"
+ ],
+ "when": {
+  "quote": "When a customer requests a replacement debit card (due to lost, stolen, damaged, or other reasons), the replacement policies vary based on the customer's checking account tier.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start when the customer asks for a replacement or new debit card, or says yes when asked after a closure. Order only with the options and fees the customer has confirmed.",
+  "quote": "Ask if they want to order a replacement card immediately",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+ },
+ "tools": [
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "get_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "order",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "order",
+   "not_used": null
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": "order",
+   "not_used": null
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": null,
+   "not_used": "The old card is closed in closing_cancelling_a_debit_card before a replacement is ordered."
+  },
+  {
+   "tool": "close_bank_account_7392",
+   "who": "agent",
+   "step": null,
+   "not_used": "Doc 005 is cited only for its tier list. No account is closed."
+  }
+ ],
+ "info": [
+  {
+   "field": "target_account",
+   "about": "The checking account the new card links to",
+   "from": "customer",
+   "ask": "Which checking account should the new card be linked to?",
+   "may_hold_back": false
+  },
+  {
+   "field": "delivery_option",
+   "about": "STANDARD, EXPEDITED or RUSH, limited by tier",
+   "from": "customer",
+   "ask": "Which shipping speed would you like? Here are the fees for your account tier.",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_design",
+   "about": "CLASSIC, PREMIUM or CUSTOM",
+   "from": "customer",
+   "ask": "Which card design would you like: Classic, Premium metallic, or Custom? Here are the fees for your account tier.",
+   "may_hold_back": true
+  },
+  {
+   "field": "shipping_address",
+   "about": "The address to mail the card to. It may differ from the home address but must be a US domestic address.",
+   "from": "customer",
+   "ask": "What address should we mail the new card to? Should it be the address on file?",
+   "may_hold_back": true
+  },
+  {
+   "field": "account_card_records",
+   "about": "The account's type, class (tier), status, balance and date_opened; its cards' status, issue_reason and date_issued; the customer's DOB and address",
+   "from": "records",
+   "ask": "",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "ensure_verified",
+   "by": "model",
+   "do": "If the customer was not verified earlier in this conversation, verify them first: lookup, 2 matching values, get_current_time, log_verification. Otherwise reuse the verified user.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "1) Customer must be verified",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Unlock get_all_user_accounts_by_user_id_3847, then call it to read each account's type, class (tier), status, balance and date_opened.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "get_cards",
+   "by": "harness",
+   "do": "Unlock get_debit_cards_by_account_id_7823, then call it for the target account (after any closure) to read each card's status, issue_reason and date_issued.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "account_id": "the target checking account"
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "get_user",
+   "by": "harness",
+   "do": "Read the customer's date_of_birth and address.",
+   "call": "get_user_information_by_id",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Customer must be at least 18 years old (verify using date_of_birth)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current time for the business-day, 12-month and 48-hour checks.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Account must have been open for at least 3 business days (excluding weekends)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "check_order",
+   "by": "model",
+   "do": "Check eligibility:\n1. account_type is checking.\n2. Status is OPEN.\n3. The account has been open at least 3 business days.\n4. The balance is at least $25.\n5. There is no other ACTIVE or PENDING card on the account.\n6. The customer is at least 18.\n7. The address is US domestic.\nIf a check fails, explain what blocks the order and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_cards",
+    "get_user",
+    "get_time"
+   ],
+   "after": [
+    "get_accounts",
+    "get_cards",
+    "get_user",
+    "get_time"
+   ],
+   "if": null,
+   "quote": "Cards with issue_reason of 'new_account', 'first_card', 'expired', 'upgrade', or 'bank_reissue' do NOT count toward the replacement limit.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "tier",
+   "by": "model",
+   "do": "Find each account's tier from its name: Light Blue, Light Green and Green Fee-Free are ENTRY; Blue Account and Green Account (checking) are MID; Evergreen is PREMIUM; Bluest is ELITE.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts"
+   ],
+   "after": [
+    "check_order"
+   ],
+   "if": null,
+   "quote": "- MID TIER (Blue Account, Green Account (checking))",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_005"
+  },
+  {
+   "id": "history",
+   "by": "model",
+   "do": "Count the replacement cards (issue_reason lost, stolen, fraud or damaged) issued in the last 12 months. Over the limit: Entry (2) waits or pays a $25 excess fee; Mid (3) waits or pays $15; Premium (5) must wait, with no fee option; Elite is unlimited. If the limit is reached, explain the wait or the fee.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards",
+    "get_time",
+    "tier"
+   ],
+   "after": [
+    "tier"
+   ],
+   "if": null,
+   "quote": "3) Check the date_issued field and count cards issued within the last 12 months",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "entry_wait",
+   "by": "model",
+   "do": "For an ENTRY-tier account, tell the customer a replacement cannot be ordered until 48 hours after the card was closed, and give the earliest time. Also say only standard shipping is available. Do not order now.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "tier",
+    "get_cards",
+    "get_time"
+   ],
+   "after": [
+    "history"
+   ],
+   "if": "the account is ENTRY tier and less than 48 hours have passed since the closure",
+   "quote": "- 48-hour waiting period after card closure before a replacement can be ordered",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "ask_delivery",
+   "by": "model",
+   "do": "Ask for the delivery option and state the tier's fee: ENTRY STANDARD $0 only; MID STANDARD $0, EXPEDITED $15; PREMIUM STANDARD or EXPEDITED $0, RUSH $35; ELITE all $0. Timeframes: STANDARD 7-10, EXPEDITED 3-5, RUSH 1-2 business days.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "tier"
+   ],
+   "after": [
+    "history"
+   ],
+   "if": "the account's tier allows ordering now",
+   "quote": "- Standard (delivery_fee: $0) or expedited shipping available (delivery_fee: $15)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "offer_options",
+   "by": "model",
+   "do": "Explain the tier's shipping and design fees. If the customer asks for the best free options, choose the highest-value $0 options for the tier: Premium EXPEDITED and the PREMIUM design, both $0; Elite RUSH and any design, all $0; Mid and Entry STANDARD and CLASSIC.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "tier"
+   ],
+   "after": [
+    "check_order"
+   ],
+   "if": "the customer asks for the best free options",
+   "quote": "Free expedited shipping on all replacements (delivery_fee: $0 for both STANDARD and EXPEDITED)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "ask_design",
+   "by": "model",
+   "do": "Ask for the card design and state the tier's fee: ENTRY and MID CLASSIC $0, PREMIUM $10, CUSTOM $25; PREMIUM tier CLASSIC $0, PREMIUM $0, CUSTOM $15; ELITE all $0.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "tier"
+   ],
+   "after": [
+    "ask_delivery"
+   ],
+   "if": null,
+   "quote": "5) Ask customer for preferred card design (CLASSIC, PREMIUM, or CUSTOM) and explain fees. ",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "confirm_addr",
+   "by": "model",
+   "do": "Confirm the mailing address the customer wants (US domestic). Before ordering, tell the customer that any fee (delivery, design, excess replacement) will be deducted from the linked checking account.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_user"
+   ],
+   "after": [
+    "ask_design"
+   ],
+   "if": null,
+   "quote": "Always inform the customer that the fee will be deducted from their checking account balance before placing the order.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "order",
+   "by": "model",
+   "do": "Unlock order_debit_card_5739, then order the card with the exact tier fees, using the parameter names the unlock reports.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "order_debit_card_5739",
+    "account_id": "linked checking account_id",
+    "delivery_option": "chosen option",
+    "card_design": "chosen design",
+    "delivery_fee": "exact tier fee",
+    "design_fee": "exact tier fee",
+    "shipping address": "address the customer confirmed",
+    "reason": "the replacement reason (e.g. lost, stolen, fraud), if the tool asks for one"
+   },
+   "lookup": [
+    "check_order",
+    "history",
+    "confirm_addr"
+   ],
+   "after": [
+    "confirm_addr"
+   ],
+   "if": "eligible: check_order passed, no tier wait is pending, the replacement limit is met or the excess fee accepted, and the customer confirmed the options and fees",
+   "quote": "When using order_debit_card_5739, you must provide the exact delivery_fee and design_fee amounts based on the tier rules below.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "inform",
+   "by": "model",
+   "do": "Tell the customer the delivery timeframe and the fees charged. If the order failed (for example, insufficient funds for the fees), explain why.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "order"
+   ],
+   "after": [
+    "order"
+   ],
+   "if": null,
+   "quote": "8) Inform customer of expected delivery timeframe and any applicable fees",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "ENTRY tier (Light Blue, Light Green, Green Fee-Free): 48-hour wait after closure, standard shipping only, delivery_fee $0, at most 2 replacements per rolling 12 months",
+   "quote": "- Standard shipping only (no expedited option available) - delivery_fee: $0",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "MID tier: at most 3 replacements per rolling 12 months, no waiting period",
+   "quote": "- No waiting period - can order immediately after closure",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "The CLASSIC design costs $0 at every tier",
+   "quote": "- CLASSIC design: design_fee $0",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "Only 1 active debit card per checking account, and no pending order may already exist for the account",
+   "quote": "8) Customer cannot have a pending debit card order for the same account (check debit_cards table for PENDING status)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "rule": "Premium tier: up to 5 replacements per 12 months, no waiting period, STANDARD and EXPEDITED at $0, RUSH at $35. PREMIUM design $0, CUSTOM $15, CLASSIC $0.",
+   "quote": "PREMIUM design (metallic silver): design_fee $0 (complimentary)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "Entry tier: 2 replacements per 12 months, a 48-hour wait after closure, and STANDARD shipping only at $0. The PREMIUM design costs $10 and CUSTOM $25.",
+   "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "Mid tier: 3 replacements per 12 months, no wait, STANDARD $0 or EXPEDITED $15",
+   "quote": "Standard (delivery_fee: $0) or expedited shipping available (delivery_fee: $15)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "Only one active debit card is allowed per checking account",
+   "quote": "Customer cannot have more than 1 active debit cards per checking account",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "rule": "The account must hold at least $25",
+   "quote": "Account must have a minimum balance of $25 (to cover potential fees)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "rule": "Cards ship to US domestic addresses only",
+   "quote": "Customer's address on file must be a valid US domestic address (international shipping is not available)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "rule": "Entry tier over 2 replacements in 12 months: wait or pay $25",
+   "quote": "If customer has exceeded the 2-card limit, they must wait until oldest replacement ages out of the 12-month window, OR pay a $25 excess replacement fee",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "Premium tier over 5 replacements: must wait, with no fee option",
+   "quote": "If customer has exceeded the 5-card limit, they must wait until oldest replacement ages out (no fee option - must wait)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "Elite tier: every delivery option is free",
+   "quote": "Complimentary shipping on all replacements (delivery_fee: $0 for STANDARD, EXPEDITED, and RUSH)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "rule": "An order fails if the account cannot cover the fees",
+   "quote": "If the account has insufficient funds for delivery or design fees, the order will fail",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  }
+ ],
+ "done_when": "One of these is true. (1) The replacement is ordered to the address the customer confirmed, with the correct tier fees, and the customer knows the timeframe and fees. (2) The customer was told why it cannot be ordered now (eligibility, the tier limit, or the Entry 48-hour wait) and when it can."
+}

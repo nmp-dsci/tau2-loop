@@ -1,0 +1,536 @@
+{
+ "job": "freezing_and_unfreezing_a_debit_card",
+ "aliases": [
+  "found my card - reactivate frozen card",
+  "freeze debit card",
+  "freezing_a_debit_card",
+  "lock debit card",
+  "report wallet stolen - freeze cards first",
+  "unfreeze a card found frozen during a CODE 05 decline review",
+  "unfreeze debit card",
+  "unfreezing_a_debit_card"
+ ],
+ "when": {
+  "quote": "Procedure for when a customer wants to temporarily freeze or unfreeze their debit card.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks to freeze or unfreeze a debit card. This includes saying yes when the agent, during a CODE 05 decline review, finds the card FROZEN and asks whether to unfreeze it. If the customer says the card is confirmed lost or stolen, recommend closing it instead, but still freeze it if the customer asks for a freeze. Unfreeze only a card the customer asks to unfreeze, for example one they found again.",
+  "quote": "If customer confirms the card is lost/stolen, recommend closing instead of freezing",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verif",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "get_cards",
+   "not_used": null
+  },
+  {
+   "tool": "freeze_debit_card_3892",
+   "who": "agent",
+   "step": "freeze",
+   "not_used": null
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": "unfreeze",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "freeze_error",
+   "not_used": null
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job never closes a card. Closing a lost or stolen card is done in closing_cancelling_a_debit_card (handoff_close)."
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_details",
+   "about": "Any 2 of: date of birth, email, phone number, address. These must match the records.",
+   "from": "customer",
+   "ask": "To verify your identity, could you please give me two of the following: your date of birth, email, phone number or home address?",
+   "may_hold_back": false
+  },
+  {
+   "field": "cards_to_freeze",
+   "about": "Which debit cards (by linked checking account) the customer wants frozen",
+   "from": "customer",
+   "ask": "Which debit cards would you like me to freeze?",
+   "may_hold_back": false
+  },
+  {
+   "field": "freeze_reason",
+   "about": "Why the customer wants to freeze the cards (for example lost wallet or stolen wallet)",
+   "from": "customer",
+   "ask": "Can you tell me why you'd like to freeze these cards?",
+   "may_hold_back": false
+  },
+  {
+   "field": "card_recovered",
+   "about": "Whether the customer later found one of the frozen cards and wants it unfrozen",
+   "from": "customer",
+   "ask": "Do you still have any of these cards, or are they all gone?",
+   "may_hold_back": true
+  },
+  {
+   "field": "wants_unfreeze",
+   "about": "During a decline review: whether the customer wants a card found FROZEN to be unfrozen",
+   "from": "customer",
+   "ask": "This card is currently frozen. Would you like me to unfreeze it?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_records",
+   "about": "Each card's card_id, user_id and status, and the linked checking account's status",
+   "from": "records",
+   "ask": "",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "from_decline_review",
+   "by": "model",
+   "do": "If this job starts from a CODE 05 decline review, where the card was found FROZEN and the customer said yes to unfreezing, reuse the verification and the get_accounts and get_cards results already read. Skip lookup_user through get_cards and go to check_unfreeze.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer was verified earlier in this conversation and agreed to unfreeze a card found FROZEN during a decline review",
+   "quote": "If status is FROZEN → Ask customer if they want to unfreeze. If yes, follow the freezing/unfreezing card protocol.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "lookup_user",
+   "by": "model",
+   "do": "Look up the customer by name, email or user id",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the name the customer gives"
+   },
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "1. Verify customer identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "verify",
+   "by": "model",
+   "do": "Confirm that 2 of DOB, email, phone or address match the records. Share nothing from the account before they match; if they do not match, do not continue.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "lookup_user"
+   ],
+   "after": [
+    "lookup_user"
+   ],
+   "if": null,
+   "quote": "1. Customer must be verified",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current time for the verification log and later date checks",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "verify"
+   ],
+   "if": null,
+   "quote": "1. Verify customer identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "log_verif",
+   "by": "harness",
+   "do": "Log the verification",
+   "call": "log_verification",
+   "args": {
+    "name": "verified user's name",
+    "user_id": "verified user id",
+    "address": "record address",
+    "email": "record email",
+    "phone_number": "record phone",
+    "date_of_birth": "record DOB",
+    "time_verified": "current time"
+   },
+   "lookup": [
+    "verify"
+   ],
+   "after": [
+    "get_time"
+   ],
+   "if": "2 or more identity values matched in verify",
+   "quote": "1. Verify customer identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Get the customer's bank accounts to find the checking account ids and account classes (tiers). Unlock get_all_user_accounts_by_user_id_3847 first.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "user_id": "verified user id"
+   },
+   "lookup": [],
+   "after": [
+    "log_verif"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "get_cards",
+   "by": "harness",
+   "do": "For each named checking account, get its debit cards (card_id, user_id, status, issue_reason, date_issued). Unlock get_debit_cards_by_account_id_7823 first.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "account_id": "each relevant checking account id"
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "ask_freeze_reason",
+   "by": "model",
+   "do": "Ask why the customer wants to freeze each card, unless they have already said.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "get_cards"
+   ],
+   "if": "the customer has not said why",
+   "quote": "Ask customer why they want to freeze the card",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "advise_close",
+   "by": "model",
+   "do": "Because the cards were stolen, recommend closing rather than freezing, but do what the customer chooses",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "ask_freeze_reason"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "customer says the cards were lost or stolen",
+   "quote": "If customer confirms the card is lost/stolen, recommend closing instead of freezing",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "check_freeze",
+   "by": "model",
+   "do": "For each card to freeze, check that its user_id is the verified user and its status is ACTIVE. If it is PENDING, CLOSED or already FROZEN, tell the customer that card cannot be frozen and why, and skip it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_cards",
+    "log_verif"
+   ],
+   "after": [
+    "get_cards"
+   ],
+   "if": "customer wants to freeze",
+   "quote": "Card must currently be in ACTIVE status (cannot freeze PENDING, CLOSED, or already FROZEN cards)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "freeze_info",
+   "by": "model",
+   "do": "Tell the customer what a freeze does: new transactions declined, recurring payments declined, pending authorized transactions may still process, and they can unfreeze at any time",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "get_cards",
+    "check_freeze"
+   ],
+   "if": "customer wants to freeze",
+   "quote": "All new transactions will be declined while frozen",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "freeze",
+   "by": "harness",
+   "do": "Freeze each ACTIVE debit card the customer named (unlock freeze_debit_card_3892 first, once)",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "freeze_debit_card_3892",
+    "card_id": "card_id of each ACTIVE card to freeze"
+   },
+   "lookup": [
+    "check_freeze"
+   ],
+   "after": [
+    "freeze_info"
+   ],
+   "if": "card status is ACTIVE, the card belongs to the verified user, and the customer asked to freeze it",
+   "quote": "4. Use freeze_debit_card_3892 with the card_id",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "confirm_freeze",
+   "by": "model",
+   "do": "Confirm to the customer that each freeze succeeded. Mention that a freeze does not block ATM use with the PIN; ATM Block is set separately in the mobile app.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "freeze"
+   ],
+   "after": [
+    "freeze"
+   ],
+   "if": "a freeze call succeeded",
+   "quote": "Confirm the freeze was successful",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "freeze_error",
+   "by": "model",
+   "do": "If a freeze or unfreeze call returns an error, tell the customer it could not be completed and why. If it cannot be resolved, ask whether they want a human agent, and transfer only if they say yes.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the cards and action attempted, and the error",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "freeze",
+    "unfreeze"
+   ],
+   "after": [
+    "freeze"
+   ],
+   "if": "a freeze or unfreeze call returned an error that cannot be resolved and the customer agrees to a transfer",
+   "quote": "System error or outage preventing completion of the customer's request",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  },
+  {
+   "id": "reread_cards_unfreeze",
+   "by": "harness",
+   "do": "Before unfreezing, read the recovered card's account again to confirm the card's current status and owner.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "account_id": "the recovered card's checking account id from get_accounts"
+   },
+   "lookup": [],
+   "after": [
+    "freeze"
+   ],
+   "if": "customer asks to unfreeze a card",
+   "quote": "Before freezing/unfreezing: Verify the card exists and check its current status",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "check_unfreeze",
+   "by": "model",
+   "do": "Check that the card belongs to the verified user, its status is FROZEN, and its linked checking account is OPEN (from get_accounts). If a check fails, tell the customer which one blocks the unfreeze and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "reread_cards_unfreeze",
+    "get_accounts"
+   ],
+   "after": [
+    "reread_cards_unfreeze"
+   ],
+   "if": "customer asks to unfreeze a card",
+   "quote": "Card must currently be in FROZEN status",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "unfreeze",
+   "by": "harness",
+   "do": "Unfreeze any card the customer has recovered (unlock unfreeze_debit_card_3893 first)",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "unfreeze_debit_card_3893",
+    "card_id": "card_id of the recovered FROZEN card"
+   },
+   "lookup": [
+    "check_unfreeze"
+   ],
+   "after": [
+    "freeze",
+    "check_unfreeze"
+   ],
+   "if": "customer has found the card and asks to unfreeze it; card is FROZEN and its checking account is OPEN",
+   "quote": "2. Use unfreeze_debit_card_3893 with the card_id",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "unfreeze_from_review",
+   "by": "harness",
+   "do": "Unfreeze the card the customer agreed to unfreeze during the decline review. Unlock unfreeze_debit_card_3893 first if it is not already unlocked.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "unfreeze_debit_card_3893",
+    "card_id": "card_id of the FROZEN card from the decline review's get_cards"
+   },
+   "lookup": [
+    "check_unfreeze",
+    "from_decline_review"
+   ],
+   "after": [
+    "check_unfreeze"
+   ],
+   "if": "the job came from a decline review, the customer said yes, the card is FROZEN, it belongs to the verified user, and its checking account is OPEN",
+   "quote": "2. Use unfreeze_debit_card_3893 with the card_id",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "confirm_unfreeze",
+   "by": "model",
+   "do": "Confirm the card is active and can be used right away",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "unfreeze"
+   ],
+   "after": [
+    "unfreeze"
+   ],
+   "if": "a card was unfrozen",
+   "quote": "3. Confirm the card is now active and ready to use immediately",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "id": "return_to_decline_review",
+   "by": "model",
+   "do": "After unfreezing a card from a decline review, go back to debit_card_decline_code_05_do_not_honor for the same card and finish the account status, fraud alert and velocity checks before calling the card ready.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "unfreeze_from_review"
+   ],
+   "after": [
+    "unfreeze_from_review"
+   ],
+   "if": "the job came from a decline review and the unfreeze succeeded",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "handoff_close",
+   "by": "model",
+   "do": "For the frozen cards the customer confirms are lost or stolen and asks to cancel, go on to closing_cancelling_a_debit_card. Never close a card the customer has found and wants to keep.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "ask_freeze_reason",
+    "freeze"
+   ],
+   "after": [
+    "freeze"
+   ],
+   "if": "the customer asks to cancel cards confirmed lost or stolen",
+   "quote": "CLOSE: Permanent deactivation - cannot be reversed. Use when card is confirmed lost/stolen or customer wants to cancel.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Only ACTIVE cards can be frozen",
+   "quote": "Card must currently be in ACTIVE status (cannot freeze PENDING, CLOSED, or already FROZEN cards)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "rule": "Unfreeze only a FROZEN card whose linked checking account is OPEN",
+   "quote": "4. The linked checking account must still be OPEN",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "rule": "Freezing can be undone. Closing is permanent.",
+   "quote": "CLOSE: Permanent deactivation - cannot be reversed. Use when card is confirmed lost/stolen or customer wants to cancel.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "rule": "The card must belong to the verified customer",
+   "quote": "Customer must be the owner of the debit card",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "rule": "A freeze does not block ATM use with a PIN; ATM Block is a separate mobile-app setting",
+   "quote": "Freezing does not affect ATM access if the customer has their PIN",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  },
+  {
+   "rule": "An unfreeze during a decline review does not end the review. The remaining CODE 05 checks still run.",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  }
+ ],
+ "done_when": "The customer is verified and logged. Every card the customer named is frozen (or the customer was told why it could not be). Any card the customer recovered, or agreed to unfreeze during a decline review, is unfrozen and confirmed active; a decline-review card was handed back for its remaining checks. Cards confirmed stolen that the customer wants cancelled have been handed to closing_cancelling_a_debit_card."
+}
