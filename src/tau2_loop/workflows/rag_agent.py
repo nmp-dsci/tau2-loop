@@ -101,6 +101,8 @@ class RagAgent:
     # as edits on the version it read (`workflows/edits.py`) instead of the whole job again.
     keep_tools: bool = False
     merge_write: str = "full"  # "full" (r2, r3) or "edits"
+    # s22 (r5): rubric checks the merge gate adds to D8 and D1 (D9 parameters, D10 statuses)
+    rubric: tuple[str, ...] = ()
 
 
 def versions(domain: str) -> list[str]:
@@ -139,6 +141,7 @@ def load(domain: str, name: str) -> RagAgent:
         decide_prompt=(d / "decide.md").read_text() if (d / "decide.md").is_file() else "",
         keep_tools=bool(cfg.get("keep_tools", False)),
         merge_write=str(cfg.get("merge_write", "full")),
+        rubric=tuple(str(x) for x in cfg.get("rubric") or ()),
     )
 
 
@@ -746,12 +749,16 @@ def _assess(
     lib: list[dict[str, Any]],
     policy: str,
     held: set[str] | None = None,
+    gate_checks: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Each merged job with the library versions it merged and its checks; `why` lists what
     stops it being taken. Under locks (`held`), a job may write only a name it holds and merge
     only library jobs it holds. A job written as edits (r4) is first applied to the version of the
-    one job it names in `into`; edits that do not apply are sent back, then not taken."""
-    from tau2_loop.workflows import edits, library, rubric
+    one job it names in `into`; edits that do not apply are sent back, then not taken. A version
+    that gates on more checks (`gate_checks`, r5: D9, D10) sends a job back for them too; a new
+    job that still fails them is taken as written, a merge keeps the previous version. A job's
+    `kept` (r7: the steps and rules it re-read and kept as they were) is checked, not stored."""
+    from tau2_loop.workflows import edits, library, rubric, toolspec
 
     rows: list[dict[str, Any]] = []
     claimed: dict[str, str] = {}
@@ -759,6 +766,8 @@ def _assess(
         if not isinstance(job, dict) or not job.get("job"):
             continue
         written = None
+        job = dict(job)
+        kept = job.pop("kept", None)
         if edits.is_edits(job):
             name = edits.base_name(job)
             base = library.by_name(lib, name) if name else None
@@ -788,15 +797,21 @@ def _assess(
             e = library.by_name(lib, n)
             if e is not None and e not in prev:
                 prev.append(e)
-        c = rubric.check(domain, job, [e["workflow"] for e in prev], policy)
+        c = rubric.check(domain, job, [e["workflow"] for e in prev], policy, kept)
         why = (
-            rubric.gate(c)
+            rubric.gate(c, gate_checks)
             if prev
             else [
-                f"quotes not found in the documents they cite: {' | '.join(c['D1']['new_unfound'][:4])}"
+                *(
+                    [
+                        "quotes not found in the documents they cite: "
+                        + " | ".join(c["D1"]["new_unfound"][:4])
+                    ]
+                    if c["D1"]["new_unfound"]
+                    else []
+                ),
+                *toolspec.reasons(c, gate_checks),
             ]
-            if c["D1"]["new_unfound"]
-            else []
         )
         blocked = []
         if held is not None:
@@ -827,6 +842,7 @@ def _assess(
                 "why": [*why, *blocked],
                 "blocked": bool(blocked),
                 "written": written,
+                "kept": kept,
             }
         )
     return rows
@@ -844,10 +860,17 @@ def _send_back(
     emit({"kind": "note", "text": f"The merge failed its checks; sent back once.\n{lines}"})
     say(
         "The harness checked your merge and these jobs fail:\n"
-        f"{lines}\n\nA merged job keeps every step, tool and quote of the versions it "
-        "merged unless its changelog names the change (removed or changed, with why), and "
-        "every quote is copied from the document it cites. Reply with the whole JSON again, "
-        "fixed."
+        f"{lines}\n\n"
+        + (
+            "A merged job accounts for every step and rule of the versions it merged: kept "
+            "(named in `kept`), rewritten or removed, each with the passage that decides it, "
+            "and every quote is copied from the document it cites."
+            if "D12" in agent.rubric
+            else "A merged job keeps every step, tool and quote of the versions it "
+            "merged unless its changelog names the change (removed or changed, with why), and "
+            "every quote is copied from the document it cites."
+        )
+        + " Reply with the whole JSON again, fixed."
         + (
             " A job written as edits is applied again to the library's newest version, not to "
             "your last reply: write all of its edits."
@@ -885,6 +908,7 @@ def _take(
                 "failed": r["why"],
                 "taken": keep,
                 **({"written": r["written"]} if r.get("written") else {}),
+                **({"kept": r["kept"]} if r.get("kept") else {}),
             }
         )
         job.pop("changelog", None)
@@ -916,17 +940,21 @@ def _merge(
     emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
     say(merge_message(agent, cands))
     merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
-    rows = _assess(meta.domain, merged, lib, policy) if merged is not None else []
+    rows = (
+        _assess(meta.domain, merged, lib, policy, gate_checks=agent.rubric)
+        if merged is not None
+        else []
+    )
     if merged is not None and any(r["why"] for r in rows):
         again = _send_back(agent, rows, turns, say, emit)
         if again is not None:
-            merged, rows = again, _assess(meta.domain, again, lib, policy)
+            merged, rows = again, _assess(meta.domain, again, lib, policy, gate_checks=agent.rubric)
     if merged is None:  # no merge written: keep only the draft's jobs no library job matches
         merged = {
             **draft,
             "jobs": [j for j in draft.get("jobs") or [] if not cands.get(str(j.get("job")))],
         }
-        rows = _assess(meta.domain, merged, lib, policy)
+        rows = _assess(meta.domain, merged, lib, policy, gate_checks=agent.rubric)
     taken, records, rejected = _take(rows)
     emit(
         {
@@ -1060,11 +1088,15 @@ def _merge_concurrent(
         )
         held = set(lock.jobs)
         merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
-        rows = _assess(meta.domain, merged, heads, policy, held) if merged is not None else []
+        rows = (
+            _assess(meta.domain, merged, heads, policy, held, agent.rubric)
+            if merged is not None
+            else []
+        )
         if merged is not None and any(r["why"] for r in rows):
             again = _send_back(agent, rows, turns, say, emit)
             if again is not None:
-                merged, rows = again, _assess(meta.domain, again, heads, policy, held)
+                merged, rows = again, _assess(meta.domain, again, heads, policy, held, agent.rubric)
         if merged is None:  # nothing written: only the draft's new jobs, and only those it holds
             merged = {
                 **draft,
@@ -1074,7 +1106,7 @@ def _merge_concurrent(
                     if not cands.get(str(j.get("job"))) and j.get("job") in held
                 ],
             }
-            rows = _assess(meta.domain, merged, heads, policy, held)
+            rows = _assess(meta.domain, merged, heads, policy, held, agent.rubric)
         taken, records, rejected = _take(rows)
         writes = [
             {
@@ -1385,13 +1417,27 @@ def session(domain: str, session_id: str) -> dict[str, Any]:
     }
 
 
+CHANGE_FILES = ("rag_agent.md", "merge.md", "decide.md", "rag_agent.yaml")
+
+
+def changes(domain: str, name: str) -> dict[str, Any] | None:
+    """A version's change record (s22, r5 on): `based_on` (the version whose prompts and settings
+    it copied), `seed` (whose library it starts from), why, and what changed in each file."""
+    p = RAG_AGENTS_DIR / domain / name / "changes.json"
+    return json.loads(p.read_text()) if p.is_file() else None
+
+
 def describe(domain: str, name: str) -> dict[str, Any]:
-    """A version as the Agent tab shows it: settings, prompt and the tools it calls."""
+    """A version as the Agent tab shows it: settings, prompt, the tools it calls and, from r5 on,
+    what changed from the version it was based on."""
     from tau2_loop.eval.retrieval import variant_tool_rows
 
     agent = load(domain, name)
+    record = changes(domain, name)
     return {
         "name": agent.name,
+        "based_on": record.get("based_on") if record else None,
+        "changes": record,
         "model": agent.model,
         "effort": agent.effort,
         "retrieval": agent.retrieval,
@@ -1405,6 +1451,7 @@ def describe(domain: str, name: str) -> dict[str, Any]:
         "queue": agent.queue,
         "keep_tools": agent.keep_tools,
         "merge_write": agent.merge_write,
+        "rubric": list(agent.rubric),
         "prompt": agent.prompt,
         "tools": variant_tool_rows(agent.retrieval),
     }

@@ -135,6 +135,15 @@
   words (their details and how they will react), so a version without this step, v4 or v7, is a
   different pipeline, not the same agent with less data. v8's train run is its smoke (14/20, run
   `20261007T224313Z`, on r3 before test went in) extended by the other 40 (`make extend NOTE=`).
+- **workflow_rag is optimised one defect at a time** (s22, 9 Oct 2026, the person's call,
+  `.lavish/s22_v8-failure-diagnosis.html`): each change is a new rN seeded with the last, one
+  train question that triggers the defect is researched and merged, and the defect's failed
+  conversations are scored by a fork of v8 reading it (`make fork … WORKFLOWS=rN WHY=`); the
+  person reviews before the next defect. A change is a general reading rule or a code check,
+  never a rule naming a case or a gold answer. r5 (rule 1 + rubric D10), r6 (rules 2–3 + D9),
+  r7 (a merge re-reads every old step: kept, rewritten or removed; D12), r8 (rules 4–5); r8 and
+  v12 are kept. **Every rN from r5 has `changes.json`** (`based_on`, `seed`, why, each file's
+  change); a test fails when it does not match the files that differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

@@ -61,6 +61,9 @@ def fork(
     workflows: Annotated[
         str | None, typer.Option(help="the workflow_rag version whose library it looks up, e.g. r2")
     ] = None,
+    why: Annotated[
+        str | None, typer.Option(help="why this fork exists, kept in its diagnosis")
+    ] = None,
 ) -> None:
     """A new version with the champion's surfaces and a different model, effort, retrieval,
     tool mode, identity note, parallel calls or workflow library."""
@@ -84,6 +87,7 @@ def fork(
         identity_note=identity_note,
         parallel_calls=parallel_calls,
         workflows=workflows,
+        why=why,
     )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "

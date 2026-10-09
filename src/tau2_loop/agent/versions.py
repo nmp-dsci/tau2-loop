@@ -233,8 +233,10 @@ def fork_version(
     identity_note: bool | None = None,
     parallel_calls: bool | None = None,
     workflows: str | None = None,
+    why: str | None = None,
 ) -> AgentVersion:
-    """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`.
+    """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`. `why` (s22)
+    is the reason the person or the session gave, kept in its diagnosis beside what changed.
 
     The optimiser may not touch `agent.yaml`, so a model, effort, retrieval or
     tool-mode change is a fork, not a loop cycle. Its `diagnosis.json` says so
@@ -308,7 +310,8 @@ def fork_version(
                 "file": "agent.yaml",
                 "anchor": "tools" if tools_only else "model",
                 "what": "; ".join(changed),
-                "why": "a hand-made fork: the optimiser may not change agent.yaml",
+                "why": (f"{why} " if why else "")
+                + "(a hand-made fork: the optimiser may not change agent.yaml)",
                 "task_ids": [],
             }
         ],
