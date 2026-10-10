@@ -142,7 +142,7 @@
   person reviews before the next defect. A change is a general reading rule or a code check,
   never a rule naming a case or a gold answer. r5 (rule 1 + rubric D10), r6 (rules 2–3 + D9),
   r7 (a merge re-reads every old step: kept, rewritten or removed; D12), r8 (rules 4–5), r9
-  (rules 6–7, D3); r9 and v13 are kept. **Every rN from r5 has `changes.json`** (`based_on`, `seed`, why, each file's
+  (rules 6–7, D3), r10 (rule 8, D4); r10 and v14 are kept. **Every rN from r5 has `changes.json`** (`based_on`, `seed`, why, each file's
   change); a test fails when it does not match the files that differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
