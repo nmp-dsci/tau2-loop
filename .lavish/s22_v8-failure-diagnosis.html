@@ -227,10 +227,10 @@ p .path, li .path{display:inline}
 <body>
 <header class="top"><div class="in"><b>tau2-loop</b><span>banking · v8's failures, train and test · what to change</span><span class="r">S22 · 9 Oct 2026</span></div></header>
 <main>
-<p class="eyebrow">Diagnosis and plan · v8 is champion: train 38 of 60, test 21 of 37 · all 38 failed conversations read · D1 optimised: 2 of its 5 failures now pass (§11) · D2: 1 of 6 with r6, r7 and r8 (§12–§14); r8's workflow matches the documents · D3: 2 of 3 (§15) · D4: 2 of 3 (§16) · D5: 1 of 4 (§17)</p>
+<p class="eyebrow">Diagnosis and plan · v8 is champion: train 38 of 60, test 21 of 37 · all 38 failed conversations read · D1 optimised: 2 of its 5 failures now pass (§11) · D2: 1 of 6 with r6, r7 and r8 (§12–§14); r8's workflow matches the documents · D3: 2 of 3 (§15) · D4: 2 of 3 (§16) · D5: 1 of 4 (§17) · D6: 0 of 4 (§18)</p>
 <h1>In 29 of v8's 38 failures the <em>workflow</em> was wrong</h1>
 <p class="lead">Five reviewers read every failed conversation against gold, the workflow v8 was shown, and the knowledge base. v8 found the right workflow in 35 of the 38 and followed it. Where the workflow was wrong (29 of 38), v8 followed it into the failure, even where its own prompt had the right rule. The agent alone caused 4 of 38, and 5 of 38 cannot pass whatever we change. In 13 of 18 rules the knowledge base held the right answer, so the fix is r5: workflow_rag reading the documents strictly, with two new code checks. It is written and tested, not run.</p>
-<nav class="toc"><a href="#s1">verdicts</a><a href="#s2">retrieval</a><a href="#s3">defects</a><a href="#s4">documents</a><a href="#s5">the agent</a><a href="#s6">unreachable</a><a href="#s7">plan</a><a href="#s8">decisions</a><a href="#s9">all 38</a><a href="#s10">sources</a><a href="#s11">D1 run</a><a href="#s12">D2 run</a><a href="#s13">D2 again</a><a href="#s14">D2 r8</a><a href="#s15">D3</a><a href="#s16">D4</a><a href="#s17">D5</a></nav>
+<nav class="toc"><a href="#s1">verdicts</a><a href="#s2">retrieval</a><a href="#s3">defects</a><a href="#s4">documents</a><a href="#s5">the agent</a><a href="#s6">unreachable</a><a href="#s7">plan</a><a href="#s8">decisions</a><a href="#s9">all 38</a><a href="#s10">sources</a><a href="#s11">D1 run</a><a href="#s12">D2 run</a><a href="#s13">D2 again</a><a href="#s14">D2 r8</a><a href="#s15">D3</a><a href="#s16">D4</a><a href="#s17">D5</a><a href="#s18">D6</a></nav>
 
 <section id="s1">
 <h2>01 · Verdicts — the workflow failed in 29 of 38</h2>
@@ -604,6 +604,39 @@ The second merge passed with 12 edits, and both jobs were taken.</td></tr>
 <label class="opt"><input type="radio" name="d5" value="ask the customer to read back the status"><span class="t"><b>Ask the customer to read back the status</b><span>r12 adds a rule: a reply that goes to the customer is asked for. Likely +1 on test (028; 026 also lacks the GitHub dispute) and −1 on train (027).</span></span></label>
 <label class="opt"><input type="radio" name="d5" value="check regressions first"><span class="t"><b>Check regressions first</b><span>Re-score the passing conversations that use the workflows r5–r11 changed, then D6.</span></span></label>
 <label class="opt"><input type="radio" name="d5" value="revise r11"><span class="t"><b>Revise r11</b><span>Say what to change in the annotation; it becomes a new version.</span></span></label>
+<div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div></form>
+</section>
+
+<section id="s18" class="band">
+<h2>18 · D6 with r12: 0 of 4, because workflow_rag never sees the tool's own description</h2>
+<p class="lead">r11 and v15 were kept and committed (86dd13d). D6 ran the same way and fixed nothing. The rule meant to fix its main part needs a fact workflow_rag cannot read: what each value of a discoverable tool's parameter means. The answering agent sees that only when it unlocks the tool.</p>
+<h3>1 · The change: r12 = r11 + reading rules 10 and 11</h3>
+<p>Rule 10: “<b>The tool decides its values.</b> A tool's own description is the authority on what each value of its parameters means. When a document gives a value the tool describes as meaning something else, write the value whose description fits the case, and quote both.” Rule 11: “<b>One instruction per case.</b> No two steps give opposite instructions for the same case. A step that drops an option, or decides against the customer, needs a document that sets that condition; when a fact the condition depends on is unknown, write the step that asks for it.” The record is <span class="path">rag_agents/banking_knowledge/r12/changes.json</span>; v16 is v8 reading r12.</p>
+<h3>2 · One question: r12 researched train task_056</h3>
+<p>Session <span class="path">rag_agent_runs/20261010T085023Z_banking_knowledge_r12_task_056</span>: 10.3 minutes, no send-back, both business workflows taken. It changed or added 16 items, but not the ones D6 needs:</p>
+<ul>
+<li><code>open_bc</code> was rewritten only for how the tool is unlocked and called, and still sets <code>account_type: checking</code>. <code>open_savings</code> was kept with <code>account_type: savings</code>.</li>
+<li>Doc 004 says “Set account_type to 'savings'”. Only tau2's description of <code>open_bank_account_4821</code> says otherwise: “'checking' (personal checking), 'savings' (personal savings), 'business_checking', 'business_savings'”. The research never read it. Its 19 hits for “business_savings” are all document file names, and workflow_rag's prompt lists the answering agent's tools without a discoverable tool's parameters.</li>
+<li><code>ask_company_age</code> was kept: “If the customer cannot say, leave Sky Blue out.” Sky Blue's own document says “Confirm your company is within 4 years of formation”, so rule 11 found a document for the exclusion.</li>
+</ul>
+<h3>3 · D6's failed conversations, scored with v16</h3>
+<div class="tw"><table><thead><tr><th>conversation</th><th>v8</th><th>v16</th><th>why it fails</th><th>whose</th></tr></thead><tbody>
+<tr><td class="sub mono">train task_056</td><td><span class="v-no">fail</span></td><td><span class="v-no">fail</span></td><td class="wrap small">Business savings still opened as <code>savings</code> (personal), so the $3,200 transfer went to the wrong account.</td><td class="wrap small">workflow_rag, which cannot see the tool's description</td></tr>
+<tr><td class="sub mono">train task_062</td><td><span class="v-no">fail</span></td><td><span class="v-no">fail</span></td><td class="wrap small">The agent again wrote <code>Navy Blue Account</code>; the workflow says to use the form in the business checking options list (“Navy Blue”).</td><td class="wrap small">the answering agent</td></tr>
+<tr><td class="sub mono">train task_063</td><td><span class="v-no">fail</span></td><td><span class="v-no">fail</span></td><td class="wrap small">The recommendation workflow was not merged into, so it could not change.</td><td class="wrap small">not reached by task_056</td></tr>
+<tr><td class="sub mono">test task_071</td><td><span class="v-no">fail</span></td><td><span class="v-no">fail</span></td><td class="wrap small">The customer would not say the company's age, so Sky Blue was left out and Hunter Green opened. The savings class was written <code>Gold Saver</code> where the workflow says “Gold Saver Account”.</td><td class="wrap small">gold against Sky Blue's eligibility line; the answering agent</td></tr>
+</tbody></table></div>
+<p class="cap">Runs: train <span class="path">runs/20261010T090045Z_banking_knowledge_v16_custom</span>, test <span class="path">runs/20261010T090508Z_banking_knowledge_v16_custom</span>. One trial each.</p>
+<h3>4 · Outcome and the next change</h3>
+<p><b>D6's main part is a gap in what workflow_rag can read, not in how it reads.</b> The correct <code>account_type</code> exists only in the tool's description. The answering agent sees that description when it unlocks the tool; workflow_rag, which writes the workflow for it, never does. A rule cannot fix that. The harness has to show it.</p>
+<p><b>Proposed r13:</b> the merge message, and the research's first turn, show tau2's description of every tool the job calls, with each parameter and its allowed values: what the answering agent will see on unlock. This is code, not a prompt rule, and needs no gold. <code>toolspec.tools</code> already reads these descriptions for D9. Then task_056 again, and optionally task_063 as a second question, since the recommendation workflow is a different job.</p>
+<p><b>Left as they are:</b> task_062's and task_071's class names are the answering agent departing from a correct workflow, for the prompt step after D7. Task_071's Sky Blue rests on a document's eligibility line that gold does not apply.</p>
+<p class="insight">Show workflow_rag the tool descriptions the answering agent sees, then re-run D6.</p>
+<form class="q" data-lavish-question="d6" onsubmit="event.preventDefault();const v=new FormData(this).get('d6');const t='D6 review: '+(v||'none');if(window.lavish){window.lavish.queuePrompt(t,{tag:'choice',text:t,element:this,data:{question:'d6',answer:v}});this.querySelector('.ack').textContent='Queued: press Send to Agent.';}else{this.querySelector('.ack').textContent='Reply in chat with: '+t;}"><h3>D6 · what next</h3>
+<label class="opt"><input type="radio" name="d6" value="r13: show tool descriptions, re-run D6 with 056 and 063" checked><span class="t"><b>r13: show the tool descriptions, re-run D6 (recommended)</b><span>Code gives the research and the merge each called tool's description. task_056 and task_063 researched, and D6's four scored again.</span></span></label>
+<label class="opt"><input type="radio" name="d6" value="r13 with task_056 only"><span class="t"><b>r13, with task_056 only</b><span>One question as before; task_063 stays out of reach.</span></span></label>
+<label class="opt"><input type="radio" name="d6" value="keep r12, go on to D7"><span class="t"><b>Keep r12 and go on to D7</b><span>Leave D6 at 0 of 4 for now.</span></span></label>
+<label class="opt"><input type="radio" name="d6" value="revise r12"><span class="t"><b>Revise r12</b><span>Say what to change in the annotation; it becomes a new version.</span></span></label>
 <div class="actions"><button class="btn" type="submit">Queue this answer</button><span class="ack" role="status" aria-live="polite"></span></div></form>
 </section>
 </main>
