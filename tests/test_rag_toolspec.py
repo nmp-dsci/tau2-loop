@@ -1,6 +1,7 @@
 """s22: rubric D9 (every write names its tool's parameters) and D10 (a write's documented status
 requirement is met), read from tau2's tools and the documents (r5, r6), and D12 (a merge re-reads
-every step and rule of the version it merges, r7). No model."""
+every step and rule of the version it merges, r7), and the tool descriptions workflow_rag reads
+(r13). No model."""
 
 from __future__ import annotations
 
@@ -128,3 +129,19 @@ def test_the_gate_sends_back_unread_steps_only_for_a_version_that_names_d12() ->
     [why] = [w for w in rubric.gate(c, ("D12",)) if "re-read" in w]
     assert "steps close" in why and "`kept`" in why
     assert rubric.gate(rubric.check(D, merged, [old], kept={"steps": ["close"]}), ("D12",)) == []
+
+
+def test_a_tools_description_is_the_text_the_answering_agent_reads_on_unlock() -> None:
+    d = toolspec.describe(D, "open_bank_account_4821")
+    assert d is not None and d.startswith(
+        "open_bank_account_4821(user_id, account_type, account_class)"
+    )
+    assert "'savings' (personal savings)" in d and "'business_savings'" in d
+    assert "run by the customer" in str(toolspec.describe(D, "submit_cash_back_dispute_0589"))
+    assert toolspec.describe(D, "no_such_tool_1234") is None
+    # every tool a job calls, and only those tau2 has
+    j = job(
+        call("open", "open_bank_account_4821", user_id="x"), {"id": "x", "call": "made_up_9999"}
+    )
+    text = toolspec.descriptions(D, [j])
+    assert "### open_bank_account_4821" in text and "made_up_9999" not in text

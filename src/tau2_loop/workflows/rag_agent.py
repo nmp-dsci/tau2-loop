@@ -103,6 +103,10 @@ class RagAgent:
     merge_write: str = "full"  # "full" (r2, r3) or "edits"
     # s22 (r5): rubric checks the merge gate adds to D8 and D1 (D9 parameters, D10 statuses)
     rubric: tuple[str, ...] = ()
+    # s22 (r13): workflow_rag reads each tool's own description, as the answering agent does when it
+    # unlocks it: a `tool_description` research tool, and the descriptions of every tool a job
+    # calls in the decide and merge turns. r12 never saw that 'savings' means personal savings.
+    tool_docs: bool = False
 
 
 def versions(domain: str) -> list[str]:
@@ -142,6 +146,7 @@ def load(domain: str, name: str) -> RagAgent:
         keep_tools=bool(cfg.get("keep_tools", False)),
         merge_write=str(cfg.get("merge_write", "full")),
         rubric=tuple(str(x) for x in cfg.get("rubric") or ()),
+        tool_docs=bool(cfg.get("tool_docs", False)),
     )
 
 
@@ -214,10 +219,36 @@ def tool_lists(env: Any, retrieval: str) -> tuple[list[dict[str, Any]], str, str
     return callable_, listed(agent), listed(list(env.get_user_tools()))
 
 
+TOOL_DOC = "tool_description"
+TOOL_DOC_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": TOOL_DOC,
+        "description": (
+            "The whole description of one of the answering agent's or the customer's tools, as the "
+            "answering agent reads it when it unlocks the tool: what it does, and what each "
+            "parameter and each allowed value means."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"tool_name": {"type": "string", "description": "the tool's exact name"}},
+            "required": ["tool_name"],
+        },
+    },
+}
+
+
+def tool_doc_reply(domain: str, args: dict[str, Any]) -> str:
+    from tau2_loop.workflows import toolspec
+
+    name = str(args.get("tool_name") or "").strip()
+    return toolspec.describe(domain, name) or f"No tool is named {name!r}."
+
+
 def system_prompt(agent: RagAgent, env: Any) -> tuple[str, list[dict[str, Any]]]:
     tools, agent_tools, user_tools = tool_lists(env, agent.retrieval)
     text = agent.prompt.format(policy=env.policy, agent_tools=agent_tools, user_tools=user_tools)
-    return text, tools
+    return text, [*tools, TOOL_DOC_SCHEMA] if agent.tool_docs else tools
 
 
 # ── pure helpers, unit-tested ──
@@ -586,7 +617,11 @@ def run_session(
                         refused = f"Refused: {c['name']} is not one of your tools."
                     elif c["name"] == "shell":
                         refused = shell_refusal(str(args.get("command", "")))
-                    out = refused or run_tool(c["name"], args)
+                    out = refused or (
+                        tool_doc_reply(meta.domain, args)
+                        if c["name"] == TOOL_DOC
+                        else run_tool(c["name"], args)
+                    )
                     cut = len(out) > agent.result_chars
                     if cut:
                         out = (
@@ -704,18 +739,42 @@ def _unique(cands: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
     return list(seen.values())
 
 
-def merge_message(agent: RagAgent, cands: dict[str, list[dict[str, Any]]]) -> str:
-    """The harness's message after the draft: the library's candidates in full."""
+def _tool_docs_text(
+    agent: RagAgent, cands: dict[str, list[dict[str, Any]]], draft: dict[str, Any] | None
+) -> str:
+    """r13: every tool the drafted jobs and the library candidates call, described in full."""
+    if not agent.tool_docs:
+        return ""
+    from tau2_loop.workflows import toolspec
+
+    jobs = [*((draft or {}).get("jobs") or []), *(e["workflow"] for e in _unique(cands))]
+    text = toolspec.descriptions(agent.domain, jobs)
+    return (
+        "\n\n## The tools these jobs call, as the answering agent reads them when it unlocks them\n\n"
+        "Each tool's own description is the authority on what its parameters and values mean "
+        "(reading rule 10).\n\n" + text
+        if text
+        else ""
+    )
+
+
+def merge_message(
+    agent: RagAgent, cands: dict[str, list[dict[str, Any]]], draft: dict[str, Any] | None = None
+) -> str:
+    """The harness's message after the draft: the library's candidates in full, and (r13) the
+    descriptions of the tools the jobs call."""
     pairs = "\n".join(
         f"- {name}: {', '.join(e['job'] for e in es) or 'no library job matches'}"
         for name, es in cands.items()
     )
     return agent.merge_prompt.format(
         pairs=pairs, current=_versions_text(_unique(cands)) or "(none)"
-    )
+    ) + _tool_docs_text(agent, cands, draft)
 
 
-def decide_message(agent: RagAgent, cands: dict[str, list[dict[str, Any]]]) -> str:
+def decide_message(
+    agent: RagAgent, cands: dict[str, list[dict[str, Any]]], draft: dict[str, Any] | None = None
+) -> str:
     """s21: before it merges, the candidates in full and the question which it will write."""
     pairs = "\n".join(
         f"- {name}: {', '.join(e['job'] for e in es) or 'no library job matches'}"
@@ -723,7 +782,7 @@ def decide_message(agent: RagAgent, cands: dict[str, list[dict[str, Any]]]) -> s
     )
     return agent.decide_prompt.format(
         pairs=pairs, current=_versions_text(_unique(cands)) or "(none)"
-    )
+    ) + _tool_docs_text(agent, cands, draft)
 
 
 def parse_decision(text: str | None, drafted: list[str]) -> dict[str, list[str]] | None:
@@ -938,7 +997,7 @@ def _merge(
     lib = library.entries(meta.domain, agent.name)  # as the last session left it
     cands = merge_candidates(draft, lib)
     emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
-    say(merge_message(agent, cands))
+    say(merge_message(agent, cands, draft))
     merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
     rows = (
         _assess(meta.domain, merged, lib, policy, gate_checks=agent.rubric)
@@ -1010,7 +1069,7 @@ def _merge_concurrent(
     drafted = list(cands)
     decision = turns(
         0,
-        decide_message(agent, cands),
+        decide_message(agent, cands, draft),
         parse=lambda t: parse_decision(t, drafted),
         again=DECIDE_AGAIN,
     )
@@ -1085,6 +1144,7 @@ def _merge_concurrent(
             agent.merge_prompt.format(
                 pairs=pairs, current=_versions_text(mine, changed) or "(none)"
             )
+            + _tool_docs_text(agent, {"held": mine}, draft)
         )
         held = set(lock.jobs)
         merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
@@ -1452,6 +1512,7 @@ def describe(domain: str, name: str) -> dict[str, Any]:
         "keep_tools": agent.keep_tools,
         "merge_write": agent.merge_write,
         "rubric": list(agent.rubric),
+        "tool_docs": agent.tool_docs,
         "prompt": agent.prompt,
         "tools": variant_tool_rows(agent.retrieval),
     }

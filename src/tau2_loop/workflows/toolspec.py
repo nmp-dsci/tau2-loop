@@ -73,6 +73,34 @@ def tools(domain: str) -> dict[str, dict[str, Any]]:
 
 
 @cache
+def describe(domain: str, name: str) -> str | None:
+    """A tool's whole description as tau2 writes it, the text the answering agent reads when it
+    unlocks the tool: what it does and what each parameter and value means (s22, r13). None for a
+    name tau2 does not have."""
+    if domain != "banking_knowledge" or not isinstance(name, str):
+        return None
+    try:
+        from tau2.domains.banking_knowledge import tools as t2
+    except ImportError:
+        return None
+    for cls, who in ((t2.KnowledgeTools, "the agent"), (t2.KnowledgeUserTools, "the customer")):
+        fn = getattr(cls, name.strip(), None)
+        if fn is not None and getattr(fn, "__tool__", False):
+            params = ", ".join(p for p in inspect.signature(fn).parameters if p != "self")
+            return f"{name.strip()}({params}), run by {who}:\n{inspect.getdoc(fn) or ''}"
+    return None
+
+
+def descriptions(domain: str, jobs: list[dict[str, Any]]) -> str:
+    """Every tool the jobs call, each with its whole description (r13's merge and decide turns)."""
+    from tau2_loop.workflows import rubric
+
+    names = sorted({t for j in jobs if isinstance(j, dict) for t in rubric.tools_named(j)})
+    found = [(n, describe(domain, n)) for n in names]
+    return "\n\n".join(f"### {n}\n{d}" for n, d in found if d)
+
+
+@cache
 def status_rules(domain: str) -> dict[str, dict[str, Any]]:
     """Each tool a document's requirement section governs: the statuses it allows, the status it
     leaves (from "is now active" in the steps, else its verb), and the document."""

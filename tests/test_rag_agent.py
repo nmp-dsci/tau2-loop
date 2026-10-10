@@ -899,3 +899,50 @@ def test_each_version_from_r5_records_its_base_and_every_file_it_changed() -> No
         assert {c["file"] for c in rec["changes"]} == differ, name  # the record matches the diff
         assert all(c["what"] and c["why"] for c in rec["changes"])
     assert rag_agent.describe(D, "r7")["based_on"] == "r6"
+
+
+# ── r13 (s22, D6 again): workflow_rag reads the tools' own descriptions ──
+@pytest.mark.skipif(not kb_docs.available(D), reason="tau2's documents are not here")
+def test_r13_reads_tool_descriptions_in_its_research_and_its_merge(r3_library: Path) -> None:
+    from tau2_loop.workflows import library
+
+    add = {"op": "add", "list": "steps", "item": BRANCH_A, "why": "the no-discrepancy case"}
+    verify = {
+        "op": "change",
+        "list": "steps",
+        "key": "verify",
+        "fields": {"args": {p: "from the customer" for p in VERIFY_PARAMS}},
+        "why": "every parameter of log_verification",
+    }
+    merged = json.loads(edited(add, verify))
+    merged["jobs"][0]["kept"] = {"steps": ["give"]}
+    ran: list[str] = []
+    ask, offered = scripted(
+        [
+            Reply(None, [call("tool_description", tool_name="log_verification")]),
+            Reply(json.dumps(DRAFT)),
+            Reply(DECIDED),
+            Reply(json.dumps(merged)),
+        ]
+    )
+    meta = rag_agent.start(
+        D,
+        "task_019",
+        "r13",
+        ask=ask,
+        run_tool=lambda n, a: ran.append(n) or "",
+        env=FakeEnv(),
+        background=False,
+    )
+    s = rag_agent.session(D, meta.id)
+    assert ran == []  # answered by the harness, never by tau2's environment
+    assert "tool_description" in {t["function"]["name"] for t in offered[0] or []}
+    [doc] = [e["content"] for e in s["events"] if e["kind"] == "tool"]
+    assert doc.startswith("log_verification(") and "run by the agent" in doc
+    said = [e["text"] for e in s["events"] if e["kind"] == "user"]
+    assert all("## The tools these jobs call" in t for t in said[-2:])  # decide and merge turns
+    assert "### log_verification" in said[-1]
+    assert s["output"]["lock"]["committed"] == {"cash_back_dispute": 1}
+    assert [x["id"] for x in library.entries(D, "r13")[0]["workflow"]["steps"]][-1] == "explain_a"
+    # r12 reads no tool descriptions
+    assert rag_agent.load(D, "r12").tool_docs is False and rag_agent.load(D, "r13").tool_docs
