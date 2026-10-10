@@ -143,7 +143,12 @@
   never a rule naming a case or a gold answer. r5 (rule 1 + rubric D10), r6 (rules 2–3 + D9),
   r7 (a merge re-reads every old step: kept, rewritten or removed; D12), r8 (rules 4–5), r9
   (rules 6–7, D3), r10 (rule 8, D4), r11 (rule 9,
-  D5), r12 (rules 10–11, D6: 0 of 4); r12 is the base of r13. **Every rN from r5 has `changes.json`** (`based_on`, `seed`, why, each file's
+  D5), r12 (rules 10–11, D6: 0 of 4). **From r13 workflow_rag reads the tools' own
+  descriptions** (`tool_docs: true`, the person's call, 10 Oct 2026): a `tool_description` research
+  tool returns tau2's description of any tool, the text the answering agent reads when it unlocks
+  it, and the decide and merge turns show the description of every tool the jobs call
+  (`toolspec.describe`). Every later rN keeps it. r13 put D6 at 3 of 4; r14 (rule 12, D7) at
+  1 of 3, since no train question merges into the referral-link workflow (a re-read pass is proposed). **Every rN from r5 has `changes.json`** (`based_on`, `seed`, why, each file's
   change); a test fails when it does not match the files that differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
