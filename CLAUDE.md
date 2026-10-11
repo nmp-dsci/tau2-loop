@@ -156,9 +156,9 @@
   the transfer ban, 1 of 3; r17 (rule 13, and `describe_named`: the decide and merge turns describe
   every tool a job names) put the customer's own `submit_referral` back, still 1 of 3, because the
   agent hands over a tool the customer already holds; v22 (v21 + `customer_tools`) 2 of 3, not yet
-  scored on the 29 conversations whose gold has the customer run their own tool. **Every rN from r5 has `changes.json`**
-  (`based_on`, `seed`, why, each file's change); a test fails when it does not match the files that
-  differ from its base.
+  scored on the 29 conversations whose gold has the customer run their own tool. **Every rN from r5
+  has `changes.json`** (`based_on`, `seed`, why, each file's change); a test fails when it does not
+  match the files that differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.
