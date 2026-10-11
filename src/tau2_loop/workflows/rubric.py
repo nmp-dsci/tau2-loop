@@ -93,7 +93,9 @@ def is_write(tool: str | None) -> bool:
 
 
 def tools_named(job: dict[str, Any]) -> set[str]:
-    """Every tool a workflow names anywhere: a step's call, its arguments, its words, `tools`."""
+    """Every tool a step calls, and every numbered tool name (`*_1234`) anywhere in the workflow: its
+    arguments, its words, `tools`. A tool without a number is collected only from a step's call;
+    `toolspec.named` finds every tool by name."""
     text = json.dumps(job, ensure_ascii=False)
     names = set(TOOL.findall(text))
     for st in job.get("steps") or []:

@@ -946,3 +946,18 @@ def test_r13_reads_tool_descriptions_in_its_research_and_its_merge(r3_library: P
     assert [x["id"] for x in library.entries(D, "r13")[0]["workflow"]["steps"]][-1] == "explain_a"
     # r12 reads no tool descriptions
     assert rag_agent.load(D, "r12").tool_docs is False and rag_agent.load(D, "r13").tool_docs
+
+
+@pytest.mark.skipif(not kb_docs.available(D), reason="tau2's documents are not here")
+def test_r17_merge_turn_describes_a_tool_the_library_job_rules_out() -> None:
+    job = {
+        "job": "referral_status",
+        "steps": [{"id": "look", "by": "harness", "call": "get_referrals_by_user", "args": {}}],
+        "tools": [{"tool": "submit_referral", "who": "customer", "not_used": "no document"}],
+    }
+    cands = {"referral_status": [{"job": "referral_status", "session": "s", "workflow": job}]}
+    r16, r17 = rag_agent.load(D, "r16"), rag_agent.load(D, "r17")
+    assert not r16.describe_named and r17.describe_named
+    assert "### submit_referral" not in rag_agent.merge_message(r16, cands)
+    said = rag_agent.merge_message(r17, cands)
+    assert "## The tools these jobs call or name" in said and "### submit_referral" in said

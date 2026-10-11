@@ -107,6 +107,10 @@ class RagAgent:
     # unlocks it: a `tool_description` research tool, and the descriptions of every tool a job
     # calls in the decide and merge turns. r12 never saw that 'savings' means personal savings.
     tool_docs: bool = False
+    # s22 (r17): those turns describe every tool a job names, the ones its `tools` list rules out
+    # included. Before it only step calls and numbered names were collected, so once r14 ruled out
+    # the customer's `submit_referral`, no later merge showed its description again.
+    describe_named: bool = False
 
 
 def versions(domain: str) -> list[str]:
@@ -147,6 +151,7 @@ def load(domain: str, name: str) -> RagAgent:
         merge_write=str(cfg.get("merge_write", "full")),
         rubric=tuple(str(x) for x in cfg.get("rubric") or ()),
         tool_docs=bool(cfg.get("tool_docs", False)),
+        describe_named=bool(cfg.get("describe_named", False)),
     )
 
 
@@ -742,15 +747,18 @@ def _unique(cands: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
 def _tool_docs_text(
     agent: RagAgent, cands: dict[str, list[dict[str, Any]]], draft: dict[str, Any] | None
 ) -> str:
-    """r13: every tool the drafted jobs and the library candidates call, described in full."""
+    """r13: every tool the drafted jobs and the library candidates call, described in full; r17:
+    every tool they name."""
     if not agent.tool_docs:
         return ""
     from tau2_loop.workflows import toolspec
 
     jobs = [*((draft or {}).get("jobs") or []), *(e["workflow"] for e in _unique(cands))]
-    text = toolspec.descriptions(agent.domain, jobs)
+    text = toolspec.descriptions(agent.domain, jobs, every_named=agent.describe_named)
+    which = "call or name" if agent.describe_named else "call"
     return (
-        "\n\n## The tools these jobs call, as the answering agent reads them when it unlocks them\n\n"
+        f"\n\n## The tools these jobs {which}, as the answering agent reads them when it unlocks "
+        "them\n\n"
         "Each tool's own description is the authority on what its parameters and values mean "
         "(reading rule 10).\n\n" + text
         if text
@@ -1513,6 +1521,7 @@ def describe(domain: str, name: str) -> dict[str, Any]:
         "merge_write": agent.merge_write,
         "rubric": list(agent.rubric),
         "tool_docs": agent.tool_docs,
+        "describe_named": agent.describe_named,
         "prompt": agent.prompt,
         "tools": variant_tool_rows(agent.retrieval),
     }

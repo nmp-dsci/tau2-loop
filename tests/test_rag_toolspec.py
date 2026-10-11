@@ -1,7 +1,8 @@
 """s22: rubric D9 (every write names its tool's parameters) and D10 (a write's documented status
 requirement is met), read from tau2's tools and the documents (r5, r6), and D12 (a merge re-reads
 every step and rule of the version it merges, r7), the tool descriptions workflow_rag reads
-(r13) and D13, a tool whose description points to the knowledge base (r16). No model."""
+(r13) and D13, a tool whose description points to the knowledge base (r16), and every tool a job
+names described, the ones it rules out included (r17). No model."""
 
 from __future__ import annotations
 
@@ -145,6 +146,25 @@ def test_a_tools_description_is_the_text_the_answering_agent_reads_on_unlock() -
     )
     text = toolspec.descriptions(D, [j])
     assert "### open_bank_account_4821" in text and "made_up_9999" not in text
+
+
+def test_r17_describes_every_tool_a_job_names_the_ones_it_rules_out_included() -> None:
+    ruled_out = {
+        "job": "referral_status",
+        "steps": [{"id": "look", "by": "harness", "call": "get_referrals_by_user", "args": {}}],
+        "tools": [
+            {"tool": "submit_referral", "who": "customer", "not_used": "No document names it."}
+        ],
+        "rules": [],
+    }
+    called = toolspec.descriptions(D, [ruled_out])
+    assert "### get_referrals_by_user" in called and "submit_referral" not in called
+    named = toolspec.descriptions(D, [ruled_out], every_named=True)
+    assert (
+        "### submit_referral\nsubmit_referral(user_id, account_type), run by the customer" in named
+    )
+    # a longer word that holds a tool's name is not the tool
+    assert toolspec.named(D, {"do": "resubmit_referrals later"}) == set()
 
 
 def test_d13_a_job_that_rules_out_a_pointer_tool_must_cite_a_document_naming_it() -> None:

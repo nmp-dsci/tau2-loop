@@ -102,12 +102,25 @@ def describe(domain: str, name: str) -> str | None:
     return None
 
 
-def descriptions(domain: str, jobs: list[dict[str, Any]]) -> str:
-    """Every tool the jobs call, each with its whole description (r13's merge and decide turns)."""
+def named(domain: str, job: dict[str, Any]) -> set[str]:
+    """Every tool tau2 has that a job names anywhere as a word: a step's call, its arguments, its
+    words, and its `tools` list, the tools it rules out included (s22, r17)."""
+    text = json.dumps(job, ensure_ascii=False)
+    return {n for n in tools(domain) if re.search(rf"\b{re.escape(n)}\b", text)}
+
+
+def descriptions(domain: str, jobs: list[dict[str, Any]], every_named: bool = False) -> str:
+    """Every tool the jobs call, each with its whole description (r13's merge and decide turns).
+    `every_named` (r17) adds every tool they name, so a tool a job rules out, such as a customer's
+    own tool, is described too: r16's merge never showed `submit_referral` once a job listed it as
+    not used, because only step calls and numbered names were collected."""
     from tau2_loop.workflows import rubric
 
-    names = sorted({t for j in jobs if isinstance(j, dict) for t in rubric.tools_named(j)})
-    found = [(n, describe(domain, n)) for n in names]
+    dicts = [j for j in jobs if isinstance(j, dict)]
+    names = {t for j in dicts for t in rubric.tools_named(j)}
+    if every_named:
+        names |= {t for j in dicts for t in named(domain, j)}
+    found = [(n, describe(domain, n)) for n in sorted(names)]
     return "\n\n".join(f"### {n}\n{d}" for n, d in found if d)
 
 
