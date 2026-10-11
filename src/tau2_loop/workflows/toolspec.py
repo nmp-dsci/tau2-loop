@@ -13,6 +13,12 @@ sections, never written here per tool. r3's closing workflow quoted "must curren
 or PENDING status" twice, then told the agent not to unfreeze, so every close of a frozen card
 failed (s22 D1).
 
+D13: a job that calls or rules out a tool whose own description says its rules are in the knowledge
+base ("The proper transfer reason enum can be found in the knowledge base") cites at least one of
+the documents that name that tool. r14 and r15 kept a referral workflow's ban on every transfer
+without reading doc 042's reason codes, though the transfer tool's description points there (s22
+D7, r16).
+
 Read only: vendor/tau2-bench is never edited. A domain other than banking_knowledge, or the demo
 image with no tau2, has no spec and both checks pass.
 """
@@ -38,6 +44,11 @@ REQUIRES = re.compile(
 )
 EFFECT_VERB = {"freeze": "FROZEN", "unfreeze": "ACTIVE", "activate": "ACTIVE", "close": "CLOSED"}
 NOT_A_CALL = ("unlock_discoverable_agent_tool",)
+POINTER = re.compile(
+    r"(?:found|described|listed|defined|documented) in the knowledge base"
+    r"|search (?:it|the knowledge base)",
+    re.I,
+)
 
 
 @cache
@@ -98,6 +109,61 @@ def descriptions(domain: str, jobs: list[dict[str, Any]]) -> str:
     names = sorted({t for j in jobs if isinstance(j, dict) for t in rubric.tools_named(j)})
     found = [(n, describe(domain, n)) for n in names]
     return "\n\n".join(f"### {n}\n{d}" for n, d in found if d)
+
+
+@cache
+def pointer_tools(domain: str) -> dict[str, str]:
+    """Each tool whose own description says its rules are in the knowledge base, with those words
+    (D13). The unlock tool's pointer is to a tool name, not to rules, and calls nothing."""
+    out: dict[str, str] = {}
+    for name in tools(domain):
+        m = POINTER.search(describe(domain, name) or "")
+        if m and name not in NOT_A_CALL:
+            out[name] = m.group(0)
+    return out
+
+
+@cache
+def naming_docs(domain: str, tool: str) -> tuple[str, ...]:
+    """The documents that name a tool: where its description's pointer leads."""
+    if not kb.available(domain):
+        return ()
+    return tuple(
+        sorted(p.stem for p in kb.source_dir(domain).glob("*.json") if tool in p.read_text())
+    )
+
+
+def _norm_doc(doc: str) -> str:
+    return re.sub(r"[()]", "_", doc.strip()).removesuffix(".md")
+
+
+def _cited(job: Any) -> set[str]:
+    out: set[str] = set()
+    if isinstance(job, dict):
+        for k, v in job.items():
+            if k == "doc" and isinstance(v, str):
+                out.add(_norm_doc(v))
+            else:
+                out |= _cited(v)
+    elif isinstance(job, list):
+        for v in job:
+            out |= _cited(v)
+    return out
+
+
+def unread_pointers(domain: str, job: dict[str, Any]) -> list[dict[str, Any]]:
+    """D13: each pointer tool the job calls or rules out while citing none of the documents that
+    name it, with the documents to read."""
+    text = json.dumps(job, ensure_ascii=False)
+    cited = _cited(job)
+    out = []
+    for tool, words in pointer_tools(domain).items():
+        if tool not in text:
+            continue
+        docs = naming_docs(domain, tool)
+        if docs and not cited & {_norm_doc(d) for d in docs}:
+            out.append({"tool": tool, "pointer": words, "docs": list(docs)})
+    return out
 
 
 @cache
@@ -249,5 +315,13 @@ def reasons(c: dict[str, Any], which: tuple[str, ...]) -> list[str]:
                 f"calls {' or '.join(m['remedy'])}, which {m['remedy_doc']} gives for a {m['meets']} card "
                 f"and leaves it {m['leaves']}: write the step that meets the requirement before "
                 f"{m['step']}, or quote the document that forbids it"
+            )
+    if "D13" in which:
+        for m in c.get("D13") or []:
+            why.append(
+                f"this job calls or rules out {m['tool']}, whose own description says its rules "
+                f"are '{m['pointer']}', but it cites none of the documents that name it: "
+                f"{', '.join(m['docs'])}. Read them and quote the passage that decides this job's "
+                "case, then keep, rewrite or remove each step that calls or rules out the tool"
             )
     return why

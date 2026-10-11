@@ -1,7 +1,7 @@
 """s22: rubric D9 (every write names its tool's parameters) and D10 (a write's documented status
 requirement is met), read from tau2's tools and the documents (r5, r6), and D12 (a merge re-reads
-every step and rule of the version it merges, r7), and the tool descriptions workflow_rag reads
-(r13). No model."""
+every step and rule of the version it merges, r7), the tool descriptions workflow_rag reads
+(r13) and D13, a tool whose description points to the knowledge base (r16). No model."""
 
 from __future__ import annotations
 
@@ -145,3 +145,43 @@ def test_a_tools_description_is_the_text_the_answering_agent_reads_on_unlock() -
     )
     text = toolspec.descriptions(D, [j])
     assert "### open_bank_account_4821" in text and "made_up_9999" not in text
+
+
+def test_d13_a_job_that_rules_out_a_pointer_tool_must_cite_a_document_naming_it() -> None:
+    assert toolspec.pointer_tools(D) == {"transfer_to_human_agents": "found in the knowledge base"}
+    reasons_doc = "doc_bank_accounts_bank_accounts_(general)_042"
+    assert reasons_doc in toolspec.naming_docs(D, "transfer_to_human_agents")
+    ban = {
+        "job": "generating_a_credit_card_referral_link",
+        "steps": [
+            {
+                "id": "explain",
+                "by": "model",
+                "do": "Do not transfer.",
+                "doc": "doc_credit_cards_credit_cards_(general)_009",
+            }
+        ],
+        "tools": [
+            {"tool": "transfer_to_human_agents", "not_used": "Doc 009 says not to transfer."}
+        ],
+        "rules": [],
+    }
+    [m] = toolspec.unread_pointers(D, ban)
+    assert m["tool"] == "transfer_to_human_agents" and reasons_doc in m["docs"]
+    # citing a document that names the tool, in the form workflows write ids, clears it
+    read = {
+        **ban,
+        "rules": [
+            {
+                "rule": "the letter case",
+                "quote": "q",
+                "doc": "doc_bank_accounts_bank_accounts__general__042",
+            }
+        ],
+    }
+    assert toolspec.unread_pointers(D, read) == []
+    # a job that never names the tool is not checked
+    assert toolspec.unread_pointers(D, {"job": "x", "steps": [], "rules": []}) == []
+    c = rubric.check(D, ban, [ban])
+    assert not any("found in the knowledge base" in w for w in rubric.gate(c, ("D9", "D10", "D12")))
+    assert any(reasons_doc in w for w in rubric.gate(c, ("D13",)))

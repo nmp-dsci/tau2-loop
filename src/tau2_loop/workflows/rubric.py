@@ -17,6 +17,8 @@ carry no signal.
   D9 parameters       every write step names every required parameter of its tool (s22)
   D10 statuses        a write a document allows only in some statuses is not made on a card the
                       job can meet in another, unless it calls the documents' tool for it (s22)
+  D13 pointers        a job that calls or rules out a tool whose description says its rules are in
+                      the knowledge base cites a document that names that tool (s22, r16)
   D12 re-read         a merge accounts for every step and rule of the versions it merged: kept
                       (named in its `kept`, its quote saying it as written), rewritten, or removed;
                       none stays only because the merge did not look at it (s22, r7)
@@ -164,6 +166,7 @@ def check(
 
     out["D9"] = toolspec.missing_params(domain, job)  # s22: reported always, gated by r5
     out["D10"] = toolspec.unmet_status(domain, job)
+    out["D13"] = toolspec.unread_pointers(domain, job)  # s22 r16
     if previous:
         out["D8"] = lost(job, previous)
         out["D12"] = unread(job, previous, kept)
