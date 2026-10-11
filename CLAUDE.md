@@ -147,9 +147,14 @@
   descriptions** (`tool_docs: true`, the person's call, 10 Oct 2026): a `tool_description` research
   tool returns tau2's description of any tool, the text the answering agent reads when it unlocks
   it, and the decide and merge turns show the description of every tool the jobs call
-  (`toolspec.describe`). Every later rN keeps it. r13 put D6 at 3 of 4; r14 (rule 12, D7) at
-  1 of 3, since no train question merges into the referral-link workflow (a re-read pass is proposed). **Every rN from r5 has `changes.json`** (`based_on`, `seed`, why, each file's
-  change); a test fails when it does not match the files that differ from its base.
+  (`toolspec.describe`). Every later rN keeps it. r13 put D6 at 3 of 4. D7 (all test): r14 (rule
+  12) 1 of 3, since no train question merges into the referral-link workflow; r15 (rule 10's pointer
+  sentence) 0 of 3; r16 (rubric D13: a tool description's knowledge-base pointer is followed) fixed
+  the transfer ban, 1 of 3; r17 (rule 13, and `describe_named`: the decide and merge turns describe
+  every tool a job names) put the customer's own `submit_referral` back, still 1 of 3, because the
+  agent hands over a tool the customer already holds. **Every rN from r5 has `changes.json`**
+  (`based_on`, `seed`, why, each file's change); a test fails when it does not match the files that
+  differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.
