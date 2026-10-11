@@ -901,6 +901,22 @@ def test_each_version_from_r5_records_its_base_and_every_file_it_changed() -> No
     assert rag_agent.describe(D, "r7")["based_on"] == "r6"
 
 
+def test_describe_gives_the_agent_tab_each_prompts_bytes_and_the_library() -> None:
+    """The Agent tab draws an rN from describe() alone: a prompt copied from the parent has the
+    parent's sha, a version without a merge has one prompt, and r13 on lists tool_description."""
+    r1, r3, r4 = (rag_agent.describe(D, n) for n in ("r1", "r3", "r4"))
+    assert set(r1["files"]) == {"rag_agent.md"} and r1["merge"] is None
+    assert set(r4["files"]) == set(rag_agent.PROMPT_FILES)
+    assert r4["files"]["decide.md"]["sha"] == r3["files"]["decide.md"]["sha"]  # r4 kept r3's
+    assert r4["decide_prompt"] == rag_agent.load(D, "r3").decide_prompt
+    assert r1["library"]["workflows"] > 0 and r1["library"]["commits"] is None
+    assert r4["library"]["commits"] is not None  # concurrent: its store's commits
+    named = lambda d: [t["name"] for t in d["tools"]]  # noqa: E731
+    assert "tool_description" not in named(rag_agent.describe(D, "r12"))
+    r13 = rag_agent.describe(D, "r13")
+    assert named(r13)[-1] == "tool_description" and r13["tools"][-1]["harness"] is True
+
+
 # ── r13 (s22, D6 again): workflow_rag reads the tools' own descriptions ──
 @pytest.mark.skipif(not kb_docs.available(D), reason="tau2's documents are not here")
 def test_r13_reads_tool_descriptions_in_its_research_and_its_merge(r3_library: Path) -> None:

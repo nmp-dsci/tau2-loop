@@ -226,6 +226,17 @@ before the conversation, and the agent's calls and the expected actions that cha
 record, so a missed write, a wrong write and a wrong argument read apart.
 `/agent` alone reopens the last view in the browser tab, else a champion's first failure.
 
+With the scope bar on workflow_rag (`/agent/<d>/workflow_rag`, `pages/WorkflowAgent.tsx`) the
+tab draws an rN the way it draws a vN (`lib/ragarch.tsx`): pick a version (`?version=`) and its
+figure comes from its folder alone (what a session reads, its prompts one per turn, model, tool
+calls, turn caps and merge, the read-only tools it calls, the merge gate, its library and the
+answering versions that read it), each layer that differs from its parent marked; a panel opens
+the part picked (`?node=`), and every rN sits side by side. The parent is `based_on` in
+`changes.json` (r5 on), else the seed; the seed is marked only when a version does not start from
+its parent's library. The session list is that version's, and an open session fills the figure
+with its counts. `GET /api/workflows/<d>/rag` (`rag_agent.describe`) carries each prompt's sha and
+size, the decide and merge prompts, and the library's size.
+
 ## 5 · The loop, precisely
 
 1. `run_cycle` loads the domain's registry champion; reuses its train run

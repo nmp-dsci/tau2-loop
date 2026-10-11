@@ -342,7 +342,8 @@ export type RagVersion = {
   max_steps: number;
   result_chars: number;
   prompt: string;
-  tools: { name: string; description: string | null; type: string; mutates: boolean }[];
+  /** `harness`: the research tool workflow_rag's own code answers (r13's tool_description), not τ²'s */
+  tools: { name: string; description: string | null; type: string; mutates: boolean; harness?: boolean }[];
   /** s20/s21: the version whose library it starts from, and how it merges into it */
   seed?: string | null;
   merge?: 'sequential' | 'concurrent' | null;
@@ -352,6 +353,34 @@ export type RagVersion = {
   /** r4: write turns keep the tools listed, so the prompt cache holds; merges may be written as edits */
   keep_tools?: boolean;
   merge_write?: 'full' | 'edits';
+  /** s22: the version whose prompts and settings it copied, and its change record (r5 on) */
+  based_on?: string | null;
+  changes?: RagChanges | null;
+  rubric?: string[];
+  tool_docs?: boolean;
+  describe_named?: boolean;
+  /** the Agent tab's version view: each prompt file's bytes, the other two prompts, its library now */
+  written?: string;
+  input?: string;
+  merge_steps?: number;
+  order_seed?: number;
+  decide_prompt?: string;
+  merge_prompt?: string;
+  files?: Record<string, { sha: string; chars: number }>;
+  library?: { workflows: number; commits: number | null };
+};
+/** `rag_agents/<domain>/<rN>/changes.json` (s22, r5 on). */
+export type RagChanges = {
+  version: string;
+  based_on: string;
+  seed: string | null;
+  written?: string;
+  defect?: string;
+  why: string;
+  evidence?: string[];
+  changes: { file: string; what: string; why: string }[];
+  code?: string[];
+  result?: string;
 };
 /** s21: a RAG version's library now; a concurrent one also shows who holds or waits for which jobs. */
 export type RagLock = { jobs: string[]; holder: string; task: string; token?: number; held_s?: number; waited_s?: number };

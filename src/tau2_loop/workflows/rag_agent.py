@@ -225,15 +225,16 @@ def tool_lists(env: Any, retrieval: str) -> tuple[list[dict[str, Any]], str, str
 
 
 TOOL_DOC = "tool_description"
+TOOL_DOC_TEXT = (
+    "The whole description of one of the answering agent's or the customer's tools, as the "
+    "answering agent reads it when it unlocks the tool: what it does, and what each "
+    "parameter and each allowed value means."
+)
 TOOL_DOC_SCHEMA = {
     "type": "function",
     "function": {
         "name": TOOL_DOC,
-        "description": (
-            "The whole description of one of the answering agent's or the customer's tools, as the "
-            "answering agent reads it when it unlocks the tool: what it does, and what each "
-            "parameter and each allowed value means."
-        ),
+        "description": TOOL_DOC_TEXT,
         "parameters": {
             "type": "object",
             "properties": {"tool_name": {"type": "string", "description": "the tool's exact name"}},
@@ -1495,27 +1496,53 @@ def changes(domain: str, name: str) -> dict[str, Any] | None:
     return json.loads(p.read_text()) if p.is_file() else None
 
 
+PROMPT_FILES = ("rag_agent.md", "decide.md", "merge.md")
+
+
 def describe(domain: str, name: str) -> dict[str, Any]:
-    """A version as the Agent tab shows it: settings, prompt, the tools it calls and, from r5 on,
-    what changed from the version it was based on."""
+    """A version as the Agent tab shows it: settings, prompts, the tools it calls and, from r5 on,
+    what changed from the version it was based on. `files` (sha and size of each prompt) lets the
+    tab mark a prompt that differs from the parent's, and `library` is its library now."""
+    import hashlib
+
     from tau2_loop.eval.retrieval import variant_tool_rows
+    from tau2_loop.workflows import library as wf_library
 
     agent = load(domain, name)
     record = changes(domain, name)
+    d = RAG_AGENTS_DIR / domain / name
+    cfg = yaml.safe_load((d / "rag_agent.yaml").read_text())
+    files = {
+        f: {"sha": hashlib.sha256(p.read_bytes()).hexdigest()[:12], "chars": len(p.read_text())}
+        for f in PROMPT_FILES
+        if (p := d / f).is_file()
+    }
+    tool_doc = {
+        "name": TOOL_DOC,
+        "description": TOOL_DOC_TEXT,
+        "type": "read",
+        "mutates": False,
+        "harness": True,
+    }
+    st = wf_library.store_for(domain, name) if agent.merge == "concurrent" else None
     return {
         "name": agent.name,
         "based_on": record.get("based_on") if record else None,
         "changes": record,
+        "written": str(cfg.get("written") or ""),
+        "input": str(cfg.get("input") or "script"),
         "model": agent.model,
         "effort": agent.effort,
         "retrieval": agent.retrieval,
         "tool_mode": agent.tool_mode,
         "max_steps": agent.max_steps,
+        "merge_steps": agent.merge_steps,
         "result_chars": agent.result_chars,
         "seed": agent.seed,
         "merge": agent.merge,
         "workers": agent.workers,
         "order": agent.order,
+        "order_seed": agent.order_seed,
         "queue": agent.queue,
         "keep_tools": agent.keep_tools,
         "merge_write": agent.merge_write,
@@ -1523,5 +1550,12 @@ def describe(domain: str, name: str) -> dict[str, Any]:
         "tool_docs": agent.tool_docs,
         "describe_named": agent.describe_named,
         "prompt": agent.prompt,
-        "tools": variant_tool_rows(agent.retrieval),
+        "decide_prompt": agent.decide_prompt,
+        "merge_prompt": agent.merge_prompt,
+        "files": files,
+        "library": {
+            "workflows": len(wf_library.entries(domain, name)),
+            "commits": len(st.commits()) if st else None,
+        },
+        "tools": [*variant_tool_rows(agent.retrieval), *([tool_doc] if agent.tool_docs else [])],
     }
