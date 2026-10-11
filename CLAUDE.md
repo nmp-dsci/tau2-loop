@@ -57,8 +57,11 @@
   returns to tau2 unrun, `llm/core.py`), `identity_note: true` (`compose.IDENTITY_NOTE`, the
   CLI's account email is not the customer's), `parallel_calls: true` (s14, native only: every
   tool call of a reply kept; before it the core kept the first, so v1–v3 made one call a turn).
-  Change them with `make fork … RETRIEVAL= TOOL_MODE= IDENTITY_NOTE=true PARALLEL_CALLS=true`,
-  or on `make optimise`, never a loop edit. The local AllTools variants
+  `customer_tools: true` (s22, 11 Oct 2026, v22, the person's call): the prompt ends with the tools
+  the customer holds from the start (`compose.customer_tools_note`, read from tau2's customer
+  toolkit, the discoverable ones left out); before it the agent knew only the ones it hands over.
+  Change them with `make fork … RETRIEVAL= TOOL_MODE= IDENTITY_NOTE=true PARALLEL_CALLS=true
+  CUSTOMER_TOOLS=true`, or on `make optimise`, never a loop edit. The local AllTools variants
   (`eval/retrieval.py`: `alltools_minilm`, `alltools_qwen3_0_6b`) need sandbox-runtime,
   ripgrep and sentence-transformers wherever their runs are played or re-scored.
 - **`make optimise` writes a version and scores nothing** (s14, 4 Oct 2026): one optimiser
@@ -135,6 +138,30 @@
   words (their details and how they will react), so a version without this step, v4 or v7, is a
   different pipeline, not the same agent with less data. v8's train run is its smoke (14/20, run
   `20261007T224313Z`, on r3 before test went in) extended by the other 40 (`make extend NOTE=`).
+- **workflow_rag is optimised one defect at a time** (s22, 9 Oct 2026, the person's call,
+  `.lavish/s22_v8-failure-diagnosis.html`): each change is a new rN seeded with the last, one
+  train question that triggers the defect is researched and merged, and the defect's failed
+  conversations are scored by a fork of v8 reading it (`make fork … WORKFLOWS=rN WHY=`); the
+  person reviews before the next defect. A change is a general reading rule or a code check,
+  never a rule naming a case or a gold answer. r5 (rule 1 + rubric D10), r6 (rules 2–3 + D9),
+  r7 (a merge re-reads every old step: kept, rewritten or removed; D12), r8 (rules 4–5), r9
+  (rules 6–7, D3), r10 (rule 8, D4), r11 (rule 9,
+  D5), r12 (rules 10–11, D6: 0 of 4). **From r13 workflow_rag reads the tools' own
+  descriptions** (`tool_docs: true`, the person's call, 10 Oct 2026): a `tool_description` research
+  tool returns tau2's description of any tool, the text the answering agent reads when it unlocks
+  it, and the decide and merge turns show the description of every tool the jobs call
+  (`toolspec.describe`). Every later rN keeps it. r13 put D6 at 3 of 4. D7 (all test): r14 (rule
+  12) 1 of 3, since no train question merges into the referral-link workflow; r15 (rule 10's pointer
+  sentence) 0 of 3; r16 (rubric D13: a tool description's knowledge-base pointer is followed) fixed
+  the transfer ban, 1 of 3; r17 (rule 13, and `describe_named`: the decide and merge turns describe
+  every tool a job names) put the customer's own `submit_referral` back, still 1 of 3, because the
+  agent hands over a tool the customer already holds; v22 (v21 + `customer_tools`) 2 of 3, not yet
+  scored on the 29 conversations whose gold has the customer run their own tool. v23 (v22 on
+  `claude-sonnet-5-5`, played with a Haiku 5.5 customer, the person's call) is held: train 43 of 60
+  and test 20 of 37 against v8's 38 and 21 (test fixed 5, broke 6, p = 0.726; train `20261011T055438Z`,
+  test `20261011T055440Z`), not like for like since v8's customer was Sonnet 5. **Every rN from r5
+  has `changes.json`** (`based_on`, `seed`, why, each file's change); a test fails when it does not
+  match the files that differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
   per page, every number with its denominator. Never the Tailwind/DaisyUI fallback.
 - Never add `.lavish/` to `.gitignore`.

@@ -38,7 +38,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from tau2_loop import __version__
-from tau2_loop.agent.compose import compose, hooks_defined, load_code_surfaces, load_helper_file
+from tau2_loop.agent.compose import (
+    compose,
+    customer_tools_note,
+    hooks_defined,
+    load_code_surfaces,
+    load_helper_file,
+)
 from tau2_loop.agent.versions import (
     CODE_SURFACES,
     FROZEN,
@@ -704,6 +710,9 @@ def create_app() -> FastAPI:
             helper,
             clock=meta.sim_rules is not None,
             identity=config.get("identity_note") is True,
+            customer_tools=customer_tools_note(meta.domain)
+            if config.get("customer_tools") is True
+            else None,
         )
         return {
             "run_id": run_id,
@@ -723,6 +732,7 @@ def create_app() -> FastAPI:
                 "extra_context": c.extra_context,
                 "clock_note": c.clock_note,
                 "identity_note": c.identity_note,
+                "customer_tools": c.customer_tools,
                 "slotted": c.slotted,
             },
         }
@@ -1259,6 +1269,8 @@ def _architecture(
     layers.append("CLOCK_NOTE")
     if v.config.identity_note:
         layers.append("identity note")
+    if v.config.customer_tools:
+        layers.append("customer tools")
     return {
         "diagnosis": diag,
         "retrieval": v.retrieval,

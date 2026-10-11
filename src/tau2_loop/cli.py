@@ -61,9 +61,19 @@ def fork(
     workflows: Annotated[
         str | None, typer.Option(help="the workflow_rag version whose library it looks up, e.g. r2")
     ] = None,
+    why: Annotated[
+        str | None, typer.Option(help="why this fork exists, kept in its diagnosis")
+    ] = None,
+    customer_tools: Annotated[
+        bool | None,
+        typer.Option(
+            "--customer-tools/--no-customer-tools",
+            help="list the tools the customer holds from the start in the prompt",
+        ),
+    ] = None,
 ) -> None:
     """A new version with the champion's surfaces and a different model, effort, retrieval,
-    tool mode, identity note, parallel calls or workflow library."""
+    tool mode, identity note, parallel calls, workflow library or customer tools."""
     from tau2_loop.agent.versions import fork_version
     from tau2_loop.tracking.registry import champion_name
 
@@ -84,13 +94,15 @@ def fork(
         identity_note=identity_note,
         parallel_calls=parallel_calls,
         workflows=workflows,
+        why=why,
+        customer_tools=customer_tools,
     )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "
         f"effort {v.config.effort} · tool mode {v.config.tool_mode} · retrieval "
         f"{v.retrieval or 'none'} · identity note {v.config.identity_note} · parallel calls "
         f"{v.config.parallel_calls} · workflows {v.config.workflows or 'none'} · "
-        f"fingerprint {v.fingerprint}"
+        f"customer tools {v.config.customer_tools} · fingerprint {v.fingerprint}"
     )
 
 

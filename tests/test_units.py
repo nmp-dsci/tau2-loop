@@ -396,3 +396,8 @@ def test_fork_copies_the_surfaces_and_records_the_swap(
     assert versions.lineage("airline", "v1") == ["v1", "v0"]
     with pytest.raises(ValueError):
         versions.fork_version("airline", "v1", model="sonnet")  # nothing would change
+    # s22: the reason given for a fork is kept beside what changed
+    v2 = versions.fork_version("airline", "v1", effort="high", why="test the higher effort")
+    [change] = json.loads((v2.path / "diagnosis.json").read_text())["changes"]
+    assert change["what"] == "effort: medium → high"
+    assert change["why"].startswith("test the higher effort (a hand-made fork")

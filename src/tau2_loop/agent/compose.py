@@ -8,9 +8,12 @@ serves that route and ships no tau2.
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
+import inspect
 import types
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +56,46 @@ IDENTITY_NOTE = (
 )
 
 
+# The agent sees only its own tools, and banking's policy explains only the customer tools the agent
+# hands over (`give_discoverable_user_tool`). It never learns the tools the customer holds from the
+# start, so in s22's test task_010 it tried to hand over `submit_referral`, got "Unknown
+# discoverable tool", and handed over `get_referral_link` in its place, which tau2's database
+# records (s22, v22). A version whose `agent.yaml` says `customer_tools: true` gets this after the
+# other notes, the list read from tau2's own customer toolkit, never written here.
+CUSTOMER_TOOLKITS = {
+    "banking_knowledge": ("tau2.domains.banking_knowledge.tools", "KnowledgeUserTools")
+}
+CUSTOMER_TOOLS_HEAD = (
+    "The customer holds these tools from the start and runs them themselves. You cannot call them "
+    "and never hand them over; you see a result only when the customer tells you. When a step is "
+    "the customer's, tell them which one to run and with what. Every other customer tool is "
+    "discoverable: hand it over with give_discoverable_user_tool only as the knowledge base says. "
+    'Each line is the description the customer reads, so its "you" is the customer.'
+)
+
+
+@cache
+def customer_tools_note(domain: str) -> str | None:
+    """The customer's own tools in tau2 (not the discoverable ones the agent hands over), each with
+    its parameters and the first line of its description; None for a domain without them."""
+    where = CUSTOMER_TOOLKITS.get(domain)
+    if where is None:
+        return None
+    try:
+        kit = getattr(importlib.import_module(where[0]), where[1])
+        discoverable = importlib.import_module(where[0]).DISCOVERABLE_ATTR
+    except (ImportError, AttributeError):
+        return None
+    rows = []
+    for name, fn in inspect.getmembers(kit, inspect.isfunction):
+        if not getattr(fn, "__tool__", False) or getattr(fn, discoverable, False):
+            continue
+        params = ", ".join(p for p in inspect.signature(fn).parameters if p != "self")
+        first = ((inspect.getdoc(fn) or "").strip().splitlines() or [""])[0]
+        rows.append(f"- `{name}({params})`: {first}")
+    return f"{CUSTOMER_TOOLS_HEAD}\n" + "\n".join(rows) if rows else None
+
+
 @dataclass(frozen=True)
 class Composed:
     """The prompt and its parts: `text` is exactly what is sent; the rest say where it came from."""
@@ -64,6 +107,7 @@ class Composed:
     slotted: bool
     clock_note: str | None = None
     identity_note: str | None = None
+    customer_tools: str | None = None
 
 
 def load_helper_file(path: Path | None, module_name: str) -> types.ModuleType | None:
@@ -119,10 +163,12 @@ def compose(
     helper: types.ModuleType | None,
     clock: bool = True,
     identity: bool = False,
+    customer_tools: str | None = None,
 ) -> Composed:
     """`system.md` with the policy in its slot (or appended), then `extra_context(policy)`, then
     `CLOCK_NOTE` (`clock=False` for a run made before it), then `IDENTITY_NOTE` for a version
-    whose `agent.yaml` asks for it."""
+    whose `agent.yaml` asks for it, then the customer's own tools (`customer_tools_note`) for one
+    whose `agent.yaml` says `customer_tools: true`."""
     slotted = POLICY_SLOT in system_md
     text = (
         system_md.replace(POLICY_SLOT, policy)
@@ -137,6 +183,8 @@ def compose(
         text = f"{text}\n\n{CLOCK_NOTE}"
     if identity:
         text = f"{text}\n\n{IDENTITY_NOTE}"
+    if customer_tools:
+        text = f"{text}\n\n{customer_tools}"
     return Composed(
         text=text,
         system_md=system_md,
@@ -145,4 +193,5 @@ def compose(
         slotted=slotted,
         clock_note=CLOCK_NOTE if clock else None,
         identity_note=IDENTITY_NOTE if identity else None,
+        customer_tools=customer_tools or None,
     )

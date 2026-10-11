@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from tau2_loop.data import documents as kb_docs
 from tau2_loop.data.splits import split_ids
 from tau2_loop.serving.app import create_app
 from tau2_loop.workflows import rag_agent
@@ -782,3 +783,181 @@ def test_a_build_on_the_test_split_queues_test_questions_and_records_the_split(
     )
     assert rag_agent.session(D, meta.id)["meta"]["split"] == "test"
     assert test[0] not in rag_agent.build_queue(D, "r3", split="test")  # done: not queued again
+
+
+# ── r5 (s22, D1): the merge gate adds D10 (a write's documented requirements met) ──
+@pytest.mark.skipif(not kb_docs.available(D), reason="tau2's documents are not here")
+def test_an_r5_merge_that_closes_a_card_it_froze_without_unfreezing_is_sent_back(
+    r3_library: Path,
+) -> None:
+    from tau2_loop.workflows import library
+
+    def card(sid: str, tool: str, **args: Any) -> dict[str, Any]:
+        return {
+            "id": sid,
+            "by": "harness",
+            "call": "call_discoverable_agent_tool",
+            "args": {"agent_tool_name": tool, **args},
+            "if": "the customer asks",
+        }
+
+    freeze = card("freeze", "freeze_debit_card_3892", card_id="from get_cards")
+    close = card("close", "close_debit_card_4721", card_id="from get_cards", reason="as said")
+    unfreeze = card("unfreeze", "unfreeze_debit_card_3893", card_id="from get_cards")
+    first = edited(
+        {"op": "add", "list": "steps", "item": freeze, "why": "the customer may freeze first"},
+        {"op": "add", "list": "steps", "item": close, "why": "then close it"},
+    )
+    fixed = edited(
+        {"op": "add", "list": "steps", "item": freeze, "why": "the customer may freeze first"},
+        {"op": "add", "list": "steps", "item": unfreeze, "why": "a FROZEN card cannot be closed"},
+        {"op": "add", "list": "steps", "item": close, "why": "then close it"},
+    )
+    ask, _ = scripted([Reply(json.dumps(DRAFT)), Reply(DECIDED), Reply(first), Reply(fixed)])
+    meta = rag_agent.start(
+        D, "task_019", "r5", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    s = rag_agent.session(D, meta.id)
+    sent_back = [e["text"] for e in s["events"] if e["kind"] == "user"][-1]
+    assert "log_verification without" not in sent_back  # D9 is not r5's check
+    assert "unfreeze_debit_card_3893" in sent_back and "FROZEN" in sent_back  # D10
+    rec = s["output"]["merge"][0]
+    assert rec["taken"] is True and s["output"]["lock"]["committed"] == {"cash_back_dispute": 1}
+    [head] = library.entries(D, "r5")
+    ids = [x["id"] for x in head["workflow"]["steps"]]
+    assert ids.index("unfreeze") < ids.index("close")
+    # r3 itself never gates on D10
+    assert rag_agent.load(D, "r3").rubric == () and rag_agent.load(D, "r5").rubric == ("D10",)
+
+
+# ── r7 (s22, D2 again): a merge re-reads every old step: kept, rewritten or removed (D12) ──
+VERIFY_PARAMS = (
+    "name",
+    "user_id",
+    "address",
+    "email",
+    "phone_number",
+    "date_of_birth",
+    "time_verified",
+)
+
+
+@pytest.mark.skipif(not kb_docs.available(D), reason="tau2's documents are not here")
+def test_an_r7_merge_that_leaves_old_steps_unread_is_sent_back(r3_library: Path) -> None:
+    from tau2_loop.workflows import library
+
+    add = {"op": "add", "list": "steps", "item": BRANCH_A, "why": "the no-discrepancy case"}
+    verify = {
+        "op": "change",
+        "list": "steps",
+        "key": "verify",
+        "fields": {"args": {p: "from the customer" for p in VERIFY_PARAMS}},
+        "why": "every parameter of log_verification",
+    }
+    first = edited(add, verify)  # leaves `give` as it was, and does not say it kept it
+    fixed = json.loads(edited(add, verify))
+    fixed["jobs"][0]["kept"] = {"steps": ["give"]}
+    ask, _ = scripted(
+        [Reply(json.dumps(DRAFT)), Reply(DECIDED), Reply(first), Reply(json.dumps(fixed))]
+    )
+    meta = rag_agent.start(
+        D, "task_019", "r7", ask=ask, run_tool=lambda n, a: "", env=FakeEnv(), background=False
+    )
+    s = rag_agent.session(D, meta.id)
+    sent_back = [e["text"] for e in s["events"] if e["kind"] == "user"][-1]
+    assert "not re-read (steps give)" in sent_back and "named in `kept`" in sent_back
+    rec = s["output"]["merge"][0]
+    assert rec["taken"] is True and rec["kept"] == {"steps": ["give"]}
+    [head] = library.entries(D, "r7")
+    assert [x["id"] for x in head["workflow"]["steps"]] == ["verify", "give", "explain_a"]
+    assert "kept" not in head["workflow"]  # checked, never stored
+    assert rag_agent.load(D, "r7").rubric == ("D9", "D10", "D12")
+    assert rag_agent.load(D, "r6").rubric == ("D9", "D10")  # r6 never gates on D12
+
+
+# ── s22: every workflow_rag version from r5 on records what it changed and what it was based on ──
+def test_each_version_from_r5_records_its_base_and_every_file_it_changed() -> None:
+    root = rag_agent.RAG_AGENTS_DIR / D
+    names = sorted(
+        (p.name for p in root.iterdir() if (p / "rag_agent.yaml").is_file()),
+        key=lambda n: int(n[1:]),
+    )
+    later = [n for n in names if int(n[1:]) >= 5]
+    assert later  # r5, r6, r7 …
+    for name in later:
+        rec = rag_agent.changes(D, name)
+        assert rec is not None, f"{name} has no changes.json"
+        assert rec["version"] == name and rec["why"]
+        base = rec["based_on"]
+        assert base in names and int(base[1:]) < int(name[1:])
+        assert rec["seed"] == rag_agent.load(D, name).seed
+        differ = {
+            f
+            for f in rag_agent.CHANGE_FILES
+            if (root / name / f).read_text() != (root / base / f).read_text()
+        }
+        assert {c["file"] for c in rec["changes"]} == differ, name  # the record matches the diff
+        assert all(c["what"] and c["why"] for c in rec["changes"])
+    assert rag_agent.describe(D, "r7")["based_on"] == "r6"
+
+
+# ── r13 (s22, D6 again): workflow_rag reads the tools' own descriptions ──
+@pytest.mark.skipif(not kb_docs.available(D), reason="tau2's documents are not here")
+def test_r13_reads_tool_descriptions_in_its_research_and_its_merge(r3_library: Path) -> None:
+    from tau2_loop.workflows import library
+
+    add = {"op": "add", "list": "steps", "item": BRANCH_A, "why": "the no-discrepancy case"}
+    verify = {
+        "op": "change",
+        "list": "steps",
+        "key": "verify",
+        "fields": {"args": {p: "from the customer" for p in VERIFY_PARAMS}},
+        "why": "every parameter of log_verification",
+    }
+    merged = json.loads(edited(add, verify))
+    merged["jobs"][0]["kept"] = {"steps": ["give"]}
+    ran: list[str] = []
+    ask, offered = scripted(
+        [
+            Reply(None, [call("tool_description", tool_name="log_verification")]),
+            Reply(json.dumps(DRAFT)),
+            Reply(DECIDED),
+            Reply(json.dumps(merged)),
+        ]
+    )
+    meta = rag_agent.start(
+        D,
+        "task_019",
+        "r13",
+        ask=ask,
+        run_tool=lambda n, a: ran.append(n) or "",
+        env=FakeEnv(),
+        background=False,
+    )
+    s = rag_agent.session(D, meta.id)
+    assert ran == []  # answered by the harness, never by tau2's environment
+    assert "tool_description" in {t["function"]["name"] for t in offered[0] or []}
+    [doc] = [e["content"] for e in s["events"] if e["kind"] == "tool"]
+    assert doc.startswith("log_verification(") and "run by the agent" in doc
+    said = [e["text"] for e in s["events"] if e["kind"] == "user"]
+    assert all("## The tools these jobs call" in t for t in said[-2:])  # decide and merge turns
+    assert "### log_verification" in said[-1]
+    assert s["output"]["lock"]["committed"] == {"cash_back_dispute": 1}
+    assert [x["id"] for x in library.entries(D, "r13")[0]["workflow"]["steps"]][-1] == "explain_a"
+    # r12 reads no tool descriptions
+    assert rag_agent.load(D, "r12").tool_docs is False and rag_agent.load(D, "r13").tool_docs
+
+
+@pytest.mark.skipif(not kb_docs.available(D), reason="tau2's documents are not here")
+def test_r17_merge_turn_describes_a_tool_the_library_job_rules_out() -> None:
+    job = {
+        "job": "referral_status",
+        "steps": [{"id": "look", "by": "harness", "call": "get_referrals_by_user", "args": {}}],
+        "tools": [{"tool": "submit_referral", "who": "customer", "not_used": "no document"}],
+    }
+    cands = {"referral_status": [{"job": "referral_status", "session": "s", "workflow": job}]}
+    r16, r17 = rag_agent.load(D, "r16"), rag_agent.load(D, "r17")
+    assert not r16.describe_named and r17.describe_named
+    assert "### submit_referral" not in rag_agent.merge_message(r16, cands)
+    said = rag_agent.merge_message(r17, cands)
+    assert "## The tools these jobs call or name" in said and "### submit_referral" in said

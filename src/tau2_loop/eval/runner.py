@@ -344,7 +344,9 @@ def extend_run(
     """Bring a scored run up to its split's current tasks without replaying what it scored: play
     only the tasks the split has gained (a custom run of them), then join the two into one run of
     the whole split (`compose_runs`). Refused unless the version's bytes, the simulation rules
-    and the retrieval are the run's, and every task it scored is still on its side."""
+    and the retrieval are the run's, and every task it scored is still on its side. The new tasks
+    are played with the run's own customer, so a run made with another customer (`USER_MODEL=`)
+    is extended with that customer, never joined to the default's (s22, v23's smoke)."""
     base, _ = load_run(base_run_id)
     if base.dry_run or not base.summary:
         raise ValueError(f"{base_run_id} is not a scored run")
@@ -356,8 +358,6 @@ def extend_run(
         )
     if base.sim_rules != SIM_RULES:
         raise ValueError(f"{base_run_id} ran under other simulation rules ({base.sim_rules})")
-    if base.user_model != sdk_model(USER_MODEL):
-        raise ValueError(f"{base_run_id} ran with another customer ({base.user_model})")
     ids = split_ids(base.domain, base.split)
     moved = sorted(set(base.task_ids) - set(ids))
     if moved:
@@ -375,6 +375,7 @@ def extend_run(
         note=note
         or f"the {len(missing)} {base.split} tasks split v{split_version(base.domain)} added "
         f"to {base_run_id}",
+        user_model=base.user_model,
     )
     return compose_runs(base_run_id, ext.run_id)
 
