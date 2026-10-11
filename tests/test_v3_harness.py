@@ -118,6 +118,36 @@ def test_the_identity_note_is_added_only_for_a_version_that_asks() -> None:
     assert noted.text.index(composing.CLOCK_NOTE) < noted.text.index(composing.IDENTITY_NOTE)
 
 
+def test_the_customer_tools_are_listed_only_for_a_version_that_asks() -> None:
+    note = composing.customer_tools_note("banking_knowledge")
+    if note is None:
+        pytest.skip("tau2's banking tools are not here")
+    # the tools the customer holds from the start, read from tau2; none the agent hands over
+    assert "- `submit_referral(user_id, account_type)`: " in note
+    assert "get_referral_link" not in note and "submit_cash_back_dispute_0589" not in note
+    assert composing.customer_tools_note("airline") is None
+    plain = composing.compose("Be exact.\n{policy}", "POLICY", None, identity=True)
+    listed = composing.compose(
+        "Be exact.\n{policy}", "POLICY", None, identity=True, customer_tools=note
+    )
+    assert plain.customer_tools is None and note not in plain.text
+    assert listed.text == f"{plain.text}\n\n{note}" and listed.customer_tools == note
+
+
+def test_a_customer_tools_fork_writes_it_frozen_in_agent_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = versions.AGENTS_DIR
+    monkeypatch.setattr(versions, "AGENTS_DIR", tmp_path)
+    shutil.copytree(real / "banking_knowledge" / "v21", tmp_path / "banking_knowledge" / "v21")
+    assert versions.load_version("banking_knowledge", "v21").config.customer_tools is False
+    v = versions.fork_version("banking_knowledge", "v21", customer_tools=True)
+    assert v.config.customer_tools and v.config.workflows == "r17"
+    assert "customer_tools: true\n" in (v.path / "agent.yaml").read_text()
+    d = json.loads((v.path / "diagnosis.json").read_text())
+    assert d["kind"] == "tool change" and d["agent_yaml"] == ["customer_tools: False → True"]
+
+
 # ── milestone 1: the local AllTools variants ─────────────────────────────────────────────────
 def test_the_local_variants_are_alltools_with_a_local_dense_model() -> None:
     from tau2_loop.eval import retrieval

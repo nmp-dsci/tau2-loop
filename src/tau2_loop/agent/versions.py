@@ -52,6 +52,9 @@ class AgentConfig:
     # look up (`find_workflow`) or ask it to research (`request_workflow`), two harness tools tau2
     # never sees; None for every version before v6, so they keep their bytes
     workflows: str | None = None
+    # s22 (v22): the tools the customer holds from the start, listed after the other notes
+    # (`compose.customer_tools_note`); off unless set, so every earlier version keeps its bytes
+    customer_tools: bool = False
 
     def __post_init__(self) -> None:
         if self.tool_mode not in TOOL_MODES:
@@ -234,6 +237,7 @@ def fork_version(
     parallel_calls: bool | None = None,
     workflows: str | None = None,
     why: str | None = None,
+    customer_tools: bool | None = None,
 ) -> AgentVersion:
     """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`. `why` (s22)
     is the reason the person or the session gave, kept in its diagnosis beside what changed.
@@ -256,11 +260,12 @@ def fork_version(
         parallel_calls=cfg.parallel_calls if parallel_calls is None else parallel_calls,
         # s16: a fork keeps the workflow_rag version its source looks up, unless given another
         workflows=workflows or cfg.workflows,
+        customer_tools=cfg.customer_tools if customer_tools is None else customer_tools,
     )
     if new == cfg:
         raise ValueError(
             f"a fork of {domain}/{source} needs a different model, effort, retrieval, tool mode, "
-            "identity note, parallel calls or workflows"
+            "identity note, parallel calls, workflows or customer tools"
         )
     name = next_version_name(domain)
     dest = version_dir(domain, name)
@@ -279,6 +284,7 @@ def fork_version(
             "identity_note",
             "parallel_calls",
             "workflows",
+            "customer_tools",
         )
         if getattr(cfg, k) != getattr(new, k)
     ]

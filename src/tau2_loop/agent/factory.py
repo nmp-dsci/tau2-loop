@@ -60,6 +60,7 @@ from tau2_loop.agent.compose import (
     GUIDANCE_CHARS,
     call_hook,
     compose,
+    customer_tools_note,
     load_code_surfaces,
     load_helper_file,
 )
@@ -222,6 +223,9 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
             self.domain_policy,
             self.helper,
             identity=self.version.config.identity_note,
+            customer_tools=customer_tools_note(self.version.domain)
+            if self.version.config.customer_tools
+            else None,
         ).text
 
     def get_init_state(self, message_history: list[Message] | None = None) -> LoopAgentState:
