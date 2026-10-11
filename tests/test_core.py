@@ -432,17 +432,27 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
         split_version=2,
     )
     played: list[list[str]] = []
+    customers: list[str] = []
 
     def fake_eval(
-        domain: str, agent: str, split: str, trials: int, concurrency: int, task_ids: Any, note: str
+        domain: str,
+        agent: str,
+        split: str,
+        trials: int,
+        concurrency: int,
+        task_ids: Any,
+        note: str,
+        user_model: str,
     ) -> Any:
         played.append(list(task_ids))
+        customers.append(user_model)
         _fake_run(runs, "20261003T000000Z_banking_knowledge_v1_custom", task_ids, {"t5"})
         return runner.load_run("20261003T000000Z_banking_knowledge_v1_custom")
 
     monkeypatch.setattr(runner, "run_eval", fake_eval)
     meta, rows = runner.extend_run("20261002T000000Z_banking_knowledge_v1_train")
     assert played == [["t3", "t5"]]  # only what the split gained, in the split's order
+    assert customers == [runner.sdk_model(runner.USER_MODEL)]  # the run's own customer
     assert meta.task_ids == train and [r.task_id for r in rows] == train
     assert meta.split_version == 3 and meta.mlflow_run_id is None
     assert meta.composed_of == [
@@ -458,12 +468,32 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
     assert loop_run._covers(meta, train, 1)
 
 
+def test_a_run_with_another_customer_is_extended_with_that_customer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import tau2_loop.eval.runner as runner
+
+    runs = _extend_world(tmp_path, monkeypatch, ["t1", "t2", "t3"])
+    haiku = "claude-sdk/claude-haiku-5-5"
+    _fake_run(runs, "r_base", ["t1", "t2"], {"t1"}, user_model=haiku)
+    customers: list[str] = []
+
+    def fake_eval(*a: Any, task_ids: Any, user_model: str, **k: Any) -> Any:
+        customers.append(user_model)
+        _fake_run(runs, "r_ext", task_ids, {"t3"}, user_model=runner.sdk_model(user_model))
+        return runner.load_run("r_ext")
+
+    monkeypatch.setattr(runner, "run_eval", fake_eval)
+    meta, _ = runner.extend_run("r_base")
+    assert customers == [haiku] and meta.user_model == haiku
+    assert (meta.summary or {})["passed"] == 2
+
+
 @pytest.mark.parametrize(
     ("over", "refusal"),
     [
         ({"fingerprint": "fp0"}, "bytes changed"),
         ({"sim_rules": None}, "other simulation rules"),
-        ({"user_model": "claude-sdk/claude-haiku-4-5"}, "another customer"),
         ({"task_ids": ["t1", "t9"]}, "no longer on its train side"),
     ],
 )
