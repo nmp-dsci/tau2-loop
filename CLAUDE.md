@@ -57,8 +57,11 @@
   returns to tau2 unrun, `llm/core.py`), `identity_note: true` (`compose.IDENTITY_NOTE`, the
   CLI's account email is not the customer's), `parallel_calls: true` (s14, native only: every
   tool call of a reply kept; before it the core kept the first, so v1–v3 made one call a turn).
-  Change them with `make fork … RETRIEVAL= TOOL_MODE= IDENTITY_NOTE=true PARALLEL_CALLS=true`,
-  or on `make optimise`, never a loop edit. The local AllTools variants
+  `customer_tools: true` (s22, 11 Oct 2026, v22, the person's call): the prompt ends with the tools
+  the customer holds from the start (`compose.customer_tools_note`, read from tau2's customer
+  toolkit, the discoverable ones left out); before it the agent knew only the ones it hands over.
+  Change them with `make fork … RETRIEVAL= TOOL_MODE= IDENTITY_NOTE=true PARALLEL_CALLS=true
+  CUSTOMER_TOOLS=true`, or on `make optimise`, never a loop edit. The local AllTools variants
   (`eval/retrieval.py`: `alltools_minilm`, `alltools_qwen3_0_6b`) need sandbox-runtime,
   ripgrep and sentence-transformers wherever their runs are played or re-scored.
 - **`make optimise` writes a version and scores nothing** (s14, 4 Oct 2026): one optimiser
@@ -152,7 +155,8 @@
   sentence) 0 of 3; r16 (rubric D13: a tool description's knowledge-base pointer is followed) fixed
   the transfer ban, 1 of 3; r17 (rule 13, and `describe_named`: the decide and merge turns describe
   every tool a job names) put the customer's own `submit_referral` back, still 1 of 3, because the
-  agent hands over a tool the customer already holds. **Every rN from r5 has `changes.json`**
+  agent hands over a tool the customer already holds; v22 (v21 + `customer_tools`) 2 of 3, not yet
+  scored on the 29 conversations whose gold has the customer run their own tool. **Every rN from r5 has `changes.json`**
   (`based_on`, `seed`, why, each file's change); a test fails when it does not match the files that
   differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
