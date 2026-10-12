@@ -14,11 +14,21 @@ A version's train number is the run the gate read: the ledger's challenger run,
 else the version's latest promotion, else its latest registry entry, else its
 newest finished train run. Its test number is the ledger's test run, else its
 newest finished test run on the same cut.
+
+A version is `full` when every run it has covers a whole side of a split (the run's tasks are
+one cut's train or test, so it has a cut) and it has a train run. One played on part of a
+split (`make eval TASKS=`, to check one change on the conversations it targets) or never
+played is not: the Optimise tab leaves it off, and `loop/<domain>/versions.md`
+(`make versions-log`) keeps it, in build order between the versions it led to.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
+
+# `make fork`'s note on every hand-made change, inside brackets or as its own sentence
+FORK_NOTE = re.compile(r"\s*\(?a hand-made fork: the optimiser may not change agent\.yaml\)?\.?\s*")
 
 # a surface's name under a version's column in the figures
 SHORT = {
@@ -38,9 +48,27 @@ def _run(r: dict[str, Any] | None) -> dict[str, Any] | None:
         "passed": r["passed"],
         "n": r["n"],
         "cut": r.get("cut"),
+        # the tasks its split side held: `n` of `of` for a run on part of it
+        "of": r.get("of"),
         "model": r.get("model"),
         "effort": r.get("effort"),
     }
+
+
+def _whole(r: dict[str, Any] | None) -> bool:
+    """A run of a whole split side: its tasks are one cut's train or test."""
+    return r is not None and r.get("cut") is not None
+
+
+def _why(e: dict[str, Any] | None, diag: dict[str, Any]) -> str | None:
+    """Why a version was made, in its maker's words: an optimiser's summary of its prompt diff,
+    or for a hand-made fork the reasons given for its changes (`make fork WHY=`)."""
+    summary = (e or {}).get("prompt_diff_summary") or diag.get("prompt_diff_summary")
+    if diag.get("diagnoses"):
+        return str(summary) if summary else None
+    # every fork's change record says it is one; that is why it is a fork, not why it was made
+    whys = [FORK_NOTE.sub(" ", str(c.get("why") or "")).strip() for c in diag.get("changes") or []]
+    return "; ".join(dict.fromkeys(w for w in whys if w)) or None
 
 
 def _newest(
@@ -79,6 +107,7 @@ def version_history(
                 "passed": fallback["passed"],
                 "n": fallback["n_scored"],
                 "cut": None,
+                "of": None,
                 "model": fallback.get("model"),
                 "effort": None,
             }
@@ -152,7 +181,12 @@ def version_history(
                 "detail": "; ".join(diag.get("agent_yaml") or []),
             }
         elif diag:
-            made = {"kind": "optimise", "cycle": None, "source": None, "detail": "no ledger entry"}
+            made = {
+                "kind": "optimise",
+                "cycle": None,
+                "source": diag.get("optimised_from"),
+                "detail": "no ledger entry",
+            }
         else:
             made = {
                 "kind": "base",
@@ -193,6 +227,8 @@ def version_history(
                 "train": train,
                 "test": test,
                 "verdict": verdict,
+                "full": train is not None and _whole(train) and (test is None or _whole(test)),
+                "why": _why(e, diag),
                 "fixed": len(o["fixed"]) if "fixed" in o else None,
                 "broke": len(o["broken"]) if "broken" in o else None,
                 "p": o.get("p_value"),
@@ -203,3 +239,51 @@ def version_history(
 
     champ = registry.get("champion") or {}
     return {"domain": domain, "champion": champ.get("agent"), "versions": out, "reigns": reigns}
+
+
+def load_history(domain: str) -> dict[str, Any]:
+    """`version_history` over the committed files: every finished, scored, non-dry run of the
+    domain, its version folders, ledger and registry. `GET /api/versions` serves this."""
+    import json
+
+    from tau2_loop.agent.versions import list_versions
+    from tau2_loop.data.splits import cut_of, cut_size
+    from tau2_loop.eval.runner import list_runs
+    from tau2_loop.loop.ledger import read_ledger
+    from tau2_loop.tracking.registry import read_registry
+
+    runs = []
+    for m in list_runs(domain):
+        if m.dry_run or not m.finished_at or not m.summary or not m.summary.get("n_scored"):
+            continue
+        cut = m.split_version or cut_of(domain, m.split, list(m.task_ids))
+        runs.append(
+            {
+                "run_id": m.run_id,
+                "agent": m.agent,
+                "split": m.split,
+                "cut": cut,
+                "of": cut_size(domain, m.split, cut),
+                "passed": m.summary["passed"],
+                "n": m.summary["n_scored"],
+                "model": m.model,
+                "effort": m.agent_effort,
+            }
+        )
+
+    def diagnosis(path: Any) -> Any:
+        try:
+            return json.loads(path.read_text())
+        except (OSError, ValueError):
+            return None
+
+    versions = [
+        {
+            "name": v.name,
+            "model": v.config.model,
+            "effort": v.config.effort,
+            "diagnosis": diagnosis(v.path / "diagnosis.json"),
+        }
+        for v in list_versions(domain)
+    ]
+    return version_history(domain, versions, runs, read_ledger(domain), read_registry(domain))

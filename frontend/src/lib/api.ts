@@ -251,7 +251,9 @@ export type Registry = { domain: string; champion: RegistryEntry | null; challen
 export type Registries = Record<string, Registry>;
 /** One run as the version history cites it (`/api/versions`): passes over scored conversations,
  * its cut (1 = split v1, 2 = split v2) and the model and effort it recorded. */
-export type HRun = { run_id: string | null; passed: number; n: number; cut: number | null; model: string | null; effort: string | null };
+/** One run as the figures read it. `cut` is the split version whose whole train or test side it
+ *  played, null for a run on part of one; `of` is how many tasks that side holds. */
+export type HRun = { run_id: string | null; passed: number; n: number; cut: number | null; of?: number | null; model: string | null; effort: string | null };
 /** How a version was made: `optimise` (a loop cycle), a hand-made fork's kind (`model swap`), or `base`. */
 export type Made = { kind: string; cycle: number | null; source: string | null; detail: string };
 export type VersionNode = {
@@ -270,6 +272,11 @@ export type VersionNode = {
   /** the champion a cycle's challenger was gated against, on train, and on test when both ran it */
   vs: { version: string; train: HRun | null; test: HRun | null } | null;
   held_title: boolean;
+  /** played on every task of its split (train, and test when it ran it): the Optimise tab draws
+   *  only these; the rest are logged in `loop/<domain>/versions.md`. Absent from an older API. */
+  full?: boolean;
+  /** why it was made, in its maker's words */
+  why?: string | null;
 };
 /** One `promote` in the registry, in order: `first`, `gate`, `model swap`, `tool change`, `re-baseline`. */
 export type Reign = { version: string; run_id: string | null; passed: number | null; n: number | null; cut: number | null; kind: string; at: string | null };

@@ -13,6 +13,25 @@ import { type HRun, type Made, type Reign, type VersionHistory, type VersionNode
 export const share = (r: HRun | null | undefined): number | null => (r && r.n ? r.passed / r.n : null);
 export const frac = (r: HRun | null | undefined): string => (r ? `${r.passed}/${r.n}` : '—');
 
+/** The versions the Optimise tab draws, those played on every task of their split, and the
+ *  names of the rest (played on part of a split, or never), which `loop/<domain>/versions.md` logs.
+ *  A version from an API without `full` is drawn. */
+export function onTheTab(h: VersionHistory): { drawn: VersionNode[]; off: string[] } {
+  return { drawn: h.versions.filter((v) => v.full !== false), off: h.versions.filter((v) => v.full === false).map((v) => v.version) };
+}
+
+/** `v5, v6, v9–v22`: three or more consecutive versions as one span. */
+export function versionSpans(names: string[]): string {
+  const num = (n: string) => Number(n.replace(/^v/, ''));
+  const groups: string[][] = [];
+  for (const n of names) {
+    const g = groups[groups.length - 1];
+    if (g && num(n) === num(g[g.length - 1]) + 1) g.push(n);
+    else groups.push([n]);
+  }
+  return groups.map((g) => (g.length > 2 ? `${g[0]}–${g[g.length - 1]}` : g.join(', '))).join(', ');
+}
+
 const onKey = (go: () => void) => (e: KeyboardEvent) => {
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
@@ -42,7 +61,8 @@ export function verdictWords(v: VersionNode): { text: string; tone: 'ok' | 'warn
 /** `model: sonnet → opus` reads `sonnet → opus` under a column; a second agent.yaml line is cut. */
 function madeWords(m: Made): { kind: string; detail: string; from: string } {
   const first = m.detail.split('; ')[0].replace(/^model: /, '');
-  const detail = m.detail.includes('; ') || first.length > 22 ? `${first.slice(0, 21)}…` : first;
+  // 19 characters of --t-2 fill a column; a longer line runs into its neighbour's
+  const detail = m.detail.includes('; ') || first.length > 19 ? `${first.slice(0, 18)}…` : first;
   const from = [m.cycle != null ? `cycle ${m.cycle}` : null, m.source ? `from ${m.source}` : null].filter(Boolean).join(' · ');
   return { kind: m.kind, detail, from };
 }
@@ -234,9 +254,16 @@ export function VersionsFig({
                   (mode === 'rounds' ? (
                     <>
                       <circle cx={X(i)} cy={Y(t)} r={5.5} style={{ fill: v.held_title ? 'var(--ok)' : 'var(--ink-2)' }} />
-                      <text className={`tx${v.held_title ? ' ok' : ''}`} x={X(i)} y={trainAbove ? Y(t) - 15 : Y(t) + 26} textAnchor="middle">
-                        {frac(v.train)}
-                      </text>
+                      {/* a label under a point near 0% would sit on the version's name: it goes to the point's left */}
+                      {!trainAbove && Y(t) + 26 > bot + 12 ? (
+                        <text className={`tx${v.held_title ? ' ok' : ''}`} x={X(i) - 11} y={Y(t) + 4} textAnchor="end">
+                          {frac(v.train)}
+                        </text>
+                      ) : (
+                        <text className={`tx${v.held_title ? ' ok' : ''}`} x={X(i)} y={trainAbove ? Y(t) - 15 : Y(t) + 26} textAnchor="middle">
+                          {frac(v.train)}
+                        </text>
+                      )}
                     </>
                   ) : v.held_title ? (
                     <>

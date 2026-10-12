@@ -263,6 +263,36 @@ def split_ids(domain: str, split: str) -> list[str]:
     return list(read_split(domain)[split])
 
 
+def cut_of(domain: str, split: str, task_ids: list[str]) -> int | None:
+    """Which cut `task_ids` are, whole: the version whose `split` side they equal, or None
+    (part of a side, or no split file). An older run's run.json predates `split_version`."""
+    if split not in SPLITS:
+        return None
+    try:
+        s = read_split(domain)
+    except FileNotFoundError:
+        return None
+    ids = set(task_ids)
+    if ids and ids == set((s.get("v1") or {}).get(split) or []):
+        return 1
+    if ids and ids == set(s.get(split) or []):
+        return int(s.get("version", 1))
+    return None
+
+
+def cut_size(domain: str, split: str, cut: int | None) -> int | None:
+    """How many tasks `split` held at cut `cut` (the committed one when None), or None."""
+    if split not in SPLITS:
+        return None
+    try:
+        s = read_split(domain)
+    except FileNotFoundError:
+        return None
+    side = s if cut is None or cut == int(s.get("version", 1)) else s.get(f"v{cut}") or {}
+    ids = side.get(split)
+    return len(ids) if isinstance(ids, list) else None
+
+
 def read_task_extract(domain: str) -> dict[str, Any]:
     p = TASKS_DIR / f"{domain}.json"
     if not p.exists():

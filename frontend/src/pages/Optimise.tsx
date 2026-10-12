@@ -17,7 +17,7 @@ import {
 } from '../lib/api';
 import { Loading, Points } from '../lib/ui';
 import { agentPath, optimisePath, runPath, useLens } from '../lib/url';
-import { CycleDumbbell, VersionsFig, frac, standing } from '../lib/versions';
+import { CycleDumbbell, VersionsFig, frac, onTheTab, standing, versionSpans } from '../lib/versions';
 import { useExp } from '../lib/scope';
 
 /**
@@ -109,11 +109,14 @@ function taskOutcome(e: LedgerEntry | undefined, taskId: string): string {
   return o.verdict === 'pending' ? 'pending' : 'unchanged';
 }
 
-/** Fig 1 · one domain's versions in build order, train and test, and the champion each faced. */
+/** Fig 1 · one domain's versions in build order, train and test, and the champion each faced.
+ *  Only the versions played on every task of their split: one played on part of a split (a
+ *  check of one change) or never played is left off, and logged in `loop/<domain>/versions.md`. */
 function VersionsSection({ h, open }: { h: VersionHistory; open: string | null }) {
   const nav = useNavigate();
   const { champ } = standing(h);
-  const cyc = h.versions.filter((v) => v.made.cycle != null);
+  const { drawn, off } = onTheTab(h);
+  const cyc = drawn.filter((v) => v.made.cycle != null);
   const held = cyc.filter((v) => v.verdict === 'hold').length;
   const aboveHeld = cyc.filter((v) => v.verdict === 'hold' && v.train && v.vs?.train && v.train.passed > v.vs.train.passed).length;
   return (
@@ -124,10 +127,10 @@ function VersionsSection({ h, open }: { h: VersionHistory; open: string | null }
       </h2>
       <figure>
         <div className="label fig-title">
-          fig 1 · every {domainLabel(h.domain)} version in build order: train (filled), test (open), and the champion each challenger faced (green tick)
+          fig 1 · every {domainLabel(h.domain)} version{off.length ? ' played on all of train and test' : ''}, in build order: train (filled), test (open), and the champion each challenger faced (green tick)
         </div>
         <VersionsFig
-          h={h}
+          h={{ ...h, versions: drawn }}
           mode="rounds"
           open={open}
           onPick={(v) => nav(v.made.kind === 'base' ? agentPath(h.domain, v.version) : optimisePath(h.domain, v.version))}
@@ -156,6 +159,14 @@ function VersionsSection({ h, open }: { h: VersionHistory; open: string | null }
               <>
                 <b>The green tick is the champion it was gated against</b>; + is tasks fixed, − broken. A column opens its round.
               </>,
+              off.length ? (
+                <>
+                  <b>
+                    {drawn.length} of {h.versions.length} versions were played on every train and test task
+                  </b>
+                  ; the other {off.length} ({versionSpans(off)}) checked one change on part of a split, or were never played. They are logged in build order in <code>loop/{h.domain}/versions.md</code>.
+                </>
+              ) : null,
             ]}
           />
           <span className="path">agents/{h.domain}/v*/ · loop/{h.domain}/ledger.jsonl · loop/{h.domain}/registry.json · runs/*/run.json → /api/versions</span>

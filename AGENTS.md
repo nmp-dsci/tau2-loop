@@ -177,7 +177,7 @@ make test · make lint
 | Rubric | `/rubric` | how τ² decides a conversation passed, and which check failed |
 | Leaderboard | `/leaderboard` | who else has tried, and why we are not comparable yet |
 | Runs | `/runs/<run>[?vs=<run>]` · `/runs/<run>/<task>/t<n>` | who holds each domain and how the title moved; what we ran, what it cost, and the gate against another run; a conversation's trace, each voice in its own colour (the answering agent in `--agent` blue, the simulated customer in `--user` sand, tool results on white), and for a DB failure every field where the final database differs from gold's |
-| Optimise | `/optimise/<domain>/<version>` | every version of a domain, train and test; a round: diagnose → propose → outcome; every cycle across the domains |
+| Optimise | `/optimise/<domain>/<version>` | every version of a domain played on all of train and test (the rest are logged in `loop/<domain>/versions.md`); a round: diagnose → propose → outcome; every cycle across the domains |
 | Agent | `/agent/<domain>/<version>?run=&trial=&node=&step=` | one conversation drawn as the agent in its harness; each node's inputs and outputs; a tool playground (plan s05) |
 | Review | `/review/<run>/<task>/t<n>` | what a person thought of what the judge scored (writes) |
 
@@ -209,7 +209,13 @@ ledger's test run, else its newest test run on the same cut. Runs draws each dom
 champion and newest challenger, then the champions over the versions (a re-baseline is a
 second point in one column); Optimise draws the chosen domain's versions, train and test
 with the champion each faced, and every cycle in every domain as champion against
-challenger. No line joins numbers from two different cuts.
+challenger. No line joins numbers from two different cuts. Optimise draws only a version that is
+`full`: a train run of a whole split side (the run has a cut; one played with `TASKS=` has none)
+and a test run of one when it has a test number (12 Oct 2026, the person's call). The rest, each a
+check of one change on part of a split or a version never played, are how the optimisation went
+between the drawn ones: `make versions-log DOMAIN=` writes them, in build order, into
+`loop/<domain>/versions.md` with what made each, why (`history._why`), what it played and its runs,
+and `tests/test_versions_log.py` fails when banking's log is missing a version the tab leaves off.
 
 The Agent tab (`lib/agentgraph.tsx`) reads three routes. `GET /api/runs/<run>/<task>/t<n>`
 returns every message whole (ids pair a result with its call), the task spec, and the

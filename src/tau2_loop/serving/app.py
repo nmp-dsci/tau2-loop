@@ -66,7 +66,7 @@ from tau2_loop.data import documents as kb_docs
 from tau2_loop.data import leaderboard as board
 from tau2_loop.data import pg
 from tau2_loop.data.goals import customer_goal, is_placeholder
-from tau2_loop.data.splits import read_split, read_task_extract, split_ids
+from tau2_loop.data.splits import cut_of, read_split, read_task_extract, split_ids
 from tau2_loop.eval import live as live_mod
 from tau2_loop.eval import replay
 from tau2_loop.eval import retrieval as retrieval_mod
@@ -76,7 +76,7 @@ from tau2_loop.eval.health import run_health
 from tau2_loop.eval.profile import profile
 from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
-from tau2_loop.loop.history import version_history
+from tau2_loop.loop.history import load_history
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tooljudge import gold as judge_gold_mod
 from tau2_loop.tooljudge import labels as judge_labels
@@ -981,33 +981,7 @@ def create_app() -> FastAPI:
     def versions(domain: str | None = None) -> dict[str, Any]:
         """Per domain, every version in build order with the run the gate read, its test run,
         how it was made and who held the title: the figures on the Runs and Optimise tabs."""
-        out = {}
-        for d in DOMAINS if domain is None else (domain,):
-            runs = [
-                {
-                    "run_id": m.run_id,
-                    "agent": m.agent,
-                    "split": m.split,
-                    "cut": m.split_version or _cut_of(m),
-                    "passed": m.summary["passed"],
-                    "n": m.summary["n_scored"],
-                    "model": m.model,
-                    "effort": m.agent_effort,
-                }
-                for m in list_runs(d)
-                if not m.dry_run and m.finished_at and m.summary and m.summary.get("n_scored")
-            ]
-            vs = [
-                {
-                    "name": v.name,
-                    "model": v.config.model,
-                    "effort": v.config.effort,
-                    "diagnosis": _json_or_none(v.path / "diagnosis.json"),
-                }
-                for v in list_versions(d)
-            ]
-            out[d] = version_history(d, vs, runs, read_ledger(d), read_registry(d))
-        return out
+        return {d: load_history(d) for d in (DOMAINS if domain is None else (domain,))}
 
     @app.get("/api/experiments")
     def experiments() -> dict[str, Any]:
@@ -1316,18 +1290,9 @@ def _conversation_health(run_id: str, task_id: str, trial: int) -> dict[str, Any
 
 def _cut_of(m: RunMeta) -> int | None:
     """Which cut an older run's tasks are (its run.json predates `split_version`): 1 or 2, or None."""
-    if m.split not in ("train", "test") or m.domain not in DOMAINS:
+    if m.domain not in DOMAINS:
         return None
-    try:
-        s = read_split(m.domain)
-    except FileNotFoundError:
-        return None
-    ids = set(m.task_ids)
-    if ids and ids == set((s.get("v1") or {}).get(m.split) or []):
-        return 1
-    if ids and ids == set(s.get(m.split) or []):
-        return int(s.get("version", 1))
-    return None
+    return cut_of(m.domain, m.split, list(m.task_ids))
 
 
 def _tokens_per_conversation(results: list[TaskResult]) -> dict[str, int] | None:

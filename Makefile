@@ -118,6 +118,9 @@ judge-score: ## J2 (s11): rewrite REPLAY=<judge_runs id>'s summary with today's 
 ledger: ## print DOMAIN's loop ledger
 	uv run tau2loop ledger --domain $(DOMAIN)
 
+versions-log: ## loop/DOMAIN/versions.md: every version in build order, the ones the Optimise tab leaves off (played on part of a split, or never) between the ones it draws
+	uv run tau2loop versions-log --domain $(DOMAIN)
+
 snapshot: platform-status ## export MLflow to loop/mlflow_snapshot.json
 	uv run tau2loop snapshot
 

@@ -551,6 +551,17 @@ def ledger(domain: str = "airline") -> None:
     console.print(t)
 
 
+@app.command("versions-log")
+def versions_log(domain: str = "banking_knowledge") -> None:
+    """Write loop/<domain>/versions.md: every answering-agent version in build order, the ones
+    the Optimise tab leaves off (played on part of a split, or never) between the ones it draws."""
+    from tau2_loop.loop.versions_log import write
+
+    p, h = write(domain)
+    off = [v["version"] for v in h["versions"] if not v["full"]]
+    console.print(f"{p}: {len(h['versions'])} versions, {len(off)} left off the Optimise tab")
+
+
 @app.command("judge-labels")
 def judge_labels(domain: str = "airline") -> None:
     """J0 (s11): label every checkpoint of every scored train conversation from gold → data/judge/."""
