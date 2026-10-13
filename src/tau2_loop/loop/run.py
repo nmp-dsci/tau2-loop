@@ -603,6 +603,7 @@ async def run_optimise(
     optimiser_model: str | None = None,
     mode: str | None = None,
     settings: dict[str, Any] | None = None,
+    run_id: str | None = None,
 ) -> OptimiserOutput:
     """One optimiser session on `source`'s train failures (default the champion), writing the
     next version and scoring nothing (s14): play it with `make eval`, gate it with `make
@@ -612,7 +613,10 @@ async def run_optimise(
 
     The source's failures come from the registry's train run when the source is the champion,
     else from the newest scored train run of its exact bytes; a source with neither is refused,
-    because this step plays nothing."""
+    because this step plays nothing. `run_id` (s23, the person's call) names the train run
+    instead: one of the source's exact bytes on the whole split under today's simulation rules,
+    played with another customer model (v23's Haiku 5.5 customer). Such a run is an experiment,
+    never a record (`_covers`), so it is read only when named, and the diagnosis records it."""
     profile, optimiser_model, mode = _settings(domain, optimiser_model, mode)
     champ_name = (read_registry(domain).get("champion") or {}).get("agent")
     source = source or (str(champ_name) if champ_name else None)
@@ -622,7 +626,27 @@ async def run_optimise(
     meta: RunMeta | None = None
     results: list[TaskResult] = []
     reg = (read_registry(domain).get("champion") or {}) if source == champ_name else {}
-    if reg.get("fingerprint") == version.fingerprint and reg.get("split") == "train":
+    if run_id:
+        meta, results = load_run(run_id)
+        wrong = [
+            why
+            for bad, why in (
+                (meta.agent != source, f"it is {meta.agent}'s, not {source}'s"),
+                (meta.fingerprint != version.fingerprint, f"it played other bytes than {source}'s"),
+                (meta.split != "train", f"it is a {meta.split} run"),
+                (
+                    set(meta.task_ids) != set(split_ids(domain, "train")),
+                    "it is not the whole split",
+                ),
+                (meta.trials != 1 or meta.dry_run, "it is not one scored trial"),
+                (meta.sim_rules != SIM_RULES, f"it ran under {meta.sim_rules}, not {SIM_RULES}"),
+                (not meta.summary, "it has no score yet"),
+            )
+            if bad
+        ]
+        if wrong:
+            raise ValueError(f"run {run_id} cannot be read: {'; '.join(wrong)}")
+    elif reg.get("fingerprint") == version.fingerprint and reg.get("split") == "train":
         meta, results = load_run(str(reg["run_id"]))
     else:
         runs = _runs_of(domain, source, "train", split_ids(domain, "train"), 1)
@@ -660,6 +684,8 @@ async def run_optimise(
     if isinstance(d, dict):  # what `make challenge` writes into the ledger for this version
         d["optimised_from"] = source
         d["source_run"] = meta.run_id
+        if run_id:
+            d["source_run_customer"] = meta.user_model  # named by the person: not the loop's
         d["optimiser"] = {
             "model": model_label(optimiser_model),
             "mode": mode,

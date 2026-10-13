@@ -430,11 +430,18 @@ def optimise(
             help="the new version keeps every tool call of a reply (native only)",
         ),
     ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option(
+            help="read this train run's failures: the source's bytes on the whole split, "
+            "played with another customer model (s23)"
+        ),
+    ] = None,
 ) -> None:
     """One optimiser session on the source's train failures, writing the next version with no
     evaluation (s14): play it with `make eval`, gate it with `make challenge`. --agent-model,
     --agent-effort and --parallel-calls give it agent settings that differ from the source's;
-    the harness writes them, never the optimiser."""
+    the harness writes them, never the optimiser. --run names the train run to read (s23)."""
     from tau2_loop.loop.run import run_optimise
 
     settings: dict[str, object] = {}
@@ -445,7 +452,7 @@ def optimise(
     if parallel_calls is not None:
         settings["parallel_calls"] = parallel_calls
     try:
-        opt = asyncio.run(run_optimise(domain, source, optimiser, mode, settings or None))
+        opt = asyncio.run(run_optimise(domain, source, optimiser, mode, settings or None, run))
     except ValueError as e:
         console.print(f"[red]optimise refused:[/] {e}")
         raise typer.Exit(1) from e

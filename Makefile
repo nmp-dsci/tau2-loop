@@ -84,8 +84,8 @@ promote: ## promote RUN=<run id> to champion of its domain (KIND="model swap" fo
 
 loop: platform-status ## the error loop on DOMAIN: CYCLES=1 of eval → diagnose → new version → gate → test under DOMAIN's optimiser profile (AGENT= to start from a held version; OPTIMISER=, MODE=classic|routing override the profile for this run; TRIALS=1)
 	uv run tau2loop loop --domain $(DOMAIN) --cycles $(CYCLES) $(if $(AGENT),--agent $(AGENT)) $(if $(OPTIMISER),--optimiser $(OPTIMISER)) --concurrency $(CONCURRENCY) --trials $(TRIALS) $(if $(MODE),--mode $(MODE))
-optimise: ## one optimiser session from FROM= (default the champion) on DOMAIN's train failures, writing the next version and scoring nothing; MODEL=, EFFORT=, PARALLEL_CALLS=true set the new version's agent.yaml; OPTIMISER=, MODE= override the profile
-	uv run tau2loop optimise --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(OPTIMISER),--optimiser $(OPTIMISER)) $(if $(MODE),--mode $(MODE)) $(if $(MODEL),--agent-model $(MODEL)) $(if $(EFFORT),--agent-effort $(EFFORT)) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls)
+optimise: ## one optimiser session from FROM= (default the champion) on DOMAIN's train failures, writing the next version and scoring nothing; MODEL=, EFFORT=, PARALLEL_CALLS=true set the new version's agent.yaml; OPTIMISER=, MODE= override the profile; RUN= names the train run to read (s23: one played with another customer)
+	uv run tau2loop optimise --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(OPTIMISER),--optimiser $(OPTIMISER)) $(if $(MODE),--mode $(MODE)) $(if $(MODEL),--agent-model $(MODEL)) $(if $(EFFORT),--agent-effort $(EFFORT)) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(RUN),--run $(RUN))
 ab: platform-status ## two challengers from DOMAIN's champion on the same failures, the classic and the routing optimiser, under DOMAIN's optimiser profile (OPTIMISER= overrides its model); both gated and tested, at most one crowned
 	uv run tau2loop ab --domain $(DOMAIN) $(if $(OPTIMISER),--optimiser $(OPTIMISER)) --concurrency $(CONCURRENCY) --trials $(TRIALS)
 
