@@ -1,0 +1,465 @@
+{
+  "diagnoses": [
+    {
+      "task_id": "task_084",
+      "symptom": "Whole Foods incorrect-amount debit dispute filed with customer_max_liability_amount 100 (the disputed amount).",
+      "graded_difference": "debit_card_disputes.dsp_4c15bbe02fde.customer_max_liability_amount: agent 100.0, gold 50.0 (file_debit_card_transaction_dispute_6281 at message 36).",
+      "root_cause": "Our own rule. system.md says '$500 (or the amount if lower)', and check D2 explicitly lets liability equal the disputed amount when it is between 50 and 500. The agent applied min(500, amount) to a charge reported days after it posted. Doc _031 lists only three tiers: $50, $500 and unlimited. The tool description says to 'Use -1 for unlimited'. Gold uses 50 or 500 even for charges below $50 (084's $47.50 charge was filed at 50 and matched).",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "checks.py"
+      ],
+      "why_this_surface": "The wrong rule is in the prompt, and the check whitelists it. Both must change, or the check keeps letting the amount through.",
+      "evidence": "doc _031: 'Reported within 2 business days of statement: Maximum liability $50 / within 60 days: $500 / after 60 days: Unlimited'. v23 system.md: 'else $500 (or the amount if lower)'.",
+      "change": "Liability is a tier and never the amount: 50 by default (a charge since the last statement is still in time), 500 only when the customer is reporting a charge from an older statement late, -1 after 60 days. D2 then accepts only 50, 500 or -1."
+    },
+    {
+      "task_id": "task_086",
+      "symptom": "Three disputes filed with liability equal to the disputed amount (189.99, 100, 200). The ATM-deposit dispute was never filed.",
+      "graded_difference": "debit_card_disputes: customer_max_liability_amount 189.99/100/200 vs gold 50 on three disputes; dsp for btxn_0788d2513c8c (atm_deposit_not_credited) missing.",
+      "root_cause": "The liability values come from the same '(or the amount if lower)' rule as task_084. The missing deposit dispute is the simulated customer's doing. Its instructions say 'If your records show that, then I'll go with what you have', but it said 'Can we just skip that one for now?', and the agent did as asked.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "checks.py"
+      ],
+      "why_this_surface": "Same liability fix as task_084. Nothing is changed for the skipped dispute, because the customer asked for the skip.",
+      "evidence": "user: 'If your records show $400 credited on that date, then I'll go with what you have... Can we just skip that one for now?'",
+      "change": "Covered by the tier-only liability rule and D2. Not expected to pass while the simulated customer skips the deposit dispute."
+    },
+    {
+      "task_id": "task_082",
+      "symptom": "ElectroniX fraud filed with liability 347.50 and pin_compromised 'unknown' after the customer said the PIN was on a note in the lost wallet. The ATM dispute got pin 'unknown' although the customer used the PIN normally. FitLife was filed with card_in_possession false. The Green Fee-Free card was closed although the customer wanted to keep using it.",
+      "graded_difference": "debit_card_disputes: liability 347.5 vs 50, pin_compromised/pin_shared_voluntarily/provisional credit on dsp_10e20efddf60, pin_compromised on dsp_ce4ea4d90d11, card_in_possession on dsp_d3627614b43e; debit_cards.dbc_mc47a2b9e1_gff CLOSED vs ACTIVE.",
+      "root_cause": "The liability value is the same '(or the amount if lower)' rule. The other fields are judgement calls on the customer's words, several of them ambiguous: whether a PIN on a sticky note counts as 'shared', and card possession at the time of the charge. Fixing liability alone will not pass the task.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md",
+        "checks.py"
+      ],
+      "why_this_surface": "The liability part and pin_compromised from the customer's words go in the dispute line, and the yes_shared/provisional-credit pairing goes in a check. The rest has no document rule to cite, so nothing is written for it.",
+      "evidence": "agent filed customer_max_liability_amount 347.5 on a $347.50 charge while telling the customer 'Within 2 business days of that statement, your maximum liability is $50'.",
+      "change": "Covered by the liability rule. The prompt also says pin_compromised 'no' when the customer used the PIN normally or says it is safe. Not expected to pass."
+    },
+    {
+      "task_id": "task_083",
+      "symptom": "Four disputes filed. The ATM shortfall and goods-not-received disputes got liability equal to the amount (150, 189.50). The nephew dispute had pin_compromised 'yes_shared' but provisional_credit_eligible true. The agent then transferred to have a human review the liabilities.",
+      "graded_difference": "ACTION basis: all four file_debit_card_transaction_dispute_6281 calls differ from gold in arguments.",
+      "root_cause": "Two rule errors. (1) Liability set to the amount, the same rule as task_084. (2) Provisional credit marked eligible on a voluntarily shared PIN, which doc _032 excludes. ACTION also needs every other argument to match gold exactly, and those cannot be seen.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "system.md"
+      ],
+      "why_this_surface": "Both errors are checkable from the call's own arguments, so they go in check_write.",
+      "evidence": "doc _032: 'Provisional Credit is NOT REQUIRED ... when: 3. Customer shared their PIN voluntarily (pin_compromised = 'yes_shared')'. Agent: pin_compromised yes_shared with provisional_credit_eligible true.",
+      "change": "D2 accepts tiers only. A new D3 sends back one dispute with pin_compromised 'yes_shared' and provisional_credit_eligible true. Not counted as a fix because of the unseen ACTION arguments."
+    },
+    {
+      "task_id": "task_051",
+      "symptom": "After the high-utilization denial and the $3,000 payment, resubmitting the CLI returned 'A similar request may already exist.' twice. The agent transferred instead of deciding the request.",
+      "graded_difference": "credit_card_accounts.cc_5e4c1a83b0_bronze.credit_limit: agent $4,000, gold $5000; approve_credit_limit_increase_5847 never unlocked or called.",
+      "root_cause": "The agent read 'already exists' as a system error and escalated. Logistics_007 has the agent decide the request on record: re-check eligibility, then approve or deny. approve_credit_limit_increase_5847 takes no request id. Gold approves after the payment without a new submission.",
+      "class": "lost-state",
+      "surfaces": [
+        "checks.py",
+        "memory.py",
+        "guidance.py"
+      ],
+      "why_this_surface": "The step skipped is in the middle of a procedure. Memory records the 'already exists' result, guidance tells the agent to carry on, and check_write sends the transfer back once.",
+      "evidence": "tool: 'Error: A similar request may already exist.' then transfer_to_human_agents(reason='technical_system_error'). logistics_007 Step 4: 'If all requirements are met ... Use the approve_credit_limit_increase_5847 tool'.",
+      "change": "After a CLI submission returns 'already exist'/'similar request' and before any approve or deny, the first transfer is sent back once: the request is on record, so re-check eligibility on the account as it stands now and approve or deny it."
+    },
+    {
+      "task_id": "task_068",
+      "symptom": "The agent opened 'Green Account (checking)'. The helper stripped it to 'Green Account', and the result's class looked wrong to the agent. It retried the same open about 45 times, each failing with 'may already exist', never closed Light Blue, and transferred.",
+      "graded_difference": "accounts.chk_rp65a7b3c4 status OPEN vs gold CLOSED (close_bank_account_7392 never unlocked or called); credit_card_applications missing (the customer's own apply, never reached).",
+      "root_cause": "helper.py rewrites account_class invisibly. The first open was right and matched gold. The agent believed the wrong product had been opened and kept reopening it, and the tool's 'already exists' error never said why. The spiral used up the conversation before the close step.",
+      "class": "lost-state",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "The fact lost is that this exact account was already opened in this conversation, under its base name. Memory records successful opens, and check_write blocks a second open of the same type and class with the explanation.",
+      "evidence": "open_bank_account_4821 with account_class 'Green Account (checking)' was sent ~45 times (messages 1607-5844); handoff: 'The exact name \"Green Account (checking)\" was never tried.'",
+      "change": "A second open_bank_account of the same account_type and class (compared without the '(checking)'/'(savings)' suffix, case-insensitive) already opened in this conversation is sent back with the existing account id. The sentence says the system records classes under the base name, so that account is the requested product, and the agent should move on to the next step."
+    },
+    {
+      "task_id": "task_046",
+      "symptom": "The agent found the card's open dispute and said the closure cannot proceed. It mentioned the $125 balance, then unlocked and ran pay_credit_card_from_checking when the customer asked.",
+      "graded_difference": "credit_card_accounts.cc_224959b99e_bsilver.current_balance $0.00 vs gold $125.00, checking 05 debited, and the pay tool recorded CALLED (unlock at message 20, call at message 22).",
+      "root_cause": "Logistics_003 Step 1 checks the requirements in order. When one fails, the agent explains what must be resolved and does not go on. The balance payment is the remedy for requirement 4 and should never be reached when requirement 1 fails. Check B gates payments only once closure tools are unlocked, which never happened here.",
+      "class": "lost-state",
+      "surfaces": [
+        "memory.py",
+        "guidance.py",
+        "checks.py"
+      ],
+      "why_this_surface": "The unlock is graded and check_write cannot see it, so guidance must stop the step before the unlock. The check on the payment is the backstop.",
+      "evidence": "doc logistics_003 Step 1: 'If any requirement is not met, explain what must be resolved and do not proceed'; agent: 'There's also a $125.00 balance ... I can help with that when the time comes.'",
+      "change": "Memory records the customer's request to close a credit card and maps open dispute-history records to cards: by transaction_id through the cc transaction read and card type, or by the customer holding a single card. Guidance names a card blocked by an open dispute or a non-final replacement and says to take no further closure step on it (payment, reason log, retention) and unlock nothing for them. Check B blocks pay_credit_card_from_checking on that card while the customer asked to close a credit card."
+    },
+    {
+      "task_id": "task_041",
+      "symptom": "Two 'refund not processed' disputes filed as partial_refund with partial_refund_amount equal to the whole transaction (67.45, 312.50).",
+      "graded_difference": "transaction_disputes dsp_218430c347f4 and dsp_99ec1e950ea6: resolution_requested partial_refund vs gold full_refund, partial_refund_amount set vs not set.",
+      "root_cause": "The right tool and category with a wrong argument. Doc cc_014 defines full_refund as the complete transaction amount, so a 'partial' refund of the whole charge is a full refund.",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "Checkable at the write against the transaction amount the agent has already read.",
+      "evidence": "doc cc_014 item 13: \"'full_refund': Complete refund of the transaction amount; 'partial_refund': Partial amount\"; agent args partial_refund_amount 67.45 on the $67.45 Tesla charge.",
+      "change": "Memory maps transaction_id to amount from get_credit_card_transactions_by_user. A file_credit_card_transaction_dispute with resolution_requested partial_refund and partial_refund_amount at or above the transaction amount is sent back once to use full_refund."
+    },
+    {
+      "task_id": "task_020",
+      "symptom": "The agent had the customer file 13 cash-back disputes. Gold files 4: the three underpaid (JetBlue, Southwest, Zoom) and one overpaid (GitHub on Silver, 2550 points recorded where the 4% rate gives 1020).",
+      "graded_difference": "cash_back_disputes and user_discoverable_tool_calls: 9 extra submit_cash_back_dispute_0589 records (Adobe, Microsoft 365, Whole Foods, Amazon, Coursera, Slack, Netflix, Costco, Nordstrom).",
+      "root_cause": "Arithmetic and knowledge. The agent did not apply the Business Silver double-cash-back promo for the 6 months from the account's opening (doc bsilver_012). It also flagged correct rates as overpaid. Recomputed with the card rate, the exclusions (doc bsilver_005) and the promo window, exactly the gold 4 differ. 'Either direction' (overpaid GitHub) is right.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "The per-transaction calculation is judgement over documents. A code copy of the card rates would hard-code the KB.",
+      "evidence": "doc bsilver_012: 'The 6-month window begins on your account opening date'; Adobe 03/05/2025 $54.99 → 1100 points = 20% inside the promo, which is correct, yet the agent flagged it.",
+      "change": "The corrections bullet gains a rewards method: for each transaction, expected = amount × the card's rate for its category (after the exclusions doc) × the promo multiplier only if the date falls in the window counted from that account's opening date. Flag only transactions that differ, over or under."
+    },
+    {
+      "task_id": "task_027",
+      "symptom": "The agent had three underpaid transactions disputed and missed the overpaid GitHub transaction (txn_b7e2d4c5f506).",
+      "graded_difference": "cash_back_disputes: dispute for txn_b7e2d4c5f506 missing (submit_cash_back_dispute_0589, expected 027_3).",
+      "root_cause": "The same rewards calculation as task_020. Recomputing every transaction surfaces the overpaid one.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Same as task_020.",
+      "evidence": "GitHub Enterprise, Silver Rewards, $255.00 Software, 2550 points recorded; doc silver_rewards_card_002: 4.0% on software.",
+      "change": "Covered by the rewards-method line."
+    },
+    {
+      "task_id": "task_069",
+      "symptom": "The agent opened the Gold Account for savings although the customer needs ATM fee rebates on savings. Gold has none, and Silver Plus is the eligible best.",
+      "graded_difference": "accounts: Gold Account ea5af121ea163b18 opened vs gold Silver Plus Account (open_bank_account_4821 at message 25, account_class).",
+      "root_cause": "The recommendation dropped no product for a feature the customer said they need. The agent priced rates but did not test each stated requirement against each product's own document.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Recommendation is judgement, and the bullet already exists. It gains the requirement test.",
+      "evidence": "Customer requirement: a savings account that reimburses out-of-network ATM fees; doc_savings_accounts_gold_account_001 lists no ATM rebate.",
+      "change": "The recommendations bullet now says to drop any product that lacks a feature the customer said they need, or whose minimum balance exceeds the amount they will hold, each checked in that product's own document."
+    },
+    {
+      "task_id": "task_063",
+      "symptom": "The agent recommended and opened the Gold Account ($10,000 minimum to stay in good standing) for an $8,000 deposit, then also opened Silver Plus and gave deposit_check_3847.",
+      "graded_difference": "accounts: extra Gold Account d200673364c5d7f4; user_discoverable_tools: deposit_check_3847 GIVEN (gold leaves both unset).",
+      "root_cause": "Same as task_069: the stated amount was not tested against the product's minimum. The deposit-tool gift followed the customer's 'fund it' request, and gold does not make it.",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Same recommendations bullet as task_069.",
+      "evidence": "doc_savings_accounts_gold_account_001: 'Maintain at least $10,000 to keep your account in good standing.'",
+      "change": "Covered by the recommendations line. Not counted as a fix, because the deposit-tool gift is unexplained."
+    },
+    {
+      "task_id": "task_090",
+      "symptom": "The replacement card was ordered with the PREMIUM design, which the customer never chose. Two fraud disputes were filed after the customer said 'please go ahead and file the dispute'.",
+      "graded_difference": "debit_card_orders/debit_cards card_design PREMIUM vs gold CLASSIC; two extra debit_card_disputes.",
+      "root_cause": "The design was an unrequested choice: the customer said only 'fastest option that's free'. The disputes followed the simulated customer's request, which goes against its scenario ('I usually just get like $60 or $100', 'Haven't withdrew anything').",
+      "class": "write-arguments",
+      "surfaces": [
+        "checks.py",
+        "memory.py"
+      ],
+      "why_this_surface": "The design argument is checkable at the write against the customer's words.",
+      "evidence": "user: 'Give the fastest option that's free'; order_debit_card card_design PREMIUM; user: 'No, I don't recognize that $100 ATM withdrawal ... please go ahead and file the dispute.'",
+      "change": "E5: an order_debit_card with card_design other than CLASSIC, when no customer message mentioned a design (design, metallic, custom, classic, premium design), is sent back once to ask the customer. Not expected to pass, because of the customer-requested disputes."
+    },
+    {
+      "task_id": "task_088",
+      "symptom": "The Miami fraud charge on a card the customer still holds, with no PIN compromise, was filed as pin_purchase. Gold has signature_purchase.",
+      "graded_difference": "debit_card_disputes.dsp_76b0f2bc26c3.transaction_type: pin_purchase vs signature_purchase.",
+      "root_cause": "Doc _031 says to take transaction_type from the customer's circumstances. An in-store fraud by someone else could only be a PIN purchase if the PIN might be compromised. Otherwise it was signed (a cloned card, per the CODE 82 doc).",
+      "class": "knowledge",
+      "surfaces": [
+        "system.md"
+      ],
+      "why_this_surface": "Judgement on the customer's circumstances, added to the existing dispute-fields line.",
+      "evidence": "doc purple_account_007 CODE 82: 'This could indicate a cloned or counterfeit card was used'; doc _031 transaction_type: 'Determine from user circumstances'.",
+      "change": "The dispute line says that for in-store fraud by someone else, pin_purchase applies only when the PIN may be compromised, and otherwise signature_purchase."
+    },
+    {
+      "task_id": "task_016",
+      "symptom": "The agent gave the $750 requirement, then refused to confirm the customer's proposed $750 purchase with an invented restriction ('I can't tell you to make that purchase', 'I can't look at or share her account activity'). The customer never ran submit_transaction.",
+      "graded_difference": "credit_card_transaction_history: the customer's submit_transaction write is missing.",
+      "root_cause": "The agent invented a restriction that no document states (policy guideline 1) and talked the customer out of an action their own tool allows. Two prompt lines have failed on this before.",
+      "class": "knowledge",
+      "surfaces": [
+        "checks.py"
+      ],
+      "why_this_surface": "The prompt rule already exists and is ignored. A reply check sends the refusal back once and asks for the document sentence.",
+      "evidence": "agent: 'I can't tell you to make that purchase ... the knowledge base doesn't say that purchases made by someone else on her card count'.",
+      "change": "check_reply sends back once per conversation a reply with invented-permission wording ('can't tell you to', 'can't confirm (that|it) would', 'can't (look at|share|access) (her|his|their)', 'not permitted', 'not allowed', 'against (our )?policy', 'prohibited'). The sentence says to cite the document that says it or drop it, since a customer acting with their own tool needs no permission. Not counted as a fix."
+    },
+    {
+      "task_id": "task_048",
+      "symptom": "The agent closed the Gold Rewards Card after the customer applied for the Silver card.",
+      "graded_difference": "credit_card_accounts.cc_e3f4a5b6c7_gold closed_by/closed_date/status set vs gold unset (close_credit_card_account_7834 at message 60).",
+      "root_cause": "The simulated customer broke its script. Its step 9 has it move straight on to the Crypto card, but it said 'Let's go ahead and close the Gold Rewards Card now, since I'm switching to the Silver.' Closing on an explicit request is correct.",
+      "class": "task-fault",
+      "surfaces": [],
+      "why_this_surface": "No reading of the documents refuses an explicit closure request on an eligible card after retention was offered.",
+      "evidence": "user: 'Thanks, the application went through. Let's go ahead and close the Gold Rewards Card now, since I'm switching to the Silver.'",
+      "change": "none"
+    },
+    {
+      "task_id": "task_053",
+      "symptom": "The customer chose dispute-first, so the CLI was denied for pending_disputes. The customer also ran the get_card_last_4_digits tool that the agent gave.",
+      "graded_difference": "credit_limit/CLI records differ; user_discoverable_tool_calls 9a452d6c48d8d07e present vs gold unset.",
+      "root_cause": "Gold's expected actions give get_card_last_4_digits (053_13) but contain no customer call to it. The simulated customer is told to use the tool when given it, so every run that follows gold's own give leaves a record gold lacks. The task cannot be passed.",
+      "class": "task-fault",
+      "surfaces": [],
+      "why_this_surface": "Gold contradicts the customer's instructions. No agent behaviour matches it.",
+      "evidence": "user scenario: 'If the agent provides you with the get_card_last_4_digits tool, use it'; expected actions list 053_13 give_discoverable_user_tool and no call_discoverable_user_tool.",
+      "change": "none"
+    }
+  ],
+  "surfaces": {
+    "system.md": "Edit three existing bullets and add no new ones. (1) Debit dispute bullet (tasks 084, 086, 082, 083, 088): replace the liability sentence with 'customer_max_liability_amount is a Regulation E tier, never the disputed amount: 50 when reported within 2 business days of the statement showing the charge (a charge since the last statement has none yet, so it is in time); 500 only when the customer is reporting a charge from an older statement late; -1 after 60 days.' Add 'pin_compromised from their words (no when they used it normally or say it is safe); for in-store fraud by someone else, pin_purchase only if the PIN may be compromised, else signature_purchase.' Delete '(or the amount if lower)'. (2) Corrections bullet (tasks 020, 027): add 'Rewards check: per transaction, expected = amount × the card's rate for its category (apply the exclusions doc) × a promo multiplier only when the date is inside the promo window counted from that account's opening date; flag only those that differ, over or under.' (3) Recommendations bullet (tasks 069, 063): after 'drop ineligible ones' add '(any lacking a feature the customer said they need, or whose minimum balance exceeds the amount they will hold, per that product's own document)'. Keep the net growth under 600 characters.",
+    "checks.py": "(a) D2 (tasks 084/086/082/083): customer_max_liability_amount must be exactly 50, 500 or -1. Remove the amount exception, and drop '(or the disputed amount if lower)' from the message. (b) New D3 (task 083): file_debit_card_transaction_dispute with pin_compromised 'yes_shared' and provisional_credit_eligible true is sent back once, citing doc _032 'not required when the customer shared their PIN voluntarily'. (c) New H (task 068): open_bank_account whose (account_type, account_class lowercased with a trailing '(checking|savings…)' parenthetical removed) matches an account already opened successfully in this conversation is blocked. The sentence names the existing account id, says the system records classes under the base name so that account is the requested product, and says to continue with the next step. Use _once. (d) New I (task 051): transfer_to_human_agents while state['cli_exists'] is set (a CLI submission returned 'already exist' or 'similar request' and no approve or deny followed) is sent back once: the request is on record; per logistics_007 re-check eligibility on the account as it stands now and approve or deny it. (e) New J (task 041): file_credit_card_transaction_dispute with resolution_requested 'partial_refund' and partial_refund_amount >= the transaction's amount (from state['cc_txn_amounts']) minus 0.005 is sent back once: a refund of the whole charge is 'full_refund' (doc cc_014), so omit partial_refund_amount. (f) B widened (task 046): pay_credit_card_from_checking (and log_credit_card_closure_reason, apply_statement_credit, apply_credit_card_account_flag) on a card in state['cc_close_blocked'] while state['wants_cc_close'] is set is sent back once: closure requirement 1 or 2 fails for this card, so per logistics_003 Step 1 explain what must be resolved and take no further closure step. This applies whether or not closure tools were unlocked. (g) New E5 (task 090): order_debit_card with card_design other than CLASSIC while state['user_design'] is not set is sent back once: the customer has not chosen a design, so ask (doc _029 lists CLASSIC, PREMIUM, CUSTOM). (h) check_reply (task 016): once per conversation, a reply matching invented-permission wording (can't tell you to | can't confirm (that|it) would | can(no|')t (look at|share|access) (her|his|their) | not permitted | not allowed | against (our )?policy | prohibited) is sent back: cite the policy or document sentence that says it or drop it (policy guideline 1); a customer acting with their own tool needs no permission. Keep the existing transfer-identity rule first.",
+    "memory.py": "Add: (1) opened_accounts, a list of {type, norm_class, id} from successful open_bank_account results (id from the 'Account ID:' line), using the same normalisation as check H. (2) cli_exists, set when a submit_credit_limit_increase_request result matches /already exist|similar request/i and cleared when approve_ or deny_credit_limit_increase succeeds. (3) cc_txn_amounts {transaction_id: float} and cc_txn_type {transaction_id: credit_card_type}, parsed from get_credit_card_transactions_by_user records ('transaction_amount: $x'). That is a top-level tool, so handle it before the 'name != call_discoverable_agent_tool' return. (4) cc_accounts {account_id: card_type} from get_credit_card_accounts_by_user records. (5) From get_user_dispute_history records: open disputes, meaning status not in RESOLVED/CLOSED/DENIED/REJECTED/WITHDRAWN/APPROVED/COMPLETED. Map each to a card by transaction_id through cc_txn_type and cc_accounts' card_type, or to the only card when cc_accounts has exactly one. Add those cards to cc_close_blocked, together with any card whose replacement read is non-final (the existing _NON_FINAL/_NO_ORDERS logic). (6) From user messages: wants_cc_close when /\\bclos\\w*\\b[^.?!]{0,60}\\b(card|credit)/i or /\\b(card|credit)\\b[^.?!]{0,60}\\bclos/i; user_design when /\\b(design|metallic|custom|classic)\\b|premium (design|look|card design)/i.",
+    "guidance.py": "Add two notes inside the 600-character cut, placed before the leads note so they survive truncation. (1) On trigger 'tool' while cli_exists is set: 'The CLI request is already on record: continue logistics_007, re-check eligibility on the account as it stands now and approve or deny it; do not transfer for this.' (2) When wants_cc_close is set and cc_close_blocked is non-empty: 'Closing <card ids> is blocked (open dispute or pending replacement, logistics_003 Step 1): explain what must be resolved and stop. Take no further closure step on that card (balance payment, reason log, retention) and unlock no tool for one.' (task 046: the graded unlock happens before any check can see it)."
+  },
+  "expected_to_fix": [
+    "task_084",
+    "task_051",
+    "task_068",
+    "task_046",
+    "task_041",
+    "task_020",
+    "task_027",
+    "task_069"
+  ],
+  "risks": [
+    "Liability: passing debit-dispute tasks (train and test) that gold files at 500 for late reports could now get 50 if the agent misjudges lateness. The prompt keeps 500 for a charge the customer reports late from an older statement, which matches the late-report cases in 084/086. D2 still allows 500, so it never blocks a correct tier.",
+    "check H could block a legitimate second account of the same class. A customer opening two identical accounts in one call is rare, and _once lets the third attempt through.",
+    "check B widened: a customer with an open dispute on one card who wants to close another card and pay that other card's balance is not blocked, because the block is keyed by card id. When the mapping is unknown with several cards, no card is marked blocked and the call goes through.",
+    "check_reply wording could catch a legitimate refusal that cites a document. It fires once per conversation and only asks for the citation, so a grounded refusal is kept on the rewrite.",
+    "E5: a customer who did choose a design in words the regex misses costs one extra question. That is harmless to the DB.",
+    "The rewards-method prompt line could change how recommendation or correction tasks compute. It only applies to rewards discrepancies and is grounded in the card documents.",
+    "helper.py is unchanged: the suffix strip stays (lesson 4, task 065). Check H explains its effect instead of removing it."
+  ],
+  "carried_forward": [],
+  "dropped": [],
+  "changes": [
+    {
+      "file": "system.md",
+      "anchor": "Debit dispute fields come from",
+      "what": "Replaced the '$500 (or the amount if lower)' liability sentence with tier-only liability (50 by default, 500 for a late report from an older statement, -1 after 60 days); added pin_compromised from the customer's words and pin_purchase only when the PIN may be compromised, else signature_purchase.",
+      "why": "doc _031 lists only $50/$500/unlimited tiers; agent filed 100, 189.99, 200, 347.5 as liability; doc _031 transaction_type 'Determine from user circumstances', purple_account_007 CODE 82 cloned card.",
+      "task_ids": [
+        "task_084",
+        "task_086",
+        "task_082",
+        "task_083",
+        "task_088"
+      ],
+      "verified_in_session": true,
+      "verification": "Edits asserted unique before writing; system.md is 3274 chars (cap 3987) with {policy} kept."
+    },
+    {
+      "file": "system.md",
+      "anchor": "Corrections are net per account",
+      "what": "Added the rewards check: expected = amount x category rate (after exclusions) x promo multiplier only inside the window counted from that account's opening date; flag only those that differ, either way.",
+      "why": "doc bsilver_012 'The 6-month window begins on your account opening date'; task_020 flagged 13 transactions where 4 differ, task_027 missed the overpaid GitHub one.",
+      "task_ids": [
+        "task_020",
+        "task_027"
+      ],
+      "verified_in_session": true,
+      "verification": "Edit asserted unique and applied; length within budget."
+    },
+    {
+      "file": "system.md",
+      "anchor": "Recommendations: list the whole",
+      "what": "'drop ineligible ones' now names products lacking a feature the customer said they need, or whose minimum balance exceeds the amount they will hold, per that product's own document.",
+      "why": "doc_savings_accounts_gold_account_001 lists no ATM rebate and 'Maintain at least $10,000'; agent opened Gold Account for an ATM-rebate need (069) and an $8,000 deposit (063).",
+      "task_ids": [
+        "task_069",
+        "task_063"
+      ],
+      "verified_in_session": true,
+      "verification": "Edit asserted unique and applied."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "D ── debit card disputes",
+      "what": "D2 now accepts only 50, 500 or -1 (the disputed-amount exception is gone); new D3 sends back pin_compromised 'yes_shared' with provisional_credit_eligible true.",
+      "why": "doc _031 tiers; doc _032 'Provisional Credit is NOT REQUIRED ... 3. Customer shared their PIN voluntarily (pin_compromised = 'yes_shared')'.",
+      "task_ids": [
+        "task_084",
+        "task_086",
+        "task_082",
+        "task_083"
+      ],
+      "verified_in_session": true,
+      "verification": "check_write on file_debit_card_transaction_dispute_6281: liability 100 -> D2 sentence; 50 and -1 -> None; yes_shared+eligible true -> D3 sentence; yes_shared+false -> None."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "I ── transfer while a",
+      "what": "A transfer while a CLI submission returned 'similar request may already exist' and no approve/deny followed is sent back once: decide the request on record per logistics_007.",
+      "why": "task_051: 'Error: A similar request may already exist.' twice, then transfer_to_human_agents(reason='technical_system_error'); logistics_007 Step 4 approve_credit_limit_increase_5847.",
+      "task_ids": [
+        "task_051"
+      ],
+      "verified_in_session": true,
+      "verification": "remember() on the submit result sets cli_exists; check_write('transfer_to_human_agents') -> I sentence; after an approve result cli_exists False and transfer -> None."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "H ── the same account",
+      "what": "A second open_bank_account of an account type and class (without '(checking)'/'(savings)', case-insensitive) already opened in this conversation is sent back naming the existing account id and saying it is the requested product.",
+      "why": "task_068: 'Green Account (checking)' opened as 'Green Account' (helper strip) then retried ~45 times with 'may already exist', never reaching the close.",
+      "task_ids": [
+        "task_068"
+      ],
+      "verified_in_session": true,
+      "verification": "remember() on the 'Bank account opened successfully! - Account ID: ...' result records it; reopening 'Green Account (checking)' -> H sentence with the id; a savings 'Green Account (savings)' -> None."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "J ── a 'partial' refund",
+      "what": "file_credit_card_transaction_dispute with partial_refund and partial_refund_amount >= the transaction amount is sent back once to use full_refund.",
+      "why": "doc cc_014 item 13: 'full_refund': Complete refund of the transaction amount; agent filed partial_refund 67.45 on a $67.45 charge.",
+      "task_ids": [
+        "task_041"
+      ],
+      "verified_in_session": true,
+      "verification": "With cc_txn_amounts from a transactions result: partial 67.45 on $67.45 -> J sentence; partial 20 -> None; full_refund -> None."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "B0 ── no closure step",
+      "what": "Payment, closure-reason log, statement credit, account flag or close on a card in cc_close_blocked while the customer asked to close a credit card is sent back once, whether or not closure tools were unlocked.",
+      "why": "logistics_003 Step 1 'If any requirement is not met, explain what must be resolved and do not proceed'; task_046 paid $125 on a card with an UNDER_REVIEW dispute.",
+      "task_ids": [
+        "task_046"
+      ],
+      "verified_in_session": true,
+      "verification": "046-shaped state (one card, UNDER_REVIEW dispute) -> pay blocked; two-card state with a SHIPPED replacement on one card -> that card blocked, the other's payment None; an unmappable dispute among two cards blocks nothing."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "E5 order_debit_card design",
+      "what": "order_debit_card with a non-CLASSIC card_design when no customer message mentioned a design is sent back once to ask the customer.",
+      "why": "task_090: customer said only 'Give the fastest option that's free'; agent ordered PREMIUM; doc _029 lists CLASSIC/PREMIUM/CUSTOM.",
+      "task_ids": [
+        "task_090"
+      ],
+      "verified_in_session": true,
+      "verification": "With that user message: PREMIUM -> E5 sentence, CLASSIC -> None; after a message choosing 'the metallic one' PREMIUM -> None."
+    },
+    {
+      "file": "checks.py",
+      "anchor": "check_reply",
+      "what": "Once per conversation, a reply with invented-permission wording (can't tell you to, can't look at/share her..., not permitted, not allowed, against policy, prohibited) is sent back to cite the document or drop it; the transfer-identity rule stays first.",
+      "why": "task_016 agent: 'I can't tell you to make that purchase ... I can't look at or share her account activity'; policy guideline 1.",
+      "task_ids": [
+        "task_016"
+      ],
+      "verified_in_session": true,
+      "verification": "check_reply on the 016 sentence -> send-back once, second call -> None; neutral reply -> None."
+    },
+    {
+      "file": "memory.py",
+      "anchor": "_remember",
+      "what": "Records opened_accounts, cli_exists, cc_txn_amounts/cc_txn_type (top-level transactions read), cc_accounts, open_cc_disputes and cc_close_blocked (by transaction card type or a single card, plus non-final replacements), wants_cc_close and user_design from user messages.",
+      "why": "Facts checks B0, H, I, J, E5 and the guidance notes need; record formats taken from the 041, 046, 051, 068 traces.",
+      "task_ids": [
+        "task_046",
+        "task_051",
+        "task_068",
+        "task_041",
+        "task_090"
+      ],
+      "verified_in_session": true,
+      "verification": "remember() fed the trace result texts; state fields as expected (cc_txn_amounts {'txn_a': 67.45, ...}, cc_close_blocked {'cc_x_bsilver'})."
+    },
+    {
+      "file": "guidance.py",
+      "anchor": "_guidance",
+      "what": "Two notes before the leads note: after a 'similar request' CLI result, decide it and do not transfer; when a credit card to close is blocked, name it, explain and stop with no further closure step or unlock.",
+      "why": "task_051 transfer; task_046 unlock and payment happened before any check could see them.",
+      "task_ids": [
+        "task_051",
+        "task_046"
+      ],
+      "verified_in_session": true,
+      "verification": "guidance(state,'tool') returned each note on the 051- and 046-shaped states; 237 chars on the multi-card state, under the 600 cut."
+    }
+  ],
+  "prompt_diff_summary": "Debit-dispute liability is a tier only (50/500/-1), plus pin_compromised and signature vs PIN purchase; rewards-check method in the corrections bullet; recommendations drop products lacking a stated need or with a minimum above the held amount (+787 chars).",
+  "helper_diff_summary": "checks: D2 tiers only, D3 yes_shared no provisional credit, H no duplicate open, I no transfer on an existing CLI request, J partial==whole -> full_refund, B0 no closure step on a blocked card, E5 design not chosen, check_reply invented restriction once; memory records their facts; guidance adds CLI-on-record and blocked-closure notes; helper.py unchanged.",
+  "routed": [
+    "system.md",
+    "checks.py",
+    "memory.py",
+    "guidance.py"
+  ],
+  "optimised_from": "v23",
+  "source_run": "20261011T055438Z_banking_knowledge_v23_train",
+  "source_run_customer": "claude-sdk/claude-haiku-5-5",
+  "optimiser": {
+    "model": "Claude Opus 5.5",
+    "mode": "routing",
+    "profile": {
+      "domain": "banking_knowledge",
+      "fingerprint": "80741e4d9562",
+      "tuned": true,
+      "model": "opus",
+      "effort": "medium",
+      "mode": "routing",
+      "max_turns": 120,
+      "budgets": {
+        "transcript": 60000,
+        "scenario": 60000,
+        "diff": 90000
+      },
+      "surfaces": [
+        "system.md",
+        "helper.py",
+        "checks.py",
+        "memory.py",
+        "guidance.py"
+      ],
+      "guide_chars": 10771,
+      "guards": false,
+      "overrides": {}
+    },
+    "routed": [
+      "system.md",
+      "checks.py",
+      "memory.py",
+      "guidance.py"
+    ],
+    "surfaces_changed": [
+      "system.md",
+      "checks.py",
+      "memory.py",
+      "guidance.py"
+    ],
+    "turns": 82,
+    "input_tokens": 10581646,
+    "output_tokens": 72378,
+    "cost_usd_notional": 6.412146399999999,
+    "duration_ms": 747860,
+    "error": null,
+    "rejected": false
+  }
+}
