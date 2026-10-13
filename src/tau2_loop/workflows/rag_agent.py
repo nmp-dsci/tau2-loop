@@ -30,6 +30,16 @@ store locks them all at once (`store.FileStore`: a worker waits, and logs who ho
 merge reads their newest versions, and the commit is refused unless every version it read is
 still the head. Every message the harness sends is saved as a `user` event, so a session's
 conversation rebuilds turn for turn.
+
+s23 (r18): every clause from its source (`workflows/provenance.py`). A step gives each deciding
+clause its own quote (`basis`); code picks the steps whose clauses may not follow from their quotes,
+kept steps included, and a reviewer reads them in its own context (`review.md`, a separate model
+call saved as a `review` event, no gold, no outcome); the documents the session printed in full and
+cites nowhere are listed in the merge turn and must be cited or set aside (`set_aside`); a called
+tool's description that names a document's title is followed; and a tool's description lists its
+error replies. The reviewer's "no", the unaccounted documents and the named titles go back to the
+writer once with the gate's reasons, and are recorded, never blocking: the gate is still D1, D8
+and the version's `rubric` checks.
 """
 
 from __future__ import annotations
@@ -111,6 +121,11 @@ class RagAgent:
     # included. Before it only step calls and numbered names were collected, so once r14 ruled out
     # the customer's `submit_referral`, no later merge showed its description again.
     describe_named: bool = False
+    # s23 (r18): a tool's description lists its error replies (M6), and a reviewer reads the clauses
+    # code picks (M2): (model, effort) and its instructions, `review.md`
+    tool_errors: bool = False
+    reviewer: tuple[str, str] | None = None
+    review_prompt: str = ""
 
 
 def versions(domain: str) -> list[str]:
@@ -152,6 +167,13 @@ def load(domain: str, name: str) -> RagAgent:
         rubric=tuple(str(x) for x in cfg.get("rubric") or ()),
         tool_docs=bool(cfg.get("tool_docs", False)),
         describe_named=bool(cfg.get("describe_named", False)),
+        tool_errors=bool(cfg.get("tool_errors", False)),
+        reviewer=(
+            (str(cfg["reviewer"]["model"]), str(cfg["reviewer"]["effort"]))
+            if isinstance(cfg.get("reviewer"), dict)
+            else None
+        ),
+        review_prompt=(d / "review.md").read_text() if (d / "review.md").is_file() else "",
     )
 
 
@@ -244,11 +266,11 @@ TOOL_DOC_SCHEMA = {
 }
 
 
-def tool_doc_reply(domain: str, args: dict[str, Any]) -> str:
+def tool_doc_reply(domain: str, args: dict[str, Any], errors: bool = False) -> str:
     from tau2_loop.workflows import toolspec
 
     name = str(args.get("tool_name") or "").strip()
-    return toolspec.describe(domain, name) or f"No tool is named {name!r}."
+    return toolspec.describe(domain, name, errors) or f"No tool is named {name!r}."
 
 
 def system_prompt(agent: RagAgent, env: Any) -> tuple[str, list[dict[str, Any]]]:
@@ -624,7 +646,7 @@ def run_session(
                     elif c["name"] == "shell":
                         refused = shell_refusal(str(args.get("command", "")))
                     out = refused or (
-                        tool_doc_reply(meta.domain, args)
+                        tool_doc_reply(meta.domain, args, agent.tool_errors)
                         if c["name"] == TOOL_DOC
                         else run_tool(c["name"], args)
                     )
@@ -659,6 +681,39 @@ def run_session(
             say(again)
         return None
 
+    def review(text: str) -> str | None:
+        """s23 (r18): one reviewer call in its own context, with no tools and no gold; the
+        message and the reply are saved as a `review` event."""
+        if agent.reviewer is None:
+            return None
+        from tau2_loop.llm import core
+
+        model, effort = agent.reviewer
+        ans = ask(
+            [{"role": "user", "content": text}],
+            None,
+            core.resolve_model(model),
+            effort,
+            agent.tool_mode,
+        )
+        res = getattr(ans, "result", None)
+        if res is not None:
+            meta.input_tokens += int(res.input_tokens or 0)
+            meta.output_tokens += int(res.output_tokens or 0)
+        emit(
+            {
+                "kind": "review",
+                "text": text,
+                "reply": ans.content,
+                "model": model,
+                "effort": effort,
+                "input_tokens": getattr(res, "input_tokens", None),
+                "output_tokens": getattr(res, "output_tokens", None),
+                "ms": getattr(res, "duration_ms", None),
+            }
+        )
+        return str(ans.content) if ans.content is not None else None
+
     wf: dict[str, Any] | None = None
     try:
         wf = turns(
@@ -667,7 +722,7 @@ def run_session(
         )
         if wf is not None and agent.merge and meta.source == "question":
             merge = _merge_concurrent if agent.merge == "concurrent" else _merge
-            wf = merge(meta, agent, wf, messages, turns, say, emit, policy)
+            wf = merge(meta, agent, wf, messages, turns, say, emit, policy, review)
         meta.status = "done" if wf is not None else "failed"
         if wf is None:
             meta.error = "no workflow JSON in the final reply"
@@ -755,7 +810,9 @@ def _tool_docs_text(
     from tau2_loop.workflows import toolspec
 
     jobs = [*((draft or {}).get("jobs") or []), *(e["workflow"] for e in _unique(cands))]
-    text = toolspec.descriptions(agent.domain, jobs, every_named=agent.describe_named)
+    text = toolspec.descriptions(
+        agent.domain, jobs, every_named=agent.describe_named, errors=agent.tool_errors
+    )
     which = "call or name" if agent.describe_named else "call"
     return (
         f"\n\n## The tools these jobs {which}, as the answering agent reads them when it unlocks "
@@ -764,6 +821,26 @@ def _tool_docs_text(
         "(reading rule 10).\n\n" + text
         if text
         else ""
+    )
+
+
+def _read_text(
+    agent: RagAgent, messages: list[dict[str, Any]], draft: dict[str, Any] | None
+) -> str:
+    """s23 (r18, D15): the documents the session printed in full that its draft cites nowhere."""
+    if "D15" not in agent.rubric:
+        return ""
+    from tau2_loop.workflows import provenance
+
+    docs = provenance.unaccounted(agent.domain, messages, draft)
+    if not docs:
+        return ""
+    return (
+        "\n\n## Documents you printed in full that your draft cites nowhere (D15)\n\n"
+        + provenance.read_list(agent.domain, docs)
+        + "\n\nFor each, quote the passage in the step it decides, or list it in `set_aside` "
+        '({"doc": "<id>", "why": "<why it does not bear on these jobs>"}). Two documents that '
+        "give one figure or requirement are both cited (reading rule 18)."
     )
 
 
@@ -811,6 +888,46 @@ def parse_decision(text: str | None, drafted: list[str]) -> dict[str, list[str]]
     return out
 
 
+def _advice(
+    domain: str,
+    job: dict[str, Any],
+    c: dict[str, Any],
+    merged: dict[str, Any],
+    policy: str,
+    gate_checks: tuple[str, ...],
+    review: Callable[[str], str | None] | None,
+    review_prompt: str,
+) -> tuple[list[str], dict[str, Any]]:
+    """s23 (r18): what goes back to the writer once without blocking: the reviewer's "no" on a
+    clause code picked (D14, every step of the job, kept ones included), and an idea a called
+    tool's description names that is a document's title (D16). Returns the lines and the record."""
+    from tau2_loop.workflows import provenance, toolspec
+
+    lines: list[str] = []
+    record: dict[str, Any] = {}
+    if "D16" in gate_checks:
+        aside = frozenset(provenance.set_aside(domain, merged))
+        c["D16"] = toolspec.named_titles(domain, job, aside)
+        lines += toolspec.reasons({"D16": c["D16"]}, ("D16",))
+    if "D14" in gate_checks and review is not None and review_prompt:
+        picks = provenance.flagged(domain, job, policy)
+        verdicts = (
+            provenance.parse_review(
+                review(provenance.review_request(domain, review_prompt, job, picks, policy))
+            )
+            if picks
+            else []
+        )
+        record = {"picked": picks, "verdicts": verdicts}
+        c["D14"] = {
+            "picked": len(picks),
+            "no": sum(v["verdict"] == "no" for v in verdicts),
+            "partly": sum(v["verdict"] == "partly" for v in verdicts),
+        }
+        lines += provenance.review_reasons(verdicts)
+    return lines, record
+
+
 def _assess(
     domain: str,
     merged: dict[str, Any],
@@ -818,6 +935,8 @@ def _assess(
     policy: str,
     held: set[str] | None = None,
     gate_checks: tuple[str, ...] = (),
+    review: Callable[[str], str | None] | None = None,
+    review_prompt: str = "",
 ) -> list[dict[str, Any]]:
     """Each merged job with the library versions it merged and its checks; `why` lists what
     stops it being taken. Under locks (`held`), a job may write only a name it holds and merge
@@ -902,12 +1021,17 @@ def _assess(
                 )
             for e in prev:
                 claimed.setdefault(e["job"], str(job["job"]))
+        advise, reviewed = _advice(
+            domain, job, c, merged, policy, gate_checks, review, review_prompt
+        )
         rows.append(
             {
                 "job": job,
                 "previous": prev,
                 "checks": c,
                 "why": [*why, *blocked],
+                "advise": advise,
+                "review": reviewed,
                 "blocked": bool(blocked),
                 "written": written,
                 "kept": kept,
@@ -922,9 +1046,14 @@ def _send_back(
     turns: Callable[..., Any],
     say: Callable[[str], None],
     emit: Callable[[dict[str, Any]], None],
+    extra: list[str] | None = None,
 ) -> dict[str, Any] | None:
-    failing = [r for r in rows if r["why"]]
-    lines = "\n".join(f"- {r['job']['job']}: {'; '.join(r['why'])}" for r in failing)
+    failing = [r for r in rows if r["why"] or r.get("advise")]
+    lines = "\n".join(
+        f"- {r['job']['job']}: {'; '.join([*r['why'], *(r.get('advise') or [])])}" for r in failing
+    )
+    if extra:
+        lines = "\n".join([*([lines] if lines else []), *(f"- {x}" for x in extra)])
     emit({"kind": "note", "text": f"The merge failed its checks; sent back once.\n{lines}"})
     say(
         "The harness checked your merge and these jobs fail:\n"
@@ -937,6 +1066,13 @@ def _send_back(
             else "A merged job keeps every step, tool and quote of the versions it "
             "merged unless its changelog names the change (removed or changed, with why), and "
             "every quote is copied from the document it cites."
+        )
+        + (
+            " A clause the reviewer finds unsupported is quoted from the passage that says it, "
+            'rewritten to what the passage says, or given a basis entry with source "none" and '
+            "made a question for the customer; a document is cited or set aside."
+            if "D14" in agent.rubric or "D15" in agent.rubric
+            else ""
         )
         + " Reply with the whole JSON again, fixed."
         + (
@@ -974,6 +1110,8 @@ def _take(
                 "changelog": job.get("changelog") or [],
                 "checks": r["checks"],
                 "failed": r["why"],
+                **({"advice": r["advise"]} if r.get("advise") else {}),
+                **({"review": r["review"]} if r.get("review") else {}),
                 "taken": keep,
                 **({"written": r["written"]} if r.get("written") else {}),
                 **({"kept": r["kept"]} if r.get("kept") else {}),
@@ -988,6 +1126,43 @@ def _take(
     return taken, records, rejected
 
 
+def _unaccounted_lines(
+    agent: RagAgent, messages: list[dict[str, Any]], merged: dict[str, Any] | None
+) -> list[str]:
+    """s23 (r18, D15): the send-back line for documents printed in full, cited by no job and not
+    set aside; empty when every one is accounted for or the version does not check it."""
+    if "D15" not in agent.rubric or merged is None:
+        return []
+    from tau2_loop.workflows import provenance
+
+    docs = provenance.unaccounted(agent.domain, messages, merged)
+    if not docs:
+        return []
+    return [
+        "you printed these documents in full and no job cites them or sets them aside: "
+        + ", ".join(docs[:20])
+        + (" …" if len(docs) > 20 else "")
+        + ". Quote each in the step it decides, or list it in `set_aside` with why it does not "
+        "bear on these jobs"
+    ]
+
+
+def _accounting(
+    agent: RagAgent, messages: list[dict[str, Any]], merged: dict[str, Any] | None
+) -> dict[str, Any]:
+    """s23 (r18): the session's `set_aside` and what is still unaccounted, kept in its output."""
+    if "D15" not in agent.rubric and "D16" not in agent.rubric:
+        return {}
+    from tau2_loop.workflows import provenance
+
+    return {
+        "set_aside": [
+            {"doc": d, "why": w} for d, w in provenance.set_aside(agent.domain, merged).items()
+        ],
+        "unaccounted": provenance.unaccounted(agent.domain, messages, merged),
+    }
+
+
 def _merge(
     meta: SessionMeta,
     agent: RagAgent,
@@ -997,6 +1172,7 @@ def _merge(
     say: Callable[[str], None],
     emit: Callable[[dict[str, Any]], None],
     policy: str,
+    review: Callable[[str], str | None] | None = None,
 ) -> dict[str, Any]:
     """Merge the drafted jobs into the library's current versions, check each merge without a
     model, send failures back once, and take only what passes (s20). A merged job that still
@@ -1006,17 +1182,19 @@ def _merge(
     lib = library.entries(meta.domain, agent.name)  # as the last session left it
     cands = merge_candidates(draft, lib)
     emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
-    say(merge_message(agent, cands, draft))
+    say(merge_message(agent, cands, draft) + _read_text(agent, messages, draft))
     merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
+    rev = (review, agent.review_prompt)
     rows = (
-        _assess(meta.domain, merged, lib, policy, gate_checks=agent.rubric)
+        _assess(meta.domain, merged, lib, policy, None, agent.rubric, *rev)
         if merged is not None
         else []
     )
-    if merged is not None and any(r["why"] for r in rows):
-        again = _send_back(agent, rows, turns, say, emit)
+    extra = _unaccounted_lines(agent, messages, merged)
+    if merged is not None and (any(r["why"] or r.get("advise") for r in rows) or extra):
+        again = _send_back(agent, rows, turns, say, emit, extra)
         if again is not None:
-            merged, rows = again, _assess(meta.domain, again, lib, policy, gate_checks=agent.rubric)
+            merged, rows = again, _assess(meta.domain, again, lib, policy, None, agent.rubric, *rev)
     if merged is None:  # no merge written: keep only the draft's jobs no library job matches
         merged = {
             **draft,
@@ -1035,6 +1213,7 @@ def _merge(
         "jobs": taken,
         "documents": merged.get("documents") or draft.get("documents") or [],
         "open_questions": merged.get("open_questions") or draft.get("open_questions") or [],
+        **_accounting(agent, messages, merged),
         "merge": records,
         "rejected": rejected,
         "draft": draft.get("jobs") or [],
@@ -1064,6 +1243,7 @@ def _merge_concurrent(
     say: Callable[[str], None],
     emit: Callable[[dict[str, Any]], None],
     policy: str,
+    review: Callable[[str], str | None] | None = None,
 ) -> dict[str, Any]:
     """s21 (r3): the merge while other workers merge too. Name the jobs it will write, lock them
     all at once (waiting, and logging who holds them, if another worker does), read their newest
@@ -1154,18 +1334,24 @@ def _merge_concurrent(
                 pairs=pairs, current=_versions_text(mine, changed) or "(none)"
             )
             + _tool_docs_text(agent, {"held": mine}, draft)
+            + _read_text(agent, messages, draft)
         )
         held = set(lock.jobs)
         merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
+        rev = (review, agent.review_prompt)
         rows = (
-            _assess(meta.domain, merged, heads, policy, held, agent.rubric)
+            _assess(meta.domain, merged, heads, policy, held, agent.rubric, *rev)
             if merged is not None
             else []
         )
-        if merged is not None and any(r["why"] for r in rows):
-            again = _send_back(agent, rows, turns, say, emit)
+        extra = _unaccounted_lines(agent, messages, merged)
+        if merged is not None and (any(r["why"] or r.get("advise") for r in rows) or extra):
+            again = _send_back(agent, rows, turns, say, emit, extra)
             if again is not None:
-                merged, rows = again, _assess(meta.domain, again, heads, policy, held, agent.rubric)
+                merged, rows = (
+                    again,
+                    _assess(meta.domain, again, heads, policy, held, agent.rubric, *rev),
+                )
         if merged is None:  # nothing written: only the draft's new jobs, and only those it holds
             merged = {
                 **draft,
@@ -1216,6 +1402,7 @@ def _merge_concurrent(
         "jobs": taken,
         "documents": merged.get("documents") or draft.get("documents") or [],
         "open_questions": merged.get("open_questions") or draft.get("open_questions") or [],
+        **_accounting(agent, messages, merged),
         "merge": records,
         "rejected": rejected,
         "draft": draft.get("jobs") or [],
@@ -1486,7 +1673,7 @@ def session(domain: str, session_id: str) -> dict[str, Any]:
     }
 
 
-CHANGE_FILES = ("rag_agent.md", "merge.md", "decide.md", "rag_agent.yaml")
+CHANGE_FILES = ("rag_agent.md", "merge.md", "decide.md", "review.md", "rag_agent.yaml")
 
 
 def changes(domain: str, name: str) -> dict[str, Any] | None:
@@ -1496,7 +1683,7 @@ def changes(domain: str, name: str) -> dict[str, Any] | None:
     return json.loads(p.read_text()) if p.is_file() else None
 
 
-PROMPT_FILES = ("rag_agent.md", "decide.md", "merge.md")
+PROMPT_FILES = ("rag_agent.md", "decide.md", "merge.md", "review.md")
 
 
 def describe(domain: str, name: str) -> dict[str, Any]:
@@ -1549,9 +1736,12 @@ def describe(domain: str, name: str) -> dict[str, Any]:
         "rubric": list(agent.rubric),
         "tool_docs": agent.tool_docs,
         "describe_named": agent.describe_named,
+        "tool_errors": agent.tool_errors,
+        "reviewer": list(agent.reviewer) if agent.reviewer else None,
         "prompt": agent.prompt,
         "decide_prompt": agent.decide_prompt,
         "merge_prompt": agent.merge_prompt,
+        "review_prompt": agent.review_prompt,
         "files": files,
         "library": {
             "workflows": len(wf_library.entries(domain, name)),
