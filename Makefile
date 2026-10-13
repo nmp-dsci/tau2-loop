@@ -58,8 +58,8 @@ platform-status: ## preflight: the central MLflow must answer /health (runs befo
 smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
 	uv run tau2loop smoke --agent $(or $(AGENT),v0) --concurrency $(CONCURRENCY)
 
-eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks; USER_MODEL= the customer; NOTE= the run's note)
-	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t)) $(if $(USER_MODEL),--user-model $(USER_MODEL)) $(if $(NOTE),--note "$(NOTE)")
+eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks; USER_MODEL= the customer; USER_EFFORT= its effort, s23; NOTE= the run's note)
+	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t)) $(if $(USER_MODEL),--user-model $(USER_MODEL)) $(if $(USER_EFFORT),--user-effort $(USER_EFFORT)) $(if $(NOTE),--note "$(NOTE)")
 
 baselines: platform-status ## each domain's base version on its train split, one trial each: v0, or the oldest version where v0 was retired (banking, v1)
 	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --split train --concurrency $(CONCURRENCY) || exit 1; done

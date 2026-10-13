@@ -151,6 +151,7 @@ def _run_config(
     concurrency: int,
     seed: int,
     user_model: str = USER_MODEL,
+    user_effort: str = USER_EFFORT,
 ) -> Any:
     from tau2.data_model.simulation import TextRunConfig
 
@@ -175,7 +176,7 @@ def _run_config(
         "llm_args_agent": llm_args_agent,
         "user": user.register(domain),
         "llm_user": sdk_model(user_model),
-        "llm_args_user": with_effort({}, USER_EFFORT),
+        "llm_args_user": with_effort({}, user_effort),
         "num_trials": trials,
         "max_concurrency": concurrency,
         "seed": seed,
@@ -213,7 +214,10 @@ def run_eval(
     dry_run: bool = False,
     seed: int = SPLIT_SEED,
     user_model: str = USER_MODEL,
+    user_effort: str = USER_EFFORT,
 ) -> tuple[RunMeta, list[TaskResult]]:
+    """`user_effort` (s23, the person's Q7) sets the customer's effort for a side experiment; a run
+    with another than `USER_EFFORT` is never a record (`loop.run._covers`), as with another model."""
     if domain not in DOMAINS and domain != SMOKE_DOMAIN:
         raise ValueError(f"domain must be one of {DOMAINS + (SMOKE_DOMAIN,)}, got {domain!r}")
     quiet_tau2()
@@ -247,7 +251,7 @@ def run_eval(
         dry_run=dry_run,
         harness=HARNESS,
         agent_effort=version.config.effort,
-        user_effort=USER_EFFORT,
+        user_effort=user_effort,
         split_version=None if task_ids else split_version(domain),
         agent_route=agent_route()[0],
         retrieval=version.retrieval,
@@ -280,7 +284,7 @@ def run_eval(
     from tau2.runner.batch import run_tasks
     from tau2.runner.helpers import get_tasks
 
-    config = _run_config(domain, version, ids, trials, concurrency, seed, user_model)
+    config = _run_config(domain, version, ids, trials, concurrency, seed, user_model, user_effort)
     tasks = get_tasks(domain, config.task_split_name, task_ids=ids)
     by_id = {t.id: t for t in tasks}
     tau2_results = run_tasks(

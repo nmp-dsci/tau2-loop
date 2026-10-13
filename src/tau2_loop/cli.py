@@ -286,10 +286,16 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
             help="the customer's model (default haiku); a run with another is an experiment the loop never reuses"
         ),
     ] = None,
+    user_effort: Annotated[
+        str | None,
+        typer.Option(
+            help="the customer's effort (default medium); a run with another is an experiment (s23)"
+        ),
+    ] = None,
 ) -> None:
     """Run an agent version over a split of one domain and score it."""
     from tau2_loop.agent.versions import base_version
-    from tau2_loop.eval.runner import USER_MODEL, run_eval
+    from tau2_loop.eval.runner import USER_EFFORT, USER_MODEL, run_eval
 
     meta, _ = run_eval(
         domain,
@@ -302,6 +308,7 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
         track=not no_track,
         dry_run=dry_run,
         user_model=user_model or USER_MODEL,
+        user_effort=user_effort or USER_EFFORT,
     )
     console.print(f"run: runs/{meta.run_id}")
 

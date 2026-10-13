@@ -44,7 +44,15 @@ from tau2_loop.config import GATE_ON_TEST
 from tau2_loop.data.splits import halves, split_ids
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.results import TaskResult
-from tau2_loop.eval.runner import SIM_RULES, USER_MODEL, RunMeta, list_runs, load_run, run_eval
+from tau2_loop.eval.runner import (
+    SIM_RULES,
+    USER_EFFORT,
+    USER_MODEL,
+    RunMeta,
+    list_runs,
+    load_run,
+    run_eval,
+)
 from tau2_loop.llm import model_label, sdk_model
 from tau2_loop.loop.ledger import append_entry, next_cycle_number, update_entry
 from tau2_loop.loop.optimiser import MODES, OptimiserOutput, build_context, run_optimiser
@@ -64,6 +72,7 @@ def _covers(meta: RunMeta, ids: list[str], trials: int) -> bool:
         and not meta.dry_run
         and meta.sim_rules == SIM_RULES
         and meta.user_model == sdk_model(USER_MODEL)
+        and (meta.user_effort or USER_EFFORT) == USER_EFFORT
     )
 
 

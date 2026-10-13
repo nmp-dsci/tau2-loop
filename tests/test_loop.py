@@ -1398,3 +1398,29 @@ def test_optimise_reads_a_named_train_run_played_with_another_customer(
         asyncio.run(
             loop_run.run_optimise("banking_knowledge", "v23", "sonnet", "routing", run_id="r1")
         )
+
+
+def test_a_run_with_another_customer_effort_is_never_a_record() -> None:
+    """`make eval USER_EFFORT=high` (s23, the person's Q7) is a side experiment, as another model is."""
+    from tau2_loop.eval.runner import SIM_RULES, USER_MODEL
+    from tau2_loop.llm import sdk_model
+
+    meta = RunMeta(
+        "r",
+        "banking_knowledge",
+        "v23",
+        "fp",
+        "m",
+        sdk_model(USER_MODEL),
+        "j",
+        "train",
+        2,
+        1,
+        3,
+        1,
+        "t",
+    )
+    meta.task_ids, meta.sim_rules = ["a", "b"], SIM_RULES
+    for effort, record in ((None, True), ("medium", True), ("high", False)):
+        meta.user_effort = effort
+        assert loop_run._covers(meta, ["a", "b"], 1) is record
