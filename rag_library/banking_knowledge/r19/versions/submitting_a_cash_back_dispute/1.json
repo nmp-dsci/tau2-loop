@@ -1,0 +1,1250 @@
+{
+ "job": "submitting_a_cash_back_dispute",
+ "aliases": [
+  "Silver Rewards Card cash back points look wrong",
+  "cash back discrepancy",
+  "cash back discrepancy across several cards",
+  "cash back discrepancy investigation",
+  "cash back discrepancy review",
+  "cash back error vs policy exception",
+  "cash back on business and personal Silver cards doesn't add up",
+  "cash back points don't look right on a few transactions",
+  "cash back rewards don't add up",
+  "cash back rewards investigation",
+  "cash back rewards look wrong",
+  "customer has no statements or transaction ids and wants the agent to find the errors",
+  "customer wants rewards errors found and fixed, doing it themselves if needed",
+  "incorrect cash back rewards",
+  "incorrect rewards on a transaction",
+  "incorrect rewards on transactions",
+  "incorrect rewards points on transactions",
+  "investigate my cash back and fix any errors in either direction",
+  "missing cash back",
+  "over-awarded and under-awarded cash back",
+  "reward rate error vs. merchant exception check",
+  "rewards audit",
+  "rewards calculated incorrectly",
+  "rewards calculation review",
+  "rewards investigation",
+  "rewards miscalculation review",
+  "rewards not calculated correctly",
+  "rewards statements don't add up across a business card and a personal card",
+  "some of my cash back rewards might be wrong",
+  "think you're missing cash back",
+  "too many or too few points",
+  "total cash back received is not what I expected",
+  "wrong cash back rate",
+  "wrong rewards rate on a transaction"
+ ],
+ "when": {
+  "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received. This process applies to all credit card transactions.",
+  "doc": "doc_credit_cards_credit_cards_(general)_003"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer says their cash back looks wrong. The customer does not have to name the transactions. The agent reviews the records on every card the customer holds and finds the wrong ones.",
+  "quote": "When you contact us, we'll look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+  "doc": "doc_credit_cards_credit_cards_(general)_021"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "s_lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "s_lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "s_lookup_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "s_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "s_log",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "s_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_transactions_by_user",
+   "who": "agent",
+   "step": "s_txns",
+   "not_used": null
+  },
+  {
+   "tool": "give_discoverable_user_tool",
+   "who": "agent",
+   "step": "s_give",
+   "not_used": null
+  },
+  {
+   "tool": "submit_cash_back_dispute_0589",
+   "who": "customer",
+   "step": "s_customer_submit",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_user_tool",
+   "who": "customer",
+   "step": "s_customer_submit",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "s_transfer",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_dispute_history_7291",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used. Its description says it reads the transaction_disputes table, which holds credit card transaction disputes. It does not read cash back disputes, so it cannot show whether a cash back dispute exists or what state it is in."
+  },
+  {
+   "tool": "update_transaction_rewards_3847",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. It belongs to applying_resolved_cash_back_dispute_corrections, which runs only after a cash back dispute is resolved and approved."
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. The agent only gives the customer submit_cash_back_dispute_0589, and no agent tool is needed for that."
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used in this job. The customer runs the dispute tool."
+  }
+ ],
+ "info": [
+  {
+   "field": "customer_full_name",
+   "about": "The customer's full name, used to look up the record. The lookup is case sensitive. An email or user id can be used instead.",
+   "from": "customer",
+   "ask": "Could I have your full name, please?",
+   "may_hold_back": false
+  },
+  {
+   "field": "identity_fields",
+   "about": "Any two of: date of birth, email, phone number, home address",
+   "from": "customer",
+   "ask": "To verify your identity, please give me two of these: your date of birth, email address, phone number or home address.",
+   "may_hold_back": true
+  },
+  {
+   "field": "suspect_transactions",
+   "about": "Which purchases the customer thinks are wrong. If the customer cannot say, the agent reviews every transaction.",
+   "from": "customer",
+   "ask": "Do you know which purchases look wrong, or would you like me to review all of your credit card transactions?",
+   "may_hold_back": true
+  },
+  {
+   "field": "wants_to_dispute",
+   "about": "Whether the customer wants to submit cash back disputes for the transactions the review found to be wrong",
+   "from": "customer",
+   "ask": "I found these transactions where the cash back recorded does not match what your card should earn. Would you like to submit a cash back dispute for them?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "s_identify",
+   "by": "model",
+   "do": "Greet the customer politely. Ask for their full name (or email) and any two of: date of birth, email, phone number, home address. Share no account details before verification.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "greet politely",
+     "quote": "Be polite and professional",
+     "doc": "policy"
+    },
+    {
+     "clause": "ask for two of the four fields",
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "clause": "share nothing before verification",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_lookup_user",
+   "by": "model",
+   "do": "Call the read tool for the identifier the customer gave: get_user_information_by_name for a name, get_user_information_by_email for an email, or get_user_information_by_id for a user id.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the full name the customer gave (case sensitive)"
+   },
+   "lookup": [],
+   "after": [
+    "s_identify"
+   ],
+   "if": null,
+   "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "call the read tool for the identifier given",
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_verify",
+   "by": "model",
+   "do": "Compare the customer's answers with the record. Verification passes only if at least two of date of birth, email, phone number and address match; a name or user id alone does not count. If fewer than two match, reveal nothing from the record and ask again for the identity fields. Do not read any account or transaction until verification passes.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_lookup_user"
+   ],
+   "after": [
+    "s_lookup_user"
+   ],
+   "if": null,
+   "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "at least two of the four fields match",
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "clause": "a name or user id alone does not count",
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy"
+    },
+    {
+     "clause": "reveal nothing",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    },
+    {
+     "clause": "do not continue until verified",
+     "quote": "Generally, for any scenario involving accessing customer information in internal databases, you must first verify their identify before proceeding.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_time",
+   "by": "harness",
+   "do": "Get the current timestamp for the verification log.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "s_verify"
+   ],
+   "if": "verification passed",
+   "quote": "If you need the current time, always use the get_current_time() tool.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "get the current time with the tool",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "clause": "verification passed, so the log needs its time",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_log",
+   "by": "harness",
+   "do": "Log the verification. Do it once per conversation.",
+   "call": "log_verification",
+   "args": {
+    "name": "full name from the s_lookup_user record",
+    "user_id": "user_id from the s_lookup_user record",
+    "address": "address from the record",
+    "email": "email from the record",
+    "phone_number": "phone number from the record",
+    "date_of_birth": "date of birth from the record, MM/DD/YYYY",
+    "time_verified": "timestamp returned by s_time"
+   },
+   "lookup": [
+    "s_lookup_user",
+    "s_time"
+   ],
+   "after": [
+    "s_time"
+   ],
+   "if": "verification passed and the customer has not already been verified in this conversation",
+   "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "log after verification passed",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "clause": "once per conversation",
+     "quote": "No need to verify more than once in a single conversation.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_scope",
+   "by": "model",
+   "do": "Ask which purchases or cards look wrong. If the customer cannot say (for example, they have no statements or transaction ids to hand), tell them you will review every transaction on every card they hold. Do not ask them for receipts or card numbers.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "s_log"
+   ],
+   "if": "the customer has not said which transactions they think are wrong",
+   "quote": "Our customer service team has the tools to investigate cash back discrepancies and review your transaction history.",
+   "doc": "doc_credit_cards_credit_cards_(general)_021",
+   "basis": [
+    {
+     "clause": "the agent reviews the transaction history itself",
+     "quote": "Our customer service team has the tools to investigate cash back discrepancies and review your transaction history.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "clause": "no card details",
+     "quote": "Do not collect sensitive card details; the tool uses the identifiers provided by the user.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "no receipts",
+     "quote": "Do not ask for any documentation, receipts... from the customer unless it states very clearly in the knowledge base how to process it, and whether you're allowed to do so.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_accounts",
+   "by": "harness",
+   "do": "Read the customer's credit card accounts. Note each account's card type and date opened.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user's user_id"
+   },
+   "lookup": [],
+   "after": [
+    "s_log"
+   ],
+   "if": "verification passed",
+   "quote": "Recalculate the correct rewards for each transaction based on the card type, transaction category, and any applicable promotions.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004",
+   "basis": [
+    {
+     "clause": "card type and promotions decide the correct rewards",
+     "quote": "Recalculate the correct rewards for each transaction based on the card type, transaction category, and any applicable promotions.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "clause": "the account opening date is where a promo's 6 months start",
+     "quote": "The 6-month window begins on your account opening date, not the promotional start date",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "verification passed",
+     "quote": "Generally, for any scenario involving accessing customer information in internal databases, you must first verify their identify before proceeding.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_txns",
+   "by": "harness",
+   "do": "Read the customer's credit card transactions. For each one, note the transaction_id, card type, merchant, category, amount, date and recorded rewards_earned.",
+   "call": "get_credit_card_transactions_by_user",
+   "args": {
+    "user_id": "the verified user's user_id"
+   },
+   "lookup": [],
+   "after": [
+    "s_log"
+   ],
+   "if": "verification passed",
+   "quote": "When you contact us, we'll look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+   "doc": "doc_credit_cards_credit_cards_(general)_021",
+   "basis": [
+    {
+     "clause": "review the transactions",
+     "quote": "When you contact us, we'll look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "clause": "verification passed",
+     "quote": "Generally, for any scenario involving accessing customer information in internal databases, you must first verify their identify before proceeding.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_rates",
+   "by": "model",
+   "do": "For each card type that appears on a transaction, take that card's earning rates, exclusions and promotions from the rules below. For a card the rules do not cover, search the KB for that card's own documents and read them in full. Never take one card's rates from another card's pages. If the customer asks what their cards earn, explain the rates of the cards they hold.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_accounts",
+    "s_txns"
+   ],
+   "after": [
+    "s_accounts",
+    "s_txns"
+   ],
+   "if": null,
+   "quote": "Ensure your calculation reflects the proper base rate and any active bonus category or promotion at the time of purchase.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004",
+   "basis": [
+    {
+     "clause": "base rate, bonus category and promotion at the time of purchase",
+     "quote": "Ensure your calculation reflects the proper base rate and any active bonus category or promotion at the time of purchase.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "clause": "each card has its own bonus categories",
+     "quote": "Each credit card has its own bonus categories with higher reward rates.",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    }
+   ]
+  },
+  {
+   "id": "s_recalc",
+   "by": "model",
+   "do": "For each transaction, work out the rate that applies, in this order: first the card's bonus or base rate for the transaction's recorded category, then any merchant exclusion, then any promotion active for that account on the transaction date. For cash back cards, correct points = floor(amount × rate × 100), because 1 point = $0.01 and fractional points are truncated. For the EcoCard, correct points = floor(amount × points per dollar). Never use an expected_rewards field or the customer's own expectation.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_accounts",
+    "s_txns",
+    "s_rates"
+   ],
+   "after": [
+    "s_rates"
+   ],
+   "if": null,
+   "quote": "All credit card rewards points are rounded down to the nearest whole number.",
+   "doc": "doc_credit_cards_credit_cards_(general)_007",
+   "basis": [
+    {
+     "clause": "rewards are stored as points, 1 point = $0.01",
+     "quote": "these 'points' should be interpreted as cash back with a conversion rate of 1 point = $0.01",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "clause": "amount × rate × 100 gives points",
+     "quote": "For example, 250 points equals $2.50 in cash back, which matches a 2.5% cash back rate on a $100 purchase.",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "clause": "EcoCard earns points per dollar",
+     "quote": "5 points per dollar on green purchases, 1 point per dollar on other purchases",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "clause": "floor, never round up",
+     "quote": "the system always truncates (floors) fractional points rather than rounding to the nearest integer.",
+     "doc": "doc_credit_cards_credit_cards_(general)_007"
+    },
+    {
+     "clause": "the category on the record decides the rate",
+     "quote": "rewards are based on the merchant’s submitted category",
+     "doc": "doc_credit_cards_silver_rewards_card_002"
+    },
+    {
+     "clause": "never use expected_rewards",
+     "quote": "Important: Do not rely on any expected_rewards field in the dispute record. Independently verify rates and eligibility.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    }
+   ]
+  },
+  {
+   "id": "s_compare",
+   "by": "model",
+   "do": "Mark a transaction as discrepant when its recorded rewards_earned implies a different rate, category or promotion than the correct value from s_recalc. A recorded value equal to amount × the correct rate, rounded down or up, is correct and is not a discrepancy. Keep the list of discrepant transaction_ids, each with its recorded and correct values, and note whether it is too low or too high.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_txns",
+    "s_recalc"
+   ],
+   "after": [
+    "s_recalc"
+   ],
+   "if": null,
+   "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received.",
+   "doc": "doc_credit_cards_credit_cards_(general)_003",
+   "basis": [
+    {
+     "clause": "a discrepancy is a difference between received and should-have-received cash back",
+     "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "a rounding gap is not a discrepancy",
+     "source": "none",
+     "why": "Doc 007 says points are floored, but no document says how to treat a recorded figure rounded the other way. Reading rule 21 treats a value equal to amount × the right rate, rounded either way, as correct."
+    }
+   ]
+  },
+  {
+   "id": "s_legit_exceptions",
+   "by": "model",
+   "do": "Some transactions are recorded below the card's usual rate but match the correct value because of a documented merchant exclusion. Examples: Business Bronze coworking and payroll merchants; Business Bronze SaaS charges after the first 12 months of the subscription; EcoCard purchases at Target, Walmart, Amazon or ThredUp; EcoCard EV charging off the Tesla Supercharger, ChargePoint and EVgo networks. Tell the customer each of these is correct and why. Do not offer a dispute for them.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_txns",
+    "s_recalc",
+    "s_compare"
+   ],
+   "after": [
+    "s_compare"
+   ],
+   "if": "at least one transaction earned a reduced rate because of a documented merchant exclusion",
+   "quote": "The following specific merchants do NOT earn the higher sustainability points rate ($5.00 points per dollar) and instead earn the standard rate ($1.00 point per dollar):",
+   "doc": "doc_credit_cards_ecocard_004",
+   "basis": [
+    {
+     "clause": "EcoCard excluded merchants earn the standard rate",
+     "quote": "The following specific merchants do NOT earn the higher sustainability points rate ($5.00 points per dollar) and instead earn the standard rate ($1.00 point per dollar):",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "clause": "EV charging network rule",
+     "quote": "EV charging only qualifies for green rewards when using one of our 3 certified partner charging networks: Tesla Supercharger, ChargePoint, or EVgo. Charging at any other network does not qualify.",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "clause": "Business Bronze coworking/payroll earn 0%",
+     "quote": "The following specific merchants earn **0% cash back** on your Business Bronze Rewards Card:",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_003"
+    },
+    {
+     "clause": "Business Bronze SaaS after 12 months earn 0%",
+     "quote": "After the initial 12-month period, auto-renewals and continued subscription payments to these merchants earn 0% cash back:",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_003"
+    },
+    {
+     "clause": "no dispute when there is no discrepancy",
+     "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    }
+   ]
+  },
+  {
+   "id": "s_none",
+   "by": "model",
+   "do": "Tell the customer that every transaction's cash back matches their cards' rates, so no dispute is needed. Explain the rates that apply to their cards if they ask. Do not give the dispute tool. Stop this job.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_compare"
+   ],
+   "after": [
+    "s_compare"
+   ],
+   "if": "s_compare found no discrepant transaction",
+   "quote": "When you contact us, we'll look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+   "doc": "doc_credit_cards_credit_cards_(general)_021",
+   "basis": [
+    {
+     "clause": "no discrepancy means nothing to dispute",
+     "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    }
+   ]
+  },
+  {
+   "id": "s_explain",
+   "by": "model",
+   "do": "For each discrepant transaction, tell the customer the transaction_id (read from s_txns), merchant, date, amount and card, plus the cash back recorded and the cash back the card should have earned (points × $0.01), and whether it was too low or too high. Group them by card. Confirm with the customer that each transaction_id is the right purchase. Do not ask for receipts or card details.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_txns",
+    "s_compare"
+   ],
+   "after": [
+    "s_compare"
+   ],
+   "if": "s_compare found one or more discrepant transactions",
+   "quote": "Confirm the customer has the correct transaction_id before they submit.",
+   "doc": "doc_credit_cards_credit_cards_(general)_003",
+   "basis": [
+    {
+     "clause": "a transaction found discrepant is what this process covers",
+     "quote": "Use this process when a customer believes there is a discrepancy between the cash back they received for a particular transaction and the cash back they should have received.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "tell the customer what the review found",
+     "quote": "we'll look into the specific transaction, verify the merchant category, check the applicable reward rates for your card, and determine if an adjustment is needed.",
+     "doc": "doc_credit_cards_credit_cards_(general)_021"
+    },
+    {
+     "clause": "confirm the transaction_id",
+     "quote": "Confirm the customer has the correct transaction_id before they submit.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "no card details collected",
+     "quote": "Do not collect sensitive card details; the tool uses the identifiers provided by the user.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "points to dollars",
+     "quote": "these 'points' should be interpreted as cash back with a conversion rate of 1 point = $0.01",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "clause": "do not ask for receipts",
+     "quote": "Do not ask for any documentation, receipts... from the customer unless it states very clearly in the knowledge base how to process it, and whether you're allowed to do so.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_give",
+   "by": "harness",
+   "do": "Give the customer the cash back dispute tool once. Tell them to run it with their own user_id once for each discrepant transaction_id from s_explain.",
+   "call": "give_discoverable_user_tool",
+   "args": {
+    "discoverable_tool_name": "submit_cash_back_dispute_0589",
+    "arguments": "JSON string {\"user_id\": the verified user's user_id, \"transaction_id\": the first discrepant transaction_id from s_compare}"
+   },
+   "lookup": [
+    "s_compare",
+    "s_explain"
+   ],
+   "after": [
+    "s_explain"
+   ],
+   "if": "at least one discrepant transaction exists and the customer wants to dispute it",
+   "quote": "Tool to provide to the user: `submit_cash_back_dispute_0589(user_id: str, transaction_id: str)`",
+   "doc": "doc_credit_cards_credit_cards_(general)_003",
+   "basis": [
+    {
+     "clause": "give the tool to the user",
+     "quote": "Instead of a step-by-step workflow, instruct the customer to use the tool directly:",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "their own user_id and the specific transaction_id",
+     "quote": "Tell the customer to run the tool with their own user_id and the specific transaction_id for the purchase in question.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    }
+   ]
+  },
+  {
+   "id": "s_customer_asks_agent_to_file",
+   "by": "model",
+   "do": "If the customer asks you to file the disputes for them, explain politely that this dispute is submitted with the tool you gave them. Walk them through each call, one transaction at a time, giving the exact user_id and transaction_id to enter. Do not submit it yourself.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_explain"
+   ],
+   "after": [
+    "s_give"
+   ],
+   "if": "the customer asks the agent to submit the disputes on their behalf",
+   "quote": "Instead of a step-by-step workflow, instruct the customer to use the tool directly:",
+   "doc": "doc_credit_cards_credit_cards_(general)_003",
+   "basis": [
+    {
+     "clause": "the customer runs the tool",
+     "quote": "Instead of a step-by-step workflow, instruct the customer to use the tool directly:",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "give the exact user_id and transaction_id",
+     "quote": "Tell the customer to run the tool with their own user_id and the specific transaction_id for the purchase in question.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    }
+   ]
+  },
+  {
+   "id": "s_customer_submit",
+   "by": "customer",
+   "do": "The customer runs submit_cash_back_dispute_0589 through call_discoverable_user_tool, one call for each discrepant transaction_id.",
+   "call": "submit_cash_back_dispute_0589",
+   "args": {
+    "user_id": "the verified user's user_id",
+    "transaction_id": "one discrepant transaction_id from s_compare per call"
+   },
+   "lookup": [],
+   "after": [
+    "s_give"
+   ],
+   "if": null,
+   "quote": "Tell the customer to run the tool with their own user_id and the specific transaction_id for the purchase in question.",
+   "doc": "doc_credit_cards_credit_cards_(general)_003"
+  },
+  {
+   "id": "s_check_replies",
+   "by": "model",
+   "do": "Read each submission's reply and tell the customer what it says. The tool's success reply says the case has been queued for review. If the reply says the tool has not been given to the customer, give it again with give_discoverable_user_tool (s_give) and have them retry. If the reply is an error about the arguments, give the customer the exact user_id and transaction_id again and have them retry. Ask the customer whether they have run the tool for each transaction_id they chose to dispute.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_customer_submit"
+   ],
+   "after": [
+    "s_customer_submit"
+   ],
+   "if": null,
+   "quote": "Tell the customer to run the tool with their own user_id and the specific transaction_id for the purchase in question.",
+   "doc": "doc_credit_cards_credit_cards_(general)_003",
+   "basis": [
+    {
+     "clause": "tell the customer what the reply says (queued for review)",
+     "source": "none",
+     "why": "This is an explanation of the reply text in the submit_cash_back_dispute_0589 tool description ('Your case has been queued for review.'). It is not a rule."
+    },
+    {
+     "clause": "give the tool again when it was not given",
+     "quote": "Just explaining isn't enough, you must use the `give_discoverable_user_tool(discoverable_tool_name)` function.",
+     "doc": "policy"
+    },
+    {
+     "clause": "give the exact ids again on an argument error",
+     "quote": "Confirm the customer has the correct transaction_id before they submit.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    },
+    {
+     "clause": "ask whether each chosen transaction_id was submitted",
+     "quote": "Tell the customer to run the tool with their own user_id and the specific transaction_id for the purchase in question.",
+     "doc": "doc_credit_cards_credit_cards_(general)_003"
+    }
+   ]
+  },
+  {
+   "id": "s_advise",
+   "by": "model",
+   "do": "Tell the customer the disputes are queued for review, and that supporting context, such as category or promotion expectations, may be requested later during the review.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_check_replies"
+   ],
+   "after": [
+    "s_check_replies"
+   ],
+   "if": "at least one submission was queued",
+   "quote": "Advise the customer that supporting context (e.g., category or promotion expectations) may be requested later during review, but the submission itself is initiated with the tool above.",
+   "doc": "doc_credit_cards_credit_cards_(general)_003"
+  },
+  {
+   "id": "s_customer_reports_resolution",
+   "by": "model",
+   "do": "If, after submitting, the customer says the disputes were approved or resolved and asks for their records to be updated, do not verify again. Continue with applying_resolved_cash_back_dispute_corrections, which checks a record of each dispute's status before any update.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_check_replies"
+   ],
+   "after": [
+    "s_advise"
+   ],
+   "if": "the customer says their submitted cash back disputes were approved or resolved and asks for the rewards to be updated",
+   "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+   "doc": "doc_credit_cards_credit_cards_(general)_004",
+   "basis": [
+    {
+     "clause": "the correction procedure applies after resolution and approval",
+     "quote": "After a cash back dispute is resolved and approved, you must update the affected transaction(s) with the correct rewards value.",
+     "doc": "doc_credit_cards_credit_cards_(general)_004"
+    },
+    {
+     "clause": "do not verify again",
+     "quote": "No need to verify more than once in a single conversation.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "s_transfer",
+   "by": "model",
+   "do": "If the customer asks for a human, first explain that you can help, and keep helping. Transfer only after the fourth request, or with the customer's agreement when the issue truly cannot be resolved. Pick the reason code from the highest tier that applies: technical_system_error when a tool error stops the request; customer_frustrated_demands_human when the frustration is general; customer_requests_human_no_specific_reason when the customer simply prefers a human. The summary states what was reviewed and submitted.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "what was reviewed, which disputes were submitted and their replies",
+    "reason": "the highest-tier reason code from doc_bank_accounts_bank_accounts_(general)_042 that fits"
+   },
+   "lookup": [
+    "s_check_replies"
+   ],
+   "after": [
+    "s_log"
+   ],
+   "if": "the customer has asked for a human agent 4 times, or the issue cannot be resolved and the customer agrees to a transfer",
+   "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below. Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "highest tier that applies",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below. Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "system error",
+     "quote": "System error or outage preventing completion of the customer's request",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "general frustration",
+     "quote": "Customer is frustrated and demands human, frustration is general",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "no specific reason",
+     "quote": "Customer requests human without clear reason, customer is not frustrated, just prefers human interaction",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "transfer after 4 requests",
+     "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+     "doc": "policy"
+    },
+    {
+     "clause": "ask before transferring",
+     "quote": "Do not transfer without asking the user first.",
+     "doc": "policy"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Silver Rewards Card: transactions in the Travel or Software category earn 4.0% (4 points per dollar). All other purchases earn 1.0%.",
+   "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+   "doc": "doc_credit_cards_silver_rewards_card_002",
+   "basis": [
+    {
+     "clause": "4.0% on travel and software",
+     "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+     "doc": "doc_credit_cards_silver_rewards_card_002"
+    },
+    {
+     "clause": "1.0% otherwise",
+     "quote": "Purchases outside top categories earn 1.0% back",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "clause": "software by category",
+     "quote": "Transactions must be categorized by the merchant as software or SaaS to earn 4.0% back.",
+     "doc": "doc_credit_cards_silver_rewards_card_004"
+    },
+    {
+     "clause": "travel by category",
+     "quote": "You earn 4.0% back when the transaction is categorized as travel.",
+     "doc": "doc_credit_cards_silver_rewards_card_003"
+    }
+   ]
+  },
+  {
+   "rule": "Silver Rewards Card: the rate follows the merchant's submitted category recorded on the transaction. Rewards on returned or refunded purchases are reversed.",
+   "quote": "rewards are based on the merchant’s submitted category",
+   "doc": "doc_credit_cards_silver_rewards_card_002",
+   "basis": [
+    {
+     "clause": "merchant's submitted category",
+     "quote": "rewards are based on the merchant’s submitted category",
+     "doc": "doc_credit_cards_silver_rewards_card_002"
+    },
+    {
+     "clause": "returns reversed",
+     "quote": "Returned or refunded purchases (rewards are reversed when credits post)",
+     "doc": "doc_credit_cards_silver_rewards_card_002"
+    }
+   ]
+  },
+  {
+   "rule": "Business Silver Rewards Card: transactions in the Travel or Software category earn 10.0%. All other purchases earn 1.0%. A merchant selling several kinds of goods earns 10.0% only on a charge coded under a qualifying category.",
+   "quote": "Earn 10.0% cash back on eligible travel and software purchases",
+   "doc": "doc_business_credit_cards_business_silver_rewards_card_002",
+   "basis": [
+    {
+     "clause": "10.0% travel and software",
+     "quote": "Earn 10.0% cash back on eligible travel and software purchases",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+    },
+    {
+     "clause": "1.0% other",
+     "quote": "Earn 1.0% cash back on all other purchases",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+    },
+    {
+     "clause": "merchant category decides",
+     "quote": "The merchant must process the transaction under a travel or software-related merchant category",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+    },
+    {
+     "clause": "multi-category merchants",
+     "quote": "If a merchant sells multiple categories of goods or services, your charge must be coded under a qualifying category to receive 10.0%",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_002"
+    }
+   ]
+  },
+  {
+   "rule": "Business Silver Rewards Card exclusions: these merchants earn the standard 1.0% rate instead of 10.0%. Travel: Concur, SAP Concur, Expensify, Navan. Hardware/electronics: Apple, Microsoft, Dell. Gaming subscriptions: Xbox Game Pass, PlayStation Plus, Nintendo Switch Online. Online learning: Coursera, Udemy, LinkedIn Learning, Skillshare, Pluralsight.",
+   "quote": "The following specific merchants do NOT earn the 10.0% bonus rate and instead earn the standard 1.0% rate:",
+   "doc": "doc_business_credit_cards_business_silver_rewards_card_005",
+   "basis": [
+    {
+     "clause": "excluded merchants earn 1.0%",
+     "quote": "The following specific merchants do NOT earn the 10.0% bonus rate and instead earn the standard 1.0% rate:",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_005"
+    },
+    {
+     "clause": "travel exclusions",
+     "quote": "**Corporate Expense Platform Merchants (Travel Exclusion):**",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_005"
+    },
+    {
+     "clause": "hardware exclusions",
+     "quote": "**Hardware/Electronics Merchants (Software Exclusion):**",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_005"
+    },
+    {
+     "clause": "gaming exclusions",
+     "quote": "**Gaming Subscription Merchants (Software Exclusion):**",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_005"
+    },
+    {
+     "clause": "learning exclusions",
+     "quote": "**Online Learning Platform Merchants (Software Exclusion):**",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_005"
+    }
+   ]
+  },
+  {
+   "rule": "Business Silver double cash back: this applies only when the account's date opened (get_credit_card_accounts_by_user) falls between 2024-11-14 and 2025-11-14. The window starts on the account opening date and ends 6 months later. Transactions dated inside the window earn 2× the rate that would otherwise apply: 20.0% for qualifying travel/software and 2.0% for other purchases. The exclusions still apply. Transactions outside the window earn the normal rates.",
+   "quote": "New Business Silver Rewards Card customers can earn 2x cash back on all purchases for the first 6 months after opening their account.",
+   "doc": "doc_business_credit_cards_business_silver_rewards_card_012",
+   "basis": [
+    {
+     "clause": "10.0% doubled",
+     "quote": "Travel and software purchases that normally earn 10.0% are multiplied by 2 during the promotional period",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "1.0% doubled",
+     "quote": "Other purchases that normally earn 1.0% are multiplied by 2 during the promotional period",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "applied automatically",
+     "quote": "The increased rewards rate is automatically applied to qualifying transactions; no separate enrollment is required",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "counted from account opening",
+     "quote": "The 6-month window begins on your account opening date, not the promotional start date",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "opened within the promo period",
+     "quote": "You must open your account during the promotional period to qualify",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "start date",
+     "quote": "- Start date: 2024-11-14",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "end date",
+     "quote": "- End date: 2025-11-14",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    },
+    {
+     "clause": "exclusions still apply",
+     "quote": "Merchant category exclusions continue to apply (see Exceptions and Exclusions)",
+     "doc": "doc_business_credit_cards_business_silver_rewards_card_012"
+    }
+   ]
+  },
+  {
+   "rule": "Business Bronze Rewards Card: 1.0% on eligible purchases, calculated on the net amount after credits or returns. WeWork, Regus, Industrious, Gusto, ADP, Paychex and Rippling earn 0%. Slack, Zoom, HubSpot and Salesforce earn 1.0% for the first 12 months of the subscription and 0% on renewals and payments after that. The 12 months start at the subscription start, and end 12 months later.",
+   "quote": "You earn 1.0% cash back on eligible purchases charged to your account.",
+   "doc": "doc_business_credit_cards_business_bronze_rewards_card_002",
+   "basis": [
+    {
+     "clause": "1.0% base",
+     "quote": "You earn 1.0% cash back on eligible purchases charged to your account.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_002"
+    },
+    {
+     "clause": "net amount",
+     "quote": "Rewards are calculated on the net transaction amount after any credits or returns.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_002"
+    },
+    {
+     "clause": "0% merchants",
+     "quote": "The following specific merchants earn **0% cash back** on your Business Bronze Rewards Card:",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_003"
+    },
+    {
+     "clause": "SaaS first 12 months",
+     "quote": "The following SaaS merchants earn the 1.0% rate for the first 12 months of your subscription only.",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_003"
+    },
+    {
+     "clause": "SaaS after 12 months 0%",
+     "quote": "After the initial 12-month period, auto-renewals and continued subscription payments to these merchants earn 0% cash back:",
+     "doc": "doc_business_credit_cards_business_bronze_rewards_card_003"
+    },
+    {
+     "clause": "placing the subscription start by the earliest charge to that merchant on that card",
+     "source": "none",
+     "why": "No record gives the subscription start date. The earliest charge in the records is the nearest record of it. This is listed as an open question."
+    }
+   ]
+  },
+  {
+   "rule": "Bronze Rewards Card: 1.0% on eligible purchases.",
+   "quote": "You earn 1.0% cash back on eligible purchases.",
+   "doc": "doc_credit_cards_bronze_rewards_card_002"
+  },
+  {
+   "rule": "Gold Rewards Card: 2.5% on all purchases. Two documents give the same figure, so it is one rate.",
+   "quote": "Earn 2.5% cash back on all purchases.",
+   "doc": "doc_credit_cards_gold_rewards_card_005",
+   "basis": [
+    {
+     "clause": "2.5% all purchases",
+     "quote": "Earn 2.5% cash back on all purchases.",
+     "doc": "doc_credit_cards_gold_rewards_card_005"
+    },
+    {
+     "clause": "same figure on the terms page",
+     "quote": "Cash back on all purchases: 2.5%",
+     "doc": "doc_credit_cards_gold_rewards_card_001"
+    }
+   ]
+  },
+  {
+   "rule": "Platinum Rewards Card: 10.0% on all eligible purchases.",
+   "quote": "You earn 10.0% cash back on all eligible purchases.",
+   "doc": "doc_credit_cards_platinum_rewards_card_002"
+  },
+  {
+   "rule": "Diamond Elite Card: 5.0% on all eligible purchases.",
+   "quote": "You earn 5.0% cash back on all eligible purchases posted to your account.",
+   "doc": "doc_credit_cards_diamond_elite_card_003"
+  },
+  {
+   "rule": "Crypto-Cash Back: 2.0% on eligible spend. Two documents give the same figure, so it is one rate.",
+   "quote": "How much do I earn on purchases? You earn 2.0% on eligible spend.",
+   "doc": "doc_credit_cards_crypto-cash_back_008",
+   "basis": [
+    {
+     "clause": "2.0%",
+     "quote": "How much do I earn on purchases? You earn 2.0% on eligible spend.",
+     "doc": "doc_credit_cards_crypto-cash_back_008"
+    },
+    {
+     "clause": "same figure",
+     "quote": "You earn rewards at 2.0% on those transactions.",
+     "doc": "doc_credit_cards_crypto-cash_back_001"
+    }
+   ]
+  },
+  {
+   "rule": "EcoCard: 5 points per dollar at qualifying green merchants and categories, 1 point per dollar otherwise. Target, Walmart, Amazon (including marketplace orders Amazon processes) and ThredUp always earn 1 point per dollar, through every purchase channel. EV charging earns the green rate only on Tesla Supercharger, ChargePoint or EVgo. Gift cards and cash equivalents are not green purchases.",
+   "quote": "Green purchases: Earn $5.00 sustainability points per dollar spent at qualifying green merchants and categories.",
+   "doc": "doc_credit_cards_ecocard_002",
+   "basis": [
+    {
+     "clause": "green rate",
+     "quote": "Green purchases: Earn $5.00 sustainability points per dollar spent at qualifying green merchants and categories.",
+     "doc": "doc_credit_cards_ecocard_002"
+    },
+    {
+     "clause": "excluded retailers earn 1 per dollar",
+     "quote": "EcoCard purchases at the retailers listed above earn the standard rate of $1.00 point per dollar, not the higher $5.00 points per dollar.",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "clause": "all channels",
+     "quote": "The exclusion applies to all purchase channels with those merchants (in-store, online, app, pickup, and delivery).",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "clause": "Amazon marketplace",
+     "quote": "For Amazon marketplace orders, transactions processed by Amazon are treated as Amazon purchases and are excluded from the higher rate.",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "clause": "EV networks",
+     "quote": "EV charging only qualifies for green rewards when using one of our 3 certified partner charging networks: Tesla Supercharger, ChargePoint, or EVgo. Charging at any other network does not qualify.",
+     "doc": "doc_credit_cards_ecocard_004"
+    },
+    {
+     "clause": "gift cards are not green",
+     "quote": "Gift cards and cash equivalents typically do not qualify as green purchases.",
+     "doc": "doc_credit_cards_ecocard_003"
+    }
+   ]
+  },
+  {
+   "rule": "Business Gold Rewards Card: 2.5% on operations purchases, 1.0% otherwise.",
+   "quote": "Eligible operations purchases earn cash back at 2.5%.",
+   "doc": "doc_business_credit_cards_business_gold_rewards_card_002",
+   "basis": [
+    {
+     "clause": "2.5% operations",
+     "quote": "Eligible operations purchases earn cash back at 2.5%.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_002"
+    },
+    {
+     "clause": "1.0% other",
+     "quote": "Purchases that do not qualify as operations spend earn cash back at 1.0%.",
+     "doc": "doc_business_credit_cards_business_gold_rewards_card_002"
+    }
+   ]
+  },
+  {
+   "rule": "Business Platinum Rewards Card: 4.0% on travel, software and media advertising, 1.5% otherwise.",
+   "quote": "Travel, software, and media advertising purchases earn 4.0%.",
+   "doc": "doc_business_credit_cards_business_platinum_rewards_card_002",
+   "basis": [
+    {
+     "clause": "4.0%",
+     "quote": "Travel, software, and media advertising purchases earn 4.0%.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_002"
+    },
+    {
+     "clause": "1.5%",
+     "quote": "Purchases outside those categories earn 1.5%.",
+     "doc": "doc_business_credit_cards_business_platinum_rewards_card_002"
+    }
+   ]
+  },
+  {
+   "rule": "Green Rewards Card: 3.0% at sustainable merchants, 1.0% otherwise.",
+   "quote": "Purchases at qualifying sustainable merchants earn 3.0%, while all other eligible purchases earn 1.0%.",
+   "doc": "doc_business_credit_cards_green_rewards_card_004"
+  },
+  {
+   "rule": "Silver Zoom Card: 3.0% on transportation and logistics, 1.0% otherwise. Triple cash back promo: it applies only if claimed between 2024-01-01 and 2025-12-31. The promo period starts at account opening and ends 9 months later. Inside it, rates are 3 × 3.0% and 3 × 1.0%, and after it they revert to 3.0% and 1.0%.",
+   "quote": "Earn elevated rewards on sector-specific spend at 3.0%",
+   "doc": "doc_business_credit_cards_silver_zoom_card_001",
+   "basis": [
+    {
+     "clause": "3.0% sector spend",
+     "quote": "Earn elevated rewards on sector-specific spend at 3.0%",
+     "doc": "doc_business_credit_cards_silver_zoom_card_001"
+    },
+    {
+     "clause": "1.0% other",
+     "quote": "Earn a flat rate on all other eligible purchases at 1.0%",
+     "doc": "doc_business_credit_cards_silver_zoom_card_001"
+    },
+    {
+     "clause": "claim window",
+     "quote": "You must claim the promotion within the window starting 2024-01-01 and ending 2025-12-31",
+     "doc": "doc_business_credit_cards_silver_zoom_card_012"
+    },
+    {
+     "clause": "9 months from opening",
+     "quote": "The triple cash back earning period lasts 9 months from account opening once properly claimed",
+     "doc": "doc_business_credit_cards_silver_zoom_card_012"
+    },
+    {
+     "clause": "tripled transportation",
+     "quote": "Transportation and logistics category purchases earn 3 × 3.0% during the promo period",
+     "doc": "doc_business_credit_cards_silver_zoom_card_012"
+    },
+    {
+     "clause": "tripled other",
+     "quote": "All other eligible purchases earn 3 × 1.0% during the promo period",
+     "doc": "doc_business_credit_cards_silver_zoom_card_012"
+    },
+    {
+     "clause": "revert",
+     "quote": "After 9 months, earnings revert to the standard rates of 3.0% and 1.0%",
+     "doc": "doc_business_credit_cards_silver_zoom_card_012"
+    }
+   ]
+  },
+  {
+   "rule": "A category that is not one of a card's bonus categories earns that card's default rate. A transaction recorded as 'Other' falls under a card-specific exclusion or exception and earns the default rate.",
+   "quote": "Purchases in non-bonus categories earn the card’s default rate.",
+   "doc": "doc_credit_cards_credit_cards_(general)_005",
+   "basis": [
+    {
+     "clause": "default rate",
+     "quote": "Purchases in non-bonus categories earn the card’s default rate.",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "clause": "Other category",
+     "quote": "Other (transactions that fall under card-specific exclusions or exceptions, do not list any examples here)",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    }
+   ]
+  },
+  {
+   "rule": "Points are floor(amount × rate × 100). On cash back cards they are worth $0.01 each.",
+   "quote": "All credit card rewards points are rounded down to the nearest whole number.",
+   "doc": "doc_credit_cards_credit_cards_(general)_007",
+   "basis": [
+    {
+     "clause": "1 point = $0.01",
+     "quote": "these 'points' should be interpreted as cash back with a conversion rate of 1 point = $0.01",
+     "doc": "doc_credit_cards_credit_cards_(general)_006"
+    },
+    {
+     "clause": "floor everywhere",
+     "quote": "This rounding policy applies consistently across all credit card types and reward categories.",
+     "doc": "doc_credit_cards_credit_cards_(general)_007"
+    }
+   ]
+  },
+  {
+   "rule": "The agent gives the dispute tool to the customer and never submits cash back disputes itself.",
+   "quote": "Instead of a step-by-step workflow, instruct the customer to use the tool directly:",
+   "doc": "doc_credit_cards_credit_cards_(general)_003"
+  }
+ ],
+ "done_when": "All of the following are true:\n- The customer is verified and the verification is logged.\n- Every transaction on every card has been checked against its card's rates, and the customer has been told the result.\n- Correct reduced-rate exclusions have been explained and not disputed.\n- Either the customer was given submit_cash_back_dispute_0589, submitted one dispute for every discrepant transaction_id they wanted disputed, and was told the disputes are queued for review; or no discrepancy was found and the customer was told so."
+}

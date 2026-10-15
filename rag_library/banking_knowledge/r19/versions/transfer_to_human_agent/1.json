@@ -1,0 +1,175 @@
+{
+ "job": "transfer_to_human_agent",
+ "aliases": [
+  "customer asks for a human to confirm completed work after earlier requests",
+  "customer_requests_human_agent",
+  "escalate_to_human",
+  "human_agent_transfer",
+  "speak to a person",
+  "supervisor_request",
+  "transfer after identity verification fails",
+  "transfer to human"
+ ],
+ "when": {
+  "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: when the customer asks for a human. The agent transfers on the 4th request, or, with the customer's agreement, when the issue is outside the agent's capabilities.",
+  "quote": "Do not transfer without asking the user first.",
+  "doc": "policy"
+ },
+ "tools": [
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "ht_transfer",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "human_request_count",
+   "about": "how many times in this conversation the customer has asked for a human",
+   "from": "customer",
+   "ask": "(counted from the conversation; do not ask)",
+   "may_hold_back": false
+  },
+  {
+   "field": "transfer_reason_context",
+   "about": "why the customer wants a human: confirmation of completed work, frustration, a service complaint, an unavailable offer, or failed verification",
+   "from": "customer",
+   "ask": "Could you tell me what you'd like the specialist to help with?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "ht_count",
+   "by": "model",
+   "do": "Count each request for a human across the whole conversation, from the opening message on. Include requests made before verification or during other jobs. While the request is within your capabilities and fewer than 4 requests have been made, tell the customer politely that you can help, and continue.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer asks for a human agent",
+   "quote": "If an issue falls within your capabilities and the user still wants to be transferred to a human agent, kindly inform the user that you can help them, and try to help them first.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "4 requests allow transfer",
+     "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "decide_transfer_unverified",
+   "by": "model",
+   "do": "If identity could not be verified, nothing can be read or changed. Say so without revealing any account data, and ask whether the customer would like to be transferred.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "ht_count"
+   ],
+   "after": [
+    "ht_count"
+   ],
+   "if": "identity verification failed and the customer asks for a human agent",
+   "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "no data before verification",
+     "quote": "Do not leak any information about the user before they are verified.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "ht_reason",
+   "by": "model",
+   "do": "Choose the reason code from the highest tier that applies. Tier 1: fraud_or_security_concern only if an unresolved fraud or security matter still needs specialist handling; account_closure_request when the customer wants a human to close an account; customer_demands_after_unavailable_offer_refusal when they kept demanding an offer that does not exist. Tier 3: request_completed_customer_wants_human_followup when the requests were completed and the customer wants a human to confirm them; customer_frustrated_demands_human for general frustration; supervisor_request_service_complaint for dissatisfaction with service; customer_requests_human_no_specific_reason when they simply prefer a person.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "decide_transfer"
+   ],
+   "after": [
+    "decide_transfer"
+   ],
+   "if": "a transfer will be made",
+   "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "fraud code needs specialist handling",
+     "quote": "Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "closure code",
+     "quote": "Customer is explicitly requesting to close their account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "unavailable offer code",
+     "quote": "Customer asked about offers/promotions that don't exist in the system, you informed them the offers aren't available, customer persisted multiple times, and now demands human",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "completed follow-up code",
+     "quote": "Agent completed the request successfully, but customer wants human for additional questions or confirmation",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "frustrated",
+     "quote": "Customer is frustrated and demands human, frustration is general",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "service complaint",
+     "quote": "Customer wants supervisor due to dissatisfaction with service quality (agent was rude, slow, unhelpful manner)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "preference",
+     "quote": "Customer requests human without clear reason, customer is not frustrated, just prefers human interaction",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ]
+  },
+  {
+   "id": "pick_reason_verification_failure",
+   "by": "model",
+   "do": "After an identity verification failure, use account_ownership_dispute (Tier 1).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "decide_transfer_unverified"
+   ],
+   "after": [
+    "decide_transfer_unverified"
+   ],
+   "if": "the transfer follows an identity verification failure",
+   "quote": "Ownership disputes, joint account issues, or identity verification failures requiring specialist",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Requests for a human are counted across the whole conversation. On the 4th request the agent transfers, using the reason from the highest tier that applies.",
+   "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "4th request",
+     "quote": "If the user asks for a human agent 4 times, then you may invoke the transfer_to_human_agents tool.",
+     "doc": "policy"
+    }
+   ]
+  }
+ ],
+ "done_when": "The customer was helped first. They were transferred no later than the 4th request, with a valid reason code and a summary. A transfer for an issue outside the agent's capabilities happened only with their agreement."
+}

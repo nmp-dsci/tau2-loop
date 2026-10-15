@@ -1,0 +1,359 @@
+{
+ "job": "reported_stolen_card_decline",
+ "aliases": [
+  "card reported stolen at the terminal",
+  "card reported stolen but customer has it",
+  "code 41 lost card",
+  "code 43 stolen card",
+  "customer denies reporting card stolen",
+  "debit_card_reported_lost_or_stolen_decline",
+  "lost card code 41 not reported by customer",
+  "stolen_card_decline_code_43",
+  "terminal said keep the card",
+  "terminal says keep the card / stolen"
+ ],
+ "when": {
+  "quote": "Card was reported stolen. This code requires EXTRA CAUTION.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start when a decline shows the card was reported lost or stolen, or the terminal asked to keep the card. The agent never offers to reactivate or unfreeze the card. A customer who insists they never reported it is transferred to security, as the scenario guidance says.",
+  "quote": "When your debit card is declined due to security concerns, you may see one of the following decline codes.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+ },
+ "tools": [
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "s_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "s_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "s_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "s_cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "s_txns",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "s_enhanced",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "s_transfer",
+   "not_used": null
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": null,
+   "not_used": "Forbidden for stolen cards: 'DO NOT immediately offer to unfreeze or reactivate.'"
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": null,
+   "not_used": "A replacement is ordered in the ordering steps of closing_cancelling_a_debit_card."
+  }
+ ],
+ "info": [
+  {
+   "field": "card_account",
+   "about": "Which card or checking account",
+   "from": "customer",
+   "ask": "Which debit card or checking account is this?",
+   "may_hold_back": true
+  },
+  {
+   "field": "customer_reported",
+   "about": "Whether the customer reported the card lost or stolen",
+   "from": "customer",
+   "ask": "I see this card was reported lost/stolen. Did you report it?",
+   "may_hold_back": true
+  },
+  {
+   "field": "ssn_last4",
+   "about": "Last 4 digits of the SSN, for enhanced verification",
+   "from": "customer",
+   "ask": "For security, please give me the last 4 digits of your SSN.",
+   "may_hold_back": true
+  },
+  {
+   "field": "recent_transactions_confirmed",
+   "about": "The customer's answers about 2-3 recent transactions",
+   "from": "customer",
+   "ask": "Did you make this transaction: <date, merchant, amount>?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "s_cards",
+   "by": "harness",
+   "do": "Get the account's cards. Read the declined card's status and issue_reason, and look for any replacement card.",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "the named checking account"
+   },
+   "lookup": [],
+   "after": [
+    "s_accounts"
+   ],
+   "if": null,
+   "quote": "Card was previously reported lost. Look up the debit card information to confirm - the card will have issue_reason = 'lost' or status will indicate lost.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+  },
+  {
+   "id": "s_txns",
+   "by": "harness",
+   "do": "Get the account's transactions, for enhanced verification and the suspicious-activity review.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "the named checking account"
+   },
+   "lookup": [],
+   "after": [
+    "s_accounts"
+   ],
+   "if": null,
+   "quote": "Recent transaction verification - review transaction history and ask about 2-3 recent transactions",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+  },
+  {
+   "id": "s_nondisclose",
+   "by": "model",
+   "do": "The record or code may show a capture/pick-up flag (04/07) or a suspected fraud flag (34/59) rather than a lost or stolen report. Never give the customer the code or the reason.\n- For 04/07, say: 'I'm sorry, but I'm unable to process transactions on this card. For assistance, please visit a Rho-Bank branch with valid ID.' Transfer if the customer presses for details.\n- For 34/59, say: 'There's a security matter affecting your card that requires in-person verification. Please visit a branch with your ID.'",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_cards"
+   ],
+   "after": [
+    "s_cards"
+   ],
+   "if": "the code or record shows code 04, 07, 34 or 59",
+   "quote": "The following codes indicate fraud or security concerns. DO NOT tell the customer the specific code or reason:",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037",
+   "basis": [
+    {
+     "clause": "04/07",
+     "quote": "Say: 'I'm sorry, but I'm unable to process transactions on this card. For assistance, please visit a Rho-Bank branch with valid ID.' Use transfer_to_human_agents if customer presses for details.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "34/59",
+     "quote": "Say: 'There's a security matter affecting your card that requires in-person verification. Please visit a branch with your ID.' Do NOT attempt to clear or explain.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    }
+   ]
+  },
+  {
+   "id": "s_lost",
+   "by": "model",
+   "do": "Lost card (code 41): ask 'I see this card was reported lost. Did you report it lost?'\n- If YES and the card was found: it cannot be reactivated. If s_cards shows a PENDING replacement, guide activation; otherwise offer to order one.\n- If NO: say 'For your security, I need to verify some additional information.' Ask security questions, review s_txns for suspicious activity, and follow the lost card protocol (closing_cancelling_a_debit_card).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_cards",
+    "s_txns"
+   ],
+   "after": [
+    "s_cards",
+    "s_txns"
+   ],
+   "if": "the card was reported lost (issue_reason or status shows lost)",
+   "quote": "Check if customer actually reported it: 'I see this card was reported lost. Did you report it lost?'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037",
+   "basis": [
+    {
+     "clause": "cannot reactivate",
+     "quote": "The old card CANNOT be reactivated once reported lost.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "pending replacement",
+     "quote": "Check if replacement card was ordered by looking for another card in the response. If a replacement exists with status PENDING, guide through activation with the internal protocol.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "offer order",
+     "quote": "If no replacement ordered, offer to help order one.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "not reported",
+     "quote": "Say: 'For your security, I need to verify some additional information.'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "review",
+     "quote": "Ask security questions. If verified, this may indicate account compromise.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    }
+   ]
+  },
+  {
+   "id": "s_enhanced",
+   "by": "model",
+   "do": "Stolen card (code 43): do not offer to unfreeze or reactivate the card. Do enhanced verification:\n- confirm the full name and date of birth against the record;\n- ask for the last 4 digits of the SSN;\n- ask about 2-3 recent transactions from s_txns.",
+   "call": "get_user_information_by_id",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [
+    "s_txns"
+   ],
+   "after": [
+    "s_cards",
+    "s_txns"
+   ],
+   "if": "the card was reported stolen",
+   "quote": "Verify customer identity using ENHANCED verification (not standard):",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037",
+   "basis": [
+    {
+     "clause": "no reactivation offer",
+     "quote": "DO NOT immediately offer to unfreeze or reactivate.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "name, DOB",
+     "quote": "Full name, date of birth, AND",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "SSN",
+     "quote": "Last 4 of SSN, AND",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "transactions",
+     "quote": "Recent transaction verification - review transaction history and ask about 2-3 recent transactions",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    }
+   ]
+  },
+  {
+   "id": "check_enhanced",
+   "by": "model",
+   "do": "Decide whether enhanced verification passed. It passes when the name and date of birth match the record, the customer gave the last 4 digits of the SSN, and they correctly confirmed 2-3 recent transactions. If it fails, do not discuss or change the card; offer a transfer to the security team (fraud_or_security_concern).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "s_enhanced",
+    "s_txns"
+   ],
+   "after": [
+    "s_enhanced"
+   ],
+   "if": "the card was reported stolen",
+   "quote": "Full name, date of birth, AND",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037",
+   "basis": [
+    {
+     "clause": "failure path",
+     "source": "none",
+     "why": "Doc 037 gives no outcome for failed enhanced verification. The security-team transfer follows how it handles security concerns."
+    }
+   ]
+  },
+  {
+   "id": "s_explain",
+   "by": "model",
+   "do": "Say: 'This card was reported stolen. For security, stolen cards cannot be reactivated. I can order you a replacement card with a new number.' If the customer confirms they reported it and accepts, follow the ordering steps of closing_cancelling_a_debit_card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_enhanced"
+   ],
+   "after": [
+    "check_enhanced"
+   ],
+   "if": "enhanced verification passed",
+   "quote": "After enhanced verification, explain: 'This card was reported stolen. For security, stolen cards cannot be reactivated. I can order you a replacement card with a new number.' Follow protocol to order a new one.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+  },
+  {
+   "id": "s_transfer",
+   "by": "model",
+   "do": "Say: 'I understand this is frustrating. For your protection, I need to transfer you to our security team who can investigate this further.' Then transfer. Do not try to resolve it yourself: do not reactivate the card or order a new one.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card was reported stolen, the customer has it and insists they never reported it, and the verification done",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "s_cards",
+    "s_explain"
+   ],
+   "after": [
+    "s_explain"
+   ],
+   "if": "the customer insists they never reported the card stolen",
+   "quote": "Say: 'I understand this is frustrating. For your protection, I need to transfer you to our security team who can investigate this further.'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037",
+   "basis": [
+    {
+     "clause": "condition",
+     "quote": "If customer insists they never reported it stolen:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "transfer, don't resolve",
+     "quote": "Use transfer_to_human_agents. Do NOT attempt to resolve this yourself.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "reason code",
+     "quote": "Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "highest tier",
+     "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Never tell the customer their card is flagged for fraud.",
+   "quote": "tell the customer their card has been flagged for fraud over the phone. This could tip off a fraudster who has stolen the card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+  },
+  {
+   "rule": "A customer denying a stolen report is a major security flag: transfer without waiting for repeated requests.",
+   "quote": "This is a MAJOR security flag. Someone may have access to their account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+  },
+  {
+   "rule": "A lost-card report the customer did not make is a security concern.",
+   "quote": "SECURITY CONCERN: Someone else may have reported it.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+  }
+ ],
+ "done_when": "The stolen or lost flag was not removed, and the card was not reactivated. Then one of these holds:\n- For a stolen card the customer insists they never reported: enhanced verification was attempted, and the customer was transferred with reason fraud_or_security_concern.\n- Otherwise: the customer knows the card cannot be reactivated, and a replacement was offered or ordered, or the code 41 branch was followed."
+}

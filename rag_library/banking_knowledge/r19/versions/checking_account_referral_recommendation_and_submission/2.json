@@ -1,0 +1,1382 @@
+{
+ "job": "checking_account_referral_recommendation_and_submission",
+ "aliases": [
+  "best_combined_bonus_per_referral_personal_and_business",
+  "best_combined_referral_bonus",
+  "best_referral_account_for_each_referred_person",
+  "business_checking_account_referral",
+  "business_checking_referral",
+  "checking_account_referral",
+  "checking_account_referral_program",
+  "checking_account_referral_recommend_and_submit",
+  "checking_account_referral_recommendation",
+  "maximize_referrer_bonus",
+  "multiple_referrals_before_year_end",
+  "multiple_referrals_rolling_window_and_annual_limits",
+  "one_personal_and_one_business_referral_within_window",
+  "personal_and_business_checking_referrals",
+  "personal_checking_account_referral",
+  "prioritize_referrals_within_rolling_window",
+  "refer_a_business_for_checking",
+  "refer_a_friend_to_a_checking_account",
+  "refer_someone_for_checking",
+  "refer_someone_for_checking_account",
+  "refer_someone_to_a_checking_account",
+  "referral_blocked_by_annual_cap",
+  "referral_bonus_recommendation",
+  "referral_recommendation",
+  "submit_checking_account_referrals",
+  "which_account_to_refer_a_business_to"
+ ],
+ "when": {
+  "quote": "Each checking account type has its own referral bonus amounts and qualification requirements. This document covers the general terms and restrictions that apply to all checking account referral programs.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks to refer one or more people or businesses to a checking account, or asks which account to refer them to. Give no recommendation and no referral terms until the referrer's eligibility has been checked. The customer runs submit_referral; the agent never submits it.",
+  "quote": "Before giving any recommendations or information on referral terms, you must check that the user is eligible to submit referrals first",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "find_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "find_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "find_user",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verification",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_accounts_tool",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_referrals_by_user",
+   "who": "agent",
+   "step": "get_referrals",
+   "not_used": null
+  },
+  {
+   "tool": "submit_referral",
+   "who": "customer",
+   "step": "customer_submits",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "transfer_if_asked",
+   "not_used": null
+  },
+  {
+   "tool": "give_discoverable_user_tool",
+   "who": "agent",
+   "step": null,
+   "not_used": "submit_referral is already one of the customer's own tools, not a discoverable one, so the agent has nothing to hand over. The agent only tells the customer which account_type to use."
+  },
+  {
+   "tool": "open_bank_account_4821",
+   "who": "agent",
+   "step": null,
+   "not_used": "It is named in the personal checking opening document, which this job cites only for the account-name format (the full name ending in 'Account'). A referral opens no account for the referrer; the referred party opens their own account."
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_fields",
+   "about": "the customer's name, email or user id, plus any 2 of: date of birth, email, phone number, address",
+   "from": "customer",
+   "ask": "To look up your account, could you give me your full name and two of the following: your date of birth, email, phone number, or address?",
+   "may_hold_back": false
+  },
+  {
+   "field": "referred_parties",
+   "about": "each person or business the customer wants to refer, and whether each is a personal or a business referral",
+   "from": "customer",
+   "ask": "Who would you like to refer, and is each one an individual or a business?",
+   "may_hold_back": true
+  },
+  {
+   "field": "referred_person_age",
+   "about": "the age of each individual being referred (Light Green 13-24, Dark Green up to 26, Gold Years 62+, otherwise 18+)",
+   "from": "customer",
+   "ask": "How old is each person you'd like to refer?",
+   "may_hold_back": true
+  },
+  {
+   "field": "planned_deposit",
+   "about": "how much new money each referred person or business plans to deposit, compared with each program's qualifying deposit and any opening deposit",
+   "from": "customer",
+   "ask": "About how much new money (not moved from another Rho-Bank account) will each of them deposit into the new account?",
+   "may_hold_back": true
+  },
+  {
+   "field": "business_formation_date",
+   "about": "when each referred business was formally incorporated or formed (Sky Blue requires within 4 years of formation). No lookup reads this.",
+   "from": "customer",
+   "ask": "When was each business formally incorporated? Please give that date, not when you started working with them.",
+   "may_hold_back": true
+  },
+  {
+   "field": "referred_is_new_customer",
+   "about": "whether each referred party has no existing Rho-Bank checking or savings account, and none closed in the 12 months before today",
+   "from": "customer",
+   "ask": "Does anyone you're referring have a Rho-Bank checking or savings account now, or have they closed one in the past 12 months?",
+   "may_hold_back": true
+  },
+  {
+   "field": "same_address",
+   "about": "whether any referred person is registered at the customer's address",
+   "from": "customer",
+   "ask": "Is anyone you're referring registered at the same address as you?",
+   "may_hold_back": true
+  },
+  {
+   "field": "business_primary_owner",
+   "about": "whether each referred business's primary authorized signer is someone other than the primary owner of any existing Rho-Bank business account",
+   "from": "customer",
+   "ask": "For each business, is its primary owner/authorized signer someone other than the owner of any existing Rho-Bank business account, including yours?",
+   "may_hold_back": true
+  },
+  {
+   "field": "ranking_basis",
+   "about": "what 'best bonus' means to the customer: referrer bonus plus the referred party's welcome bonus (combined), or the customer's own bonus only",
+   "from": "customer",
+   "ask": "When you say best bonus, do you mean the total of your bonus plus their welcome bonus, or just your own bonus?",
+   "may_hold_back": true
+  },
+  {
+   "field": "referral_order",
+   "about": "which referrals the customer wants to use the open rolling-window slots on first, when there are more referrals than open slots",
+   "from": "customer",
+   "ask": "Only a limited number of referrals can earn a bonus right now. Which ones would you like to do first?",
+   "may_hold_back": true
+  },
+  {
+   "field": "earliest_checking_open_date",
+   "about": "date_opened of the customer's earliest checking account (referrer tenure)",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "referral_history",
+   "about": "the customer's referrals with account type, status and timestamp",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "find_user",
+   "by": "model",
+   "do": "Greet the customer and ask for their name, email or user id, and any 2 of date of birth, email, phone number, address. Look the customer up with the tool that matches the identifier they gave: get_user_information_by_name (exact, case-sensitive full name), get_user_information_by_email, or get_user_information_by_id.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the full name the customer gives (or the email with get_user_information_by_email, or the user id with get_user_information_by_id)"
+   },
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": null,
+   "doc": null,
+   "basis": [
+    {
+     "clause": "ask for an identifier and identity values, then look the record up",
+     "source": "none",
+     "why": "Set by the Customer Service Policy section 'Authenticating Users', not by a knowledge-base document. The step only asks the customer and reads the record."
+    }
+   ]
+  },
+  {
+   "id": "verify",
+   "by": "model",
+   "do": "Compare the identity values the customer gave with the record from find_user, as the agent policy's Authenticating Users section describes. If they do not match, ask the customer to check and give them again.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "find_user"
+   ],
+   "after": [
+    "find_user"
+   ],
+   "if": null,
+   "quote": null,
+   "doc": null,
+   "basis": [
+    {
+     "clause": "compare the customer's values with the record; ask again on a mismatch",
+     "source": "none",
+     "why": "Comes from the Customer Service Policy 'Authenticating Users' and the log_verification tool description ('confirming 2 out of 4 identity fields'), not from a KB document. The step only compares and asks the customer."
+    }
+   ]
+  },
+  {
+   "id": "get_time",
+   "by": "harness",
+   "do": "Get the current date and time. It is used for the verification log, referrer tenure, the rolling 9-day window, the calendar-year counts, business formation age, and which business promotion notice is active.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "verify"
+   ],
+   "if": null,
+   "quote": "A rolling 9-day window means the count is evaluated based on the exact timestamps of your most recent referral bonuses, not calendar weeks.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+  },
+  {
+   "id": "log_verification",
+   "by": "harness",
+   "do": "Log the verification. Fill the fields from the record in find_user, and set time_verified to the timestamp from get_time.",
+   "call": "log_verification",
+   "args": {
+    "name": "the verified user's full name, from find_user",
+    "user_id": "from find_user",
+    "address": "from find_user",
+    "email": "from find_user",
+    "phone_number": "from find_user",
+    "date_of_birth": "from find_user, MM/DD/YYYY",
+    "time_verified": "the timestamp from get_time, the moment verification was completed"
+   },
+   "lookup": [
+    "verify",
+    "get_time"
+   ],
+   "after": [
+    "verify",
+    "get_time"
+   ],
+   "if": "the customer was verified in step verify",
+   "quote": "Ensure the time_verified field reflects the precise moment you completed verification.",
+   "doc": "doc_customer_support_special_support_codes_001",
+   "basis": [
+    {
+     "clause": "identity verification is logged with log_verification",
+     "quote": "Log identity verification with the log_verification tool",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "clause": "time_verified is the moment verification was completed",
+     "quote": "Ensure the time_verified field reflects the precise moment you completed verification.",
+     "doc": "doc_customer_support_special_support_codes_001"
+    },
+    {
+     "clause": "log after a standard 2-of-4 verification",
+     "source": "none",
+     "why": "The KB passage is written for bypass-code verification. For standard verification, logging comes from the agent policy and the log_verification tool description."
+    }
+   ]
+  },
+  {
+   "id": "get_referrals",
+   "by": "harness",
+   "do": "Get every referral this customer has made, with each one's account type, status and timestamp.",
+   "call": "get_referrals_by_user",
+   "args": {
+    "user_id": "the user_id from find_user"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": null,
+   "quote": "Track the timing of your last two successful referral bonuses before sending additional referrals.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+  },
+  {
+   "id": "unlock_accounts_tool",
+   "by": "harness",
+   "do": "Unlock get_all_user_accounts_by_user_id_3847, which is needed to read the opening date of the customer's earliest checking account.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+   },
+   "lookup": [],
+   "after": [
+    "log_verification"
+   ],
+   "if": "check_tenure needs the date the customer's earliest checking account was opened",
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009",
+   "basis": [
+    {
+     "clause": "this tool reads the customer's checking accounts",
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "clause": "tenure needs the earliest checking account's opening date",
+     "quote": "This threshold is calculated from when you first became a Rho-Bank checking customer—specifically, the date your earliest checking account was opened.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    }
+   ]
+  },
+  {
+   "id": "get_accounts",
+   "by": "harness",
+   "do": "Get the customer's accounts. Note the date_opened of every checking account, personal or business.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "arguments": {
+     "user_id": "the user_id from find_user"
+    }
+   },
+   "lookup": [],
+   "after": [
+    "unlock_accounts_tool"
+   ],
+   "if": null,
+   "quote": "The tool requires the customer's user_id and returns all account information including:",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "check_tenure",
+   "by": "model",
+   "do": "In get_accounts, find the earliest date_opened among the customer's checking accounts (any class, personal or business; ignore savings and cards). Count the days from it to the current time (get_time). A program can be recommended only if that count meets or exceeds its minimum:\n- 14 days: Light Green.\n- 30 days: Gold Years, Green Fee-Free, Light Blue, Blue, Green Account (checking).\n- 45 days: Dark Green, Purple, Evergreen, Sky Blue.\n- 60 days: Bluest, Hunter Green, Cobalt Blue, Navy Blue.\n- 90 days: Lime Green, True Blue, World Blue.\n- 120 days: Beige.\nThe account class the customer holds does not matter. If the customer has no checking account, or meets no program's minimum, tell them they are not yet eligible to refer and the date they will reach the lowest minimum. Give no recommendations, and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts",
+    "get_time"
+   ],
+   "after": [
+    "get_accounts",
+    "get_time"
+   ],
+   "if": null,
+   "quote": "Every referral program requires the referrer to meet a tenure threshold before participating.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": [
+    {
+     "clause": "each program has a tenure threshold",
+     "quote": "Every referral program requires the referrer to meet a tenure threshold before participating.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "counted from the earliest checking account",
+     "quote": "This threshold is calculated from when you first became a Rho-Bank checking customer—specifically, the date your earliest checking account was opened.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "account class held is irrelevant",
+     "quote": "Consequently, holding one account type does not prevent you from referring someone to a different account type, as long as the duration since your first account meets or exceeds the program's stated minimum.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "check eligibility before any recommendation; stop if not eligible",
+     "quote": "Before giving any recommendations or information on referral terms, you must check that the user is eligible to submit referrals first",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "Light Green 14 days",
+     "quote": "Referrer eligibility is based on account tenure: you must have opened your first Rho-Bank checking account at least 14 days ago.",
+     "doc": "doc_checking_accounts_light_green_account_002"
+    },
+    {
+     "clause": "Gold Years 30 days",
+     "quote": "The referrer must have maintained checking account status with Rho-Bank for 30 days.",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "clause": "Green Fee-Free 30 days",
+     "quote": "Your Rho-Bank checking relationship must span at least 30 days.",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "clause": "Light Blue 30 days",
+     "quote": "To qualify as a referrer, you must have been a Rho-Bank checking account holder for 30 days or longer.",
+     "doc": "doc_checking_accounts_light_blue_account_007"
+    },
+    {
+     "clause": "Blue 30 days",
+     "quote": "A minimum banking relationship of 30 days is required to participate",
+     "doc": "doc_checking_accounts_blue_account_010"
+    },
+    {
+     "clause": "Green Account 30 days",
+     "quote": "Account tenure requirement: 30 days since becoming a Rho-Bank checking customer.",
+     "doc": "doc_checking_accounts_green_account_(checking)_001"
+    },
+    {
+     "clause": "Dark Green 45 days",
+     "quote": "You must satisfy the 45-day minimum as a Rho-Bank checking customer.",
+     "doc": "doc_checking_accounts_dark_green_account_010"
+    },
+    {
+     "clause": "Purple 45 days",
+     "quote": "Participation requires 45 days of checking account history with Rho-Bank.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    },
+    {
+     "clause": "Evergreen 45 days",
+     "quote": "The 45-day tenure threshold applies",
+     "doc": "doc_checking_accounts_evergreen_account_007"
+    },
+    {
+     "clause": "Sky Blue 45 days",
+     "quote": "Your eligibility: Referrers must meet the 45-day tenure threshold based on their banking history with Rho-Bank.",
+     "doc": "doc_business_checking_accounts_sky_blue_002"
+    },
+    {
+     "clause": "Bluest 60 days",
+     "quote": "Eligibility: Referrers must have established their Rho-Bank checking relationship at least 60 days prior.",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "clause": "Hunter Green 60 days",
+     "quote": "A minimum relationship duration of 60 days as a checking account holder is required.",
+     "doc": "doc_business_checking_accounts_hunter_green_001"
+    },
+    {
+     "clause": "Cobalt Blue 60 days",
+     "quote": "Your eligibility: To participate, your earliest-opened Rho-Bank checking account must have reached 60 days of age.",
+     "doc": "doc_business_checking_accounts_cobalt_blue_005"
+    },
+    {
+     "clause": "Navy Blue 60 days",
+     "quote": "Referrer eligibility requires having been a Rho-Bank checking customer for 60 days or more.",
+     "doc": "doc_business_checking_accounts_navy_blue_001"
+    },
+    {
+     "clause": "Lime Green 90 days",
+     "quote": "You must have maintained checking account status with Rho-Bank for a minimum of 90 days.",
+     "doc": "doc_business_checking_accounts_lime_green_003"
+    },
+    {
+     "clause": "True Blue 90 days",
+     "quote": "The account age threshold is 90 days, calculated from when you opened your oldest checking account.",
+     "doc": "doc_business_checking_accounts_true_blue_002"
+    },
+    {
+     "clause": "World Blue 90 days",
+     "quote": "You must have maintained checking account status with Rho-Bank for at least 90 days",
+     "doc": "doc_business_checking_accounts_world_blue_001"
+    },
+    {
+     "clause": "Beige 120 days",
+     "quote": "Referrer tenure requirement: 120 days since opening your first checking account with us.",
+     "doc": "doc_business_checking_accounts_beige_012"
+    }
+   ]
+  },
+  {
+   "id": "check_annual_caps",
+   "by": "model",
+   "do": "Use the referral records in get_referrals, not what the customer remembers. The period is the current calendar year: from January 1 of the year shown by get_time up to the current time.\n- For each account type, count the referrals submitted for it in that period, leaving out REJECTED ones (denied). Several caps are stated as a number of referrals per year.\n- Remaining = the program's annual cap minus that count.\n- Caps: Light Green 3; Green Fee-Free 4; Light Blue 5, Blue 5, Green Account (checking) 5; Gold Years 6, Dark Green 6, Purple 6, Evergreen 6; Bluest 8, Sky Blue 8; Hunter Green 10, Cobalt Blue 10, Navy Blue 10; Lime Green 12, World Blue 12; True Blue 15, Beige 15.\n- A program with 0 remaining is blocked for the rest of the year.\n- If a program's remaining room depends on referrals that are not yet COMPLETE, or that have ERROR status, tell the customer the terms do not say whether those count.\n- If the recorded count differs from what the customer remembers, tell them the recorded count.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_referrals",
+    "get_time"
+   ],
+   "after": [
+    "get_referrals",
+    "get_time"
+   ],
+   "if": null,
+   "quote": "Each checking account type has its own referral bonus amounts and qualification requirements.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": [
+    {
+     "clause": "caps per calendar year",
+     "quote": "You can earn up to 6 referral bonuses per calendar year.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    },
+    {
+     "clause": "caps are stated as numbers of referrals",
+     "quote": "Maximum referrals: 5 per calendar year",
+     "doc": "doc_checking_accounts_light_blue_account_007"
+    },
+    {
+     "clause": "REJECTED left out",
+     "quote": "REJECTED — The referral has been denied (e.g., rolling window limit exceeded, ineligible referral).",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "tell the customer that not-yet-COMPLETE and ERROR counting is unclear",
+     "source": "none",
+     "why": "No document says whether ERROR, NO_PROGRESS, APPLIED or IN_PROGRESS referrals count toward a cap, so the agent explains this to the customer. Recorded in open_questions."
+    },
+    {
+     "clause": "Light Green 3",
+     "quote": "Maximum referrals: 3 per calendar year",
+     "doc": "doc_checking_accounts_light_green_account_001"
+    },
+    {
+     "clause": "Green Fee-Free 4",
+     "quote": "Annual limit: 4 referrals per year",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "clause": "Light Blue 5",
+     "quote": "Maximum referrals: 5 per calendar year",
+     "doc": "doc_checking_accounts_light_blue_account_007"
+    },
+    {
+     "clause": "Blue 5",
+     "quote": "You can earn up to 5 referral bonuses per calendar year.",
+     "doc": "doc_checking_accounts_blue_account_010"
+    },
+    {
+     "clause": "Green Account 5",
+     "quote": "Maximum referrals per year: 5",
+     "doc": "doc_checking_accounts_green_account_(checking)_001"
+    },
+    {
+     "clause": "Gold Years 6",
+     "quote": "**Annual maximum**: 6 referral bonuses per calendar year",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "clause": "Dark Green 6",
+     "quote": "**Maximum per year**: 6 referral bonuses",
+     "doc": "doc_checking_accounts_dark_green_account_010"
+    },
+    {
+     "clause": "Evergreen 6",
+     "quote": "Earn up to 6 referral bonuses per calendar year",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "clause": "Bluest 8",
+     "quote": "Annual limit: 8 referral bonuses per calendar year",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "clause": "Sky Blue 8",
+     "quote": "Annual limit: 8 referrals per year",
+     "doc": "doc_business_checking_accounts_sky_blue_001"
+    },
+    {
+     "clause": "Hunter Green 10",
+     "quote": "**Annual limit**: Up to 10 referral bonuses per year",
+     "doc": "doc_business_checking_accounts_hunter_green_001"
+    },
+    {
+     "clause": "Cobalt Blue 10",
+     "quote": "Maximum referrals: 10 per calendar year",
+     "doc": "doc_business_checking_accounts_cobalt_blue_001"
+    },
+    {
+     "clause": "Navy Blue 10",
+     "quote": "| Maximum referrals per year | 10 |",
+     "doc": "doc_business_checking_accounts_navy_blue_001"
+    },
+    {
+     "clause": "Lime Green 12",
+     "quote": "**Annual cap**: 12 referrals per year",
+     "doc": "doc_business_checking_accounts_lime_green_003"
+    },
+    {
+     "clause": "World Blue 12",
+     "quote": "**Annual limit**: 12 referral bonuses per calendar year",
+     "doc": "doc_business_checking_accounts_world_blue_007"
+    },
+    {
+     "clause": "True Blue 15",
+     "quote": "Referral bonuses are paid after qualification is confirmed and are subject to the annual limit of 15.",
+     "doc": "doc_business_checking_accounts_true_blue_002"
+    },
+    {
+     "clause": "Beige 15",
+     "quote": "**Annual maximum**: 15 referral bonuses per calendar year",
+     "doc": "doc_business_checking_accounts_beige_012"
+    }
+   ]
+  },
+  {
+   "id": "gather_referred",
+   "by": "model",
+   "do": "Ask about each party the customer wants to refer, one at a time:\n- personal or business;\n- for a person, their age;\n- for a business, its formal incorporation date (not when the customer began working with it);\n- the planned deposit of new money.\nTell the customer the qualifying deposit must be new money. If the customer has not said what 'best bonus' means, ask whether they mean the total of their bonus and the welcome bonus, or their own bonus only.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_tenure",
+    "check_rolling_window"
+   ],
+   "after": [
+    "check_tenure",
+    "check_rolling_window"
+   ],
+   "if": "check_tenure and check_rolling_window passed (at least one program's tenure met and at least one open slot)",
+   "quote": "The qualifying deposit must be new money and cannot be transferred from another Rho-Bank account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": [
+    {
+     "clause": "only after referrer eligibility is checked",
+     "quote": "Before giving any recommendations or information on referral terms, you must check that the user is eligible to submit referrals first",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "tenure must be met",
+     "quote": "Every referral program requires the referrer to meet a tenure threshold before participating.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "an open slot in the window",
+     "quote": "You can receive at most 2 referral bonuses in any rolling 9-day window.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "the deposit must be new money",
+     "quote": "The qualifying deposit must be new money and cannot be transferred from another Rho-Bank account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "age decides personal eligibility",
+     "quote": "The referred person must be 18 years or older, except for the Light Green Account which allows minors with a guardian.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "formation date decides Sky Blue",
+     "quote": "Confirm your company is within 4 years of formation.",
+     "doc": "doc_business_checking_accounts_sky_blue_001"
+    },
+    {
+     "clause": "ask what 'best/combined bonus' means",
+     "source": "none",
+     "why": "No document defines a combined referral bonus, so the agent asks the customer."
+    }
+   ]
+  },
+  {
+   "id": "referred_eligibility",
+   "by": "model",
+   "do": "Where it is unknown, ask about each referred party:\n- whether it has any Rho-Bank checking or savings account now, or closed one in the 12 months before today (get_time);\n- whether it is registered at the customer's address (compare with the address in find_user);\n- for a business, whether its primary authorized signer differs from the owner of any existing Rho-Bank business account.\nDo not assume from words like 'roommate' or 'business partner'; ask. A party that fails any of these cannot be referred. Tell the customer why, recommend no account for it, do not count it against the open slots, and carry on with the others.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "find_user",
+    "get_time"
+   ],
+   "after": [
+    "gather_referred"
+   ],
+   "if": null,
+   "quote": "The referred person must be a new Rho-Bank customer with no existing checking, savings, or closed accounts within the past 12 months.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": [
+    {
+     "clause": "new customer within 12 months",
+     "quote": "The referred person must be a new Rho-Bank customer with no existing checking, savings, or closed accounts within the past 12 months.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "not the same address",
+     "quote": "The referrer and referred person cannot be registered at the same address.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "business: different primary owner",
+     "quote": "For business accounts: The referred business must have a different primary owner than any existing Rho-Bank business account, based on the SSN of the primary authorized signer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "these are rejection reasons",
+     "quote": "The referred person already has or recently had a Rho-Bank account.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_048"
+    }
+   ]
+  },
+  {
+   "id": "rank_accounts",
+   "by": "model",
+   "do": "For each eligible party separately, list the programs of its kind that pass every test below, then rank them by the customer's ranking_basis.\n\nPERSONAL age filters: Light Green 13-24; Dark Green 18-26 (its own minimum is 17, but referred people must be 18+ outside Light Green); Gold Years 62+; all others 18+.\n\nPERSONAL deposit filters (planned new money must be at least the qualifying deposit): Light Green $100; Green Fee-Free $300; Blue, Light Blue, Green Account (checking) $500; Evergreen $750; Purple, Dark Green, Gold Years $1,000; Bluest $2,000. Bluest also needs a $75,000 minimum opening deposit, so drop it unless they will deposit at least $75,000.\n\nPERSONAL combined bonus (referrer + welcome): Bluest $125 ($75+$50); Gold Years $125 ($50+$75); Purple $80 ($45+$35); Dark Green $70 ($40+$30); Blue $65 ($35+$30); Evergreen $60 ($35+$25); Green Fee-Free $55 ($20+$35); Light Blue $50 ($30+$20); Green Account (checking) $50 ($20+$30); Light Green $40 ($15+$25).\n\nBUSINESS filters: Sky Blue only if incorporated within 4 years of today (get_time). Planned deposit at least: Navy Blue $5,000; Cobalt Blue $7,500; Sky Blue $10,000; Hunter Green $10,000; Lime Green $15,000; World Blue $25,000; True Blue $50,000; Beige $100,000.\n\nBUSINESS combined bonus: Beige $850 ($500+$350); True Blue $600 ($350+$250); World Blue $500 ($300+$200); Sky Blue $400 ($150+$250); Lime Green $350 ($200+$150); Hunter Green $300 ($175+$125); Cobalt Blue $250 ($150+$100); Navy Blue $175 ($100+$75).\n\nFor every program, also require tenure met (check_tenure) and annual cap room (check_annual_caps). The top program is the recommendation (see promo_tiebreak for business ties). If none passes for a party, tell the customer that party cannot be referred now and why: which programs were blocked by cap, age, deposit, formation age or tenure.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_tenure",
+    "check_annual_caps",
+    "gather_referred",
+    "referred_eligibility",
+    "get_time"
+   ],
+   "after": [
+    "check_tenure",
+    "check_annual_caps",
+    "check_rolling_window",
+    "referred_eligibility"
+   ],
+   "if": null,
+   "quote": "Each checking account type has its own referral bonus amounts and qualification requirements.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": [
+    {
+     "clause": "18+ except Light Green",
+     "quote": "The referred person must be 18 years or older, except for the Light Green Account which allows minors with a guardian.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "Light Green age 13-24",
+     "quote": "You must be the primary account holder and be between 13 and 24 years old to open the account.",
+     "doc": "doc_checking_accounts_light_green_account_002"
+    },
+    {
+     "clause": "Dark Green minimum 17",
+     "quote": "The primary account holder must be at least 17.",
+     "doc": "doc_checking_accounts_dark_green_account_002"
+    },
+    {
+     "clause": "Dark Green through 26",
+     "quote": "You can maintain the account through 26.",
+     "doc": "doc_checking_accounts_dark_green_account_002"
+    },
+    {
+     "clause": "Gold Years 62+",
+     "quote": "The person you refer must be eligible for a Gold Years Account (age 62+)",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "clause": "Light Green $100",
+     "quote": "The person you refer must deposit at least $100 within 90 days of opening their account.",
+     "doc": "doc_checking_accounts_light_green_account_002"
+    },
+    {
+     "clause": "Green Fee-Free $300",
+     "quote": "The new account holder must deposit at least $300",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "clause": "Blue $500",
+     "quote": "The referred person must deposit at least $500 within 60 days of opening their account.",
+     "doc": "doc_checking_accounts_blue_account_010"
+    },
+    {
+     "clause": "Light Blue $500",
+     "quote": "| Qualifying deposit | $500 |",
+     "doc": "doc_checking_accounts_light_blue_account_007"
+    },
+    {
+     "clause": "Green Account $500",
+     "quote": "Qualifying deposit required: $500 within 60 days",
+     "doc": "doc_checking_accounts_green_account_(checking)_001"
+    },
+    {
+     "clause": "Evergreen $750",
+     "quote": "The referred person must deposit $750 within 60 days of account opening to trigger the referral bonus.",
+     "doc": "doc_checking_accounts_evergreen_account_007"
+    },
+    {
+     "clause": "Purple $1,000",
+     "quote": "The referred person must deposit at least $1,000 within 60 days of account opening.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    },
+    {
+     "clause": "Dark Green $1,000",
+     "quote": "They must deposit at least $1,000 within 60 days of opening",
+     "doc": "doc_checking_accounts_dark_green_account_010"
+    },
+    {
+     "clause": "Gold Years $1,000",
+     "quote": "They must deposit $1,000 within 90 days of account opening",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "clause": "Bluest $2,000",
+     "quote": "Qualifying requirement: Referred person must deposit $2,000 within 90 days",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "clause": "Bluest $75,000 opening deposit",
+     "quote": "| Minimum opening deposit | $75,000 |",
+     "doc": "doc_checking_accounts_bluest_account_001"
+    },
+    {
+     "clause": "Bluest referred $50",
+     "quote": "New member bonus: $50 for the person you refer",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "clause": "Bluest referrer $75",
+     "quote": "Referrer bonus: $75 per successful referral",
+     "doc": "doc_checking_accounts_bluest_account_003"
+    },
+    {
+     "clause": "Gold Years $50",
+     "quote": "**You receive**: $50 for each successful referral",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "clause": "Gold Years $75",
+     "quote": "**They receive**: $75 as a welcome bonus",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "clause": "Purple $45 + $35",
+     "quote": "When you refer someone to open a Purple Account, you earn $45 and the person you refer receives $35.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    },
+    {
+     "clause": "Dark Green $40",
+     "quote": "**Your bonus**: $40 for each qualifying referral",
+     "doc": "doc_checking_accounts_dark_green_account_010"
+    },
+    {
+     "clause": "Dark Green $30",
+     "quote": "**Their bonus**: $30 welcome bonus",
+     "doc": "doc_checking_accounts_dark_green_account_010"
+    },
+    {
+     "clause": "Blue $35 + $30",
+     "quote": "When you refer someone to open a Blue Account, you earn $35 for each successful referral. The person you refer receives $30 as a welcome bonus.",
+     "doc": "doc_checking_accounts_blue_account_010"
+    },
+    {
+     "clause": "Evergreen $35",
+     "quote": "Refer others to join Evergreen and earn $35 per successful referral",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "clause": "Evergreen $25",
+     "quote": "New members receive $25 as a welcome bonus",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "clause": "Green Fee-Free $20",
+     "quote": "Your reward: $20 per successful referral",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "clause": "Green Fee-Free $35",
+     "quote": "New member reward: $35 welcome bonus",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "clause": "Light Blue $30",
+     "quote": "Referral bonus: $30 for each successful referral",
+     "doc": "doc_checking_accounts_light_blue_account_007"
+    },
+    {
+     "clause": "Light Blue $20",
+     "quote": "Welcome bonus: $20 when they open and fund their account",
+     "doc": "doc_checking_accounts_light_blue_account_007"
+    },
+    {
+     "clause": "Green Account $20",
+     "quote": "You earn: $20 per successful referral",
+     "doc": "doc_checking_accounts_green_account_(checking)_001"
+    },
+    {
+     "clause": "Green Account $30",
+     "quote": "They receive: $30 welcome bonus",
+     "doc": "doc_checking_accounts_green_account_(checking)_001"
+    },
+    {
+     "clause": "Light Green $15",
+     "quote": "You earn: $15 for each successful referral",
+     "doc": "doc_checking_accounts_light_green_account_001"
+    },
+    {
+     "clause": "Light Green $25",
+     "quote": "They receive: $25 as a welcome bonus",
+     "doc": "doc_checking_accounts_light_green_account_001"
+    },
+    {
+     "clause": "Sky Blue within 4 years",
+     "quote": "Confirm your company is within 4 years of formation.",
+     "doc": "doc_business_checking_accounts_sky_blue_001"
+    },
+    {
+     "clause": "Sky Blue $10,000",
+     "quote": "Qualifying deposit: Referred startups must deposit at least $10,000 to trigger the bonus",
+     "doc": "doc_business_checking_accounts_sky_blue_002"
+    },
+    {
+     "clause": "Sky Blue $150",
+     "quote": "Your bonus: $150 for each successful referral",
+     "doc": "doc_business_checking_accounts_sky_blue_001"
+    },
+    {
+     "clause": "Sky Blue $250",
+     "quote": "Their bonus: $250 welcome bonus",
+     "doc": "doc_business_checking_accounts_sky_blue_001"
+    },
+    {
+     "clause": "Navy Blue $5,000",
+     "quote": "To qualify: The referred business must open a Navy Blue account and deposit at least $5,000 within 90 days of account opening.",
+     "doc": "doc_business_checking_accounts_navy_blue_001"
+    },
+    {
+     "clause": "Navy Blue $100",
+     "quote": "| Your referral bonus | $100 |",
+     "doc": "doc_business_checking_accounts_navy_blue_001"
+    },
+    {
+     "clause": "Navy Blue $75",
+     "quote": "| New business welcome bonus | $75 |",
+     "doc": "doc_business_checking_accounts_navy_blue_001"
+    },
+    {
+     "clause": "Cobalt Blue $7,500",
+     "quote": "Qualifying deposit: The referred business must deposit at least $7,500 to trigger the referral bonus",
+     "doc": "doc_business_checking_accounts_cobalt_blue_005"
+    },
+    {
+     "clause": "Cobalt Blue $150",
+     "quote": "You earn: $150 per successful referral",
+     "doc": "doc_business_checking_accounts_cobalt_blue_001"
+    },
+    {
+     "clause": "Cobalt Blue $100",
+     "quote": "They receive: $100 as a welcome bonus",
+     "doc": "doc_business_checking_accounts_cobalt_blue_001"
+    },
+    {
+     "clause": "Hunter Green $10,000",
+     "quote": "**Requirement**: Referred business must deposit $10,000 within 90 days",
+     "doc": "doc_business_checking_accounts_hunter_green_001"
+    },
+    {
+     "clause": "Hunter Green $175",
+     "quote": "**Referrer reward**: $175 for each successful referral",
+     "doc": "doc_business_checking_accounts_hunter_green_001"
+    },
+    {
+     "clause": "Hunter Green $125",
+     "quote": "**New member bonus**: $125 for the business you refer",
+     "doc": "doc_business_checking_accounts_hunter_green_001"
+    },
+    {
+     "clause": "Lime Green $15,000",
+     "quote": "**Qualification**: Referred business must deposit $15,000 within 90 days",
+     "doc": "doc_business_checking_accounts_lime_green_003"
+    },
+    {
+     "clause": "Lime Green $200",
+     "quote": "**Your bonus**: $200 for each successful referral",
+     "doc": "doc_business_checking_accounts_lime_green_003"
+    },
+    {
+     "clause": "Lime Green $150",
+     "quote": "**Their bonus**: $150 welcome bonus for the referred business",
+     "doc": "doc_business_checking_accounts_lime_green_003"
+    },
+    {
+     "clause": "World Blue $25,000",
+     "quote": "They must deposit at least $25,000 within 90 days of account opening",
+     "doc": "doc_business_checking_accounts_world_blue_001"
+    },
+    {
+     "clause": "World Blue $300",
+     "quote": "**Your bonus**: $300 for each successful referral",
+     "doc": "doc_business_checking_accounts_world_blue_007"
+    },
+    {
+     "clause": "World Blue $200",
+     "quote": "**Their bonus**: $200 welcome bonus for the new business",
+     "doc": "doc_business_checking_accounts_world_blue_007"
+    },
+    {
+     "clause": "True Blue $50,000",
+     "quote": "The referred business must deposit $50,000 within 120 days of opening their True Blue account.",
+     "doc": "doc_business_checking_accounts_true_blue_002"
+    },
+    {
+     "clause": "True Blue $350",
+     "quote": "| Referrer bonus | $350 per referral |",
+     "doc": "doc_business_checking_accounts_true_blue_002"
+    },
+    {
+     "clause": "True Blue $250",
+     "quote": "| New member bonus | $250 |",
+     "doc": "doc_business_checking_accounts_true_blue_002"
+    },
+    {
+     "clause": "Beige $100,000",
+     "quote": "They must deposit at least $100,000 within 120 days",
+     "doc": "doc_business_checking_accounts_beige_012"
+    },
+    {
+     "clause": "Beige $500",
+     "quote": "**Your reward**: $500 for each qualifying referral",
+     "doc": "doc_business_checking_accounts_beige_012"
+    },
+    {
+     "clause": "Beige $350",
+     "quote": "**Their reward**: $350 welcome bonus",
+     "doc": "doc_business_checking_accounts_beige_012"
+    },
+    {
+     "clause": "rank by the customer's chosen basis",
+     "source": "none",
+     "why": "No document ranks referral programs. The customer asked for the best bonus, and the ranking basis they chose when asked in gather_referred decides."
+    }
+   ]
+  },
+  {
+   "id": "promo_tiebreak",
+   "by": "model",
+   "do": "For a business referral, apply this step when two or more business programs passed rank_accounts and either tie at the top under the customer's ranking basis, or the customer gave no ranking basis. If the current date (get_time) falls inside an active promotion window, recommend in that promotion's order among those programs:\n- 11/01/2025-11/30/2025: Sky Blue first, then Lime Green.\n- 10/12/2025-11/12/2025: Lime Green first, then Hunter Green.\nNever let a promotion replace the account that meets the customer's stated requirement (for example the highest bonus) with one that does not. If both notices are active (11/01-11/12/2025) and they order the tied accounts differently, tell the customer both accounts meet their requirement and ask which they prefer.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rank_accounts",
+    "get_time"
+   ],
+   "after": [
+    "rank_accounts"
+   ],
+   "if": "a business referral has two or more programs that meet all of the customer's stated requirements (tied at the top, or no ranking basis given)",
+   "quote": "Always ensure the recommended account still meets ALL of the customer's stated requirements - do not recommend a promotional account if it does not satisfy the customer's needs.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_013",
+   "basis": [
+    {
+     "clause": "November window and when it applies",
+     "quote": "PROMOTION NOTICE - ACTIVE FROM 11/01/2025 TO 11/30/2025: When recommending business checking accounts to customers, if multiple accounts meet all of the customer's stated requirements, agents should prioritize recommending accounts in the following order:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_013"
+    },
+    {
+     "clause": "Sky Blue first, Lime Green second",
+     "quote": "(1) Sky Blue account should be recommended first, as it is currently under promotional priority; (2) Lime Green account should be recommended second, as it is also under promotional priority;",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_013"
+    },
+    {
+     "clause": "October window",
+     "quote": "PROMOTION NOTICE - ACTIVE FROM 10/12/2025 TO 11/12/2025: When recommending business checking accounts to customers, if multiple accounts meet all of the customer's stated requirements, agents should prioritize recommending accounts in the following order:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_014"
+    },
+    {
+     "clause": "Lime Green first, Hunter Green second",
+     "quote": "(1) Lime Green account should be recommended first, as it is currently under promotional priority; (2) Hunter Green account should be recommended second, as it is also under promotional priority;",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_014"
+    },
+    {
+     "clause": "promotion never overrides the customer's requirement",
+     "quote": "Always ensure the recommended account still meets ALL of the customer's stated requirements - do not recommend a promotional account if it does not satisfy the customer's needs.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_013"
+    },
+    {
+     "clause": "overlapping notices: ask the customer",
+     "source": "none",
+     "why": "No document says which notice governs during 11/01-11/12/2025, so the agent asks the customer. Recorded in open_questions."
+    }
+   ]
+  },
+  {
+   "id": "beige_route",
+   "by": "model",
+   "do": "If the recommended account is Beige, also tell the customer that Beige referral materials and introductions go through their dedicated relationship manager.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rank_accounts"
+   ],
+   "after": [
+    "recommend"
+   ],
+   "if": "the recommended account is Beige",
+   "quote": "Contact your dedicated relationship manager for referral materials",
+   "doc": "doc_business_checking_accounts_beige_012"
+  },
+  {
+   "id": "customer_submits",
+   "by": "customer",
+   "do": "The customer runs submit_referral once for each referral recommended for now, and never more times than there are open slots.",
+   "call": "submit_referral",
+   "args": {
+    "user_id": "the customer's own user_id, from find_user",
+    "account_type": "the full name of the account recommended for that referral in recommend, ending in 'Account'"
+   },
+   "lookup": [
+    "recommend",
+    "choose_order"
+   ],
+   "after": [
+    "recommend"
+   ],
+   "if": "the customer has a recommended account for the referral and an open slot for it",
+   "quote": "If you attempt to receive more than 2 referrals in a single 9-day period, the third referral (and any subsequent referrals in that window) will be automatically denied.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+  },
+  {
+   "id": "error_path",
+   "by": "model",
+   "do": "Read each submit_referral reply.\n- REJECTED: do not retry it right away. Explain what the status means (rolling window limit, or an ineligible referral).\n- ERROR: tell the customer a system error occurred and that they can try again later.\n- Referrals left for later: give the date a slot opens. The window runs from 9 days before the current time up to now, using get_referrals and the referrals just submitted; the slot opens at the timestamp of the oldest referral in it plus 9 days. Remind the customer that each referral submitted now occupies the window for 9 days from its own timestamp, and that the caps and any promotion notice will be rechecked then.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "customer_submits",
+    "get_referrals",
+    "get_time"
+   ],
+   "after": [
+    "customer_submits"
+   ],
+   "if": "a submit_referral reply is REJECTED or ERROR, or referrals remain for a later window",
+   "quote": "If a referral is denied for hitting the rolling window limit, wait until enough time has passed to drop under the cap before attempting another.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": [
+    {
+     "clause": "REJECTED meaning",
+     "quote": "REJECTED — The referral has been denied (e.g., rolling window limit exceeded, ineligible referral).",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "wait before retrying",
+     "quote": "If a referral is denied for hitting the rolling window limit, wait until enough time has passed to drop under the cap before attempting another.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    },
+    {
+     "clause": "when a slot opens",
+     "quote": "If your referral was rejected due to the rolling window limit, you must wait until your oldest qualifying referral is more than 9 days old.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_048"
+    },
+    {
+     "clause": "ERROR: try again later",
+     "quote": "**ERROR**: A system error occurred; try again later or contact support.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_048"
+    }
+   ]
+  },
+  {
+   "id": "transfer_if_asked",
+   "by": "model",
+   "do": "If the customer asks for a human agent, first tell them you can help and keep helping. Per policy, transfer after the 4th request, or sooner if the request truly cannot be completed (for example, a system error that persists). Before transferring, ask the customer to confirm. Then call transfer_to_human_agents with a summary of the referrals discussed and submitted, and the reason from the highest tier that applies:\n- technical_system_error if a system error prevented the referral;\n- request_completed_customer_wants_human_followup if the referrals were completed and they want follow-up;\n- otherwise customer_requests_human_no_specific_reason, or customer_frustrated_demands_human if they are frustrated.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the referrals discussed, recommended and submitted, and what remains",
+    "reason": "the reason code from doc_bank_accounts_bank_accounts_(general)_042 that fits, as listed in do"
+   },
+   "lookup": [
+    "customer_submits",
+    "error_path"
+   ],
+   "after": [
+    "verify"
+   ],
+   "if": "the customer asks for a human agent and either the request cannot be completed or they have asked 4 times, and they confirm the transfer",
+   "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "pick the reason from the highest tier",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below. Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "technical_system_error",
+     "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "request_completed_customer_wants_human_followup",
+     "quote": "| request_completed_customer_wants_human_followup | Agent completed the request successfully, but customer wants human for additional questions or confirmation |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "customer_requests_human_no_specific_reason",
+     "quote": "| customer_requests_human_no_specific_reason | Customer requests human without clear reason, customer is not frustrated, just prefers human interaction |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "customer_frustrated_demands_human",
+     "quote": "| customer_frustrated_demands_human | Customer is frustrated and demands human, frustration is general |",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "ask first; transfer after 4 requests when within capability",
+     "source": "none",
+     "why": "Customer Service Policy guidelines 5 and 6."
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Check referrer eligibility (tenure and rolling window) from the records before giving any recommendation or referral terms.",
+   "quote": "Before giving any recommendations or information on referral terms, you must check that the user is eligible to submit referrals first",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": []
+  },
+  {
+   "rule": "No more than 2 referrals may be submitted in any rolling 9-day window (from 9 days before the current time up to now), across all checking account types. Never have the customer submit more than the open slots.",
+   "quote": "If you attempt to receive more than 2 referrals in a single 9-day period, the third referral (and any subsequent referrals in that window) will be automatically denied.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_047",
+   "basis": [
+    {
+     "clause": "across types",
+     "quote": "This limit applies across all checking account types; referrals from different accounts count toward the same 9-day cap.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    }
+   ]
+  },
+  {
+   "rule": "Purple Account: referrer $45, referred $35; deposit at least $1,000 within 60 days; cap 6 per calendar year; tenure 45 days.",
+   "quote": "When you refer someone to open a Purple Account, you earn $45 and the person you refer receives $35.",
+   "doc": "doc_checking_accounts_purple_account_011",
+   "basis": [
+    {
+     "clause": "deposit",
+     "quote": "The referred person must deposit at least $1,000 within 60 days of account opening.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    },
+    {
+     "clause": "cap",
+     "quote": "You can earn up to 6 referral bonuses per calendar year.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    },
+    {
+     "clause": "tenure",
+     "quote": "Participation requires 45 days of checking account history with Rho-Bank.",
+     "doc": "doc_checking_accounts_purple_account_011"
+    }
+   ]
+  },
+  {
+   "rule": "Gold Years Account: referred must be 62+; referrer $50, referred $75; deposit $1,000 within 90 days; cap 6 per calendar year; tenure 30 days.",
+   "quote": "The person you refer must be eligible for a Gold Years Account (age 62+)",
+   "doc": "doc_checking_accounts_gold_years_account_010",
+   "basis": [
+    {
+     "clause": "age",
+     "quote": "You must be at least 62 years old to qualify.",
+     "doc": "doc_checking_accounts_gold_years_account_002"
+    },
+    {
+     "clause": "deposit",
+     "quote": "They must deposit $1,000 within 90 days of account opening",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    },
+    {
+     "clause": "tenure",
+     "quote": "The referrer must have maintained checking account status with Rho-Bank for 30 days.",
+     "doc": "doc_checking_accounts_gold_years_account_010"
+    }
+   ]
+  },
+  {
+   "rule": "Green Fee-Free Account: referrer $20, referred $35; deposit at least $300 within 60 days; cap 4 per year; tenure 30 days.",
+   "quote": "Your reward: $20 per successful referral",
+   "doc": "doc_checking_accounts_green_fee-free_account_007",
+   "basis": [
+    {
+     "clause": "window",
+     "quote": "This deposit must be made within 60 days of opening their account",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    },
+    {
+     "clause": "cap",
+     "quote": "Annual limit: 4 referrals per year",
+     "doc": "doc_checking_accounts_green_fee-free_account_007"
+    }
+   ]
+  },
+  {
+   "rule": "Light Green Account: referred must be 13-24; referrer $15, referred $25; deposit at least $100 within 90 days; cap 3 per calendar year; tenure 14 days.",
+   "quote": "You must be the primary account holder and be between 13 and 24 years old to open the account.",
+   "doc": "doc_checking_accounts_light_green_account_002",
+   "basis": [
+    {
+     "clause": "age range",
+     "quote": "If you are below 13 or past 24, you are not eligible as the primary account holder for this account type.",
+     "doc": "doc_checking_accounts_light_green_account_003"
+    }
+   ]
+  },
+  {
+   "rule": "Dark Green Account: referred must be 17-26 and, under the general rule, 18+; referrer $40, referred $30; deposit at least $1,000 within 60 days; cap 6; tenure 45 days.",
+   "quote": "The primary account holder must be at least 17.",
+   "doc": "doc_checking_accounts_dark_green_account_002",
+   "basis": [
+    {
+     "clause": "max age",
+     "quote": "Maximum primary holder age: 26",
+     "doc": "doc_checking_accounts_dark_green_account_001"
+    },
+    {
+     "clause": "18+ general",
+     "quote": "The referred person must be 18 years or older, except for the Light Green Account which allows minors with a guardian.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_047"
+    }
+   ]
+  },
+  {
+   "rule": "Bluest Account: referrer $75, referred $50; deposit $2,000 within 90 days; $75,000 minimum opening deposit; $112,500 minimum daily balance to keep benefits; cap 8 per calendar year; tenure 60 days.",
+   "quote": "Qualifying requirement: Referred person must deposit $2,000 within 90 days",
+   "doc": "doc_checking_accounts_bluest_account_003",
+   "basis": [
+    {
+     "clause": "opening deposit",
+     "quote": "| Minimum opening deposit | $75,000 |",
+     "doc": "doc_checking_accounts_bluest_account_001"
+    },
+    {
+     "clause": "balance for benefits",
+     "quote": "| Minimum daily balance to maintain benefits | $112,500 |",
+     "doc": "doc_checking_accounts_bluest_account_001"
+    }
+   ]
+  },
+  {
+   "rule": "Sky Blue Account (business): only for companies within 4 years of formation; referrer $150, referred $250; deposit at least $10,000 within 90 days; cap 8 per year; tenure 45 days.",
+   "quote": "Confirm your company is within 4 years of formation.",
+   "doc": "doc_business_checking_accounts_sky_blue_001",
+   "basis": [
+    {
+     "clause": "formation check",
+     "quote": "Verify your company age is within 4. Confirm using formation documents that match your application details.",
+     "doc": "doc_business_checking_accounts_sky_blue_009"
+    }
+   ]
+  },
+  {
+   "rule": "Lime Green Account (business): referrer $200, referred $150; deposit $15,000 within 90 days; $5,000 minimum balance; cap 12 per year; tenure 90 days.",
+   "quote": "| Minimum balance requirement | $5,000 |",
+   "doc": "doc_business_checking_accounts_lime_green_001",
+   "basis": []
+  },
+  {
+   "rule": "A business checking promotion order applies only among accounts that meet all of the customer's stated requirements, and only between the notice's printed start and end dates.",
+   "quote": "Always ensure the recommended account still meets ALL of the customer's stated requirements - do not recommend a promotional account if it does not satisfy the customer's needs.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_013",
+   "basis": []
+  },
+  {
+   "rule": "Write the account type as the full official name ending in 'Account'.",
+   "quote": "Personal checking account_class options must use the full official name ending with 'Account' (e.g., 'Blue Account', 'Green Account (checking)').",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_001",
+   "basis": []
+  }
+ ],
+ "done_when": "The customer is verified and logged, or has been asked to give their identity values again. Referrer tenure, the rolling 9-day window and each program's calendar-year cap have been checked from the records, and any of the customer's figures that differ from the records have been corrected. Each referred party has either a recommended account (with both bonuses, the qualifying deposit and its conditions) or an explanation of why it cannot be referred. The customer has submitted no more referrals than the open slots. Each submit result has been read and explained, and the customer knows when any remaining referrals can be submitted."
+}

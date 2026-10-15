@@ -1,0 +1,948 @@
+{
+ "job": "debit_card_decline_diagnosis",
+ "aliases": [
+  "card declined at store",
+  "card declined but customer saw no code",
+  "check hold reduced available balance",
+  "code 05 do not honor",
+  "code 51 insufficient funds",
+  "daily limit code 61 found during a decline review",
+  "debit card declined",
+  "debit card declined at a store",
+  "deposited check not available",
+  "deposited check not available yet",
+  "do not honor code 05 diagnosis",
+  "expired card code 54",
+  "insufficient funds code 51",
+  "troubleshoot_debit_card_decline"
+ ],
+ "when": {
+  "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+  "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer reports a declined debit card transaction. Offer each fix (unfreeze, clearing an alert or velocity block, a temporary limit increase, a transfer between the customer's own accounts) only when its check finds that cause, and make it only after the customer agrees. A bank-initiated alert goes to the security team without an offer.",
+  "quote": "The account doesn't have enough funds for the transaction. This is the most common decline but requires careful diagnosis.",
+  "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "v_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "v_log",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "d_unlock",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "d_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "d_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "d_cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "d_txns",
+   "not_used": null
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": "c_frozen_unfreeze",
+   "not_used": null
+  },
+  {
+   "tool": "clear_debit_card_fraud_alert_4892",
+   "who": "agent",
+   "step": "c_fraud_customer_clear",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "c_fraud_bank",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_funds_between_bank_accounts_7291",
+   "who": "agent",
+   "step": "b_transfer",
+   "not_used": null
+  },
+  {
+   "tool": "request_temporary_debit_card_limit_increase_8374",
+   "who": "agent",
+   "step": "l_increase",
+   "not_used": null
+  },
+  {
+   "tool": "freeze_debit_card_3892",
+   "who": "agent",
+   "step": null,
+   "not_used": "Diagnosing a decline never freezes a card. Freezing belongs to chip_cvv_mismatch_card_review and to the card action after a dispute."
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": null,
+   "not_used": "A replacement for a CLOSED or expired card is ordered in the ordering steps of closing_cancelling_a_debit_card."
+  },
+  {
+   "tool": "activate_debit_card_8291",
+   "who": "agent",
+   "step": null,
+   "not_used": "Only for a PENDING card. This job hands that case to the activation procedure (doc_bank_accounts_bank_accounts_(general)_024), which picks the tool by issue_reason."
+  },
+  {
+   "tool": "activate_debit_card_8292",
+   "who": "agent",
+   "step": null,
+   "not_used": "Only for a PENDING replacement card. Handed to the activation procedure."
+  },
+  {
+   "tool": "activate_debit_card_8293",
+   "who": "agent",
+   "step": null,
+   "not_used": "Only for a PENDING reissued card. Handed to the activation procedure."
+  },
+  {
+   "tool": "deposit_check_3847",
+   "who": "customer",
+   "step": null,
+   "not_used": "This tool makes a new mobile check deposit. A check that is already deposited and not yet available needs no new deposit."
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_fields",
+   "about": "Full name, plus any 2 of: date of birth, email, phone, address",
+   "from": "customer",
+   "ask": "To verify your identity, could you give me your full name and two of these: your date of birth, email, phone number, or address on file?",
+   "may_hold_back": true
+  },
+  {
+   "field": "declined_card_account",
+   "about": "Which checking account or debit card was declined",
+   "from": "customer",
+   "ask": "Which debit card or checking account were you using?",
+   "may_hold_back": true
+  },
+  {
+   "field": "decline_code",
+   "about": "Any decline code or message shown at the terminal",
+   "from": "customer",
+   "ask": "Did you see a decline code or message on the terminal or receipt?",
+   "may_hold_back": true
+  },
+  {
+   "field": "transaction_channel",
+   "about": "In person (chip, PIN or swipe), online, or at an ATM",
+   "from": "customer",
+   "ask": "Were you paying in person, online, or at an ATM?",
+   "may_hold_back": true
+  },
+  {
+   "field": "attempted_amount",
+   "about": "Amount of the declined purchase",
+   "from": "customer",
+   "ask": "What was the amount of the purchase?",
+   "may_hold_back": true
+  },
+  {
+   "field": "authorization_holds",
+   "about": "Recent hotel, gas, rental or restaurant holds the customer knows about",
+   "from": "customer",
+   "ask": "Have you had any recent authorization holds, for example at a gas station, hotel or car rental?",
+   "may_hold_back": true
+  },
+  {
+   "field": "velocity_explanation",
+   "about": "The customer's reason for unusual recent activity, if the card has a velocity block",
+   "from": "customer",
+   "ask": "Our system saw an unusual pattern of activity on this card. Can you tell me about your recent purchases?",
+   "may_hold_back": true
+  },
+  {
+   "field": "transfer_choice",
+   "about": "Whether to move money from another of the customer's own accounts, and if so from which account and how much",
+   "from": "customer",
+   "ask": "Would you like to transfer funds from another of your accounts? If so, which account and how much?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_and_account_records",
+   "about": "Card status, flags, limits and expiration; account status, balance, date_opened and overdraft_pos_enabled; pending transactions and deposits",
+   "from": "records",
+   "ask": "",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "v_ask",
+   "by": "model",
+   "do": "Before reading or changing any customer record, ask for the customer's full name and any 2 of: date of birth, email, phone number, address.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Always verify the customer's identity before using this tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039",
+   "basis": [
+    {
+     "clause": "verify before accessing records; 2 of DOB, email, phone, address",
+     "source": "none",
+     "why": "This comes from the Authenticating Users section of the Rho-Bank service policy, not from a KB document."
+    }
+   ]
+  },
+  {
+   "id": "v_lookup",
+   "by": "model",
+   "do": "Look up the customer's record by the name they gave (case sensitive), or by their email or user id if that is what they gave.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the full name the customer gave (or use get_user_information_by_email / get_user_information_by_id with the value they gave)"
+   },
+   "lookup": [],
+   "after": [
+    "v_ask"
+   ],
+   "if": null,
+   "quote": "Always verify the customer's identity before using this tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "v_check",
+   "by": "model",
+   "do": "Check that at least 2 of the values the customer gave match the record. If they do not match, share no account information, tell the customer you cannot verify them, and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "v_lookup"
+   ],
+   "after": [
+    "v_lookup"
+   ],
+   "if": null,
+   "quote": "Always verify the customer's identity before using this tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039",
+   "basis": [
+    {
+     "clause": "2 of 4 must match; nothing is shared before verification",
+     "source": "none",
+     "why": "This comes from the policy's Authenticating Users section, not from a KB document."
+    }
+   ]
+  },
+  {
+   "id": "v_time",
+   "by": "harness",
+   "do": "Get the current time for the verification log and the later date checks.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "v_check"
+   ],
+   "if": "verification succeeded",
+   "quote": "Always verify the customer's identity before using this tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039",
+   "basis": [
+    {
+     "clause": "use get_current_time and never assume the time",
+     "source": "none",
+     "why": "Policy guideline 4."
+    }
+   ]
+  },
+  {
+   "id": "v_log",
+   "by": "harness",
+   "do": "Log the verification, once per conversation.",
+   "call": "log_verification",
+   "args": {
+    "name": "name from the v_lookup record",
+    "user_id": "user_id from the v_lookup record",
+    "address": "address from the v_lookup record",
+    "email": "email from the v_lookup record",
+    "phone_number": "phone number from the v_lookup record",
+    "date_of_birth": "date of birth from the v_lookup record (MM/DD/YYYY)",
+    "time_verified": "the v_time result"
+   },
+   "lookup": [
+    "v_lookup",
+    "v_time"
+   ],
+   "after": [
+    "v_time"
+   ],
+   "if": "at least 2 of the identity values matched in v_check",
+   "quote": "Always verify the customer's identity before using this tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039",
+   "basis": [
+    {
+     "clause": "log after verifying",
+     "source": "none",
+     "why": "This comes from the policy and the log_verification tool description."
+    }
+   ]
+  },
+  {
+   "id": "d_ask",
+   "by": "model",
+   "do": "Ask which card or checking account was declined, whether they saw a decline code, whether they paid in person, online or at an ATM, and the amount.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "v_log"
+   ],
+   "if": null,
+   "quote": "Identify the error code, confirm the action the customer attempted, and follow the suggested resolution.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "d_unlock",
+   "by": "harness",
+   "do": "Unlock each discoverable tool this job uses (the lookups below, and any fix tool the customer agrees to) before its first call. Unlock it once per conversation.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "the tool's exact name as the document gives it, e.g. get_all_user_accounts_by_user_id_3847"
+   },
+   "lookup": [],
+   "after": [
+    "v_log"
+   ],
+   "if": "the tool has not been unlocked yet in this conversation",
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009",
+   "basis": [
+    {
+     "clause": "unlock before calling, then run with call_discoverable_agent_tool",
+     "source": "none",
+     "why": "This comes from the policy's Discoverable Tools section."
+    }
+   ]
+  },
+  {
+   "id": "d_accounts",
+   "by": "harness",
+   "do": "Get the customer's accounts. Find the checking account the declined card is linked to, and note its status, balance, account_class, date_opened and any overdraft_pos_enabled field.",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "d_ask",
+    "d_unlock"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "d_cards",
+   "by": "harness",
+   "do": "Get the debit cards on that checking account. For each card, note its status, issue_reason, date_issued, expiration_date and daily_purchase_limit, plus any fraud_alert_active, alert_source, velocity_blocked and daily_purchase_used fields.",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "the checking account the customer named, from d_accounts"
+   },
+   "lookup": [],
+   "after": [
+    "d_accounts"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "d_txns",
+   "by": "harness",
+   "do": "Get the account's transactions. Note any with status 'pending', including pending check_deposit or mobile_deposit credits and pending debits.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "the same checking account"
+   },
+   "lookup": [],
+   "after": [
+    "d_accounts"
+   ],
+   "if": null,
+   "quote": "Transaction status, either 'posted' or 'pending'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "d_route",
+   "by": "model",
+   "do": "Route by what the customer reported:\n- A specific code: follow that code's section in its document. PIN codes are 55/75/83; limit and restriction codes 57/58/61/62/65; system codes 19/91/92/96; status codes 05/14/54/56; balance codes 51/52.\n- The code or the card record shows the card was reported lost or stolen, or the terminal said to keep or pick up the card: go to the reported_stolen_card_decline job.\n- The chip repeatedly fails to read: go to the chip_cvv_mismatch_card_review job.\n- No code: run the Code 05 checks in order (c_* steps), then check_expired, then l_limit, then the balance checks (b_* steps).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards",
+    "d_accounts",
+    "d_txns"
+   ],
+   "after": [
+    "d_cards",
+    "d_txns"
+   ],
+   "if": null,
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003",
+   "basis": [
+    {
+     "clause": "PIN codes",
+     "quote": "CODE 55 - Incorrect PIN",
+     "doc": "doc_checking_accounts_green_account_(checking)_010"
+    },
+    {
+     "clause": "limit codes",
+     "quote": "CODE 61 - Exceeds Withdrawal Amount Limit",
+     "doc": "doc_checking_accounts_light_green_account_005"
+    },
+    {
+     "clause": "system codes",
+     "quote": "CODE 91 - Issuer Unavailable / CODE 96 - System Malfunction",
+     "doc": "doc_checking_accounts_purple_account_009"
+    },
+    {
+     "clause": "stolen card goes to its own protocol",
+     "quote": "Card was reported stolen. This code requires EXTRA CAUTION.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "chip failure goes to the Code 82 review",
+     "quote": "The card's chip data or CVV code doesn't match what's on file. This could indicate card damage or potential fraud.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    },
+    {
+     "clause": "with no code, also check the balance",
+     "quote": "The requested amount exceeded your available balance at the time of authorization.",
+     "doc": "doc_checking_accounts_green_account_(checking)_008"
+    }
+   ]
+  },
+  {
+   "id": "c_status",
+   "by": "model",
+   "do": "Check the declined card's status in d_cards. If it is ACTIVE, continue to c_account.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards"
+   ],
+   "after": [
+    "d_route"
+   ],
+   "if": "no code was given, or the code is 05",
+   "quote": "Look up the debit card information and check the card's status field.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003",
+   "basis": [
+    {
+     "clause": "ACTIVE continues",
+     "quote": "If status is ACTIVE → Continue to step 2.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+    }
+   ]
+  },
+  {
+   "id": "c_frozen_ask",
+   "by": "model",
+   "do": "Tell the customer the card is frozen and ask whether they want it unfrozen.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards"
+   ],
+   "after": [
+    "c_status"
+   ],
+   "if": "card status is FROZEN",
+   "quote": "If status is FROZEN → Ask customer if they want to unfreeze. If yes, follow the freezing/unfreezing card protocol.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "c_closed",
+   "by": "model",
+   "do": "Tell the customer this card is no longer active. Check d_cards for another ACTIVE card on the account. If there is none, offer to order a replacement (ordering steps of closing_cancelling_a_debit_card).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards"
+   ],
+   "after": [
+    "c_status"
+   ],
+   "if": "card status is CLOSED",
+   "quote": "If status is CLOSED → Inform customer this card is no longer active. Check if they have another active card or offer to order a replacement.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "c_pending",
+   "by": "model",
+   "do": "Tell the customer the card is not activated yet, and follow the debit card activation procedure. It picks the activation tool by issue_reason.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards"
+   ],
+   "after": [
+    "c_status"
+   ],
+   "if": "card status is PENDING",
+   "quote": "If status is PENDING → Card not yet activated. Follow protocol to activate it.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003",
+   "basis": [
+    {
+     "clause": "tool depends on issue_reason",
+     "quote": "Using the wrong activation tool will result in an error. Always verify the issue reason before selecting the tool.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    }
+   ]
+  },
+  {
+   "id": "c_fraud_customer_ask",
+   "by": "model",
+   "do": "Read the customer's recent transactions from d_txns and ask them to confirm each one is theirs. If they deny any, do not clear the alert, and offer a dispute (filing_a_debit_card_transaction_dispute).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards",
+    "d_txns"
+   ],
+   "after": [
+    "c_account"
+   ],
+   "if": "fraud_alert_active is TRUE and alert_source is 'customer_initiated'",
+   "quote": "If fraud_alert_active is TRUE and alert_source is 'customer_initiated' → Ask customer to verify recent transactions. If they confirm all transactions are legitimate, clear the alert.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003",
+   "basis": [
+    {
+     "clause": "denied transaction: escalate rather than clear",
+     "quote": "Customer reports transactions they did not make",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+    }
+   ]
+  },
+  {
+   "id": "c_fraud_customer_clear",
+   "by": "harness",
+   "do": "Clear the customer-initiated fraud alert. If the tool replies BANK_INITIATED_ALERT, follow c_fraud_bank instead.",
+   "call": "clear_debit_card_fraud_alert_4892",
+   "args": {
+    "card_id": "the declined card's card_id from d_cards",
+    "reason": "customer_verified"
+   },
+   "lookup": [
+    "c_fraud_customer_ask"
+   ],
+   "after": [
+    "c_fraud_customer_ask"
+   ],
+   "if": "the alert is customer-initiated and the customer confirmed all recent transactions are legitimate",
+   "quote": "Use when clearing a customer-initiated fraud alert after the customer has verified their identity and confirmed their transactions are legitimate",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "id": "c_fraud_bank",
+   "by": "model",
+   "do": "Do not clear the alert. Say: 'I see there's a security flag on your account that requires additional review. I'm transferring you to our security team.' Then transfer, with reason fraud_or_security_concern and a summary of the decline and the checks done.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the decline, the card and the checks done",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "d_cards"
+   ],
+   "after": [
+    "c_account"
+   ],
+   "if": "fraud_alert_active is TRUE and alert_source is 'bank_initiated', or clear_debit_card_fraud_alert_4892 replied BANK_INITIATED_ALERT",
+   "quote": "IMPORTANT: If fraud_alert_active is TRUE and alert_source is 'bank_initiated' → Do NOT clear it.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003",
+   "basis": [
+    {
+     "clause": "say and transfer",
+     "quote": "Say: 'I see there's a security flag on your account that requires additional review. I'm transferring you to our security team.' Then transfer to human agents.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+    },
+    {
+     "clause": "reason code",
+     "quote": "Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ]
+  },
+  {
+   "id": "c_velocity",
+   "by": "model",
+   "do": "Tell the customer: 'Your card was temporarily blocked because our security system detected unusual activity patterns. This block automatically lifts after 30 minutes. Would you like me to verify your identity and lift it now?' If they say yes, ask about the recent activity.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards"
+   ],
+   "after": [
+    "c_account"
+   ],
+   "if": "velocity_blocked is TRUE",
+   "quote": "This block automatically lifts after 30 minutes. Would you like me to verify your identity and lift it now?",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "c_velocity_clear",
+   "by": "harness",
+   "do": "Lift the velocity block.",
+   "call": "clear_debit_card_fraud_alert_4892",
+   "args": {
+    "card_id": "the declined card's card_id from d_cards",
+    "reason": "velocity_clear"
+   },
+   "lookup": [
+    "c_velocity"
+   ],
+   "after": [
+    "c_velocity"
+   ],
+   "if": "velocity_blocked is TRUE, the customer wants it lifted now, and they gave a reasonable explanation for the activity",
+   "quote": "Use when clearing a velocity block after verifying the customer's identity",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039",
+   "basis": [
+    {
+     "clause": "lift early after verification",
+     "quote": "To lift early: Verify customer identity, then clear the velocity block.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+    },
+    {
+     "clause": "reasonable explanation",
+     "quote": "For velocity blocks: Customer provides a reasonable explanation for the unusual activity (e.g., shopping spree, travel)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+    }
+   ]
+  },
+  {
+   "id": "check_expired",
+   "by": "model",
+   "do": "Compare the card's expiration_date (d_cards) with v_time. If the card is expired, look for another card on the account with issue_reason 'expired':\n- PENDING: guide activation (activation procedure).\n- ACTIVE: tell the customer to use the new card.\n- None: order one (ordering steps of closing_cancelling_a_debit_card).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards",
+    "v_time"
+   ],
+   "after": [
+    "c_velocity"
+   ],
+   "if": "code 54 was given, or the card's expiration_date has passed",
+   "quote": "Verify expiration: Look up the debit card information and check expiration_date field.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003",
+   "basis": [
+    {
+     "clause": "PENDING replacement",
+     "quote": "If replacement exists and is PENDING: Guide through the appropriate activation protocol article.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+    },
+    {
+     "clause": "ACTIVE replacement",
+     "quote": "If replacement exists and is ACTIVE: Customer may be using old card. Direct them to new card.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+    },
+    {
+     "clause": "no replacement",
+     "quote": "If NO replacement exists: 'It looks like your replacement card wasn't automatically sent. Let me order one for you now.' and call the appropriate tools to do so.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+    }
+   ]
+  },
+  {
+   "id": "l_limit",
+   "by": "model",
+   "do": "Compare the attempted amount with daily_purchase_limit minus daily_purchase_used (use the daily ATM fields for an ATM withdrawal). If the amount is higher, tell the customer the limit, the amount used and the amount left. Then ask: 'I can request a temporary increase that lasts 24 hours. Would you like me to do that?'",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_cards"
+   ],
+   "after": [
+    "c_account"
+   ],
+   "if": "code 61, or the attempted amount is more than the card's remaining daily limit",
+   "quote": "Transaction exceeds the card's daily purchase or ATM limit.",
+   "doc": "doc_checking_accounts_light_green_account_005",
+   "basis": [
+    {
+     "clause": "offer",
+     "quote": "Tell customer: 'I can request a temporary increase that lasts 24 hours. Would you like me to do that?'",
+     "doc": "doc_checking_accounts_light_green_account_005"
+    }
+   ]
+  },
+  {
+   "id": "b_balance",
+   "by": "model",
+   "do": "Take the checking balance from d_accounts, subtract the pending debits in d_txns, and compare the result with the attempted amount. A recent check_deposit or mobile_deposit that is still pending is not yet spendable.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_accounts",
+    "d_txns"
+   ],
+   "after": [
+    "c_account"
+   ],
+   "if": "no code was given or the code is 51, and the card checks did not explain the decline",
+   "quote": "Look up the customer's accounts to get the checking account balance.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_006",
+   "basis": [
+    {
+     "clause": "pending debits reduce available balance",
+     "quote": "Pending debits reduce available balance.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+    },
+    {
+     "clause": "pending checks reduce available funds",
+     "quote": "Pending card transactions and checks can decrease available funds before they appear as posted.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+    }
+   ]
+  },
+  {
+   "id": "b_holds",
+   "by": "model",
+   "do": "If the balance looks sufficient:\n- Ask whether the customer has any recent authorization holds, and explain that holds typically release in 1-3 business days.\n- Tell them about any pending debits.\n- If overdraft_pos_enabled is FALSE, say: 'Your account isn't opted into overdraft coverage for debit card purchases. Would you like me to explain your options?'",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_accounts",
+    "d_txns"
+   ],
+   "after": [
+    "b_balance"
+   ],
+   "if": "the balance appears sufficient for the attempted amount",
+   "quote": "Ask the customer if they have any recent authorization holds that might be reducing their available balance.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_006",
+   "basis": [
+    {
+     "clause": "release time",
+     "quote": "These holds typically release in 1-3 business days.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+    },
+    {
+     "clause": "pending transactions",
+     "quote": "Review recent transaction history and look for transactions with status 'pending'.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+    },
+    {
+     "clause": "overdraft",
+     "quote": "If overdraft_pos_enabled is FALSE: 'Your account isn't opted into overdraft coverage for debit card purchases. Would you like me to explain your options?'",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+    }
+   ]
+  },
+  {
+   "id": "b_check_hold",
+   "by": "model",
+   "do": "The customer may have expected funds from a deposited check that d_txns shows as pending, or that is not yet in the available balance. Explain that deposited check funds become available on a schedule: standard deposits are typically available within 1-2 business days, some deposits go through extended review, and the app shows the expected availability date. If they ask for faster access, say that no early-release option is documented. Offer the options in b_insufficient (a transfer from another of their accounts, or a smaller purchase), or waiting for the funds.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_txns",
+    "d_accounts"
+   ],
+   "after": [
+    "b_balance"
+   ],
+   "if": "the customer mentions a recent check deposit, or d_txns shows a pending check_deposit or mobile_deposit",
+   "quote": "Standard deposits are typically available within 1-2 business days.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_011",
+   "basis": [
+    {
+     "clause": "extended review, date in app",
+     "quote": "Certain deposits may be subject to extended review. You will see the expected availability date in the app after submission.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "depends on account and amount",
+     "quote": "Availability depends on your account type and the deposit amount.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "documented alternatives",
+     "quote": "Add funds or transfer money from another account to restore a positive available balance.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+    },
+    {
+     "clause": "no early release",
+     "source": "none",
+     "why": "Searched check hold, clearing and funds availability. No document gives a way to release deposited funds early."
+    }
+   ]
+  },
+  {
+   "id": "b_insufficient",
+   "by": "model",
+   "do": "Tell the customer their balance and offer: 'Would you like to transfer funds from another account, or would you prefer to make a smaller transaction?'",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "d_accounts",
+    "d_txns"
+   ],
+   "after": [
+    "b_balance"
+   ],
+   "if": "the available balance is less than the attempted amount",
+   "quote": "Offer options: 'Would you like to transfer funds from another account, or would you prefer to make a smaller transaction?'",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_006",
+   "basis": [
+    {
+     "clause": "inform balance",
+     "quote": "Inform customer of their balance.",
+     "doc": "doc_checking_accounts_checking_accounts_(general)_006"
+    }
+   ]
+  },
+  {
+   "id": "b_transfer",
+   "by": "harness",
+   "do": "Transfer the amount the customer names from the account they choose to the declined card's checking account.",
+   "call": "transfer_funds_between_bank_accounts_7291",
+   "args": {
+    "source_account_id": "the customer's other Rho-Bank account they chose, from d_accounts",
+    "destination_account_id": "the declined card's checking account",
+    "amount": "the amount the customer asks for"
+   },
+   "lookup": [
+    "d_accounts"
+   ],
+   "after": [
+    "b_insufficient"
+   ],
+   "if": "the customer chooses to transfer, both accounts are theirs and OPEN or ACTIVE in d_accounts, and the source balance covers the amount",
+   "quote": "If they want to transfer, help them do so.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_006",
+   "basis": [
+    {
+     "clause": "both accounts active/open",
+     "quote": "Confirm both the source and destination accounts are in ACTIVE or OPEN status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_010"
+    }
+   ]
+  },
+  {
+   "id": "transfer_error",
+   "by": "model",
+   "do": "If the transfer returns an error (for example, insufficient funds in the source account), tell the customer it did not go through and why, based on the tool's reply. Ask whether they would like to try a different amount or source account.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "b_transfer"
+   ],
+   "after": [
+    "b_transfer"
+   ],
+   "if": "b_transfer returned an error",
+   "quote": "The tool will return an error if the source account has insufficient funds.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_010",
+   "basis": [
+    {
+     "clause": "ask about another amount or source",
+     "source": "none",
+     "why": "No document gives a retry rule. The agent asks the customer what they want to do."
+    }
+   ]
+  },
+  {
+   "id": "transfer_if_error",
+   "by": "model",
+   "do": "If an unfreeze, clear or limit-increase call returns an error that cannot be resolved, explain what failed and ask whether the customer wants a human agent. Transfer only if they say yes.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card checked, the action attempted and the error",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "c_frozen_unfreeze",
+    "c_velocity_clear",
+    "l_increase"
+   ],
+   "after": [
+    "c_frozen_unfreeze"
+   ],
+   "if": "a fix call returned an unresolvable error and the customer agrees to a transfer",
+   "quote": "System error or outage preventing completion of the customer's request",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Run the Code 05 checks in order: card status, then account status, then fraud alert, then velocity block.",
+   "quote": "This is a catch-all code that requires investigation. Check the following IN ORDER:",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "rule": "Never clear a bank-initiated fraud alert.",
+   "quote": "These CANNOT be cleared by customer service agents and require review by the security team.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_039"
+  },
+  {
+   "rule": "Authorization holds reduce the available balance even when no line item shows.",
+   "quote": "Even if you do not see a line item, the hold reduces your available balance until it is released or finalized.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_004"
+  },
+  {
+   "rule": "Never tell the customer a card is flagged for fraud (codes 04/07/34/59).",
+   "quote": "This could tip off a fraudster who has stolen the card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+  }
+ ],
+ "done_when": "All of the following hold:\n- The customer is verified and the verification is logged.\n- The decline cause has been found from the records and explained: card status, account restriction, alert or block, expiry, limit, insufficient available funds, or a deposited check not yet available. No faster access to held deposits was promised.\n- Each fix the customer accepted (unfreeze, clear, transfer, limit increase) is confirmed or explained as ineligible, or the customer has been transferred.\n- Any further card issue has been routed to its job."
+}

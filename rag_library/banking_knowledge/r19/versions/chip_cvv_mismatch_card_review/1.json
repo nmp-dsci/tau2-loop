@@ -1,0 +1,350 @@
+{
+ "job": "chip_cvv_mismatch_card_review",
+ "aliases": [
+  "card error at terminal",
+  "card error when inserting chip",
+  "chip card error",
+  "chip error at terminal",
+  "cloned card check",
+  "code 82",
+  "code 82 negative CAM/CVV",
+  "debit_card_chip_cvv_mismatch",
+  "debit_card_chip_cvv_mismatch_review",
+  "possible cloned debit card"
+ ],
+ "when": {
+  "quote": "The card's chip data or CVV code doesn't match what's on file. This could indicate card damage or potential fraud.",
+  "doc": "doc_checking_accounts_purple_account_007"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start when the customer reports chip or CVV failures (code 82, or a repeated chip 'card error') on a debit card. If the card is undamaged, the agent reviews recent transactions with the customer. Disputes, closure and replacement follow only for transactions the customer denies. A freeze is recommended, and done only if the customer agrees.",
+  "quote": "Ask: 'Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?'",
+  "doc": "doc_checking_accounts_purple_account_007"
+ },
+ "tools": [
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "k_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "k_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "k_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "k_cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "k_txns",
+   "not_used": null
+  },
+  {
+   "tool": "freeze_debit_card_3892",
+   "who": "agent",
+   "step": "k_freeze",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "action_error_82",
+   "not_used": null
+  },
+  {
+   "tool": "file_debit_card_transaction_dispute_6281",
+   "who": "agent",
+   "step": null,
+   "not_used": "Filed in the filing_a_debit_card_transaction_dispute job when k_review finds an unrecognized transaction."
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": null,
+   "not_used": "Closing runs in the closing_cancelling_a_debit_card job."
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": null,
+   "not_used": "Ordered in the closing_cancelling_a_debit_card job."
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job never unfreezes a card."
+  }
+ ],
+ "info": [
+  {
+   "field": "affected_card_account",
+   "about": "Which checking account's card had the chip failure",
+   "from": "customer",
+   "ask": "Which card or checking account was this?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_physical_condition",
+   "about": "Whether the chip or stripe is damaged",
+   "from": "customer",
+   "ask": "Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?",
+   "may_hold_back": true
+  },
+  {
+   "field": "transactions_recognized",
+   "about": "For each recent transaction read out, whether the customer made it",
+   "from": "customer",
+   "ask": "Did you make this transaction: <date, merchant, amount>?",
+   "may_hold_back": true
+  },
+  {
+   "field": "freeze_consent",
+   "about": "Whether the customer agrees to freeze an undamaged card until a replacement arrives",
+   "from": "customer",
+   "ask": "For your security I recommend freezing this card until a replacement arrives. Would you like me to do that?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "k_identify",
+   "by": "model",
+   "do": "Reuse the verification done earlier in this conversation. If there was none, verify first, as in the v_* steps of debit_card_decline_diagnosis. Then ask which card or checking account had the chip failure.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "The card's chip data or CVV code doesn't match what's on file. This could indicate card damage or potential fraud.",
+   "doc": "doc_checking_accounts_purple_account_007",
+   "basis": [
+    {
+     "clause": "verify once per conversation",
+     "source": "none",
+     "why": "Policy: there is no need to verify more than once in a single conversation."
+    }
+   ]
+  },
+  {
+   "id": "k_accounts",
+   "by": "harness",
+   "do": "Unlock the tool if needed, then get the customer's accounts. Pick the checking account the customer named, and note its class, status and balance.",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "k_identify"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "k_cards",
+   "by": "harness",
+   "do": "Get that account's debit cards and identify the card in use (the ACTIVE one).",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "the named checking account from k_accounts"
+   },
+   "lookup": [],
+   "after": [
+    "k_accounts"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "k_damage",
+   "by": "model",
+   "do": "Ask: 'Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?'",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "k_cards"
+   ],
+   "if": null,
+   "quote": "Ask: 'Has your card been damaged recently? Have you noticed any issues with the chip or magnetic stripe?'",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "k_damaged",
+   "by": "model",
+   "do": "Explain that the chip or stripe may be damaged and is causing the mismatch. Offer to order a replacement: closing_cancelling_a_debit_card with close reason 'damaged', then its ordering steps.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "k_damage"
+   ],
+   "after": [
+    "k_damage"
+   ],
+   "if": "the customer says the card is physically damaged",
+   "quote": "Offer / help them to order a replacement.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "k_txns",
+   "by": "harness",
+   "do": "Say: 'For your security, I'd like to review some recent transactions with you.' Then get the account's transactions.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "the named checking account"
+   },
+   "lookup": [],
+   "after": [
+    "k_damage"
+   ],
+   "if": "the customer says the card looks undamaged",
+   "quote": "Say: 'For your security, I'd like to review some recent transactions with you.'",
+   "doc": "doc_checking_accounts_purple_account_007",
+   "basis": [
+    {
+     "clause": "possible clone",
+     "quote": "SECURITY CONCERN: This could indicate a cloned or counterfeit card was used.",
+     "doc": "doc_checking_accounts_purple_account_007"
+    }
+   ]
+  },
+  {
+   "id": "k_review",
+   "by": "model",
+   "do": "Read the recent card transactions from k_txns to the customer one at a time (date, description, amount), and ask whether each one was theirs. Ask about each transaction separately.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "k_txns"
+   ],
+   "after": [
+    "k_txns"
+   ],
+   "if": "the card looks undamaged",
+   "quote": "Review recent transaction history to check for suspicious activity.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "id": "k_suspicious",
+   "by": "model",
+   "do": "For each transaction the customer did not make, tell them it looks unauthorized and offer to dispute it. If they agree, run filing_a_debit_card_transaction_dispute for it. That job tells them their liability under Regulation E and decides provisional credit under the Debit Card Provisional Credit Guidelines. A fraud category maps to close_and_reissue, so the card is then closed and a replacement offered in closing_cancelling_a_debit_card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "k_review"
+   ],
+   "after": [
+    "k_review"
+   ],
+   "if": "the customer does not recognize one or more transactions",
+   "quote": "If suspicious transactions found: Follow stolen card protocol to assist the customer.",
+   "doc": "doc_checking_accounts_purple_account_007",
+   "basis": [
+    {
+     "clause": "advise disputes when fraud suspected",
+     "quote": "If fraud is suspected, advise customer to review recent transactions and file disputes for any unauthorized charges",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "fraud maps to close and reissue",
+     "quote": "'card_present_fraud' → 'close_and_reissue'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_031"
+    },
+    {
+     "clause": "Regulation E liability",
+     "quote": "If someone uses your debit card without permission, your liability is limited based on how quickly you report it:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "provisional credit guidelines",
+     "quote": "Provisional Credit is REQUIRED when ALL of these conditions are met:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+    }
+   ]
+  },
+  {
+   "id": "k_freeze_offer",
+   "by": "model",
+   "do": "Recommend freezing the card until a replacement arrives. Tell the customer two things: all new transactions, including recurring payments, are declined while it is frozen; and pending authorized transactions may still process. Offer a replacement through the ordering steps of closing_cancelling_a_debit_card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "k_review",
+    "k_cards"
+   ],
+   "after": [
+    "k_review"
+   ],
+   "if": "the card looks undamaged, the customer recognizes all transactions, and the card is ACTIVE",
+   "quote": "Recommend freezing the card until a replacement arrives.",
+   "doc": "doc_checking_accounts_purple_account_007",
+   "basis": [
+    {
+     "clause": "inform",
+     "quote": "All new transactions will be declined while frozen",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    },
+    {
+     "clause": "recurring",
+     "quote": "Recurring payments/subscriptions will also be declined",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ]
+  },
+  {
+   "id": "k_freeze",
+   "by": "harness",
+   "do": "Freeze the card and confirm the freeze succeeded. On an error, follow action_error_82.",
+   "call": "freeze_debit_card_3892",
+   "args": {
+    "card_id": "the card's card_id from k_cards"
+   },
+   "lookup": [
+    "k_cards"
+   ],
+   "after": [
+    "k_freeze_offer"
+   ],
+   "if": "the customer accepts the freeze and the card status is ACTIVE",
+   "quote": "Use freeze_debit_card_3892 with the card_id",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026",
+   "basis": [
+    {
+     "clause": "ACTIVE only",
+     "quote": "Card must currently be in ACTIVE status (cannot freeze PENDING, CLOSED, or already FROZEN cards)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "An undamaged card with a chip/CVV mismatch is a possible clone. Review recent transactions before ordering a replacement.",
+   "quote": "SECURITY CONCERN: This could indicate a cloned or counterfeit card was used.",
+   "doc": "doc_checking_accounts_purple_account_007"
+  },
+  {
+   "rule": "Only an ACTIVE card can be frozen.",
+   "quote": "Card must currently be in ACTIVE status (cannot freeze PENDING, CLOSED, or already FROZEN cards)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+  }
+ ],
+ "done_when": "The card's condition is known, and one of these holds:\n- Damaged card: a replacement was offered.\n- Undamaged card: every recent transaction was reviewed with the customer. Each unrecognized one was handed to the dispute job, and the card to the closing job. If all were recognized, a freeze was recommended (and done if the customer agreed) and a replacement offered.\nAny failed call was explained and a transfer offered."
+}
