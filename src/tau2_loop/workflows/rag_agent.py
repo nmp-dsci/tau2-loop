@@ -126,6 +126,15 @@ class RagAgent:
     tool_errors: bool = False
     reviewer: tuple[str, str] | None = None
     review_prompt: str = ""
+    # s25 (r19, the person's call, 15 Oct 2026): a better merge on the same research. `drafts_from`
+    # names the version whose sessions a re-merge takes: each one's research is rebuilt from its
+    # events, its draft and decision are reused, and only the merge runs again. `merge_base:
+    # draft` makes the draft the base, an old step carried only when it covers a case the draft
+    # does not (M1, M2), and what it drops is logged by code, never a rejection (M3).
+    # `review_binding` removes a step the reviewer still finds unsupported after the send-back (R1).
+    drafts_from: str | None = None
+    merge_base: str = "library"  # "library" (r2-r18) or "draft" (r19)
+    review_binding: bool = False
 
 
 def versions(domain: str) -> list[str]:
@@ -174,6 +183,9 @@ def load(domain: str, name: str) -> RagAgent:
             else None
         ),
         review_prompt=(d / "review.md").read_text() if (d / "review.md").is_file() else "",
+        drafts_from=cfg.get("drafts_from"),
+        merge_base=str(cfg.get("merge_base", "library")),
+        review_binding=bool(cfg.get("review_binding", False)),
     )
 
 
@@ -482,6 +494,8 @@ class SessionMeta:
     # the question's split: train, or test only when a build is told to (r3, 8 Oct 2026, the
     # person's call: test researched into the library, so a test score that reads it is not held out)
     split: str = "train"
+    # s25: a re-merge's source session ("remerge" sessions only), whose research it replays
+    drafts_of: str | None = None
 
 
 _live: dict[str, SessionMeta] = {}
@@ -540,6 +554,17 @@ def env_runner(env: Any) -> RunTool:
     return run
 
 
+@dataclass(frozen=True)
+class Replay:
+    """s25 (r19): where a re-merge starts: a source session's research conversation rebuilt from
+    its events, its draft and its decision. No research turn runs; only the merge does."""
+
+    source: str
+    messages: list[dict[str, Any]]
+    draft: dict[str, Any]
+    decision: dict[str, list[str]]
+
+
 def run_session(
     d: Path,
     meta: SessionMeta,
@@ -551,9 +576,11 @@ def run_session(
     run_tool: RunTool,
     policy: str = "",
     opening: str = SCRIPT_OPENING,
+    replay: Replay | None = None,
 ) -> SessionMeta:
     """The agentic loop: ask, run every tool call, feed the results back, until the model writes
-    the workflow. Every step is appended to `events.jsonl` as it happens, which the viewer polls."""
+    the workflow. Every step is appended to `events.jsonl` as it happens, which the viewer polls.
+    A re-merge (`replay`, s25) starts from another session's research and runs only the merge."""
     events_path = d / "events.jsonl"
     events: list[dict[str, Any]] = []
     started = time.time()
@@ -564,14 +591,24 @@ def run_session(
         _append(events_path, row)
 
     names = {t["function"]["name"] for t in tools}
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": system},
+    messages: list[dict[str, Any]] = (
+        list(replay.messages)
+        if replay is not None
+        else [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": f"{opening}\n\n{question}",
+            },
+        ]
+    )
+    emit(
         {
-            "role": "user",
-            "content": f"{opening}\n\n{question}",
-        },
-    ]
-    emit({"kind": "start", "question": question})
+            "kind": "start",
+            "question": question,
+            **({"replayed_from": replay.source} if replay is not None else {}),
+        }
+    )
 
     def say(text: str) -> None:
         """A message from the harness: in the conversation and, in full, in the events (s21)."""
@@ -716,13 +753,29 @@ def run_session(
 
     wf: dict[str, Any] | None = None
     try:
-        wf = turns(
-            agent.max_steps,
-            "Your research steps are used up. Write the workflow JSON now from what you have.",
-        )
-        if wf is not None and agent.merge and meta.source == "question":
-            merge = _merge_concurrent if agent.merge == "concurrent" else _merge
-            wf = merge(meta, agent, wf, messages, turns, say, emit, policy, review)
+        if replay is not None:
+            wf = replay.draft
+            emit(
+                {
+                    "kind": "note",
+                    "text": f"The research is {replay.source}'s, replayed from its events "
+                    f"({len(replay.messages)} messages); its draft and decision are reused, and "
+                    "only the merge runs.",
+                }
+            )
+        else:
+            wf = turns(
+                agent.max_steps,
+                "Your research steps are used up. Write the workflow JSON now from what you have.",
+            )
+        if wf is not None and agent.merge and meta.source in ("question", "remerge"):
+            if replay is not None:
+                wf = _merge_concurrent(
+                    meta, agent, wf, messages, turns, say, emit, policy, review, replay.decision
+                )
+            else:
+                merge = _merge_concurrent if agent.merge == "concurrent" else _merge
+                wf = merge(meta, agent, wf, messages, turns, say, emit, policy, review)
         meta.status = "done" if wf is not None else "failed"
         if wf is None:
             meta.error = "no workflow JSON in the final reply"
@@ -925,6 +978,13 @@ def _advice(
             "partly": sum(v["verdict"] == "partly" for v in verdicts),
         }
         lines += provenance.review_reasons(verdicts)
+    if "D18" in gate_checks:  # s25 (r19): a named period says where it starts and ends
+        c["D18"] = provenance.unbounded_periods(job)
+        lines += [
+            f"step {sid}: it names a period or window without saying where it starts and ends; "
+            "say it from the records the step reads (reading rule 5)"
+            for sid in c["D18"]
+        ]
     return lines, record
 
 
@@ -937,6 +997,7 @@ def _assess(
     gate_checks: tuple[str, ...] = (),
     review: Callable[[str], str | None] | None = None,
     review_prompt: str = "",
+    draft_base: bool = False,
 ) -> list[dict[str, Any]]:
     """Each merged job with the library versions it merged and its checks; `why` lists what
     stops it being taken. Under locks (`held`), a job may write only a name it holds and merge
@@ -986,7 +1047,7 @@ def _assess(
                 prev.append(e)
         c = rubric.check(domain, job, [e["workflow"] for e in prev], policy, kept)
         why = (
-            rubric.gate(c, gate_checks)
+            rubric.gate(c, gate_checks, draft_base=draft_base)
             if prev
             else [
                 *(
@@ -1059,7 +1120,17 @@ def _send_back(
         "The harness checked your merge and these jobs fail:\n"
         f"{lines}\n\n"
         + (
-            "A merged job accounts for every step and rule of the versions it merged: kept "
+            "The draft is the base: a step of the versions you merged stays only when it covers a "
+            "case no step of the draft covers, its quote is found in the document it cites, and "
+            "its clauses follow from that quote. You need not account for what you leave out: "
+            "code logs it. After this reply, a quote that is still not found loses its place, and "
+            + (
+                "a step the reviewer still finds unsupported is removed."
+                if agent.review_binding
+                else "the job is taken."
+            )
+            if agent.merge_base == "draft"
+            else "A merged job accounts for every step and rule of the versions it merged: kept "
             "(named in `kept`), rewritten or removed, each with the passage that decides it, "
             "and every quote is copied from the document it cites."
             if "D12" in agent.rubric
@@ -1115,6 +1186,7 @@ def _take(
                 "taken": keep,
                 **({"written": r["written"]} if r.get("written") else {}),
                 **({"kept": r["kept"]} if r.get("kept") else {}),
+                **({"settled": r["settled"]} if r.get("settled") else {}),
             }
         )
         job.pop("changelog", None)
@@ -1124,6 +1196,115 @@ def _take(
             job["aliases"] = sorted(set(aliases))
         (taken if keep else rejected).append(job)
     return taken, records, rejected
+
+
+CODE_LOGGED = "logged by code (r19's draft-first merge)"
+
+
+def _unquote(domain: str, job: dict[str, Any], policy: str) -> list[dict[str, str]]:
+    """s25 (r19, M3): each quote the job still carries that its document does not hold loses its
+    place. The clause stays, without the quote: a basis entry becomes source "none", a step,
+    rule or other item is marked `unquoted`. Returns the changelog lines code adds for them."""
+    rows = quote_check(domain, {"jobs": [job]}, policy)["rows"]
+    bad = {_squash(r["quote"].strip(" .…\"'")) for r in rows if not r["found"]}
+    log: list[dict[str, str]] = []
+
+    def walk(o: Any, in_log: bool) -> None:
+        if isinstance(o, dict):
+            q = o.get("quote")
+            if isinstance(q, str) and q and _squash(q.strip(" .…\"'")) in bad:
+                doc = str(o.pop("doc", "") or "")
+                o.pop("quote")
+                if not in_log:
+                    note = f"its quote was not found in {doc or 'the document it cited'}"
+                    if "clause" in o:
+                        o["source"], o["why"] = "none", note
+                    else:
+                        o["unquoted"] = note
+                    log.append(
+                        {
+                            "change": "changed",
+                            "what": f"quote not found: {q[:120]}",
+                            "why": f"{note}; {CODE_LOGGED}",
+                        }
+                    )
+            for k, v in o.items():
+                walk(v, in_log or k == "changelog")
+        elif isinstance(o, list):
+            for v in o:
+                walk(v, in_log)
+
+    walk(job, False)
+    return log
+
+
+def _settle(
+    domain: str,
+    rows: list[dict[str, Any]],
+    policy: str,
+    gate_checks: tuple[str, ...],
+    binding: bool,
+) -> None:
+    """s25 (r19): a draft-based merge's last word, after its one send-back. A quote still not
+    found loses its place, not the merge (M3); a step the reviewer still finds unsupported is
+    removed (R1, `binding`); what the job leaves out of the versions it merged is written into its
+    changelog by code (M3). The checks are then run again on what is left."""
+    from tau2_loop.workflows import rubric, toolspec
+
+    for r in rows:
+        if r.get("blocked"):
+            continue
+        job = r["job"]
+        log = _unquote(domain, job, policy)
+        if binding:
+            no = {
+                v["step"]
+                for v in (r.get("review") or {}).get("verdicts") or []
+                if v.get("verdict") == "no"
+            }
+            gone = [
+                st for st in job.get("steps") or [] if isinstance(st, dict) and st.get("id") in no
+            ]
+            if gone:
+                job["steps"] = [st for st in job.get("steps") or [] if st not in gone]
+                for st in gone:
+                    why = next(
+                        (
+                            v.get("why") or v.get("clause")
+                            for v in r["review"]["verdicts"]
+                            if v["step"] == st["id"]
+                        ),
+                        "",
+                    )
+                    log.append(
+                        {
+                            "change": "removed",
+                            "what": f"step {st['id']}",
+                            "why": f"the reviewer still finds it unsupported after the send-back: {str(why)[:200]}; {CODE_LOGGED}",
+                        }
+                    )
+        prev = [e["workflow"] for e in r["previous"]]
+        if prev:
+            for kind, items in rubric.lost(job, prev).items():
+                for x in items:
+                    log.append(
+                        {
+                            "change": "removed",
+                            "what": f"{kind[:-1]} {x}",
+                            "why": f"not carried into the draft-based version; {CODE_LOGGED}",
+                        }
+                    )
+        if not log:
+            continue
+        job["changelog"] = [*(job.get("changelog") or []), *log]
+        c = rubric.check(domain, job, prev, policy, r.get("kept"))
+        r["checks"] = {**r["checks"], **c}
+        r["why"] = (
+            rubric.gate(c, gate_checks, draft_base=True)
+            if prev
+            else toolspec.reasons(c, gate_checks)
+        )
+        r["settled"] = log
 
 
 def _unaccounted_lines(
@@ -1244,11 +1425,13 @@ def _merge_concurrent(
     emit: Callable[[dict[str, Any]], None],
     policy: str,
     review: Callable[[str], str | None] | None = None,
+    decision: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """s21 (r3): the merge while other workers merge too. Name the jobs it will write, lock them
     all at once (waiting, and logging who holds them, if another worker does), read their newest
     versions, merge and check as r2 does, and commit under the version check. Only the jobs it
-    holds may be merged; a merge of another is sent back once, then not taken."""
+    holds may be merged; a merge of another is sent back once, then not taken. A re-merge (s25)
+    brings the source session's `decision`, so no decide turn runs."""
     from tau2_loop.workflows import library, store
 
     st = library.store_for(meta.domain, agent.name)
@@ -1256,16 +1439,20 @@ def _merge_concurrent(
     cands = merge_candidates(draft, snap)
     emit({"kind": "merge", "candidates": {k: [e["job"] for e in v] for k, v in cands.items()}})
     drafted = list(cands)
-    decision = turns(
-        0,
-        decide_message(agent, cands, draft),
-        parse=lambda t: parse_decision(t, drafted),
-        again=DECIDE_AGAIN,
-    )
+    replayed = decision is not None
+    if decision is None:
+        decision = turns(
+            0,
+            decide_message(agent, cands, draft),
+            parse=lambda t: parse_decision(t, drafted),
+            again=DECIDE_AGAIN,
+        )
+    else:
+        decision = {k: list(decision.get(k) or []) for k in drafted}
     if decision is None:  # no usable answer: hold every candidate, which r2 would have shown it
         decision = {k: [e["job"] for e in v] for k, v in cands.items()}
         emit({"kind": "note", "text": "No usable decision; the library holds every candidate."})
-    emit({"kind": "decided", "decision": decision})
+    emit({"kind": "decided", "decision": decision, **({"replayed": True} if replayed else {})})
 
     want = _holds(decision, snap)
     asked = time.time()
@@ -1339,8 +1526,9 @@ def _merge_concurrent(
         held = set(lock.jobs)
         merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
         rev = (review, agent.review_prompt)
+        base = agent.merge_base == "draft"
         rows = (
-            _assess(meta.domain, merged, heads, policy, held, agent.rubric, *rev)
+            _assess(meta.domain, merged, heads, policy, held, agent.rubric, *rev, draft_base=base)
             if merged is not None
             else []
         )
@@ -1350,7 +1538,9 @@ def _merge_concurrent(
             if again is not None:
                 merged, rows = (
                     again,
-                    _assess(meta.domain, again, heads, policy, held, agent.rubric, *rev),
+                    _assess(
+                        meta.domain, again, heads, policy, held, agent.rubric, *rev, draft_base=base
+                    ),
                 )
         if merged is None:  # nothing written: only the draft's new jobs, and only those it holds
             merged = {
@@ -1361,7 +1551,9 @@ def _merge_concurrent(
                     if not cands.get(str(j.get("job"))) and j.get("job") in held
                 ],
             }
-            rows = _assess(meta.domain, merged, heads, policy, held, agent.rubric)
+            rows = _assess(meta.domain, merged, heads, policy, held, agent.rubric, draft_base=base)
+        if base:
+            _settle(meta.domain, rows, policy, agent.rubric, agent.review_binding)
         taken, records, rejected = _take(rows)
         writes = [
             {
@@ -1436,6 +1628,7 @@ def _launch(
     env: Any,
     background: bool,
     on_start: Callable[[SessionMeta], None] | None = None,
+    source_session: dict[str, Any] | None = None,
 ) -> SessionMeta:
     from tau2_loop.llm import core
 
@@ -1464,7 +1657,9 @@ def _launch(
         source=source,
         conversation=conversation,
         split=split,
+        drafts_of=source_session["meta"]["id"] if source_session else None,
     )
+    replay = _replay(source_session, system, opening) if source_session else None
     d = session_dir(meta.id)
     d.mkdir(parents=True, exist_ok=False)
     (d / "system.md").write_text(system)
@@ -1484,6 +1679,7 @@ def _launch(
         run_tool or env_runner(env),
         str(getattr(env, "policy", "") or ""),
         opening,
+        replay,
     )
     if not background:
         return run_session(*args)
@@ -1522,6 +1718,133 @@ def start(
         run_tool=run_tool,
         env=env,
         background=background,
+    )
+
+
+# ── s25 (r19, the person's call, 15 Oct 2026): merge again, on the same research ──
+
+REPLAY_STOP = frozenset({"merge", "decided", "locked"})
+
+
+def replay_messages(
+    events: list[dict[str, Any]], system: str, opening: str = SCRIPT_OPENING
+) -> list[dict[str, Any]]:
+    """A session's research conversation, rebuilt from its events as the model saw it, up to the
+    draft (the first merge event): every model turn, tool result and harness message. The system
+    prompt is the re-merging version's, so its reading rules are the ones the merge reads."""
+    start = next(e for e in events if e["kind"] == "start")
+    out: list[dict[str, Any]] = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"{opening}\n\n{start['question']}"},
+    ]
+    for e in events:
+        if e["kind"] in REPLAY_STOP:
+            break
+        if e["kind"] == "model" and e.get("calls"):
+            out.append(
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": c["id"],
+                            "type": "function",
+                            "function": {"name": c["name"], "arguments": json.dumps(c["args"])},
+                        }
+                        for c in e["calls"]
+                    ],
+                }
+            )
+        elif e["kind"] == "model":
+            out.append({"role": "assistant", "content": e.get("text") or ""})
+        elif e["kind"] == "tool":
+            out.append({"role": "tool", "tool_call_id": e["id"], "content": e["content"]})
+        elif e["kind"] == "user":
+            out.append({"role": "user", "content": e["text"]})
+    return out
+
+
+def _replay(src: dict[str, Any], system: str, opening: str) -> Replay:
+    """A re-merge's start from a finished session (`session()`'s record): its research rebuilt, its
+    draft as the research's last reply wrote it, and the decision it made."""
+    events = src["events"]
+    messages = replay_messages(events, system, opening)
+    last = next(
+        (m["content"] for m in reversed(messages) if m["role"] == "assistant" and m["content"]),
+        None,
+    )
+    draft = parse_workflow(last)
+    if draft is None:
+        out = src.get("output") or {}
+        draft = {"jobs": out.get("draft") or [], "documents": out.get("documents") or []}
+    decision = (src.get("output") or {}).get("decision")
+    if not isinstance(decision, dict):
+        raise RagAgentError(f"{src['meta']['id']} recorded no decision to merge by")
+    return Replay(src["meta"]["id"], messages, draft, decision)
+
+
+def remerge_queue(domain: str, agent_name: str) -> list[str]:
+    """The sessions a re-merging version (`drafts_from`) still has to merge again: every finished
+    session of that version that reached its merge, in the order it took its lock (the order its
+    merges reached the library), less those this version has merged already."""
+    agent = load(domain, agent_name)
+    if not agent.drafts_from:
+        raise RagAgentError(f"{agent_name} merges no other version's drafts")
+    done = {
+        m.get("drafts_of")
+        for m in sessions(domain)
+        if m.get("agent") == agent_name and m.get("status") == "done" and not _refused(m["id"])
+    }
+    order: list[tuple[float, str]] = []
+    for m in sessions(domain):
+        if (
+            m.get("agent") != agent.drafts_from
+            or m.get("status") != "done"
+            or m.get("source", "question") != "question"
+        ):
+            continue
+        events = session(domain, m["id"])["events"]
+        lock = next((e for e in events if e["kind"] == "locked"), None)
+        if lock is None:
+            continue  # it never reached a merge: nothing to merge again
+        t0 = datetime.strptime(m["started"], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC).timestamp()
+        order.append((t0 + lock["t"] / 1000, m["id"]))
+    return [sid for _, sid in sorted(order) if sid not in done]
+
+
+def remerge(
+    domain: str,
+    agent_name: str,
+    source_id: str,
+    *,
+    ask: Ask | None = None,
+    run_tool: RunTool | None = None,
+    env: Any = None,
+    background: bool = False,
+) -> SessionMeta:
+    """Merge one session of `drafts_from` again with this version's merge: no research turn and no
+    decide turn run, so the two versions' libraries differ only by how they merge."""
+    agent = load(domain, agent_name)
+    src = session(domain, source_id)
+    sm = src["meta"]
+    if sm.get("agent") != agent.drafts_from:
+        raise RagAgentError(f"{source_id} is not a session of {agent.drafts_from}")
+    return _launch(
+        domain,
+        agent,
+        str(sm["task_id"]),
+        src["events"][0].get("question") or "",
+        SCRIPT_OPENING,
+        None,  # this version's model and effort
+        None,
+        task_id=str(sm["task_id"]),
+        source="remerge",
+        split=str(sm.get("split") or "train"),
+        ask=ask,
+        run_tool=run_tool,
+        env=env,
+        background=background,
+        source_session=src,
     )
 
 

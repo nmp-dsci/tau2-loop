@@ -308,3 +308,32 @@ def read_list(domain: str, docs: list[str]) -> str:
         doc = kb.document(domain, d)
         lines.append(f"- {d}: {doc['title'] if doc else ''}")
     return "\n".join(lines)
+
+
+# ── s25 (r19): D18, a named period says where it starts and ends ──
+
+PERIOD = re.compile(r"\b(?:period|window)s?\b", re.I)
+# what bounds a period near where it is named: a date or count, a start or end, or the event
+# it is counted from ("the window of the declined attempts", "the period since the statement")
+BOUND = re.compile(
+    r"\d|\b(?:from|between|since|starting|starts|start|begins|ends|until|through|after|before|"
+    r"prior|preceding|following|of the|of each|of that|of its)\b",
+    re.I,
+)
+
+
+def unbounded_periods(job: dict[str, Any]) -> list[str]:
+    """The steps that name a period or window and say nowhere near any mention of it where it
+    starts and ends (rule 5's named period, checked in code): a step may define it once and then
+    say "that window". r18 kept 'the suspicious period' undefined."""
+    out: list[str] = []
+    for st in job.get("steps") or []:
+        if not isinstance(st, dict):
+            continue
+        text = f"{st.get('do') or ''} {st.get('if') or ''}"
+        named = list(PERIOD.finditer(text))
+        if named and not any(
+            BOUND.search(text[max(0, m.start() - 60) : m.end() + 60]) for m in named
+        ):
+            out.append(str(st.get("id")))
+    return out

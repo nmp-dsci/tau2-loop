@@ -204,6 +204,80 @@ def rag_build(
             t.join()
 
 
+@app.command("rag-remerge")
+def rag_remerge(
+    domain: str = "banking_knowledge",
+    rag: str = "r19",
+    limit: Annotated[int | None, typer.Option(help="stop after this many sessions")] = None,
+    workers: Annotated[int | None, typer.Option(help="sessions merging at once")] = None,
+) -> None:
+    """Merge again, with a re-merging version's merge, every session of the version it takes drafts
+    from (s25, r19: r18's, the person's call, 15 Oct 2026). No research runs: each session's
+    research is replayed from its events and its draft and decision are reused, in the order its
+    merges reached the library. Resumable; a second build of the same version is refused."""
+    import queue as queues
+    import threading
+
+    from tau2_loop.workflows import library, rag_agent
+
+    agent = rag_agent.load(domain, rag)
+    todo = rag_agent.remerge_queue(domain, rag)
+    todo = todo[:limit] if limit else todo
+    n_workers = max(1, workers or agent.workers)
+    console.print(
+        f"{rag}: {len(todo)} of {agent.drafts_from}'s sessions to merge again, no research, "
+        f"{n_workers} at once",
+        highlight=False,
+    )
+    say = threading.Lock()
+    done = [0]
+    jobs: queues.Queue[str] = queues.Queue()
+    for sid in todo:
+        jobs.put(sid)
+
+    def worker() -> None:
+        while True:
+            try:
+                sid = jobs.get_nowait()
+            except queues.Empty:
+                return
+            try:
+                meta = rag_agent.remerge(domain, rag, sid)
+                out = rag_agent.session(domain, meta.id).get("output") or {}
+                recs = out.get("merge") or []
+                with say:
+                    done[0] += 1
+                    console.print(
+                        f"[{done[0]}/{len(todo)}] {meta.task_id} from {sid[:16]} {meta.status} in "
+                        f"{meta.duration_ms / 60000:.1f} min · took "
+                        f"{', '.join(r['job'] for r in recs if r.get('taken')) or 'nothing'}"
+                        + (
+                            " · not taken "
+                            + ", ".join(r["job"] for r in recs if not r.get("taken"))
+                            if any(not r.get("taken") for r in recs)
+                            else ""
+                        )
+                        + f" · {sum(len(r.get('settled') or []) for r in recs)} logged by code"
+                        + (f" · {meta.error}" if meta.error else ""),
+                        highlight=False,
+                        soft_wrap=True,
+                    )
+            except Exception as e:  # noqa: BLE001 - one session's failure must not stop the build
+                with say:
+                    console.print(
+                        f"{sid} failed to start: {type(e).__name__}: {e}", highlight=False
+                    )
+
+    with library.store_for(domain, rag).build_guard():
+        threads = [
+            threading.Thread(target=worker, name=f"{rag}-m{i + 1}") for i in range(n_workers)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+
 @app.command("rag-locks")
 def rag_locks(domain: str = "banking_knowledge", rag: str = "r3") -> None:
     """Who is updating which workflow (s21): a concurrent version's held and waiting locks."""

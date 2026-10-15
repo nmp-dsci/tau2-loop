@@ -23,6 +23,9 @@ carry no signal.
                       (named in its `kept`, its quote saying it as written), rewritten, or removed;
                       none stays only because the merge did not look at it (s22, r7)
 
+D18 bounds          a step that names a period or window says where it starts and ends (s25,
+                      r19; `provenance.unbounded_periods`, sent back once, never blocking)
+
 D9, D10 and D12 are reported for every version and gated only by one that names them (r5's
 `rubric: [D10]`, r7's `[D9, D10, D12]`). D8 and D1's "no new quote that is not found" are the merge gate (`gate()`): a merged version
 that fails them after one send-back is not taken, and the library keeps the previous one.
@@ -184,6 +187,9 @@ def check(
         ]
     else:
         out["D1"]["new_unfound"] = [r["quote"][:120] for r in q if not r["found"]]
+    # s25 (r19): a draft-based merge carries an old step only when its quote is still found, so it
+    # is gated on every unfound quote, the old ones included
+    out["D1"]["unfound"] = [r["quote"][:120] for r in q if not r["found"]]
     out["score"] = score(out)
     return out
 
@@ -274,20 +280,21 @@ def _quotes(o: Any) -> list[dict[str, str]]:
     return quotes(o)
 
 
-def gate(c: dict[str, Any], extra: tuple[str, ...] = ()) -> list[str]:
+def gate(c: dict[str, Any], extra: tuple[str, ...] = (), draft_base: bool = False) -> list[str]:
     """Why a merged version may not be taken: empty when it may. `extra` are the checks a version
-    also gates on (r5: D10; r6: D9, `workflows/toolspec.py`; r7: D12)."""
+    also gates on (r5: D10; r6: D9, `workflows/toolspec.py`; r7: D12). A draft-based merge (s25,
+    r19) is never refused for what it leaves out (D8, D12: code logs it), and is sent back for
+    every quote not found, an old one carried over included."""
     from tau2_loop.workflows import toolspec
 
     why = []
-    for k, items in (c.get("D8") or {}).items():
+    for k, items in ({} if draft_base else c.get("D8") or {}).items():
         if items:
             why.append(f"lost {k} the changelog does not name: {', '.join(items[:6])}")
-    if c["D1"].get("new_unfound"):
-        why.append(
-            "quotes not found in the documents they cite: " + " | ".join(c["D1"]["new_unfound"][:4])
-        )
-    if "D12" in extra:
+    unfound = c["D1"].get("unfound" if draft_base else "new_unfound")
+    if unfound:
+        why.append("quotes not found in the documents they cite: " + " | ".join(unfound[:4]))
+    if "D12" in extra and not draft_base:
         u = c.get("D12") or {}
         if u.get("steps") or u.get("rules"):
             parts = [f"steps {', '.join(u['steps'][:12])}"] if u.get("steps") else []

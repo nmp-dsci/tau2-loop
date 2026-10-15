@@ -37,6 +37,9 @@ fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFOR
 rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (default r2): r2 one at a time in id order, r3 with WORKERS= (default its own 4); resumable (TASKS= some, LIMIT=); SPLIT=test researches the test questions too (r3, the person's call, 8 Oct 2026)
 	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS)) --split $(SPLIT)
 
+rag-remerge: ## s25: merge again, with RAG='s merge (default r19), every session of the version it takes drafts from (r18's): no research runs; resumable (LIMIT=, WORKERS=)
+	uv run tau2loop rag-remerge --domain banking_knowledge --rag $(or $(RAG),r19) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS))
+
 rag-locks: ## s21: who is updating which workflow in RAG='s library (default r3): held and waiting locks
 	uv run tau2loop rag-locks --domain banking_knowledge --rag $(or $(RAG),r3)
 
@@ -156,4 +159,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: rag-build rag-locks rag-replay rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: rag-build rag-remerge rag-locks rag-replay rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
