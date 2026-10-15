@@ -241,6 +241,19 @@ def test_a_version_played_on_part_of_a_split_or_never_is_not_full() -> None:
     assert v["v4"]["why"] is None
 
 
+def test_a_later_replay_of_some_tasks_does_not_stand_for_a_whole_run() -> None:
+    """s23 replayed v23 on its 34 failures after its whole runs; v23 stays played in full."""
+    runs = [
+        _run("r23", "v23", "train", 43, n=60, cut=3),
+        _run("r23t", "v23", "test", 20, n=37, cut=3),
+        {**_run("c23", "v23", "train", 1, n=17), "cut": None, "of": 60},
+        {**_run("c23t", "v23", "test", 4, n=17), "cut": None, "of": 37},
+    ]
+    versions = [{"name": "v23", "model": "sonnet", "effort": "medium", "diagnosis": None}]
+    [v] = version_history("banking_knowledge", versions, runs, [], {})["versions"]
+    assert v["full"] and (v["train"]["run_id"], v["test"]["run_id"]) == ("r23", "r23t")
+
+
 def test_the_committed_banking_history_leaves_the_checks_off() -> None:
     h = (
         TestClient(create_app())

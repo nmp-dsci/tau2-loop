@@ -74,12 +74,15 @@ def _why(e: dict[str, Any] | None, diag: dict[str, Any]) -> str | None:
 def _newest(
     runs: list[dict[str, Any]], agent: str, split: str, cut: int | None = None
 ) -> dict[str, Any] | None:
+    """A version's newest run of a split side, a whole one (one cut's tasks) before any part: a
+    later replay of some of its tasks (s23 replayed v23 on its 34 failures) never stands for it."""
     xs = [
         r
         for r in runs
         if r["agent"] == agent and r["split"] == split and (cut is None or r.get("cut") == cut)
     ]
-    return xs[-1] if xs else None
+    whole = [r for r in xs if _whole(r)]
+    return (whole or xs)[-1] if xs else None
 
 
 def version_history(
