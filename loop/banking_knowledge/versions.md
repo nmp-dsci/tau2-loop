@@ -1,6 +1,6 @@
 # banking_knowledge: every answering-agent version, in build order
 
-The Optimise tab draws the 7 of 23 versions played on every task of their split: v1–v4, v7, v8, v23. The other 16 (v5, v6, v9–v22) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
+The Optimise tab draws the 7 of 26 versions played on every task of their split: v1–v4, v7, v8, v23. The other 19 (v5, v6, v9–v22, v24–v26) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
 
 Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_knowledge/v*/`, `loop/banking_knowledge/ledger.jsonl`, `loop/banking_knowledge/registry.json` and the run folders, the reading `GET /api/versions` serves. Re-run it when a version is added or played; do not edit it by hand.
 
@@ -29,6 +29,9 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 | v21 | no | workflow tools | v8 | — | 1 of 3 played | not gated |
 | v22 | no | tool change | v21 | — | 2 of 3 played | not gated |
 | v23 | yes | model swap | v22 | 43/60 | 20/37 | not gated |
+| v24 | no | optimise | v23 | 5 of 17 played | 4 of 17 played | not gated |
+| v25 | no | workflow tools | v23 | — | — | never played |
+| v26 | no | workflow tools | v24 | — | — | never played |
 
 ## v1 · on the Optimise tab
 
@@ -190,3 +193,24 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Played:** train 43 of 60 · test 20 of 37 · sonnet-5-5 · medium · not gated
 - **Why:** the person's call: v22 with the answering agent on Sonnet 5.5 (claude-sonnet-5-5; v22's 'sonnet' is claude-sonnet-5), played with a Haiku 5.5 customer on v8's 20-task smoke before a full train and test run
 - **Runs:** `20261011T055438Z_banking_knowledge_v23_train`, `20261011T055440Z_banking_knowledge_v23_test`
+
+## After v23 · 3 versions left off the tab
+
+### v24
+
+- **Made:** optimise from v23: no ledger entry
+- **Played:** train 5 of 17 played, of the split's 60 · test 4 of 17 played, of the split's 37 · sonnet-5-5 · medium · not gated
+- **Why:** Debit-dispute liability is a tier only (50/500/-1), plus pin_compromised and signature vs PIN purchase; rewards-check method in the corrections bullet; recommendations drop products lacking a stated need or with a minimum above the held amount (+787 chars).
+- **Runs:** `20261013T102726Z_banking_knowledge_v24_custom`, `20261013T141532Z_banking_knowledge_v24_custom`
+
+### v25
+
+- **Made:** workflow tools from v23: workflows: r17 → r18
+- **Played:** no train run · no test run · sonnet-5-5 · medium · never played
+- **Why:** s23 workflow arm: v23 reading r18 (r17 + W1-W7 and the per-clause provenance checks M1-M6; train 027 041 063 084 086 088 090 and R's 10 test questions researched)
+
+### v26
+
+- **Made:** workflow tools from v24: workflows: r17 → r18
+- **Played:** no train run · no test run · sonnet-5-5 · medium · never played
+- **Why:** s23 combined arm (the person's call, 15 Oct 2026): v24's prompt and code reading r18's library; v25 skipped
