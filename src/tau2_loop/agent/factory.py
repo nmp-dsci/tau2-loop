@@ -273,6 +273,7 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
                 state.messages.extend(extra)
                 call = call + extra
                 note["workflow"] = used
+                self._record_workflows(state, used)
         blocked = self._check(response, state)
         if blocked:
             # once per turn: the model sees why, replies again, and that reply goes through
@@ -355,8 +356,13 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
         self._emit({"kind": "workflow_call", "id": tc.id, "name": tc.name, "args": args})
         try:
             if tc.name == "find_workflow":
+                view = self.version.config.workflow_view  # s25: only a version that sets it
                 content = library.find(
-                    self.version.domain, str(self.workflows), text, str(args.get("job") or "")
+                    self.version.domain,
+                    str(self.workflows),
+                    text,
+                    str(args.get("job") or ""),
+                    **({"view": view} if view else {}),
                 )
             else:
                 content, session = library.request(
@@ -384,7 +390,25 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
             "arguments": args,
             "result": content[:WORKFLOW_RESULT_CHARS],
             "session": session,
+            **({"job": job} if (job := library.shown_job(content)) else {}),
         }
+
+    def _record_workflows(self, state: LoopAgentState, used: list[dict[str, Any]]) -> None:
+        """s25 (v27, A1): each job find_workflow showed, as data, in the hooks' state
+        (`state["workflows"]`, job -> workflow, newest last), so guidance and checks can read
+        the procedure the agent was shown. A version whose hooks never read it is unchanged."""
+        from tau2_loop.workflows import library
+
+        jobs = [r["job"] for r in used if r.get("job")]
+        if not jobs:
+            return
+        lib = library.entries(self.version.domain, str(self.workflows))
+        shown = state.memory.setdefault("workflows", {})
+        for job in jobs:
+            e = library.by_name(lib, job)
+            if e is not None:
+                shown.pop(job, None)  # newest last
+                shown[job] = e["workflow"]
 
     def _remember(self, state: LoopAgentState, incoming: list[Any]) -> None:
         """memory.py's hook on each tool result (with the call that asked for it) and user message."""

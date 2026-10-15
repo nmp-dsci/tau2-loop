@@ -31,8 +31,8 @@ splits: ## cut each domain's base set in half, train / test (seed 300) → data/
 documents: ## index banking's knowledge base (title and size per document) → data/tasks, for Evals
 	uv run tau2loop documents
 
-fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true, PARALLEL_CALLS=true, CUSTOMER_TOOLS=true or WORKFLOWS=rN, by hand; WHY= says why, kept in its diagnosis.json
-	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(WORKFLOWS),--workflows $(WORKFLOWS)) $(if $(filter true,$(CUSTOMER_TOOLS)),--customer-tools) $(if $(WHY),--why "$(WHY)")
+fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true, PARALLEL_CALLS=true, CUSTOMER_TOOLS=true, WORKFLOWS=rN or WORKFLOW_VIEW=steps, by hand; WHY= says why, kept in its diagnosis.json
+	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(WORKFLOWS),--workflows $(WORKFLOWS)) $(if $(filter true,$(CUSTOMER_TOOLS)),--customer-tools) $(if $(WORKFLOW_VIEW),--workflow-view $(WORKFLOW_VIEW)) $(if $(WHY),--why "$(WHY)")
 
 rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (default r2): r2 one at a time in id order, r3 with WORKERS= (default its own 4); resumable (TASKS= some, LIMIT=); SPLIT=test researches the test questions too (r3, the person's call, 8 Oct 2026)
 	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS)) --split $(SPLIT)

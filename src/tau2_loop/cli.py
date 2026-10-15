@@ -71,9 +71,13 @@ def fork(
             help="list the tools the customer holds from the start in the prompt",
         ),
     ] = None,
+    workflow_view: Annotated[
+        str | None,
+        typer.Option(help="how find_workflow shows a job: full, or steps (no quotes or basis)"),
+    ] = None,
 ) -> None:
     """A new version with the champion's surfaces and a different model, effort, retrieval,
-    tool mode, identity note, parallel calls, workflow library or customer tools."""
+    tool mode, identity note, parallel calls, workflow library, customer tools or workflow view."""
     from tau2_loop.agent.versions import fork_version
     from tau2_loop.tracking.registry import champion_name
 
@@ -96,13 +100,15 @@ def fork(
         workflows=workflows,
         why=why,
         customer_tools=customer_tools,
+        workflow_view=workflow_view,
     )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "
         f"effort {v.config.effort} · tool mode {v.config.tool_mode} · retrieval "
         f"{v.retrieval or 'none'} · identity note {v.config.identity_note} · parallel calls "
         f"{v.config.parallel_calls} · workflows {v.config.workflows or 'none'} · "
-        f"customer tools {v.config.customer_tools} · fingerprint {v.fingerprint}"
+        f"customer tools {v.config.customer_tools} · workflow view "
+        f"{v.config.workflow_view or 'full'} · fingerprint {v.fingerprint}"
     )
 
 

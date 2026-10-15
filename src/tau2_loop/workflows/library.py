@@ -231,8 +231,9 @@ def rank(request: str, lib: list[dict[str, Any]]) -> list[tuple[float, bool, dic
     return sorted(scored, key=lambda x: (not x[1], -x[0], x[2]["job"]))
 
 
-def find(domain: str, rag_version: str, request: str, job: str = "") -> str:
-    """`find_workflow`'s result: the library's jobs ranked for the request, and one in full."""
+def find(domain: str, rag_version: str, request: str, job: str = "", view: str = "full") -> str:
+    """`find_workflow`'s result: the library's jobs ranked for the request, and one in full
+    (`view: steps`, s25: without the quotes and basis behind its steps)."""
     lib = entries(domain, rag_version)
     if not lib:
         return (
@@ -244,7 +245,7 @@ def find(domain: str, rag_version: str, request: str, job: str = "") -> str:
         if e is None:
             names = ", ".join(x["job"] for x in lib)
             return f"No job named {job!r} in the library. Its jobs: {names}."
-        return _full(e)
+        return _full(e, view)
     ranked = rank(request, lib)
     n = f"{len(lib)} workflow{'' if len(lib) == 1 else 's'}"
     lines = [f"The library holds {n}. Ranked for your request:"]
@@ -263,13 +264,39 @@ def find(domain: str, rag_version: str, request: str, job: str = "") -> str:
         "\nThe best match, in full. Follow it only if it is the customer's job; for another job "
         "in the list call find_workflow with job=<name>, and if none fits call request_workflow."
     )
-    return "\n".join(lines) + "\n\n" + _full(best)
+    return "\n".join(lines) + "\n\n" + _full(best, view)
 
 
-def _full(e: dict[str, Any]) -> str:
+EVIDENCE = ("quote", "doc", "basis")  # what a step stands on, for review; not what the agent does
+SHOWN_JOB = re.compile(r"Workflow (\S+) \(researched by workflow_rag")
+
+
+def steps_view(wf: dict[str, Any]) -> dict[str, Any]:
+    """s25 (v27): a job as the answering agent follows it: every step, condition, argument, rule
+    and done_when, without the quotes, document ids and basis entries that justify them, and
+    without the aliases the lookup ranks by."""
+
+    def strip(o: Any) -> Any:
+        if isinstance(o, dict):
+            return {k: strip(v) for k, v in o.items() if k not in EVIDENCE}
+        if isinstance(o, list):
+            return [strip(v) for v in o]
+        return o
+
+    return {k: strip(v) for k, v in wf.items() if k != "aliases"}
+
+
+def shown_job(content: str) -> str | None:
+    """The job a find_workflow result shows in full, if it shows one."""
+    m = SHOWN_JOB.search(content)
+    return m.group(1) if m else None
+
+
+def _full(e: dict[str, Any], view: str = "full") -> str:
+    wf = steps_view(e["workflow"]) if view == "steps" else e["workflow"]
     return (
         f"Workflow {e['job']} (researched by workflow_rag, session {e['session']}):\n"
-        + json.dumps(e["workflow"], ensure_ascii=False, indent=1)
+        + json.dumps(wf, ensure_ascii=False, indent=1)
     )
 
 
