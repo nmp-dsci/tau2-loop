@@ -76,7 +76,10 @@ def start(
     domain: str, agent: str, task_id: str, user_model: str = "", background: bool = True
 ) -> LiveMeta:
     """Start a conversation on a train task; returns at once, the conversation in a thread."""
-    from tau2_loop.eval.runner import USER_MODEL
+    from tau2_loop.eval.runner import customer
+
+    default_model, user_effort = customer(domain)
+    user_model = user_model or default_model
 
     if task_id not in set(split_ids(domain, "train")):
         raise LiveError(f"{task_id} is not a train task: test is sealed")
@@ -95,7 +98,7 @@ def start(
         fingerprint=version.fingerprint,
         task_id=task_id,
         model=sdk_model(version.config.model),
-        user_model=sdk_model(user_model or USER_MODEL),
+        user_model=sdk_model(user_model),
         workflows=version.config.workflows,
         started=stamp,
     )
@@ -105,15 +108,15 @@ def start(
     with _lock:
         _running.add(meta.id)
     if not background:
-        _play(d, meta, user_model or USER_MODEL)
+        _play(d, meta, user_model, user_effort)
         return meta
     threading.Thread(
-        target=_play, args=(d, meta, user_model or USER_MODEL), daemon=True, name=f"live-{meta.id}"
+        target=_play, args=(d, meta, user_model, user_effort), daemon=True, name=f"live-{meta.id}"
     ).start()
     return meta
 
 
-def _play(d: Path, meta: LiveMeta, user_model: str) -> None:
+def _play(d: Path, meta: LiveMeta, user_model: str, user_effort: str) -> None:
     events = d / "events.jsonl"
     t0 = time.time()
     lock = threading.Lock()
@@ -140,7 +143,7 @@ def _play(d: Path, meta: LiveMeta, user_model: str) -> None:
         _point_judge_at_sdk()
         scrub_injected_key()
         version = load_version(meta.domain, meta.agent)
-        config = _run_config(meta.domain, version, [meta.task_id], 1, 1, SPLIT_SEED, user_model)
+        config = _run_config(meta.domain, version, [meta.task_id], 1, 1, SPLIT_SEED, user_model, user_effort)
         task = get_tasks(meta.domain, config.task_split_name, task_ids=[meta.task_id])[0]
         orch = build_orchestrator(config, task, seed=SPLIT_SEED, simulation_id=meta.id)
         emit({"kind": "start", "task_id": meta.task_id, "agent": meta.agent})
