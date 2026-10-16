@@ -50,6 +50,17 @@ console = Console()
 # customer check sends back. Haiku before; the loop never reuses a run with another customer.
 USER_MODEL = "sonnet"
 USER_EFFORT = EFFORT
+# A domain whose customer is not the loop's (s27, 16 Oct 2026, the person's call): telecom plays
+# Haiku 5.5 at high, the customer banking's s25 experiments made standard. Every default reads
+# `customer(domain)`, so a telecom run with it is the loop's record (`loop.run._covers`).
+DOMAIN_CUSTOMER: dict[str, tuple[str, str]] = {"telecom": ("claude-haiku-5-5", "high")}
+
+
+def customer(domain: str) -> tuple[str, str]:
+    """The (model, effort) a domain's runs play their customer with unless told otherwise."""
+    return DOMAIN_CUSTOMER.get(domain, (USER_MODEL, USER_EFFORT))
+
+
 # The simulation's rules beyond tau2's own: our customer (`eval.user`) holds a stop sent with words
 # until the agent's turn, and neither side may take the real date the Claude CLI tells every
 # session (the customer is told the world's time, the agent `compose.CLOCK_NOTE`). Bump it when
@@ -214,13 +225,16 @@ def run_eval(
     track: bool = True,
     dry_run: bool = False,
     seed: int = SPLIT_SEED,
-    user_model: str = USER_MODEL,
-    user_effort: str = USER_EFFORT,
+    user_model: str | None = None,
+    user_effort: str | None = None,
 ) -> tuple[RunMeta, list[TaskResult]]:
     """`user_effort` (s23, the person's Q7) sets the customer's effort for a side experiment; a run
-    with another than `USER_EFFORT` is never a record (`loop.run._covers`), as with another model."""
+    with another than its domain's (`customer`) is never a record (`loop.run._covers`), as with
+    another model. Left out, both are the domain's."""
     if domain not in DOMAINS and domain != SMOKE_DOMAIN:
         raise ValueError(f"domain must be one of {DOMAINS + (SMOKE_DOMAIN,)}, got {domain!r}")
+    default_model, default_effort = customer(domain)
+    user_model, user_effort = user_model or default_model, user_effort or default_effort
     quiet_tau2()
     reset_hard_limit()
     if not dry_run:
@@ -351,8 +365,10 @@ def extend_run(
     only the tasks the split has gained (a custom run of them), then join the two into one run of
     the whole split (`compose_runs`). Refused unless the version's bytes, the simulation rules
     and the retrieval are the run's, and every task it scored is still on its side. The new tasks
-    are played with the run's own customer, so a run made with another customer (`USER_MODEL=`)
-    is extended with that customer, never joined to the default's (s22, v23's smoke)."""
+    are played with the run's own customer and its effort, so a run made with another customer
+    (`USER_MODEL=`, `USER_EFFORT=`) is extended with that customer, never joined to the default's
+    (s22, v23's smoke; s27, the effort too). A run from before s23 recorded no effort: it ran at
+    `USER_EFFORT`."""
     base, _ = load_run(base_run_id)
     if base.dry_run or not base.summary:
         raise ValueError(f"{base_run_id} is not a scored run")
@@ -382,6 +398,7 @@ def extend_run(
         or f"the {len(missing)} {base.split} tasks split v{split_version(base.domain)} added "
         f"to {base_run_id}",
         user_model=base.user_model,
+        user_effort=base.user_effort or USER_EFFORT,
     )
     return compose_runs(base_run_id, ext.run_id)
 

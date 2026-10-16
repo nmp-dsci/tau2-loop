@@ -352,6 +352,36 @@ def test_another_customer_is_recorded_and_its_run_is_never_the_loops_record(
     assert not loop_run._covers(meta2.__class__(**{**meta2.__dict__, **real}), meta2.task_ids, 1)
 
 
+def test_telecoms_customer_is_haiku_5_5_at_high_and_its_runs_are_the_loops_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """s27 (16 Oct 2026, the person's call): telecom plays Haiku 5.5 at high by default, so a telecom
+    run left at the default is the loop's record and one with the loop's other customer is not;
+    every other domain keeps Sonnet."""
+    from tau2_loop.eval import runner
+    from tau2_loop.loop import run as loop_run
+
+    monkeypatch.setattr(runner, "RUNS_DIR", tmp_path)
+    assert runner.customer("telecom") == ("claude-haiku-5-5", "high")
+    assert runner.customer("banking_knowledge") == (runner.USER_MODEL, runner.USER_EFFORT)
+    meta, _ = runner.run_eval("telecom", "v1", "train", dry_run=True, track=False)
+    assert (meta.user_model, meta.user_effort) == ("claude-sdk/claude-haiku-5-5", "high")
+    sonnet, _ = runner.run_eval(
+        "telecom",
+        "v1",
+        "train",
+        dry_run=True,
+        track=False,
+        user_model="sonnet",
+        user_effort="medium",
+    )
+    real = {"dry_run": False, "sim_rules": runner.SIM_RULES}
+    assert loop_run._covers(meta.__class__(**{**meta.__dict__, **real}), meta.task_ids, 1)
+    assert not loop_run._covers(sonnet.__class__(**{**sonnet.__dict__, **real}), sonnet.task_ids, 1)
+    airline, _ = runner.run_eval("airline", "v0", "train", dry_run=True, track=False)
+    assert (airline.user_model, airline.user_effort) == ("claude-sdk/claude-sonnet-5", "medium")
+
+
 # ── extending a run to its split's new tasks (3 Oct 2026, banking's split v3) ──────────────────
 
 
@@ -433,6 +463,7 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
     )
     played: list[list[str]] = []
     customers: list[str] = []
+    efforts: list[str] = []
 
     def fake_eval(
         domain: str,
@@ -443,9 +474,11 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
         task_ids: Any,
         note: str,
         user_model: str,
+        user_effort: str,
     ) -> Any:
         played.append(list(task_ids))
         customers.append(user_model)
+        efforts.append(user_effort)
         _fake_run(runs, "20261003T000000Z_banking_knowledge_v1_custom", task_ids, {"t5"})
         return runner.load_run("20261003T000000Z_banking_knowledge_v1_custom")
 
@@ -453,6 +486,7 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
     meta, rows = runner.extend_run("20261002T000000Z_banking_knowledge_v1_train")
     assert played == [["t3", "t5"]]  # only what the split gained, in the split's order
     assert customers == [runner.sdk_model(runner.USER_MODEL)]  # the run's own customer
+    assert efforts == [runner.USER_EFFORT]  # a run with no recorded effort ran at the default
     assert meta.task_ids == train and [r.task_id for r in rows] == train
     assert meta.split_version == 3 and meta.mlflow_run_id is None
     assert meta.composed_of == [
@@ -475,17 +509,26 @@ def test_a_run_with_another_customer_is_extended_with_that_customer(
 
     runs = _extend_world(tmp_path, monkeypatch, ["t1", "t2", "t3"])
     haiku = "claude-sdk/claude-haiku-5-5"
-    _fake_run(runs, "r_base", ["t1", "t2"], {"t1"}, user_model=haiku)
-    customers: list[str] = []
+    _fake_run(runs, "r_base", ["t1", "t2"], {"t1"}, user_model=haiku, user_effort="high")
+    customers: list[tuple[str, str | None]] = []
 
     def fake_eval(*a: Any, task_ids: Any, user_model: str, **k: Any) -> Any:
-        customers.append(user_model)
-        _fake_run(runs, "r_ext", task_ids, {"t3"}, user_model=runner.sdk_model(user_model))
+        effort = k.get("user_effort")
+        customers.append((user_model, effort))
+        _fake_run(
+            runs,
+            "r_ext",
+            task_ids,
+            {"t3"},
+            user_model=runner.sdk_model(user_model),
+            user_effort=effort,
+        )
         return runner.load_run("r_ext")
 
     monkeypatch.setattr(runner, "run_eval", fake_eval)
     meta, _ = runner.extend_run("r_base")
-    assert customers == [haiku] and meta.user_model == haiku
+    # s27: the effort is the run's too, or the join refuses after every new task was played
+    assert customers == [(haiku, "high")] and (meta.user_model, meta.user_effort) == (haiku, "high")
     assert (meta.summary or {})["passed"] == 2
 
 

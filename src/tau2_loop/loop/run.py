@@ -45,6 +45,7 @@ from tau2_loop.data.splits import halves, split_ids
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.results import TaskResult
 from tau2_loop.eval.runner import (
+    DOMAIN_CUSTOMER,
     SIM_RULES,
     USER_EFFORT,
     USER_MODEL,
@@ -65,14 +66,16 @@ console = Console()
 def _covers(meta: RunMeta, ids: list[str], trials: int) -> bool:
     """A run scored exactly these tasks at this many trials, under today's simulation rules (a run
     on an older cut does not, nor one with tau2's own customer and the real date: `runner.SIM_RULES`)
-    and with the loop's customer model (s16: a run played with another is an experiment, never a record)."""
+    and with its domain's customer, model and effort (s16: a run played with another is an experiment,
+    never a record; s27: telecom's is `runner.DOMAIN_CUSTOMER`'s, every other domain's the loop's)."""
+    model, effort = DOMAIN_CUSTOMER.get(meta.domain, (USER_MODEL, USER_EFFORT))
     return (
         set(meta.task_ids) == set(ids)
         and meta.trials == trials
         and not meta.dry_run
         and meta.sim_rules == SIM_RULES
-        and meta.user_model == sdk_model(USER_MODEL)
-        and (meta.user_effort or USER_EFFORT) == USER_EFFORT
+        and meta.user_model == sdk_model(model)
+        and (meta.user_effort or USER_EFFORT) == effort
     )
 
 

@@ -63,6 +63,11 @@ TEST_CAP: dict[str, int] = {"banking_knowledge": 25}
 # n tasks, the rest to test. Every v2 member keeps its side (banking: train 48, the 25 test tasks
 # run since s09), so banking is 60 train / 37 test with nothing in reserve.
 TRAIN_FROM_RESERVE: dict[str, int] = {"banking_knowledge": 60}
+# Split version 3 for telecom (s27, 16 Oct 2026, the person's call): the whole base set drawn
+# afresh, seed 300, `n` to test, each stratum (telecom's id carries its symptom and persona) given
+# its share of the test tasks. v1's sides are not kept; the v1 and v2 lists stay in the file as
+# the cuts the older runs were played on.
+STRATA: dict[str, tuple[int, tuple[str, ...]]] = {"telecom": (40, ("symptom", "persona"))}
 V1_SIZE = 20
 
 # tau2 reads its data dir from this variable; the submodule's own `data/` is the
