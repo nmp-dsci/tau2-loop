@@ -61,16 +61,16 @@ def test_a_reset_lets_the_next_call_reach_the_sdk_and_a_new_run_start_resets(
     from tau2_loop import llm
     from tau2_loop.eval.runner import run_eval
 
-    class Stop(Exception):
+    class StopError(Exception):
         pass
 
     def stop() -> None:
-        raise Stop
+        raise StopError
 
     monkeypatch.setattr(llm, "require_live", stop)
     core.run_query("sys", "again", "claude-sonnet-5-5")
     assert core._hard_limit == WEEKLY
-    with pytest.raises(Stop):
+    with pytest.raises(StopError):
         run_eval("airline")
     assert core._hard_limit is None
 

@@ -73,10 +73,10 @@ from tau2_loop.eval import retrieval as retrieval_mod
 from tau2_loop.eval import review as review_store
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.health import run_health
-from tau2_loop.llm import core
 from tau2_loop.eval.profile import profile
 from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
+from tau2_loop.llm import core
 from tau2_loop.loop.history import load_history
 from tau2_loop.loop.ledger import read_ledger
 from tau2_loop.tooljudge import gold as judge_gold_mod

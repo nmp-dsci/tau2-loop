@@ -30,7 +30,6 @@ from tau2_loop.config import (
     settings,
 )
 from tau2_loop.data.splits import split_ids, split_version
-from tau2_loop.llm.core import reset_hard_limit
 from tau2_loop.eval.results import (
     Summary,
     TaskResult,
@@ -41,6 +40,7 @@ from tau2_loop.eval.results import (
     write_results,
 )
 from tau2_loop.llm import EFFORT, HARNESS, redact_tree, resolve_model, sdk_model
+from tau2_loop.llm.core import reset_hard_limit
 
 console = Console()
 
