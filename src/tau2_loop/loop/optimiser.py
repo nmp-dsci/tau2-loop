@@ -492,11 +492,11 @@ def build_context(
 
 
 def _intro(champion: AgentVersion, ctx: Context) -> str:
-    from tau2_loop.eval.runner import USER_MODEL
+    from tau2_loop.eval.runner import customer
 
     return f"""You are the optimiser in a benchmark improvement loop for a customer-support agent on τ²-bench,
 domain `{ctx.domain}`. The agent is {model_label(champion.config.model)} on the Claude subscription; it follows a policy document and calls the
-domain's tools ({ctx.tool_names}) {"as native tool calls" if champion.config.tool_mode == "native" else "through a JSON contract"}; a simulated user ({model_label(USER_MODEL)}) plays the customer. A
+domain's tools ({ctx.tool_names}) {"as native tool calls" if champion.config.tool_mode == "native" else "through a JSON contract"}; a simulated user ({model_label(customer(ctx.domain)[0])}) plays the customer. A
 conversation scores 1 only if every component in its task's REWARD BASIS passes (each failure lists it): DB, the
 final database equals gold's, which tau2 builds by running the expected actions on the same starting database;
 ACTION, every expected action was called with its arguments; COMMUNICATE, the required facts were said to the
