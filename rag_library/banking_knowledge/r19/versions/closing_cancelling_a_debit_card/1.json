@@ -1,0 +1,908 @@
+{
+ "job": "closing_cancelling_a_debit_card",
+ "aliases": [
+  "cancel stolen debit card",
+  "cancel_debit_card",
+  "close a PIN-locked card that cannot be unlocked and replace it",
+  "close a cloned card after a chip/CVV mismatch review",
+  "close a stolen card that has a pending refund",
+  "close and reissue debit card",
+  "close several lost debit cards where one is blocked by pending transactions and stays frozen",
+  "close_debit_card",
+  "close_debit_card_and_order_replacement",
+  "closing_a_debit_card",
+  "deactivate_debit_card",
+  "debit_card_action_after_dispute",
+  "lost wallet: close cards, one entry-tier card over its replacement limit",
+  "order replacement debit card",
+  "perform_card_action_after_disputes",
+  "replace compromised debit card",
+  "report_lost_debit_card"
+ ],
+ "when": {
+  "quote": "Procedure for when a customer wants to close, cancel, or deactivate their debit card.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: when a filed dispute's card_action is close_and_reissue, or when a PIN lock investigation recommends closure and the customer agrees. customer: when the customer asks to close, cancel or replace a card. Order a replacement only if the customer wants one. Never close a card the customer found and wants to keep.",
+  "quote": "Ask if they want to order a replacement card immediately",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+ },
+ "tools": [
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "r_time",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "r_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "r_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "r_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "r_cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "r_txns",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "r_user",
+   "not_used": null
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": "r_unfreeze",
+   "not_used": null
+  },
+  {
+   "tool": "freeze_debit_card_3892",
+   "who": "agent",
+   "step": "blocked_offer_freeze",
+   "not_used": null
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": "r_close",
+   "not_used": null
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": "r_order",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "action_error",
+   "not_used": null
+  },
+  {
+   "tool": "file_debit_card_transaction_dispute_6281",
+   "who": "agent",
+   "step": null,
+   "not_used": "Disputes for unauthorized transactions are filed in filing_a_debit_card_transaction_dispute before this job runs (Regulation E liability and the Debit Card Provisional Credit Guidelines apply there)."
+  },
+  {
+   "tool": "activate_debit_card_8292",
+   "who": "agent",
+   "step": null,
+   "not_used": "Used later, when the replacement card arrives (activation procedure)."
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": null,
+   "not_used": "The credit card check after a lost or stolen card belongs to lost_stolen_card_cross_product_security_protocol (cross_product_handoff)."
+  },
+  {
+   "tool": "clear_debit_card_fraud_alert_4892",
+   "who": "agent",
+   "step": null,
+   "not_used": "A card closed after a fraud dispute is closed with its alert in place (alert_card_not_cleared)."
+  }
+ ],
+ "info": [
+  {
+   "field": "close_reason",
+   "about": "One of: lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing",
+   "from": "customer",
+   "ask": "What is the reason for closing the card?",
+   "may_hold_back": false
+  },
+  {
+   "field": "pending_refunds",
+   "about": "Whether a merchant refund to the card is pending, and if so, whether the customer waits for it or accepts it going to the checking account",
+   "from": "customer",
+   "ask": "Are you expecting any refunds to this card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "wants_replacement",
+   "about": "Whether the customer wants a replacement card",
+   "from": "customer",
+   "ask": "Would you like me to order a replacement card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "excess_fee_choice",
+   "about": "At the tier's replacement limit: pay the excess fee (Entry $25, Mid $15) or wait",
+   "from": "customer",
+   "ask": "This account has reached its replacement limit. You can wait until the oldest replacement ages out, or pay the excess replacement fee, deducted from the checking account. Which would you prefer?",
+   "may_hold_back": true
+  },
+  {
+   "field": "delivery_option",
+   "about": "STANDARD, EXPEDITED or RUSH, as the tier allows",
+   "from": "customer",
+   "ask": "Which shipping option would you like?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_design",
+   "about": "CLASSIC, PREMIUM or CUSTOM",
+   "from": "customer",
+   "ask": "Which card design would you like?",
+   "may_hold_back": true
+  },
+  {
+   "field": "shipping_address",
+   "about": "Address to mail the card to: the one on file, or another US address",
+   "from": "customer",
+   "ask": "Should we mail the card to your address on file?",
+   "may_hold_back": true
+  },
+  {
+   "field": "freeze_blocked_card",
+   "about": "When closure is blocked and the card is ACTIVE: whether to freeze it in the meantime",
+   "from": "customer",
+   "ask": "This card can't be closed yet. Would you like me to freeze it in the meantime?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "ensure_verified",
+   "by": "model",
+   "do": "Reuse the verification done earlier in this conversation. If there was none, verify first: look the customer up, check that 2 values match, call get_current_time, then log_verification.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Customer must be verified",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "r_time",
+   "by": "harness",
+   "do": "Get the current date.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Calculate this from the date_issued field.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "r_accounts",
+   "by": "harness",
+   "do": "Unlock the tool if needed. Then get the accounts and read the linked checking account's status, balance, account_class and date_opened.",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "r_cards",
+   "by": "harness",
+   "do": "Get the account's cards, and read each card's user_id, status, issue_reason and date_issued.",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "the linked checking account"
+   },
+   "lookup": [],
+   "after": [
+    "r_accounts"
+   ],
+   "if": null,
+   "quote": "Before closing a card: Confirm the card_id and current status",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "r_txns",
+   "by": "harness",
+   "do": "Get the account's transactions and check for pending ones.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "the linked checking account"
+   },
+   "lookup": [],
+   "after": [
+    "r_accounts"
+   ],
+   "if": null,
+   "quote": "Transaction status, either 'posted' or 'pending'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "pin_lock_close_no_dispute",
+   "by": "model",
+   "do": "This step covers a PIN-locked card that cannot be unlocked, where the PIN lock investigation found no successful unauthorized transactions and the customer chose closure and replacement. File no dispute for it. Ask the customer the closure reason: fraud_suspected if fraud is suspected. Then close the card through r_close_check and r_close, and offer a replacement.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_txns",
+    "r_cards"
+   ],
+   "after": [
+    "r_txns"
+   ],
+   "if": "the PIN-locked card cannot be unlocked, no unauthorized transactions were found, and the customer chose closure and replacement",
+   "quote": "Card closure and replacement (recommended if fraud suspected)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "options offered when nothing was taken",
+     "quote": "If no unauthorized transactions: Explain the security concern and offer options:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "ask the reason",
+     "quote": "Ask customer for the reason they want to close the card (select from: lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    }
+   ]
+  },
+  {
+   "id": "pin_lock_close_once",
+   "by": "model",
+   "do": "For a PIN-locked card whose unauthorized transactions were disputed in filing_a_debit_card_transaction_dispute, close it once here with reason fraud_suspected. Order a replacement if the customer wants one.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_cards"
+   ],
+   "after": [
+    "r_cards"
+   ],
+   "if": "the card came from the PIN lock investigation and disputes were filed for successful unauthorized transactions on it",
+   "quote": "If unauthorized transactions found: File dispute, close card, order replacement.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "fraud_suspected for unauthorized transactions",
+     "quote": "Suspected fraud/unauthorized transactions",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    }
+   ]
+  },
+  {
+   "id": "alert_card_not_cleared",
+   "by": "model",
+   "do": "A card with a customer-initiated fraud alert and a filed fraud dispute is closed as it is. Do not clear its alert first, because the customer did not confirm every transaction.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_cards"
+   ],
+   "after": [
+    "r_cards"
+   ],
+   "if": "the card's fraud_alert_active is TRUE and a fraud dispute on it was filed",
+   "quote": "If they confirm all transactions are legitimate, clear the alert.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  },
+  {
+   "id": "r_close_check",
+   "by": "model",
+   "do": "Confirm the reason (lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing), then check:\n1. The card's user_id is the verified user.\n2. Its status is ACTIVE or PENDING. If it is FROZEN, go to r_unfreeze. If it is CLOSED, no closure is needed.\n3. The account has no pending transactions.\n4. There are no pending refunds (ask the customer). If a refund is pending, the customer must wait for it (typically 3-5 business days), or acknowledge in writing in this conversation that it will be credited to the linked checking account.\n5. The card is at least 14 days past date_issued. Lost, stolen and fraud_suspected bypass this check.\nIf any requirement fails, say what must be resolved and do not close.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_cards",
+    "r_txns",
+    "r_time"
+   ],
+   "after": [
+    "r_cards",
+    "r_txns",
+    "r_time"
+   ],
+   "if": null,
+   "quote": "Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "owner",
+     "quote": "Customer must be the owner of the debit card (verify user_id matches)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "status",
+     "quote": "The debit card must currently be in ACTIVE or PENDING status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "age bypass",
+     "quote": "These reasons bypass the minimum card age requirement (requirement 6) for security purposes",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "refunds",
+     "quote": "If pending refunds exist, inform the customer they must wait for the refunds to process (typically 3-5 business days) or acknowledge in writing that the refunds will be credited to the linked checking account instead.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "reasons",
+     "quote": "Ask customer for the reason they want to close the card (select from: lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "no tool reads pending refunds, so ask",
+     "source": "none",
+     "why": "No lookup returns refunds."
+    }
+   ]
+  },
+  {
+   "id": "per_card_independent",
+   "by": "model",
+   "do": "When several cards are being closed, run r_close_check, the closure and the replacement for each card on its own, using that card's account tier. One card failing a check does not stop the others. Tell the customer each card's outcome.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_cards",
+    "r_txns",
+    "r_accounts"
+   ],
+   "after": [
+    "r_close_check"
+   ],
+   "if": "more than one card is being closed",
+   "quote": "Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "blocked_offer_freeze",
+   "by": "harness",
+   "do": "Tell the customer what a freeze does: new transactions and recurring payments are declined, pending authorized transactions may still process, and they can unfreeze at any time. Then freeze the card.",
+   "call": "freeze_debit_card_3892",
+   "args": {
+    "card_id": "the blocked card's card_id from r_cards"
+   },
+   "lookup": [
+    "blocked_pending_tx",
+    "r_cards"
+   ],
+   "after": [
+    "blocked_pending_tx"
+   ],
+   "if": "the card is ACTIVE, belongs to the verified user, and the customer wants temporary security while the card cannot yet be closed",
+   "quote": "FREEZE: Temporary lock - card can be unfrozen later. Use when customer misplaced the card or wants temporary security.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026",
+   "basis": [
+    {
+     "clause": "ACTIVE only",
+     "quote": "Card must currently be in ACTIVE status (cannot freeze PENDING, CLOSED, or already FROZEN cards)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ]
+  },
+  {
+   "id": "r_unfreeze",
+   "by": "harness",
+   "do": "Tell the customer the card will be reactivated only so it can be closed right away. Unfreeze it, then go straight to r_close. If the unfreeze fails, do not close the card; follow action_error.",
+   "call": "unfreeze_debit_card_3893",
+   "args": {
+    "card_id": "the card_id from r_cards"
+   },
+   "lookup": [
+    "r_cards",
+    "r_accounts",
+    "r_close_check"
+   ],
+   "after": [
+    "r_close_check"
+   ],
+   "if": "the card to close is FROZEN, the linked account is OPEN, and the other closure requirements are met",
+   "quote": "Use unfreeze_debit_card_3893 with the card_id",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_026",
+   "basis": [
+    {
+     "clause": "close needs ACTIVE/PENDING",
+     "quote": "The debit card must currently be in ACTIVE or PENDING status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "account OPEN",
+     "quote": "The linked checking account must still be OPEN",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ]
+  },
+  {
+   "id": "refund_to_checking_notice",
+   "by": "model",
+   "do": "For a card closed after the customer acknowledged a pending refund, confirm the refund will be credited to the linked checking account.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_close_check",
+    "r_close"
+   ],
+   "after": [
+    "r_close"
+   ],
+   "if": "the closed card had a pending refund the customer acknowledged",
+   "quote": "Refunds to a closed card will be credited to the linked checking account",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "note_closure_time",
+   "by": "harness",
+   "do": "Right after closing an Entry-tier card, get the current time and keep it as the closure time. The 48-hour wait counts from it.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "r_close"
+   ],
+   "if": "a card on an Entry-tier account (Light Blue, Light Green, Green Fee-Free) was closed in this conversation",
+   "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "no_replacement_while_blocked",
+   "by": "model",
+   "do": "If a card's closure was blocked, do not order a replacement on that account now. Tell the customer a new card can be ordered once the old card is closed.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "blocked_pending_tx",
+    "r_cards"
+   ],
+   "after": [
+    "blocked_pending_tx"
+   ],
+   "if": "closure was blocked and the customer asks for a replacement on that account",
+   "quote": "If they need a new card, they can order one through the standard ordering process",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "only one active card per account",
+     "quote": "Customer cannot have more than 1 active debit cards per checking account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    }
+   ]
+  },
+  {
+   "id": "r_user",
+   "by": "harness",
+   "do": "Read the customer's date of birth and the address on file.",
+   "call": "get_user_information_by_id",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "r_close"
+   ],
+   "if": "the customer wants a replacement",
+   "quote": "Customer must be at least 18 years old (verify using date_of_birth)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "r_order_check",
+   "by": "model",
+   "do": "Check the order requirements:\n- the account is OPEN and has been open at least 3 business days;\n- the balance is at least $25;\n- no ACTIVE and no PENDING card remains on it after the closure;\n- the customer is 18 or older;\n- the address is a US address.\nTake the tier from account_class. Count the replacements (issue_reason lost, stolen, fraud, damaged) issued in the last 12 months (date_issued compared with r_time). Tier limits:\n- Entry: 2, then a $25 excess fee or a wait; also a 48-hour wait after closure.\n- Mid: 3, then a $15 excess fee or a wait.\n- Premium: 5, then the customer must wait.\n- Elite: unlimited.\nIf a requirement fails, say what is needed and do not order.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_accounts",
+    "r_cards",
+    "r_user",
+    "r_time"
+   ],
+   "after": [
+    "r_user"
+   ],
+   "if": "the customer wants a replacement",
+   "quote": "Customer cannot have a pending debit card order for the same account (check debit_cards table for PENDING status)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023",
+   "basis": [
+    {
+     "clause": "OPEN",
+     "quote": "Account status must be OPEN",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "clause": "3 business days",
+     "quote": "Account must have been open for at least 3 business days (excluding weekends)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "clause": "$25",
+     "quote": "Account must have a minimum balance of $25 (to cover potential fees)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "clause": "US address",
+     "quote": "Customer's address on file must be a valid US domestic address (international shipping is not available)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "clause": "one active card",
+     "quote": "Customer cannot have more than 1 active debit cards per checking account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "clause": "count",
+     "quote": "Look for cards with issue_reason of 'lost', 'stolen', 'fraud', or 'damaged'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "12 months",
+     "quote": "Check the date_issued field and count cards issued within the last 12 months",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "entry wait",
+     "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "entry excess",
+     "quote": "If customer has exceeded the 2-card limit, they must wait until oldest replacement ages out of the 12-month window, OR pay a $25 excess replacement fee",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "mid excess",
+     "quote": "If customer has exceeded the 3-card limit, they must wait until oldest replacement ages out, OR pay a $15 excess replacement fee",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "premium wait",
+     "quote": "If customer has exceeded the 5-card limit, they must wait until oldest replacement ages out (no fee option - must wait)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "elite",
+     "quote": "Unlimited replacement cards",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    }
+   ]
+  },
+  {
+   "id": "entry_fee_then_wait",
+   "by": "model",
+   "do": "For an Entry-tier account at its 2-card limit, offer two choices: wait for the oldest replacement to age out, or pay the $25 excess fee. Even with the fee, the 48-hour wait after closure applies. Give the earliest order time (the closure time from note_closure_time + 48 hours), and do not order now.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_order_check",
+    "note_closure_time"
+   ],
+   "after": [
+    "r_order_check"
+   ],
+   "if": "the account is Entry tier, its replacement count has reached 2, and less than 48 hours have passed since the closure",
+   "quote": "If customer has exceeded the 2-card limit, they must wait until oldest replacement ages out of the 12-month window, OR pay a $25 excess replacement fee",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029",
+   "basis": [
+    {
+     "clause": "48h wait",
+     "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    }
+   ]
+  },
+  {
+   "id": "over_limit_customer_waits",
+   "by": "model",
+   "do": "If the customer is at the tier limit and chooses to wait (Premium must wait), give the date the oldest counted card ages out: its date_issued plus 12 months. For Entry, the earliest order date is the later of that date and the closure time + 48 hours. Order nothing now.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_order_check",
+    "r_cards",
+    "r_time"
+   ],
+   "after": [
+    "r_order_check"
+   ],
+   "if": "the replacement count has reached the tier limit and the customer chooses to wait",
+   "quote": "Maximum 2 replacement cards per rolling 12-month period",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029",
+   "basis": [
+    {
+     "clause": "premium must wait",
+     "quote": "If customer has exceeded the 5-card limit, they must wait until oldest replacement ages out (no fee option - must wait)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    }
+   ]
+  },
+  {
+   "id": "r_options",
+   "by": "model",
+   "do": "Ask for a delivery option and a design, offering only what the tier allows, with their fees.\n- Delivery: Entry STANDARD only, $0. Mid STANDARD $0 or EXPEDITED $15. Premium STANDARD or EXPEDITED $0, RUSH $35. Elite all $0.\n- Design: Entry and Mid CLASSIC $0, PREMIUM $10, CUSTOM $25. Premium CLASSIC $0, PREMIUM $0, CUSTOM $15. Elite all $0.\nTell the customer any fee is deducted from the checking account, and confirm the mailing address.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_accounts",
+    "r_user"
+   ],
+   "after": [
+    "r_order_check"
+   ],
+   "if": "all order requirements are met and no Entry-tier wait applies",
+   "quote": "When using order_debit_card_5739, you must provide the exact delivery_fee and design_fee amounts based on the tier rules below.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029",
+   "basis": [
+    {
+     "clause": "entry shipping",
+     "quote": "Standard shipping only (no expedited option available) - delivery_fee: $0",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "mid shipping",
+     "quote": "Standard (delivery_fee: $0) or expedited shipping available (delivery_fee: $15)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "premium shipping",
+     "quote": "Free expedited shipping on all replacements (delivery_fee: $0 for both STANDARD and EXPEDITED)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "premium rush",
+     "quote": "Rush shipping available (delivery_fee: $35)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "elite shipping",
+     "quote": "Complimentary shipping on all replacements (delivery_fee: $0 for STANDARD, EXPEDITED, and RUSH)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "classic",
+     "quote": "CLASSIC design: design_fee $0",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "premium design entry/mid",
+     "quote": "PREMIUM design (metallic silver): design_fee $10",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "premium design premium/elite",
+     "quote": "PREMIUM design (metallic silver): design_fee $0 (complimentary)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "custom entry/mid",
+     "quote": "CUSTOM design (uploaded image): design_fee $25",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "custom premium",
+     "quote": "CUSTOM design (uploaded image): design_fee $15 (discounted from $25)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "custom elite",
+     "quote": "CUSTOM design (uploaded image): design_fee $0 (complimentary)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "fee notice",
+     "quote": "Always inform the customer that the fee will be deducted from their checking account balance before placing the order.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "address",
+     "quote": "Confirm the address that the customer would like to mail the card to.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    }
+   ]
+  },
+  {
+   "id": "entry_expedited_request",
+   "by": "model",
+   "do": "If the customer asks for expedited or rush shipping on an Entry-tier account, tell them only standard shipping ($0, 7-10 business days) is available for that account's replacements.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_accounts"
+   ],
+   "after": [
+    "r_options"
+   ],
+   "if": "the account is Entry tier and the customer asks for expedited or rush delivery",
+   "quote": "Standard shipping only (no expedited option available) - delivery_fee: $0",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  },
+  {
+   "id": "best_free_options",
+   "by": "model",
+   "do": "If the customer asks for the best or fastest options that cost nothing, pick the highest $0 choices for the tier:\n- Premium: EXPEDITED and the PREMIUM design.\n- Elite: RUSH and any design.\n- Mid and Entry: STANDARD and CLASSIC.\nIf they want a design only if it is free, give it when its tier fee is $0; otherwise use CLASSIC. Tell them what was chosen and that no fee applies.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_accounts"
+   ],
+   "after": [
+    "r_options"
+   ],
+   "if": "the customer asks for the best, fastest or design options that are free",
+   "quote": "PREMIUM design (metallic silver): design_fee $0 (complimentary)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029",
+   "basis": [
+    {
+     "clause": "premium expedited free",
+     "quote": "Free expedited shipping on all replacements (delivery_fee: $0 for both STANDARD and EXPEDITED)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    },
+    {
+     "clause": "elite all free",
+     "quote": "Complimentary shipping on all replacements (delivery_fee: $0 for STANDARD, EXPEDITED, and RUSH)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    }
+   ]
+  },
+  {
+   "id": "alternate_mailing_address",
+   "by": "model",
+   "do": "If the customer wants the card mailed somewhere other than the address on file, take the full address and check it is a US domestic address. Read it back, then use it for the order.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "r_options"
+   ],
+   "if": "the customer gives a mailing address other than the one on file",
+   "quote": "Confirm the address that the customer would like to mail the card to.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "r_order",
+   "by": "harness",
+   "do": "Order the card. If the reply is 'already has an active debit card', 'Order may already exist' or 'Insufficient funds for fees', tell the customer what must be resolved; follow action_error if it cannot be. Then give the delivery time (STANDARD 7-10, EXPEDITED 3-5, RUSH 1-2 business days) and the fees.",
+   "call": "order_debit_card_5739",
+   "args": {
+    "account_id": "the linked checking account",
+    "user_id": "the verified user",
+    "delivery_option": "the customer's choice from r_options",
+    "delivery_fee": "the tier figure for that option",
+    "card_design": "the customer's choice",
+    "design_fee": "the tier figure for that design",
+    "shipping_address": "the address the customer confirmed: the one on file from r_user, unless they gave another US address",
+    "excess_replacement_fee": "the tier excess fee ($25 Entry, $15 Mid), only when over the limit and the customer chose to pay; otherwise 0"
+   },
+   "lookup": [
+    "r_order_check",
+    "r_options"
+   ],
+   "after": [
+    "r_options"
+   ],
+   "if": "a card was closed, the customer wants a replacement, the order requirements are met, the tier's wait has passed, and the customer confirmed the options and fees",
+   "quote": "Use order_debit_card_5739 to order the card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023",
+   "basis": [
+    {
+     "clause": "inform",
+     "quote": "Inform customer of expected delivery timeframe and any applicable fees",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "clause": "standard time",
+     "quote": "STANDARD: Free shipping, arrives in 7-10 business days",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+    },
+    {
+     "clause": "fees charged at order",
+     "quote": "IMPORTANT - Fee Charging: All applicable fees (shipping, design, excess replacement) are AUTOMATICALLY CHARGED to the linked checking account when the card is ordered.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+    }
+   ]
+  },
+  {
+   "id": "cross_product_handoff",
+   "by": "model",
+   "do": "If a card was closed or frozen because it was lost or stolen, run lost_stolen_card_cross_product_security_protocol next.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_close_check",
+    "r_close"
+   ],
+   "after": [
+    "r_close"
+   ],
+   "if": "the card was reported lost or stolen",
+   "quote": "Complete the standard debit card freeze/close procedure",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "action_error",
+   "by": "model",
+   "do": "If a close, unfreeze, freeze or order call returns an error that cannot be resolved, explain what failed and offer a transfer to a human agent. Transfer only if the customer agrees.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card actions done and the error",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "r_close",
+    "r_unfreeze",
+    "blocked_offer_freeze",
+    "r_order"
+   ],
+   "after": [
+    "r_close"
+   ],
+   "if": "a close, unfreeze, freeze or order call returns an unresolvable error and the customer agrees to a transfer",
+   "quote": "System error or outage preventing completion of the customer's request",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Lost, stolen and fraud_suspected closures bypass only the 14-day card age requirement.",
+   "quote": "These reasons bypass the minimum card age requirement (requirement 6) for security purposes",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "rule": "A card with pending transactions cannot be closed.",
+   "quote": "No pending transactions: The card must not have any pending or processing transactions.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "rule": "Lost or stolen cards are closed immediately once the requirements are met.",
+   "quote": "Cards reported as lost or stolen are closed immediately with no cooling-off period",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "rule": "Mid, Premium and Elite tiers have no waiting period after closure. Entry waits 48 hours.",
+   "quote": "No waiting period - can order immediately after closure",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029"
+  }
+ ],
+ "done_when": "All of the following hold:\n- Each card in scope was closed with the right reason and the closure confirmed, or the customer knows what blocks it (pending transactions, a refund, card age). A freeze was offered for a blocked ACTIVE card.\n- A found card was not closed.\n- For each closed card, one of these is true: a replacement was ordered with the tier's fees and the timeframe given; the customer declined one; or the customer was told when one can be ordered (the Entry 48-hour wait, or the tier limit).\n- Lost or stolen cards were handed to the cross-product check.\n- Failed calls were explained and a transfer offered."
+}

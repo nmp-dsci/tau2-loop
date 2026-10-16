@@ -1,0 +1,425 @@
+{
+ "job": "depositing_a_check_into_your_account",
+ "aliases": [
+  "deposit a check into a new checking account",
+  "deposit_check",
+  "deposit_check_and_confirm_balance",
+  "depositing_a_check",
+  "fund new account by check",
+  "mobile_check_deposit"
+ ],
+ "when": {
+  "quote": "To help a customer deposit a check, give them the deposit_check_3847 tool.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: only when the customer asks to deposit a check",
+  "quote": "Customers can deposit checks into their checking or savings accounts using mobile check deposit.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+ },
+ "tools": [
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "unlock_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "read_accounts_deposit",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "read_accounts_deposit",
+   "not_used": null
+  },
+  {
+   "tool": "give_discoverable_user_tool",
+   "who": "agent",
+   "step": "give_deposit_tool",
+   "not_used": null
+  },
+  {
+   "tool": "deposit_check_3847",
+   "who": "customer",
+   "step": "customer_deposits",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_user_tool",
+   "who": "customer",
+   "step": "customer_deposits",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "confirm_via_transactions",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "destination_account",
+   "about": "which checking or savings account the check goes into",
+   "from": "customer",
+   "ask": "Which account would you like to deposit the check into?",
+   "may_hold_back": false
+  },
+  {
+   "field": "check_amount",
+   "about": "the check amount in USD as printed",
+   "from": "customer",
+   "ask": "What is the amount of the check?",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "unlock_lookup",
+   "by": "harness",
+   "do": "Unlock the account lookup tool.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847"
+   },
+   "lookup": [],
+   "after": [],
+   "if": "the account lookup tool is not already unlocked in this conversation",
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts__general__009",
+   "basis": [
+    {
+     "clause": "the lookup tool is named in the KB",
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts__general__009"
+    },
+    {
+     "clause": "unlock before use, only if not already unlocked",
+     "source": "none",
+     "why": "Agent policy 'Unlocking and Using Agent Discoverable Tools': a discoverable tool must be unlocked before it is called"
+    }
+   ]
+  },
+  {
+   "id": "read_accounts_deposit",
+   "by": "harness",
+   "do": "Read the customer's accounts to get the destination account_id, class, status and balance.",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "verified user id"
+   },
+   "lookup": [],
+   "after": [
+    "unlock_lookup"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009",
+   "basis": [
+    {
+     "clause": "read accounts",
+     "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "clause": "run through call_discoverable_agent_tool",
+     "source": "none",
+     "why": "Agent policy 'Unlocking and Using Agent Discoverable Tools': unlocked tools are run with call_discoverable_agent_tool"
+    }
+   ]
+  },
+  {
+   "id": "check_deposit",
+   "by": "model",
+   "do": "Confirm the destination account is active and the check amount is within that class's daily mobile check deposit limit (rules below). If over the limit, tell the customer the limit and do not give the tool for that amount; if the account is not active, say it must be active. You may remind them the check must be payable to them, unaltered, and endorsed.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "read_accounts_deposit"
+   ],
+   "after": [
+    "read_accounts_deposit"
+   ],
+   "if": null,
+   "quote": "Plan larger check deposits ahead of time if they exceed the $2,500 daily mobile deposit limit.",
+   "doc": "doc_checking_accounts_blue_account_001",
+   "basis": [
+    {
+     "clause": "daily limit applies",
+     "quote": "Plan larger check deposits ahead of time if they exceed the $2,500 daily mobile deposit limit.",
+     "doc": "doc_checking_accounts_blue_account_001"
+    },
+    {
+     "clause": "payable and unaltered",
+     "quote": "Confirm the check is payable to the account owner(s) and is not altered or damaged.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "endorse",
+     "quote": "Endorse the back of the check.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "account must be active",
+     "source": "none",
+     "why": "From the deposit_check_3847 tool description error 'is not active'"
+    }
+   ]
+  },
+  {
+   "id": "give_deposit_tool",
+   "by": "model",
+   "do": "Give the customer deposit_check_3847 and explain they call it with the account_id and the check amount; the agent cannot deposit for them.",
+   "call": "give_discoverable_user_tool",
+   "args": {
+    "discoverable_tool_name": "'deposit_check_3847' (fixed)",
+    "arguments": "JSON string with account_id (destination account_id from read_accounts_deposit) and check_amount (amount the customer gave)"
+   },
+   "lookup": [
+    "check_deposit"
+   ],
+   "after": [
+    "check_deposit"
+   ],
+   "if": "the customer asked to deposit a check, the destination account is active and the amount is within its daily limit",
+   "quote": "Have the user call deposit_check_3847(account_id, check_amount) where account_id is the ID of the account they want to deposit into and check_amount is the amount of the check in USD.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_011",
+   "basis": [
+    {
+     "clause": "give the tool",
+     "quote": "To help a customer deposit a check, give them the deposit_check_3847 tool.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "agent cannot deposit",
+     "quote": "Note: The agent cannot deposit checks on behalf of the customer - this action must be performed by the customer themselves through the mobile app.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    }
+   ]
+  },
+  {
+   "id": "customer_deposits",
+   "by": "customer",
+   "do": "Customer calls deposit_check_3847 (via call_discoverable_user_tool) with the account_id and check_amount.",
+   "call": "deposit_check_3847",
+   "args": {
+    "account_id": "destination account_id",
+    "check_amount": "check amount in USD"
+   },
+   "lookup": [],
+   "after": [
+    "give_deposit_tool"
+   ],
+   "if": null,
+   "quote": "Have the user call deposit_check_3847(account_id, check_amount) where account_id is the ID of the account they want to deposit into and check_amount is the amount of the check in USD.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+  },
+  {
+   "id": "deposit_error",
+   "by": "model",
+   "do": "If the deposit returns an error: for 'not found' or an invalid/non-positive amount, help the customer correct the value and retry; for 'not active', explain the account must be active; for image, endorsement or amount-mismatch problems, give the documented fix and have them resubmit; on a duplicate, tell them not to redeposit.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "customer_deposits"
+   ],
+   "after": [
+    "customer_deposits"
+   ],
+   "if": "deposit_check_3847 returned an error",
+   "quote": "Amount mismatch: Edit the entered amount to exactly match the check and resubmit.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_011",
+   "basis": [
+    {
+     "clause": "amount mismatch",
+     "quote": "Amount mismatch: Edit the entered amount to exactly match the check and resubmit.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "image",
+     "quote": "Image quality error: Retake photos with better lighting and ensure all corners are visible.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "duplicate",
+     "quote": "Duplicate deposit detected: Do not attempt to redeposit.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "tool error replies",
+     "source": "none",
+     "why": "From the deposit_check_3847 tool description"
+    }
+   ]
+  },
+  {
+   "id": "verify_balance",
+   "by": "harness",
+   "do": "Re-read the accounts to look up the destination account's balance after the deposit.",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "verified user id"
+   },
+   "lookup": [
+    "customer_deposits"
+   ],
+   "after": [
+    "customer_deposits"
+   ],
+   "if": "deposit_check_3847 replied that the check was deposited successfully",
+   "quote": "Looking up account details for customer service inquiries",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009",
+   "basis": [
+    {
+     "clause": "look up account details",
+     "quote": "Looking up account details for customer service inquiries",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "clause": "deposit succeeded",
+     "source": "none",
+     "why": "The success reply 'Check deposited successfully.' comes from the deposit_check_3847 tool description"
+    },
+    {
+     "clause": "run through call_discoverable_agent_tool",
+     "source": "none",
+     "why": "Agent policy 'Unlocking and Using Agent Discoverable Tools'"
+    }
+   ]
+  },
+  {
+   "id": "confirm_via_transactions",
+   "by": "harness",
+   "do": "Read the destination account's transactions to see the check deposit and whether its status is posted or pending.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "destination account_id"
+   },
+   "lookup": [
+    "verify_balance"
+   ],
+   "after": [
+    "verify_balance"
+   ],
+   "if": "the customer asks whether the deposit went through",
+   "quote": "This is useful when reviewing account activity, verifying fees, checking for applied rebates, or investigating customer inquiries.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018",
+   "basis": [
+    {
+     "clause": "read transactions for a customer inquiry",
+     "quote": "This is useful when reviewing account activity, verifying fees, checking for applied rebates, or investigating customer inquiries.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+    },
+    {
+     "clause": "posted or pending",
+     "quote": "Transaction status, either 'posted' or 'pending'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+    },
+    {
+     "clause": "unlock first if not already unlocked, then run through call_discoverable_agent_tool",
+     "source": "none",
+     "why": "Agent policy 'Unlocking and Using Agent Discoverable Tools'"
+    }
+   ]
+  },
+  {
+   "id": "report",
+   "by": "model",
+   "do": "Tell the customer the balance or the deposit's posted/pending status, and that standard deposits are typically available within 1-2 business days (some get extended review, with the expected availability date shown in the app).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "verify_balance",
+    "confirm_via_transactions"
+   ],
+   "after": [
+    "verify_balance"
+   ],
+   "if": null,
+   "quote": "Standard deposits are typically available within 1-2 business days.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_011",
+   "basis": [
+    {
+     "clause": "1-2 business days",
+     "quote": "Standard deposits are typically available within 1-2 business days.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+    },
+    {
+     "clause": "extended review",
+     "quote": "Certain deposits may be subject to extended review. You will see the expected availability date in the app after submission.",
+     "doc": "doc_bank_accounts_bank_accounts__general__011"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Daily mobile check deposit limits: Blue $2,500, Light Blue $2,000, Green Fee-Free $2,500, Green Account (checking) $3,000, Evergreen $3,500, Purple $5,000, Gold Years $5,000, Bluest $10,000, Dark Green $1,500, Light Green $500, Silver Plus (savings) $5,000.",
+   "quote": "Mobile check deposit daily limit: $2,500",
+   "doc": "doc_checking_accounts_blue_account_001",
+   "basis": [
+    {
+     "clause": "Light Blue",
+     "quote": "Daily mobile check deposit limit: $2,000",
+     "doc": "doc_checking_accounts_light_blue_account_002"
+    },
+    {
+     "clause": "Green Fee-Free",
+     "quote": "Mobile check deposits are limited to $2,500 per day.",
+     "doc": "doc_checking_accounts_green_fee-free_account_003"
+    },
+    {
+     "clause": "Green checking",
+     "quote": "Mobile check deposits up to $3,000 per day",
+     "doc": "doc_checking_accounts_green_account_(checking)_001"
+    },
+    {
+     "clause": "Evergreen",
+     "quote": "Mobile check deposit daily limit: $3,500",
+     "doc": "doc_checking_accounts_evergreen_account_001"
+    },
+    {
+     "clause": "Purple",
+     "quote": "Mobile check deposit up to $5,000 per day",
+     "doc": "doc_checking_accounts_purple_account_001"
+    },
+    {
+     "clause": "Gold Years",
+     "quote": "Mobile check deposit limit: $5,000 per day",
+     "doc": "doc_checking_accounts_gold_years_account_001"
+    },
+    {
+     "clause": "Bluest",
+     "quote": "Mobile check deposit limit (daily) | $10,000",
+     "doc": "doc_checking_accounts_bluest_account_001"
+    },
+    {
+     "clause": "Dark Green",
+     "quote": "Mobile check deposit daily limit: $1,500",
+     "doc": "doc_checking_accounts_dark_green_account_001"
+    },
+    {
+     "clause": "Light Green",
+     "quote": "Use mobile check deposit for up to $500 each day.",
+     "doc": "doc_checking_accounts_light_green_account_001"
+    },
+    {
+     "clause": "Silver Plus",
+     "quote": "You can deposit checks through the mobile app up to a daily total of $5,000.",
+     "doc": "doc_savings_accounts_silver_plus_account_007"
+    }
+   ]
+  },
+  {
+   "rule": "The agent never deposits a check itself; the customer runs deposit_check_3847.",
+   "quote": "Note: The agent cannot deposit checks on behalf of the customer - this action must be performed by the customer themselves through the mobile app.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_011"
+  }
+ ],
+ "done_when": "The customer ran deposit_check_3847 into the chosen active account within its daily limit and the agent confirmed the balance or the deposit's posted/pending status from the records with the usual 1-2 business day availability; or the customer was told how to fix a deposit error, or what blocks the deposit (limit or inactive account)."
+}

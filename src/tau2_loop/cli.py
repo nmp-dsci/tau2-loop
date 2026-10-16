@@ -71,9 +71,13 @@ def fork(
             help="list the tools the customer holds from the start in the prompt",
         ),
     ] = None,
+    workflow_view: Annotated[
+        str | None,
+        typer.Option(help="how find_workflow shows a job: full, or steps (no quotes or basis)"),
+    ] = None,
 ) -> None:
     """A new version with the champion's surfaces and a different model, effort, retrieval,
-    tool mode, identity note, parallel calls, workflow library or customer tools."""
+    tool mode, identity note, parallel calls, workflow library, customer tools or workflow view."""
     from tau2_loop.agent.versions import fork_version
     from tau2_loop.tracking.registry import champion_name
 
@@ -96,13 +100,15 @@ def fork(
         workflows=workflows,
         why=why,
         customer_tools=customer_tools,
+        workflow_view=workflow_view,
     )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "
         f"effort {v.config.effort} · tool mode {v.config.tool_mode} · retrieval "
         f"{v.retrieval or 'none'} · identity note {v.config.identity_note} · parallel calls "
         f"{v.config.parallel_calls} · workflows {v.config.workflows or 'none'} · "
-        f"customer tools {v.config.customer_tools} · fingerprint {v.fingerprint}"
+        f"customer tools {v.config.customer_tools} · workflow view "
+        f"{v.config.workflow_view or 'full'} · fingerprint {v.fingerprint}"
     )
 
 
@@ -127,8 +133,10 @@ def rag_build(
     import queue as queues
     import threading
 
+    from tau2_loop.llm.core import reset_hard_limit
     from tau2_loop.workflows import library, rag_agent
 
+    reset_hard_limit()
     agent = rag_agent.load(domain, rag)
     if agent.merge not in ("sequential", "concurrent"):
         raise typer.BadParameter(f"{rag} does not merge; its sessions run one by one in the viewer")
@@ -197,6 +205,82 @@ def rag_build(
     with library.store_for(domain, rag).build_guard():
         threads = [
             threading.Thread(target=worker, name=f"{rag}-w{i + 1}") for i in range(n_workers)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+
+@app.command("rag-remerge")
+def rag_remerge(
+    domain: str = "banking_knowledge",
+    rag: str = "r19",
+    limit: Annotated[int | None, typer.Option(help="stop after this many sessions")] = None,
+    workers: Annotated[int | None, typer.Option(help="sessions merging at once")] = None,
+) -> None:
+    """Merge again, with a re-merging version's merge, every session of the version it takes drafts
+    from (s25, r19: r18's, the person's call, 15 Oct 2026). No research runs: each session's
+    research is replayed from its events and its draft and decision are reused, in the order its
+    merges reached the library. Resumable; a second build of the same version is refused."""
+    import queue as queues
+    import threading
+
+    from tau2_loop.llm.core import reset_hard_limit
+    from tau2_loop.workflows import library, rag_agent
+
+    reset_hard_limit()
+    agent = rag_agent.load(domain, rag)
+    todo = rag_agent.remerge_queue(domain, rag)
+    todo = todo[:limit] if limit else todo
+    n_workers = max(1, workers or agent.workers)
+    console.print(
+        f"{rag}: {len(todo)} of {agent.drafts_from}'s sessions to merge again, no research, "
+        f"{n_workers} at once",
+        highlight=False,
+    )
+    say = threading.Lock()
+    done = [0]
+    jobs: queues.Queue[str] = queues.Queue()
+    for sid in todo:
+        jobs.put(sid)
+
+    def worker() -> None:
+        while True:
+            try:
+                sid = jobs.get_nowait()
+            except queues.Empty:
+                return
+            try:
+                meta = rag_agent.remerge(domain, rag, sid)
+                out = rag_agent.session(domain, meta.id).get("output") or {}
+                recs = out.get("merge") or []
+                with say:
+                    done[0] += 1
+                    console.print(
+                        f"[{done[0]}/{len(todo)}] {meta.task_id} from {sid[:16]} {meta.status} in "
+                        f"{meta.duration_ms / 60000:.1f} min · took "
+                        f"{', '.join(r['job'] for r in recs if r.get('taken')) or 'nothing'}"
+                        + (
+                            " · not taken "
+                            + ", ".join(r["job"] for r in recs if not r.get("taken"))
+                            if any(not r.get("taken") for r in recs)
+                            else ""
+                        )
+                        + f" · {sum(len(r.get('settled') or []) for r in recs)} logged by code"
+                        + (f" · {meta.error}" if meta.error else ""),
+                        highlight=False,
+                        soft_wrap=True,
+                    )
+            except Exception as e:  # noqa: BLE001 - one session's failure must not stop the build
+                with say:
+                    console.print(
+                        f"{sid} failed to start: {type(e).__name__}: {e}", highlight=False
+                    )
+
+    with library.store_for(domain, rag).build_guard():
+        threads = [
+            threading.Thread(target=worker, name=f"{rag}-m{i + 1}") for i in range(n_workers)
         ]
         for t in threads:
             t.start()
@@ -286,10 +370,16 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
             help="the customer's model (default haiku); a run with another is an experiment the loop never reuses"
         ),
     ] = None,
+    user_effort: Annotated[
+        str | None,
+        typer.Option(
+            help="the customer's effort (default medium); a run with another is an experiment (s23)"
+        ),
+    ] = None,
 ) -> None:
     """Run an agent version over a split of one domain and score it."""
     from tau2_loop.agent.versions import base_version
-    from tau2_loop.eval.runner import USER_MODEL, run_eval
+    from tau2_loop.eval.runner import USER_EFFORT, USER_MODEL, run_eval
 
     meta, _ = run_eval(
         domain,
@@ -302,6 +392,7 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
         track=not no_track,
         dry_run=dry_run,
         user_model=user_model or USER_MODEL,
+        user_effort=user_effort or USER_EFFORT,
     )
     console.print(f"run: runs/{meta.run_id}")
 
@@ -430,11 +521,18 @@ def optimise(
             help="the new version keeps every tool call of a reply (native only)",
         ),
     ] = None,
+    run: Annotated[
+        str | None,
+        typer.Option(
+            help="read this train run's failures: the source's bytes on the whole split, "
+            "played with another customer model (s23)"
+        ),
+    ] = None,
 ) -> None:
     """One optimiser session on the source's train failures, writing the next version with no
     evaluation (s14): play it with `make eval`, gate it with `make challenge`. --agent-model,
     --agent-effort and --parallel-calls give it agent settings that differ from the source's;
-    the harness writes them, never the optimiser."""
+    the harness writes them, never the optimiser. --run names the train run to read (s23)."""
     from tau2_loop.loop.run import run_optimise
 
     settings: dict[str, object] = {}
@@ -445,7 +543,7 @@ def optimise(
     if parallel_calls is not None:
         settings["parallel_calls"] = parallel_calls
     try:
-        opt = asyncio.run(run_optimise(domain, source, optimiser, mode, settings or None))
+        opt = asyncio.run(run_optimise(domain, source, optimiser, mode, settings or None, run))
     except ValueError as e:
         console.print(f"[red]optimise refused:[/] {e}")
         raise typer.Exit(1) from e
@@ -549,6 +647,17 @@ def ledger(domain: str = "airline") -> None:
             f"{o['p_value']:.3f}" if "p_value" in o else "",
         )
     console.print(t)
+
+
+@app.command("versions-log")
+def versions_log(domain: str = "banking_knowledge") -> None:
+    """Write loop/<domain>/versions.md: every answering-agent version in build order, the ones
+    the Optimise tab leaves off (played on part of a split, or never) between the ones it draws."""
+    from tau2_loop.loop.versions_log import write
+
+    p, h = write(domain)
+    off = [v["version"] for v in h["versions"] if not v["full"]]
+    console.print(f"{p}: {len(h['versions'])} versions, {len(off)} left off the Optimise tab")
 
 
 @app.command("judge-labels")

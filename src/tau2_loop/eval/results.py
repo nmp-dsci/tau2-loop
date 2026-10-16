@@ -224,7 +224,9 @@ def from_simulation(sim: Any, task: Any, trace_name: str) -> TaskResult:
         task_id=str(sim.task_id),
         trial=int(sim.trial or 0),
         reward=reward,
-        correct=reward >= 1.0,
+        # s25: a conversation the harness could not run (a usage limit, a dead transport) is not a
+        # failure of the agent: it is left unscored, so a void run never reads as 0 of 17
+        correct=None if _infra(sim) else reward >= 1.0,
         reward_basis=basis,
         db_check=(bool(ri.db_check.db_match) if ri and ri.db_check is not None else None),
         env_assertions=_ratio([a.met for a in ri.env_assertions])
@@ -259,6 +261,12 @@ def from_simulation(sim: Any, task: Any, trace_name: str) -> TaskResult:
 
 def _ratio(flags: list[bool]) -> str:
     return f"{sum(1 for f in flags if f)}/{len(flags)}"
+
+
+def _infra(sim: Any) -> bool:
+    return str(getattr(sim.termination_reason, "value", sim.termination_reason)) == (
+        "infrastructure_error"
+    )
 
 
 def _sim_error(sim: Any) -> str | None:

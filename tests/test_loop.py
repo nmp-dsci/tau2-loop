@@ -1348,3 +1348,79 @@ def test_banking_task_blocks_name_the_required_documents_and_the_kb_is_copied(
     assert n == len(files) > 600
     assert files[0].read_text().startswith("# ") and "ID: doc_" in files[0].read_text()
     assert opt._copy_kb("airline", tmp_path / "none") == 0
+
+
+def test_optimise_reads_a_named_train_run_played_with_another_customer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`make optimise RUN=` (s23): v23's train run was played with the Haiku 5.5 customer, so it
+    is no record (`_covers`) and the optimiser refused it; named, it is read when it is the
+    source's bytes on the whole split under today's rules, and refused otherwise."""
+    import asyncio
+
+    from tau2_loop.eval.runner import SIM_RULES
+
+    ids = loop_run.split_ids("banking_knowledge", "train")
+    meta = RunMeta(
+        "r1",
+        "banking_knowledge",
+        "v23",
+        "fpv23",
+        "m",
+        "claude-sdk/haiku",
+        "j",
+        "train",
+        len(ids),
+        1,
+        3,
+        300,
+        "t",
+        "t",
+    )
+    meta.task_ids, meta.sim_rules, meta.summary = list(ids), SIM_RULES, {"passed": 43}
+    read: list[str] = []
+
+    async def fake_optimiser(
+        champion: Any, run_id: str, failures: Any, **_: Any
+    ) -> OptimiserOutput:
+        read.append(run_id)
+        return OptimiserOutput("v99", {}, n_turns=1)
+
+    monkeypatch.setattr(loop_run, "run_optimiser", fake_optimiser)
+    monkeypatch.setattr(
+        loop_run, "load_version", lambda d, n: type("V", (), {"fingerprint": "fp" + n})()
+    )
+    monkeypatch.setattr(loop_run, "load_run", lambda rid: (meta, _rows(set(ids[:43]), ids)))
+    asyncio.run(loop_run.run_optimise("banking_knowledge", "v23", "sonnet", "routing", run_id="r1"))
+    assert read == ["r1"]
+    meta.fingerprint = "fpother"
+    with pytest.raises(ValueError, match="other bytes than v23's"):
+        asyncio.run(
+            loop_run.run_optimise("banking_knowledge", "v23", "sonnet", "routing", run_id="r1")
+        )
+
+
+def test_a_run_with_another_customer_effort_is_never_a_record() -> None:
+    """`make eval USER_EFFORT=high` (s23, the person's Q7) is a side experiment, as another model is."""
+    from tau2_loop.eval.runner import SIM_RULES, USER_MODEL
+    from tau2_loop.llm import sdk_model
+
+    meta = RunMeta(
+        "r",
+        "banking_knowledge",
+        "v23",
+        "fp",
+        "m",
+        sdk_model(USER_MODEL),
+        "j",
+        "train",
+        2,
+        1,
+        3,
+        1,
+        "t",
+    )
+    meta.task_ids, meta.sim_rules = ["a", "b"], SIM_RULES
+    for effort, record in ((None, True), ("medium", True), ("high", False)):
+        meta.user_effort = effort
+        assert loop_run._covers(meta, ["a", "b"], 1) is record

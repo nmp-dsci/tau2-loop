@@ -1,0 +1,182 @@
+{
+ "job": "lost_stolen_card_cross_product_security_protocol",
+ "aliases": [
+  "credit card check after a lost wallet where some debit cards were closed and one stayed frozen",
+  "credit card check after several debit cards were stolen",
+  "credit card in the lost wallet",
+  "customer already reported credit cards stolen with the debit cards",
+  "offer credit card replacement after debit card theft",
+  "offer_credit_card_replacement_after_lost_wallet"
+ ],
+ "when": {
+  "quote": "When a customer reports a lost or stolen debit card:",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+ },
+ "starts": {
+  "by": "agent",
+  "note": "agent: after the debit card freeze/close work, the agent checks for credit cards and proactively offers a replacement. The replacement is ordered (in order_replacement_credit_card) only if the customer accepts.",
+  "quote": "3) If yes, proactively offer to order a replacement credit card as a security precaution",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+ },
+ "tools": [
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "xp_cc_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "order_replacement_credit_card_7291",
+   "who": "agent",
+   "step": null,
+   "not_used": "Ordering happens in order_replacement_credit_card (xp_handoff), which runs the pending check and uses the tool's own parameters."
+  }
+ ],
+ "info": [
+  {
+   "field": "credit_cards_in_wallet",
+   "about": "which credit cards were in the lost or stolen wallet",
+   "from": "customer",
+   "ask": "I see you also have a [card type] with us. Was it in the lost/stolen wallet too?",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "once_after_all_debit_cards",
+   "by": "model",
+   "do": "When several debit cards were lost or stolen, first finish the freeze, close and replacement work for all of them. Then run this check for the customer's credit cards.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": "the customer reported more than one lost or stolen debit card",
+   "quote": "1) Complete the standard debit card freeze/close procedure",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "xp_cc_accounts",
+   "by": "harness",
+   "do": "Get the customer's credit card accounts, with each one's account id, card type and status.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "verified user_id"
+   },
+   "lookup": [],
+   "after": [
+    "once_after_all_debit_cards"
+   ],
+   "if": "the customer reported a lost or stolen debit card and the debit card freeze/close work is done",
+   "quote": "Use get_credit_card_accounts_by_user to retrieve any credit card accounts for the customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030",
+   "basis": [
+    {
+     "clause": "after freeze/close",
+     "quote": "1) Complete the standard debit card freeze/close procedure",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    }
+   ]
+  },
+  {
+   "id": "no_cc",
+   "by": "model",
+   "do": "If the customer has no Rho-Bank credit card on file, skip the rest of this job.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "xp_cc_accounts"
+   ],
+   "after": [
+    "xp_cc_accounts"
+   ],
+   "if": "xp_cc_accounts returns no credit card account",
+   "quote": "2) Check if the customer has any Rho-Bank credit cards on file",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "xp_offer",
+   "by": "model",
+   "do": "For each credit card on file, tell the customer you see they hold it and ask whether it was in the lost or stolen wallet. Explain that wallet theft often involves several cards. Offer to order a replacement with a new card number. If the customer declines, note that the offer was made.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "xp_cc_accounts"
+   ],
+   "after": [
+    "xp_cc_accounts"
+   ],
+   "if": "xp_cc_accounts returns one or more credit card accounts",
+   "quote": "Offer to order a replacement credit card with a new card number to prevent any unauthorized charges",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030",
+   "basis": [
+    {
+     "clause": "tell them you noticed the card",
+     "quote": "Inform them that you noticed they also have a credit card with Rho-Bank",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "clause": "ask if in wallet",
+     "quote": "Ask if their credit card was also in the lost/stolen wallet",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "clause": "explain",
+     "quote": "4) Explain that wallet theft often involves multiple cards and this protects against potential fraud",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    },
+    {
+     "clause": "decline noted",
+     "quote": "If they decline, note in the account that the offer was made",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+    }
+   ]
+  },
+  {
+   "id": "already_reported_cc",
+   "by": "model",
+   "do": "If the customer already said which credit cards were in the wallet, take that as their answer for those cards and match each one to an account in xp_cc_accounts. Ask about any other credit card on file they did not mention.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "xp_cc_accounts"
+   ],
+   "after": [
+    "xp_cc_accounts"
+   ],
+   "if": "the customer already said earlier in the conversation that specific credit cards were in the lost or stolen wallet",
+   "quote": "Ask if their credit card was also in the lost/stolen wallet",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "xp_handoff",
+   "by": "model",
+   "do": "For each card the customer wants replaced, run order_replacement_credit_card. Use the reason stolen for a stolen wallet and lost for a lost wallet, and use each card's own tier.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "xp_offer"
+   ],
+   "after": [
+    "xp_offer"
+   ],
+   "if": "the customer accepts a replacement for a card",
+   "quote": "Offer to order a replacement credit card with a new card number to prevent any unauthorized charges",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030",
+   "basis": [
+    {
+     "clause": "reason values",
+     "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "After a lost or stolen debit card report, once the debit card freeze/close work is done, the agent proactively offers a credit card replacement.",
+   "quote": "2) Check if the customer has any Rho-Bank credit cards on file",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  }
+ ],
+ "done_when": "The check ran after the debit card work. The customer was asked about every credit card on file, or had already named the cards. Each card was handed to order_replacement_credit_card, or the decline was noted."
+}

@@ -71,6 +71,7 @@ from tau2_loop.llm import (
     resolve_model,
     subscription_env,
 )
+from tau2_loop.llm.core import reset_hard_limit
 from tau2_loop.loop.guards import (
     ALLOWED_IMPORTS,
     PROMPT_GROWTH,
@@ -1559,6 +1560,7 @@ async def run_optimiser(
     mode = mode or profile.mode
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
+    reset_hard_limit()
     require_live()
     ctx = ctx or build_context(champion, run_id, failures, profile)
     new_name = next_version_name(domain)

@@ -891,14 +891,27 @@ def test_each_version_from_r5_records_its_base_and_every_file_it_changed() -> No
         base = rec["based_on"]
         assert base in names and int(base[1:]) < int(name[1:])
         assert rec["seed"] == rag_agent.load(D, name).seed
-        differ = {
-            f
-            for f in rag_agent.CHANGE_FILES
-            if (root / name / f).read_text() != (root / base / f).read_text()
-        }
+        text = lambda v, f: (root / v / f).read_text() if (root / v / f).is_file() else ""  # noqa: E731
+        differ = {f for f in rag_agent.CHANGE_FILES if text(name, f) != text(base, f)}
         assert {c["file"] for c in rec["changes"]} == differ, name  # the record matches the diff
         assert all(c["what"] and c["why"] for c in rec["changes"])
     assert rag_agent.describe(D, "r7")["based_on"] == "r6"
+
+
+def test_describe_gives_the_agent_tab_each_prompts_bytes_and_the_library() -> None:
+    """The Agent tab draws an rN from describe() alone: a prompt copied from the parent has the
+    parent's sha, a version without a merge has one prompt, and r13 on lists tool_description."""
+    r1, r3, r4 = (rag_agent.describe(D, n) for n in ("r1", "r3", "r4"))
+    assert set(r1["files"]) == {"rag_agent.md"} and r1["merge"] is None
+    assert set(r4["files"]) == {"rag_agent.md", "decide.md", "merge.md"}  # review.md is r18's
+    assert r4["files"]["decide.md"]["sha"] == r3["files"]["decide.md"]["sha"]  # r4 kept r3's
+    assert r4["decide_prompt"] == rag_agent.load(D, "r3").decide_prompt
+    assert r1["library"]["workflows"] > 0 and r1["library"]["commits"] is None
+    assert r4["library"]["commits"] is not None  # concurrent: its store's commits
+    named = lambda d: [t["name"] for t in d["tools"]]  # noqa: E731
+    assert "tool_description" not in named(rag_agent.describe(D, "r12"))
+    r13 = rag_agent.describe(D, "r13")
+    assert named(r13)[-1] == "tool_description" and r13["tools"][-1]["harness"] is True
 
 
 # ── r13 (s22, D6 again): workflow_rag reads the tools' own descriptions ──

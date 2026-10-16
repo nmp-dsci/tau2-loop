@@ -1,0 +1,4635 @@
+{
+ "jobs": [
+  {
+   "job": "platinum_rewards_card_annual_fee_rebate_eligibility",
+   "aliases": [
+    "check_platinum_annual_fee_rebate",
+    "do_i_qualify_for_the_platinum_fee_rebate",
+    "platinum_rebate_eligibility_and_calculation",
+    "platinum_rewards_card_rebate_eligibility_and_calculation",
+    "platinum_rewards_rebate_eligibility_and_calculation"
+   ],
+   "when": {
+    "quote": "The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every month of your cardmember year.",
+    "doc": "doc_credit_cards_platinum_rewards_card_010"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks whether they qualify for the Platinum Rewards Card annual fee rebate, or asks about a rebate they think is missing. This job reads records and explains the result. It makes no account write.",
+    "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+    "doc": "doc_credit_cards_platinum_rewards_card_010"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "v_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "v_log",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "accounts",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": "txns",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_dispute_history_7291",
+     "who": "agent",
+     "step": "disputes",
+     "not_used": null
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": "disputes_unlock",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": "disputes",
+     "not_used": null
+    },
+    {
+     "tool": "apply_statement_credit_8472",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used. doc_credit_cards_platinum_rewards_card_010 says a qualifying rebate 'is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed', but no document tells the agent to post a missing Platinum rebate by hand. doc_credit_cards_credit_cards_(general)_017 describes the tool in general terms only. If a rebate is due and missing, the agent explains this and offers a transfer (rebate_not_posted). See open_questions."
+    },
+    {
+     "tool": "apply_checking_account_credit_5829",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used for this rebate. The Platinum rebate posts to the credit card account, and checking credits can go only to checking accounts: 'Credits may ONLY be applied to checking accounts.' (doc_bank_accounts_bank_accounts_(general)_017)"
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "fail_transfer",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "identity_lookup_key",
+     "about": "the customer's full name, email or user id, used to find their record",
+     "from": "customer",
+     "ask": "Could you please give me your full name (or the email on your account) so I can find your profile?",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_values",
+     "about": "any two of date of birth, email, phone number, home address",
+     "from": "customer",
+     "ask": "To verify your identity, please give me two of the following: your date of birth, email, phone number or home address.",
+     "may_hold_back": true
+    },
+    {
+     "field": "platinum_account_open_date",
+     "about": "the date the Platinum Rewards Card account opened. It sets the monthly windows and shows whether the promotional first-year waiver applied.",
+     "from": "records",
+     "ask": "If you have more than one Platinum Rewards Card account, which one should I check?",
+     "may_hold_back": false
+    },
+    {
+     "field": "posted_transactions",
+     "about": "the card's posted purchases, credits and fees (including any annual fee charge), and any rebate credit",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "unresolved_disputes",
+     "about": "the customer's credit card disputes and their statuses",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "v_lookup",
+     "by": "model",
+     "do": "Ask the customer for their name, email or user id. Find their record with get_user_information_by_name, get_user_information_by_email or get_user_information_by_id, using the value they give. Do not share any account details yet.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives (case sensitive). Alternatively, call get_user_information_by_email(email) or get_user_information_by_id(user_id) with the value the customer gives."
+     },
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_check",
+     "by": "model",
+     "do": "Ask for any two of date of birth, email, phone number or home address, and compare them with the record. If two do not match, share no account information and stop.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_lookup"
+     ],
+     "after": [
+      "v_lookup"
+     ],
+     "if": null,
+     "quote": "Knowing full name or userID is not enough to verify.",
+     "doc": "policy",
+     "basis": [
+      {
+       "clause": "two of the four values must match",
+       "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+       "doc": "policy"
+      },
+      {
+       "clause": "share nothing before verification",
+       "quote": "Do not leak any information about the user before they are verified.",
+       "doc": "policy"
+      }
+     ]
+    },
+    {
+     "id": "v_time",
+     "by": "harness",
+     "do": "Get the current time. It is used for the verification log and for the date checks later in this job.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "v_check"
+     ],
+     "if": "identity verified",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "id": "v_log",
+     "by": "harness",
+     "do": "Call log_verification with the verified record and the time from v_time.",
+     "call": "log_verification",
+     "args": {
+      "name": "from the verified user's record",
+      "user_id": "from the verified user's record",
+      "address": "from the verified user's record",
+      "email": "from the verified user's record",
+      "phone_number": "from the verified user's record",
+      "date_of_birth": "from the verified user's record (MM/DD/YYYY)",
+      "time_verified": "the v_time result"
+     },
+     "lookup": [],
+     "after": [
+      "v_time"
+     ],
+     "if": "identity verified",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "id": "no_platinum",
+     "by": "model",
+     "do": "If the customer has no open Platinum Rewards Card account, explain that this annual fee rebate is a Platinum Rewards Card benefit, and stop this job. If the Platinum account is closed or was product-changed, explain that the rebate is not awarded.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "accounts"
+     ],
+     "after": [
+      "accounts"
+     ],
+     "if": "the accounts result shows no open Platinum Rewards Card",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "the rebate belongs to the Platinum Rewards Card",
+       "quote": "The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every month of your cardmember year.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "a closed or product-changed account gets no rebate",
+       "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "txns",
+     "by": "harness",
+     "do": "Get the customer's credit card transactions. Keep only the ones on the Platinum Rewards Card account, with their dates, amounts and types.",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "accounts"
+     ],
+     "if": "the customer holds a Platinum Rewards Card",
+     "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold. Authorization dates do not control eligibility.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "id": "disputes_unlock",
+     "by": "harness",
+     "do": "Unlock get_user_dispute_history_7291.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+     },
+     "lookup": [],
+     "after": [
+      "accounts"
+     ],
+     "if": "the customer holds a Platinum Rewards Card",
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "disputes",
+     "by": "harness",
+     "do": "Get the customer's credit card disputes. If a Platinum transaction's dispute is still unresolved (a status such as open or under_review), leave that transaction out of the monthly totals.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "arguments": "{\"user_id\": the verified user}"
+     },
+     "lookup": [],
+     "after": [
+      "disputes_unlock"
+     ],
+     "if": "the customer holds a Platinum Rewards Card",
+     "quote": "Disputed transactions while unresolved.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "read disputes with this tool",
+       "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+       "doc": "doc_credit_cards_credit_cards_(general)_016"
+      },
+      {
+       "clause": "unresolved statuses",
+       "quote": "status (for example: open, under_review, closed)",
+       "doc": "doc_credit_cards_credit_cards_(general)_016"
+      },
+      {
+       "clause": "unresolved disputed transactions are left out",
+       "quote": "Disputed transactions while unresolved.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "promo_year",
+     "by": "model",
+     "do": "Decide which cardmember year to evaluate. The first year's annual fee was waived by the promo if the Platinum account was applied for and opened inside the promo window (2024-06-01 to 2024-12-31) and no annual fee was charged in the first 12 months. In that case the rebate does not apply to the first cardmember year, whatever the customer spent. Evaluate the year that starts on the first anniversary of the opening date instead, because that is the first year the fee is billed. Otherwise, evaluate the year that starts on the account opening date or on its latest anniversary.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "accounts",
+      "txns",
+      "v_time"
+     ],
+     "after": [
+      "txns",
+      "disputes"
+     ],
+     "if": "the customer holds a Platinum Rewards Card",
+     "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "a promo-waived first year earns no rebate; eligibility starts with the next fee-billed year",
+       "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "promo window start",
+       "quote": "Start date: 2024-06-01",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "promo window end",
+       "quote": "End date: 2024-12-31",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "the waiver requires an application in the window and approval",
+       "quote": "Submit your application within the promo window and be approved.",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "the waiver covers the first 12 months from opening; the fee is billed after the first anniversary",
+       "quote": "The waiver applies to the first 12 months from account opening; after the first anniversary, the standard $200.00 annual fee applies.",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "a waived year shows no annual fee charge",
+       "quote": "Your first statement should show no annual fee charge for the first year.",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "the evaluation year starts at opening, or at the first fee-billed year",
+       "quote": "Cardmember year: Your rebate evaluation covers 12 consecutive monthly windows, starting from your account opening date (or from the start of the first fee-billed cardmember year after any promotional waiver).",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "windows",
+     "by": "model",
+     "do": "Build the 12 monthly windows of the evaluation year. Each window starts on a monthly anniversary of the account opening day and ends the day before the next one. Use the time from v_time to mark which windows have closed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "accounts",
+      "v_time",
+      "promo_year"
+     ],
+     "after": [
+      "promo_year"
+     ],
+     "if": "the customer holds a Platinum Rewards Card",
+     "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "the first window starts on the opening date",
+       "quote": "Start date: Your first monthly window begins on your account opening date.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "each window runs from an anniversary to the day before the next",
+       "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "count by anniversary dates, not statement cycles or calendar months",
+       "quote": "Track posted transactions by your monthly anniversary dates, not by statement cycle or calendar month.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "totals",
+     "by": "model",
+     "do": "For each window, add up the net qualifying spend. Count purchases posted in the window, including authorized-user, virtual-card and international purchases. Subtract returns, refunds and credits in the window in which they post. Leave out fees, interest, adjustments, cash advances and cash equivalents, balance transfers, person-to-person or cash-equivalent funding transactions, and transactions with an unresolved dispute (from the disputes step). Compare each window's total with the $7500.00 monthly threshold.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "txns",
+      "disputes",
+      "windows"
+     ],
+     "after": [
+      "windows"
+     ],
+     "if": "the customer holds a Platinum Rewards Card",
+     "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_007",
+     "basis": [
+      {
+       "clause": "threshold $7500.00 a month, rebate $150.00",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "purchases that count",
+       "quote": "Net purchases posted to your Platinum Rewards Card, including purchases made by authorized users.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "international purchases count",
+       "quote": "International purchases, provided they post as purchases.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "leave out fees, interest, adjustments",
+       "quote": "Fees, interest charges, and adjustments.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "leave out cash advances and cash equivalents",
+       "quote": "Cash advances and cash-equivalent transactions (for example, money orders, traveler’s checks, and similar cash-like activity).",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "leave out balance transfers",
+       "quote": "Balance transfers.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "leave out P2P or cash-equivalent funding",
+       "quote": "Person-to-person money transfers and funding transactions that are coded as cash equivalents.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "leave out unresolved disputes",
+       "quote": "Disputed transactions while unresolved.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "returns reduce the window in which they post",
+       "quote": "Returns, refunds, or credits reduce the monthly total in the window in which the credit posts.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "count by posting date",
+       "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold. Authorization dates do not control eligibility.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "decide",
+     "by": "model",
+     "do": "Decide the outcome and explain it, giving the specific reason if the customer asks why. (a) The first year was promo-waived: tell the customer the rebate does not apply to that year, and say how the next fee-billed year stands. (b) Any window of the evaluation year is below the threshold: the customer does not qualify for that cardmember year, and there is no partial or prorated rebate. Name the window or windows that fell short. (c) All 12 windows have closed and each met the threshold: the customer qualifies for the $150.00 rebate. It is applied as a statement credit to the Platinum card after that year's $200.00 annual fee is billed. Use txns to say whether it has posted. (d) Not all 12 windows have closed, and every closed window met the threshold: eligibility has not been assessed yet. Explain that it is decided after the 12th window closes and that every remaining window must also meet the threshold.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "promo_year",
+      "totals",
+      "windows",
+      "txns"
+     ],
+     "after": [
+      "totals"
+     ],
+     "if": "the customer holds a Platinum Rewards Card",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "a promo-waived first year earns no rebate",
+       "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "one short month disqualifies the whole year; there is no partial rebate",
+       "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "all 12 windows must meet the threshold",
+       "quote": "You must meet the monthly threshold in all 12 windows to earn the rebate for that cardmember year.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "assessed after the 12th window closes",
+       "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "posted as a statement credit after the fee is billed",
+       "quote": "If you qualified, the rebate is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "the annual fee figure",
+       "quote": "Annual fee: $200.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "forfeit_note",
+     "by": "model",
+     "do": "If the customer qualifies, or may still qualify, and talks about closing or product-changing the Platinum card, tell them the rebate is not awarded if they do so before the year-end evaluation or rebate posting.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide"
+     ],
+     "after": [
+      "decide"
+     ],
+     "if": "the outcome is (c) or (d) and the customer mentions closing or changing the Platinum card",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "id": "rebate_not_posted",
+     "by": "model",
+     "do": "If the customer qualifies and txns show no $150.00 rebate credit, explain that the rebate is applied as a statement credit after that cardmember year's annual fee is billed. Use txns to say whether that fee has been billed yet. If the fee has been billed, the credit is still missing, and the customer wants it followed up, ask whether they would like to be transferred to a human agent (fail_transfer).",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide",
+      "txns"
+     ],
+     "after": [
+      "decide"
+     ],
+     "if": "the outcome is (c) and txns show no $150.00 rebate credit for that year",
+     "quote": "If you qualified, the rebate is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "the rebate posts as a statement credit after the fee is billed",
+       "quote": "If you qualified, the rebate is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "the rebate amount is $150.00",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "offer a transfer when the issue cannot be resolved",
+       "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+       "doc": "policy"
+      }
+     ]
+    },
+    {
+     "id": "r_next",
+     "by": "model",
+     "do": "If the customer then asks to apply for another card (a simpler card or an upgrade), go on to recommend_personal_credit_card. If they say they will close or product-change the Platinum card while a rebate is pending, remind them the rebate would be forfeited.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide"
+     ],
+     "after": [
+      "decide"
+     ],
+     "if": "the customer asks to apply for another credit card after hearing the result",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "a pending rebate is forfeited on closure or product change",
+       "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "no repeat verification",
+       "quote": "No need to verify more than once in a single conversation.",
+       "doc": "policy"
+      }
+     ]
+    },
+    {
+     "id": "fail_transfer",
+     "by": "model",
+     "do": "Ask whether the customer wants a human agent if a record cannot be read, if it lacks the dates needed, if a due rebate is missing after the fee was billed, or if the customer still disputes the result after the explanation. Transfer only if they agree. Pick the reason code from the highest tier that applies: 'technical_system_error' for a tool error or outage; 'complex_billing_dispute' for a missing rebate credit or a statement error; 'customer_frustrated_demands_human' if the customer is frustrated; otherwise 'customer_requests_human_no_specific_reason'.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "the customer's rebate question, the outcome found and what was attempted",
+      "reason": "a reason code from doc_bank_accounts_bank_accounts_(general)_042, chosen as described in do"
+     },
+     "lookup": [
+      "accounts",
+      "txns",
+      "decide"
+     ],
+     "after": [
+      "accounts"
+     ],
+     "if": "a lookup fails or lacks the needed data, a due rebate is missing, or the customer asks for a human after the explanation; and the customer agrees to a transfer",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+     "basis": [
+      {
+       "clause": "choose a reason code from the tiered list",
+       "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+       "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+      },
+      {
+       "clause": "technical_system_error",
+       "quote": "System error or outage preventing completion of the customer's request",
+       "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+      },
+      {
+       "clause": "complex_billing_dispute",
+       "quote": "Billing disputes requiring specialist review (recurring charges, statement errors, fee reversals)",
+       "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+      },
+      {
+       "clause": "customer_frustrated_demands_human",
+       "quote": "Customer is frustrated and demands human, frustration is general",
+       "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+      },
+      {
+       "clause": "customer_requests_human_no_specific_reason",
+       "quote": "Customer requests human without clear reason, customer is not frustrated, just prefers human interaction",
+       "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+      },
+      {
+       "clause": "ask before transferring",
+       "quote": "Do not transfer without asking the user first.",
+       "doc": "policy"
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The rebate is earned only if every one of the 12 monthly windows in the cardmember year meets the $7500.00 threshold. One short window disqualifies the whole year, and there is no partial rebate.",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "the threshold and the rebate amount",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      }
+     ]
+    },
+    {
+     "rule": "A cardmember year whose annual fee was waived by a promotion earns no rebate.",
+     "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": []
+    },
+    {
+     "rule": "The first-year waiver applies only to applications made and approved inside the promo window.",
+     "quote": "Apply during the promo window and, if approved, your first year annual fee is $0.00 instead of $200.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009",
+     "basis": []
+    },
+    {
+     "rule": "Windows run from the monthly anniversaries of the account opening date, and transactions count by posting date.",
+     "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold. Authorization dates do not control eligibility.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": []
+    },
+    {
+     "rule": "Closing or product-changing the card before the evaluation or rebate posting forfeits the rebate.",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": []
+    }
+   ],
+   "done_when": "The customer is verified and the verification is logged. They have been told whether they qualify, do not qualify, or have not yet been assessed for the Platinum annual fee rebate, with the reason: a promo-waived year, the window(s) below $7500.00, or an evaluation not yet due. A missing due rebate, or a data or tool failure, has been explained and a transfer offered."
+  },
+  {
+   "job": "recommend_personal_credit_card",
+   "aliases": [
+    "apply_for_credit_card",
+    "apply_for_diamond_elite_card",
+    "apply_for_named_credit_card",
+    "apply_for_new_credit_card",
+    "apply_for_personal_credit_card",
+    "apply_for_silver_rewards_card",
+    "best sign-up bonus card with the lowest annual fee",
+    "card with no foreign transaction fee, purchase protection and a high credit limit",
+    "choose_a_credit_card",
+    "choose_best_cash_back_card",
+    "choose_best_credit_card",
+    "compare_credit_cards",
+    "compare_credit_cards_by_requirements",
+    "credit card sign-up bonus recommendation",
+    "credit_card_application",
+    "credit_card_recommendation",
+    "lowest annual fee card that meets requirements, ties broken by cash back",
+    "new credit card promotional offer inquiry",
+    "new_credit_card_application_guidance",
+    "open_new_credit_card",
+    "recommend_and_apply_for_personal_credit_card",
+    "recommend_card_by_fx_protection_and_credit_limit",
+    "recommend_credit_card_by_signup_bonus",
+    "recommend_highest_cash_back_personal_credit_card",
+    "recommend_personal_credit_card_by_requirements",
+    "switch_to_another_card",
+    "switch_to_another_credit_card",
+    "which credit card has the best welcome bonus",
+    "which_credit_card_should_i_get"
+   ],
+   "when": {
+    "quote": "1. Complete the online application with your personal information and income details",
+    "doc": "doc_credit_cards_silver_rewards_card_001"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: start only when the customer asks to apply for a personal credit card (including one they name), asks which card suits them, asks for a card that meets stated requirements, or asks which card has the best sign-up bonus. The customer runs apply_for_credit_card themselves. No document tells the agent to offer a card unprompted.",
+    "quote": "1. Complete the online application with your personal information and income details",
+    "doc": "doc_credit_cards_silver_rewards_card_001"
+   },
+   "tools": [
+    {
+     "tool": "apply_for_credit_card",
+     "who": "customer",
+     "step": "customer_applies",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "check_promo_dates",
+     "not_used": null
+    },
+    {
+     "tool": "shell",
+     "who": "agent",
+     "step": "read_card_terms",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_bm25",
+     "who": "agent",
+     "step": "read_card_terms",
+     "not_used": null
+    },
+    {
+     "tool": "KB_search_dense",
+     "who": "agent",
+     "step": "read_card_terms",
+     "not_used": null
+    },
+    {
+     "tool": "downgrade_credit_card_3847",
+     "who": "agent",
+     "step": null,
+     "not_used": "Used only when the customer explicitly asks to downgrade an existing card to avoid annual fees, and then only to the Bronze Rewards Card. Applying for a new card is not a downgrade. 'Customer request: The customer explicitly asks to downgrade to avoid annual fees.' (doc_credit_cards_credit_card_account_logistics_008)"
+    },
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used. Applying for or recommending a card reads no customer records. Verify only if the customer also asks about their own accounts, and not again if they were verified earlier."
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used, for the same reason as get_user_information_by_name."
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": null,
+     "not_used": "Not used, for the same reason as get_user_information_by_name."
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": null,
+     "not_used": "Used only after a verification that is actually needed. Applying alone does not need one."
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": null,
+     "not_used": "No document makes the cards a customer already holds a condition for applying for a new personal card."
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "app_fail",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "card_type",
+     "about": "the card the customer wants to apply for",
+     "from": "customer",
+     "ask": "Which credit card would you like to apply for?",
+     "may_hold_back": false
+    },
+    {
+     "field": "customer_name",
+     "about": "full legal name",
+     "from": "customer",
+     "ask": "What is your full legal name for the application?",
+     "may_hold_back": false
+    },
+    {
+     "field": "annual_income",
+     "about": "annual income in USD, as a number",
+     "from": "customer",
+     "ask": "What is your annual income in US dollars?",
+     "may_hold_back": true
+    },
+    {
+     "field": "rho_bank_subscription",
+     "about": "whether the customer has a Rho-Bank+ subscription (required for Gold, changes Silver's FX fee, and is an application argument)",
+     "from": "customer",
+     "ask": "Do you have a Rho-Bank+ subscription?",
+     "may_hold_back": true
+    },
+    {
+     "field": "diamond_invitation",
+     "about": "for the Diamond Elite Card: whether the customer has received an invitation",
+     "from": "customer",
+     "ask": "The Diamond Elite Card is by invitation only. Have you received an invitation to apply?",
+     "may_hold_back": true
+    },
+    {
+     "field": "card_use",
+     "about": "whether the card is for personal or business spending",
+     "from": "customer",
+     "ask": "Is this card for your personal everyday spending or for a business?",
+     "may_hold_back": false
+    },
+    {
+     "field": "spending_categories",
+     "about": "where the customer's spending on this card will go, and whether another card already pays any of it",
+     "from": "customer",
+     "ask": "What do you mainly plan to use the card for? Are any categories, like travel, already paid by another card?",
+     "may_hold_back": true
+    },
+    {
+     "field": "hard_requirements",
+     "about": "foreign transaction fee ceiling, minimum payment ceiling, virtual card management, purchase protection, a credit limit the card must be able to reach, and any others",
+     "from": "customer",
+     "ask": "Is there anything the card must have, such as no foreign transaction fee, purchase protection, virtual cards or a certain credit limit?",
+     "may_hold_back": true
+    },
+    {
+     "field": "annual_fee_tolerance",
+     "about": "whether the customer accepts an annual fee, or their yearly fee budget",
+     "from": "customer",
+     "ask": "Would you consider a card with an annual fee? If so, what is the most you'd pay each year?",
+     "may_hold_back": true
+    },
+    {
+     "field": "expected_monthly_spend",
+     "about": "the customer's monthly spend on the card; it decides whether the Platinum $150.00 rebate applies",
+     "from": "customer",
+     "ask": "About how much do you expect to spend on the card each month?",
+     "may_hold_back": true
+    },
+    {
+     "field": "credit_score",
+     "about": "the customer's approximate credit score; no agent tool reads it",
+     "from": "customer",
+     "ask": "Roughly what is your current credit score?",
+     "may_hold_back": true
+    },
+    {
+     "field": "tie_break_preference",
+     "about": "how to choose when several cards meet every requirement",
+     "from": "customer",
+     "ask": "If more than one card meets your needs, how should I choose: lowest annual fee, highest cash back, or something else?",
+     "may_hold_back": true
+    },
+    {
+     "field": "signup_bonus_priority",
+     "about": "whether the customer's main goal is a sign-up bonus, and of what kind",
+     "from": "customer",
+     "ask": "Is your main goal a sign-up bonus in points or cash back, or another kind of promotion?",
+     "may_hold_back": false
+    },
+    {
+     "field": "signup_tie_break",
+     "about": "how to choose when more than one card has an open sign-up bonus",
+     "from": "customer",
+     "ask": "If more than one card has a sign-up bonus, what matters most: the lowest annual fee, the biggest bonus, or something else?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "card_choice",
+     "by": "model",
+     "do": "Confirm which card the customer wants to apply for. If they name a card, skip the comparison steps (greet through recommend) unless they ask for advice. If they ask for advice, run the comparison steps first. When asked, give the named card's own documented terms: Silver Rewards Card, $0.00 annual fee and minimum credit score 680; Diamond Elite Card, $495.00 annual fee, invitation only, and a credit score of at least 780 to be considered. Do not swap the named card for another. If the customer was verified earlier in the conversation, do not verify again.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "the customer asks to apply for a credit card",
+     "quote": "Annual fee: $0.00",
+     "doc": "doc_credit_cards_silver_rewards_card_001",
+     "basis": [
+      {
+       "clause": "Silver annual fee",
+       "quote": "Annual fee: $0.00",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Silver credit score",
+       "quote": "Minimum credit score: $680",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Diamond annual fee",
+       "quote": "Your standard annual fee is $495.00. It appears on your first statement and on the anniversary each year thereafter unless waived by a qualifying promotion.",
+       "doc": "doc_credit_cards_diamond_elite_card_006"
+      },
+      {
+       "clause": "Diamond credit score",
+       "quote": "You should maintain a credit score of at least $780 to be considered.",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      },
+      {
+       "clause": "no repeat verification",
+       "quote": "No need to verify more than once in a single conversation.",
+       "doc": "policy"
+      }
+     ]
+    },
+    {
+     "id": "diamond_invite",
+     "by": "model",
+     "do": "If the chosen card is the Diamond Elite Card, ask whether the customer has received an invitation. If they have not, explain that membership is by invitation only and do not have them apply; they may choose another card instead. If they say they have one, continue.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "card_choice"
+     ],
+     "if": "card_type is Diamond Elite Card",
+     "quote": "Membership is by invitation only (Yes).",
+     "doc": "doc_credit_cards_diamond_elite_card_001",
+     "basis": [
+      {
+       "clause": "invitation only",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      },
+      {
+       "clause": "invitations are time-limited",
+       "quote": "Invitations are time-limited; respond promptly if you receive one.",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      }
+     ]
+    },
+    {
+     "id": "check_promo_dates",
+     "by": "harness",
+     "do": "Call get_current_time to see which promotion windows are open: the Platinum first-year fee waiver (2024-06-01 to 2024-12-31), the Bronze 0% APR (2025-09-01 through 2026-02-28) and the Diamond Elite invitation promo (2025-11-01 to 2026-01-31). Mention only promotions whose window includes today.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "a promotion would affect the comparison, or the agent intends to mention any promotion",
+     "quote": "Apply during the promo window and, if approved, your first year annual fee is $0.00 instead of $200.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009",
+     "basis": [
+      {
+       "clause": "Platinum waiver window start",
+       "quote": "Start date: 2024-06-01",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "Platinum waiver window end",
+       "quote": "End date: 2024-12-31",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "Diamond campaign window",
+       "quote": "Campaign window: 2025-11-01 to 2026-01-31.",
+       "doc": "doc_credit_cards_diamond_elite_card_009"
+      },
+      {
+       "clause": "use the time tool",
+       "quote": "If you need the current time, always use the get_current_time() tool.",
+       "doc": "policy"
+      }
+     ]
+    },
+    {
+     "id": "named_diamond_promo",
+     "by": "model",
+     "do": "For an invited Diamond Elite applicant, state the $495.00 annual fee. Mention the invitation promo only if check_promo_dates shows that today falls within 2025-11-01 to 2026-01-31. The promo waives the fee and adds a $5,000 credit after $50,000 is spent within 1 month, counted from the account opening date or the date in the invitation.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_promo_dates",
+      "diamond_invite"
+     ],
+     "after": [
+      "diamond_invite",
+      "check_promo_dates"
+     ],
+     "if": "the card is the Diamond Elite Card and the customer has an invitation",
+     "quote": "Campaign window: 2025-11-01 to 2026-01-31.",
+     "doc": "doc_credit_cards_diamond_elite_card_009",
+     "basis": [
+      {
+       "clause": "campaign window",
+       "quote": "Campaign window: 2025-11-01 to 2026-01-31.",
+       "doc": "doc_credit_cards_diamond_elite_card_009"
+      },
+      {
+       "clause": "$50,000 within 1 month, counted from opening or the invitation date",
+       "quote": "From the date your account opens (or the date specified in your invitation), complete eligible purchases totaling $50,000 within 1 month(s).",
+       "doc": "doc_credit_cards_diamond_elite_card_009"
+      },
+      {
+       "clause": "fee waived and $5,000 credit",
+       "quote": "Outcome upon qualification: Annual fee waived (Yes) and a $5,000 statement credit applied.",
+       "doc": "doc_credit_cards_diamond_elite_card_009"
+      },
+      {
+       "clause": "$495.00 fee",
+       "quote": "Your standard annual fee is $495.00.",
+       "doc": "doc_credit_cards_diamond_elite_card_006"
+      }
+     ]
+    },
+    {
+     "id": "gather_app_fields",
+     "by": "model",
+     "do": "Ask for any application value the customer has not given: full legal name, annual income in USD (a number), and whether they have a Rho-Bank+ subscription (true or false).",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "diamond_invite"
+     ],
+     "after": [
+      "card_choice"
+     ],
+     "if": "the customer still wants to apply, and for the Diamond Elite Card has said they have an invitation",
+     "quote": "1. Complete the online application with your personal information and income details",
+     "doc": "doc_credit_cards_silver_rewards_card_001",
+     "basis": [
+      {
+       "clause": "personal and income details for the application",
+       "quote": "1. Complete the online application with your personal information and income details",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Diamond Elite only with an invitation",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      }
+     ]
+    },
+    {
+     "id": "named_gold_check",
+     "by": "model",
+     "do": "If the card is the Gold Rewards Card and the customer has no Rho-Bank+ subscription, explain that the card requires one. Do not have them apply; offer to recommend another card.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather_app_fields"
+     ],
+     "after": [
+      "gather_app_fields"
+     ],
+     "if": "the card is the Gold Rewards Card",
+     "quote": "Rho‑Bank+ premium subscription required: Yes",
+     "doc": "doc_credit_cards_gold_rewards_card_001"
+    },
+    {
+     "id": "named_rebate_warn",
+     "by": "model",
+     "do": "If the customer holds a Platinum Rewards Card whose rebate is still pending and says they will close it or change its product, tell them the rebate would not be awarded.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "gather_app_fields"
+     ],
+     "if": "the customer mentions closing or product-changing a Platinum Rewards Card whose rebate is still pending",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "id": "customer_applies",
+     "by": "customer",
+     "do": "Have the customer submit the application themselves with apply_for_credit_card, for the card they named or the one recommended. The agent does not apply for them.",
+     "call": "apply_for_credit_card",
+     "args": {
+      "card_type": "the card the customer chose, named as its documents title it (e.g. 'Silver Rewards Card', 'Diamond Elite Card', 'Gold Rewards Card', 'Platinum Rewards Card', 'EcoCard')",
+      "customer_name": "the customer's full legal name, from the customer",
+      "annual_income": "a number in USD, from the customer",
+      "rho_bank_subscription": "true or false, from the customer"
+     },
+     "lookup": [],
+     "after": [
+      "gather_app_fields",
+      "diamond_invite",
+      "named_gold_check"
+     ],
+     "if": null,
+     "quote": "1. Complete the online application with your personal information and income details",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "id": "app_fail",
+     "by": "model",
+     "do": "Read the application reply. If it says 'Invalid card_type', have the customer resubmit with a value from the valid list the error shows. If it says 'Invalid annual_income', have them resubmit the income as a plain number. Otherwise tell the customer the result; if approved, tell them to activate the card when it arrives. If the problem cannot be resolved, ask whether they want a human agent and transfer only if they agree. Use reason 'technical_system_error' for a system error, otherwise 'customer_requests_human_no_specific_reason'.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "the card applied for, the error returned and what was attempted",
+      "reason": "a reason code from doc_bank_accounts_bank_accounts_(general)_042, chosen as described in do"
+     },
+     "lookup": [
+      "customer_applies"
+     ],
+     "after": [
+      "customer_applies"
+     ],
+     "if": "the application returns an error that resubmitting does not fix, and the customer agrees to a transfer",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+     "basis": [
+      {
+       "clause": "error replies and their fixes",
+       "source": "none",
+       "why": "Comes from the error replies listed in the apply_for_credit_card tool description, not from a KB document; explained to the customer."
+      },
+      {
+       "clause": "activate after approval",
+       "quote": "Activate your physical card upon arrival and add it to your preferred digital wallets",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "technical_system_error",
+       "quote": "System error or outage preventing completion of the customer's request",
+       "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+      },
+      {
+       "clause": "customer_requests_human_no_specific_reason",
+       "quote": "Customer requests human without clear reason, customer is not frustrated, just prefers human interaction",
+       "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+      },
+      {
+       "clause": "ask before transferring",
+       "quote": "Do not transfer without asking the user first.",
+       "doc": "policy"
+      }
+     ]
+    },
+    {
+     "id": "greet",
+     "by": "model",
+     "do": "Confirm that the customer wants a personal card recommendation, for example the highest cash back or a card that meets specific requirements.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "You earn 10.0% cash back on all eligible purchases.",
+     "doc": "doc_credit_cards_platinum_rewards_card_002"
+    },
+    {
+     "id": "gather",
+     "by": "model",
+     "do": "Before recommending anything, collect the customer's hard requirements: foreign transaction fee ceiling, minimum payment ceiling, virtual card management, purchase protection, a credit limit the card must be able to reach, and any others. Also collect their credit score, their Rho-Bank+ subscription status, and whether the card is for personal or business use.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "You must provide standard identity and income information during the application.",
+     "doc": "doc_credit_cards_ecocard_001"
+    },
+    {
+     "id": "gather_needs",
+     "by": "model",
+     "do": "Before comparing cards, ask for anything the customer has not given: personal or business use; main spending categories, and whether another card already pays any of them; whether they will accept an annual fee.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Each credit card has its own bonus categories with higher reward rates.",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "id": "ask_budget_spend",
+     "by": "model",
+     "do": "Before recommending anything, ask for the customer's yearly fee budget and expected monthly spend. These decide whether the Platinum rebate makes its fee acceptable.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "gather_needs"
+     ],
+     "if": "the customer may accept an annual fee and has not already given a fee budget and monthly spend",
+     "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_007"
+    },
+    {
+     "id": "ask_eligibility",
+     "by": "model",
+     "do": "Before recommending, ask whether the customer has an active Rho-Bank+ subscription, what their approximate credit score is, and whether they hold a Diamond Elite invitation.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "gather_needs"
+     ],
+     "if": "the customer asks for advice and has not already said these",
+     "quote": "Rho‑Bank+ premium subscription required: Yes",
+     "doc": "doc_credit_cards_gold_rewards_card_001",
+     "basis": [
+      {
+       "clause": "Rho-Bank+ decides Gold",
+       "quote": "Rho‑Bank+ premium subscription required: Yes",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "credit score minimums",
+       "quote": "Minimum credit score: $680",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Diamond invitation",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      }
+     ]
+    },
+    {
+     "id": "ask_tie_break",
+     "by": "model",
+     "do": "If the customer has not said how to choose between several cards that meet every requirement, ask them, for example lowest annual fee first and then highest cash back on their main spending.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "gather_needs"
+     ],
+     "if": "the customer stated hard requirements and has not given a tie-break preference",
+     "quote": "Each credit card has its own bonus categories with higher reward rates.",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "id": "read_card_terms",
+     "by": "harness",
+     "do": "Read every personal card's own documents for minimum credit score, subscription or invitation requirement, foreign transaction fee, minimum payment, virtual card management and annual fee. Bronze Rewards: _001, _005. Silver Rewards: _001, _007. Gold Rewards: _001, _005. Platinum Rewards: _001. Diamond Elite: _001, _002, _005, _008. EcoCard: _001, _008. Crypto-Cash Back: _001, _008, _009. Never judge from one card's page.",
+     "call": "shell",
+     "args": {
+      "command": "cat the card documents listed above (fixed list)"
+     },
+     "lookup": [],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Minimum credit score required to apply: 0 (0 indicates no credit score requirement).",
+     "doc": "doc_credit_cards_ecocard_001"
+    },
+    {
+     "id": "read_protection_terms",
+     "by": "harness",
+     "do": "Also read each personal card's purchase protection and credit-limit documents: Bronze Rewards _006; Silver Rewards _001; Gold Rewards _001; Platinum Rewards _001, _003, _007; Diamond Elite _005, _007; EcoCard _001; Crypto-Cash Back _008.",
+     "call": "shell",
+     "args": {
+      "command": "cat the card documents listed above (fixed list)"
+     },
+     "lookup": [],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer requires purchase protection or a credit limit the card must be able to reach",
+     "quote": "Purchase protection: eligible items are protected for 90 days after purchase, up to $3,000 per claim",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "id": "screen_bronze",
+     "by": "model",
+     "do": "Check the Bronze Rewards Card: FX fee 2.75%, minimum credit score 640.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms"
+     ],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Foreign transaction fee on international purchases: 2.75%",
+     "doc": "doc_credit_cards_bronze_rewards_card_001",
+     "basis": [
+      {
+       "clause": "FX 2.75%",
+       "quote": "Foreign transaction fee on international purchases: 2.75%",
+       "doc": "doc_credit_cards_bronze_rewards_card_001"
+      },
+      {
+       "clause": "score 640",
+       "quote": "Minimum credit score: $640",
+       "doc": "doc_credit_cards_bronze_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "screen_silver",
+     "by": "model",
+     "do": "Check the Silver Rewards Card: FX fee 2.75% without a premium subscription and 0% with one, virtual card management No, minimum credit score 680.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms"
+     ],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Virtual card management features are No for this card",
+     "doc": "doc_credit_cards_silver_rewards_card_001",
+     "basis": [
+      {
+       "clause": "FX without subscription",
+       "quote": "Foreign transaction fee without a premium subscription: 2.75%",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "FX with subscription",
+       "quote": "Foreign transaction fee with a premium subscription: 0%",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "no virtual card management",
+       "quote": "Virtual card management features are No for this card",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "score 680",
+       "quote": "Minimum credit score: $680",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "screen_gold",
+     "by": "model",
+     "do": "Check the Gold Rewards Card: minimum payment 2.0%, Rho-Bank+ subscription required.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms"
+     ],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Minimum payment due each cycle: 2.0% of your outstanding balance",
+     "doc": "doc_credit_cards_gold_rewards_card_005",
+     "basis": [
+      {
+       "clause": "minimum payment 2.0%",
+       "quote": "Minimum payment due each cycle: 2.0% of your outstanding balance",
+       "doc": "doc_credit_cards_gold_rewards_card_005"
+      },
+      {
+       "clause": "Rho-Bank+ required",
+       "quote": "Rho‑Bank+ premium subscription required: Yes",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "screen_platinum",
+     "by": "model",
+     "do": "Check the Platinum Rewards Card: FX fee 0%, minimum payment 2.5%, annual fee $200.00, minimum credit score 750.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms"
+     ],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "The minimum monthly payment is 2.5% of your outstanding balance.",
+     "doc": "doc_credit_cards_platinum_rewards_card_001",
+     "basis": [
+      {
+       "clause": "FX 0%",
+       "quote": "Foreign transaction fee: 0% on international purchases.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      },
+      {
+       "clause": "minimum payment 2.5%",
+       "quote": "The minimum monthly payment is 2.5% of your outstanding balance.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      },
+      {
+       "clause": "fee $200.00",
+       "quote": "Annual fee: $200.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      },
+      {
+       "clause": "score 750",
+       "quote": "Minimum credit score required: $750.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "screen_diamond",
+     "by": "model",
+     "do": "Check the Diamond Elite Card: invitation only, credit score of at least 780, minimum payment 3.0%. A customer without an invitation cannot apply for it.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms"
+     ],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Membership is by invitation only (Yes).",
+     "doc": "doc_credit_cards_diamond_elite_card_001",
+     "basis": [
+      {
+       "clause": "invitation only",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      },
+      {
+       "clause": "score 780",
+       "quote": "You should maintain a credit score of at least $780 to be considered.",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      },
+      {
+       "clause": "minimum payment 3.0%",
+       "quote": "Minimum payment: 3.0% of your statement balance each cycle (or the statement minimum, if higher).",
+       "doc": "doc_credit_cards_diamond_elite_card_005"
+      }
+     ]
+    },
+    {
+     "id": "screen_ecocard",
+     "by": "model",
+     "do": "Check the EcoCard: no credit score requirement, annual fee $50.00.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms"
+     ],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Minimum credit score required to apply: 0 (0 indicates no credit score requirement).",
+     "doc": "doc_credit_cards_ecocard_001",
+     "basis": [
+      {
+       "clause": "no score requirement",
+       "quote": "Minimum credit score required to apply: 0 (0 indicates no credit score requirement).",
+       "doc": "doc_credit_cards_ecocard_001"
+      },
+      {
+       "clause": "fee $50.00",
+       "quote": "Annual fee: $50.00.",
+       "doc": "doc_credit_cards_ecocard_001"
+      }
+     ]
+    },
+    {
+     "id": "screen_crypto",
+     "by": "model",
+     "do": "Check the Crypto-Cash Back card: FX fee 0%, minimum payment 1.5%, annual fee $75.00, minimum credit score 660.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms"
+     ],
+     "after": [
+      "gather"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "What is the minimum credit score to apply for the card to earn crypto rewards? $660.",
+     "doc": "doc_credit_cards_crypto-cash_back_009",
+     "basis": [
+      {
+       "clause": "FX 0%",
+       "quote": "What is the foreign transaction fee if I use the card abroad? 0%.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "minimum payment 1.5%",
+       "quote": "What is the minimum monthly payment? 1.5% of the outstanding balance.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "fee $75.00",
+       "quote": "Annual fee: $75.00 dollars.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "score 660",
+       "quote": "What is the minimum credit score to apply for the card to earn crypto rewards? $660.",
+       "doc": "doc_credit_cards_crypto-cash_back_009"
+      }
+     ]
+    },
+    {
+     "id": "filter_eligible",
+     "by": "model",
+     "do": "Remove the cards the customer cannot get, using the minimums from the screen steps: Gold Rewards needs Rho-Bank+ and a score of 720; Platinum needs 750; Silver 680; Crypto-Cash Back 660; Bronze 640; EcoCard has no minimum; Diamond Elite is by invitation only.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "ask_eligibility",
+      "gather",
+      "read_card_terms",
+      "screen_bronze",
+      "screen_silver",
+      "screen_gold",
+      "screen_platinum",
+      "screen_diamond",
+      "screen_ecocard",
+      "screen_crypto"
+     ],
+     "after": [
+      "ask_eligibility"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Minimum credit score: $680",
+     "doc": "doc_credit_cards_silver_rewards_card_001",
+     "basis": [
+      {
+       "clause": "Gold 720",
+       "quote": "Minimum credit score required: $720",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "Gold Rho-Bank+",
+       "quote": "Rho‑Bank+ premium subscription required: Yes",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "Platinum 750",
+       "quote": "Minimum credit score required: $750.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      },
+      {
+       "clause": "Silver 680",
+       "quote": "Minimum credit score: $680",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Crypto 660",
+       "quote": "What is the minimum credit score to apply for the card to earn crypto rewards? $660.",
+       "doc": "doc_credit_cards_crypto-cash_back_009"
+      },
+      {
+       "clause": "Bronze 640",
+       "quote": "Minimum credit score: $640",
+       "doc": "doc_credit_cards_bronze_rewards_card_001"
+      },
+      {
+       "clause": "EcoCard none",
+       "quote": "Minimum credit score required to apply: 0 (0 indicates no credit score requirement).",
+       "doc": "doc_credit_cards_ecocard_001"
+      },
+      {
+       "clause": "Diamond invitation",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      }
+     ]
+    },
+    {
+     "id": "filter_requirements",
+     "by": "model",
+     "do": "From the cards left by filter_eligible, keep only those that meet every hard feature requirement the customer stated, using the values recorded in the screen steps and read_card_terms. A value equal to the customer's ceiling meets it.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_card_terms",
+      "filter_eligible",
+      "screen_bronze",
+      "screen_silver",
+      "screen_gold",
+      "screen_platinum",
+      "screen_diamond",
+      "screen_ecocard",
+      "screen_crypto"
+     ],
+     "after": [
+      "filter_eligible"
+     ],
+     "if": "the customer stated hard feature requirements",
+     "quote": "Foreign transaction fee without a premium subscription: 2.75%",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "id": "filter_protection_limit",
+     "by": "model",
+     "do": "From the cards left by filter_eligible and filter_requirements, keep those that meet the customer's purchase protection and credit-limit needs. Purchase protection: Silver 90 days, up to $3,000 per claim. Gold 105 days, up to $7,500. Platinum 135 days, up to $17,500. Diamond Elite 150 days, unlimited. Crypto-Cash Back has none. The Bronze and EcoCard documents read do not state any purchase protection, so tell the customer it is not documented for those cards and do not present them as meeting that requirement. Top of each card's documented credit-limit range: Bronze $32,500, EcoCard $50,000, Silver $100,000, Crypto-Cash Back $110,000, Gold $112,500, Platinum $150,000, Diamond Elite $375,000. A card passes a limit need when the top of its range is at or above the amount needed. Tell the customer the actual limit is set at approval.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather",
+      "read_protection_terms",
+      "filter_eligible",
+      "filter_requirements"
+     ],
+     "after": [
+      "filter_requirements",
+      "read_protection_terms"
+     ],
+     "if": "the customer requires purchase protection or a credit limit the card must be able to reach",
+     "quote": "Is purchase protection included with this card? No.",
+     "doc": "doc_credit_cards_crypto-cash_back_008",
+     "basis": [
+      {
+       "clause": "Silver protection",
+       "quote": "Purchase protection: eligible items are protected for 90 days after purchase, up to $3,000 per claim",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Gold protection",
+       "quote": "Purchase protection: 105 days from purchase, up to $7,500 per covered claim",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "Platinum 135 days",
+       "quote": "Items you buy are protected for 135 days from the purchase date",
+       "doc": "doc_credit_cards_platinum_rewards_card_003"
+      },
+      {
+       "clause": "Platinum $17,500",
+       "quote": "The maximum coverage per claim is $17,500, subject to policy terms and exclusions.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "Diamond 150 days",
+       "quote": "Covered purchase window: 150 days from the date of purchase.",
+       "doc": "doc_credit_cards_diamond_elite_card_007"
+      },
+      {
+       "clause": "Diamond unlimited",
+       "quote": "Coverage maximum: Unlimited (Yes), subject to policy terms and exclusions.",
+       "doc": "doc_credit_cards_diamond_elite_card_007"
+      },
+      {
+       "clause": "Crypto none",
+       "quote": "Is purchase protection included with this card? No.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "Bronze and EcoCard protection not documented",
+       "source": "none",
+       "why": "The Bronze and EcoCard documents read state no purchase protection either way; the agent explains this to the customer rather than ruling it out as a rule."
+      },
+      {
+       "clause": "Bronze limit",
+       "quote": "Upon approval, your limit will be at least $3,000 and can be as high as $32,500",
+       "doc": "doc_credit_cards_bronze_rewards_card_006"
+      },
+      {
+       "clause": "EcoCard limit",
+       "quote": "Initial credit lines are determined at approval and typically range from $5,000 to $50,000.",
+       "doc": "doc_credit_cards_ecocard_001"
+      },
+      {
+       "clause": "Silver limit",
+       "quote": "Initial credit limits typically range from $10,000 to $100,000, subject to approval",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Crypto limit",
+       "quote": "Your available credit range is $5,000 to $110,000 dollars",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "Gold limit",
+       "quote": "Approved credit limits typically range from $17,500 to $112,500.",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "Platinum limit, set at approval",
+       "quote": "Typical approved credit limits range from $25,000 to $150,000. Your exact limit appears in your approval details.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      },
+      {
+       "clause": "Diamond limit",
+       "quote": "Standard range: $37,500 to $375,000.",
+       "doc": "doc_credit_cards_diamond_elite_card_005"
+      }
+     ]
+    },
+    {
+     "id": "compare_cards",
+     "by": "model",
+     "do": "Compare the personal cards that passed the filters that ran, on the spending the customer says they will put on this card. For each card use its earn rate, its effective annual fee (fee minus any rebate) and its eligibility. Earn rates: Bronze 1.0%. Silver 4.0% on travel and software, 1.0% otherwise. Gold 2.5%. Crypto-Cash Back 2.0%. Platinum 10.0%. Diamond Elite 5.0%. EcoCard 5 points per dollar on green purchases and 1 point per dollar otherwise. Platinum's $200.00 fee is reduced by the $150.00 rebate only if at least $7500.00 posts in every monthly window of the cardmember year (each window runs from a monthly anniversary of the account opening date to the day before the next).",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather_needs",
+      "ask_budget_spend",
+      "filter_eligible",
+      "filter_requirements",
+      "filter_protection_limit",
+      "check_promo_dates"
+     ],
+     "after": [
+      "filter_eligible"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Purchases in non-bonus categories earn the card’s default rate.",
+     "doc": "doc_credit_cards_credit_cards_(general)_005",
+     "basis": [
+      {
+       "clause": "Bronze 1.0%",
+       "quote": "You earn 1.0% cash back on eligible purchases.",
+       "doc": "doc_credit_cards_bronze_rewards_card_002"
+      },
+      {
+       "clause": "Silver 4.0%",
+       "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+       "doc": "doc_credit_cards_silver_rewards_card_002"
+      },
+      {
+       "clause": "Silver 1.0% otherwise",
+       "quote": "Purchases outside top categories earn 1.0% back",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Gold 2.5%",
+       "quote": "Cash back on all purchases: 2.5%",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "Crypto 2.0%",
+       "quote": "You earn 2.0% on eligible spend.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "Platinum 10.0%",
+       "quote": "You earn 10.0% cash back on all eligible purchases.",
+       "doc": "doc_credit_cards_platinum_rewards_card_002"
+      },
+      {
+       "clause": "Diamond 5.0%",
+       "quote": "You earn 5.0% cash back on all eligible purchases posted to your account.",
+       "doc": "doc_credit_cards_diamond_elite_card_003"
+      },
+      {
+       "clause": "EcoCard points",
+       "quote": "5 points per dollar on green purchases, 1 point per dollar on other purchases",
+       "doc": "doc_credit_cards_credit_cards_(general)_006"
+      },
+      {
+       "clause": "Platinum rebate condition",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "window bounds",
+       "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "apply_fee_preference",
+     "by": "model",
+     "do": "Apply the customer's fee preference. Annual fees: Bronze $0.00, Silver $0.00, Gold $0.00, EcoCard $50.00, Crypto-Cash Back $75.00, Platinum $200.00, Diamond Elite $495.00. If the customer refuses annual fees, keep only the eligible $0.00 cards. If none of those is left, tell the customer and ask whether they would consider a card with a fee.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "gather_needs",
+      "compare_cards"
+     ],
+     "after": [
+      "compare_cards"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Consider your net rewards after the $200.00 annual fee when planning large purchases.",
+     "doc": "doc_credit_cards_platinum_rewards_card_002",
+     "basis": [
+      {
+       "clause": "Bronze $0.00",
+       "quote": "Annual fee: $0.00",
+       "doc": "doc_credit_cards_bronze_rewards_card_001"
+      },
+      {
+       "clause": "Silver $0.00",
+       "quote": "Annual fee: $0.00",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Gold $0.00",
+       "quote": "Annual fee: $0.00",
+       "doc": "doc_credit_cards_gold_rewards_card_005"
+      },
+      {
+       "clause": "EcoCard $50.00",
+       "quote": "Annual fee: $50.00.",
+       "doc": "doc_credit_cards_ecocard_001"
+      },
+      {
+       "clause": "Crypto $75.00",
+       "quote": "Annual fee: $75.00 dollars.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "Platinum $200.00",
+       "quote": "Annual fee: $200.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      },
+      {
+       "clause": "Diamond $495.00",
+       "quote": "Your standard annual fee is $495.00.",
+       "doc": "doc_credit_cards_diamond_elite_card_006"
+      }
+     ]
+    },
+    {
+     "id": "recommend_by_tiebreak",
+     "by": "model",
+     "do": "From the cards left after the filters, rank them by the customer's stated tie-break order and recommend the top one. If the customer has not given a credit score, tell them that card's minimum score.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "ask_tie_break",
+      "gather_needs",
+      "ask_eligibility",
+      "filter_eligible",
+      "filter_requirements",
+      "filter_protection_limit",
+      "apply_fee_preference"
+     ],
+     "after": [
+      "apply_fee_preference"
+     ],
+     "if": "the customer stated a tie-break order and more than one card is left after the filters",
+     "quote": "Each credit card has its own bonus categories with higher reward rates.",
+     "doc": "doc_credit_cards_credit_cards_(general)_005"
+    },
+    {
+     "id": "recommend_gold",
+     "by": "model",
+     "do": "Recommend the Gold Rewards Card and explain it: 2.5% cash back on all purchases, $0.00 annual fee, Rho-Bank+ required, minimum score 720, 0% foreign transaction fee.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "apply_fee_preference",
+      "filter_eligible",
+      "filter_requirements",
+      "gather_needs"
+     ],
+     "after": [
+      "apply_fee_preference"
+     ],
+     "if": "the customer has Rho-Bank+ and a score of at least 720; Gold gives the highest return among the cards whose fee they accept; travel and software are not the main share of their spending; Gold passed any filter that ran; and recommend_by_tiebreak did not run",
+     "quote": "Cash back on all purchases: 2.5%",
+     "doc": "doc_credit_cards_gold_rewards_card_001",
+     "basis": [
+      {
+       "clause": "2.5%",
+       "quote": "Cash back on all purchases: 2.5%",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "$0.00 fee",
+       "quote": "Annual fee: $0.00",
+       "doc": "doc_credit_cards_gold_rewards_card_005"
+      },
+      {
+       "clause": "Rho-Bank+",
+       "quote": "Rho‑Bank+ premium subscription required: Yes",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "720",
+       "quote": "Minimum credit score required: $720",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "FX 0%",
+       "quote": "Foreign transaction fee: 0%",
+       "doc": "doc_credit_cards_gold_rewards_card_001"
+      },
+      {
+       "clause": "Silver beats Gold when travel and software are the main spending",
+       "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+       "doc": "doc_credit_cards_silver_rewards_card_002"
+      }
+     ]
+    },
+    {
+     "id": "recommend_silver_or_bronze",
+     "by": "model",
+     "do": "Recommend the Silver Rewards Card if travel or software is the main share of the customer's spending and their score is at least 680. Otherwise explain that both Silver and Bronze earn 1.0% on everyday spending, and recommend Bronze if the score is below 680.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "apply_fee_preference",
+      "filter_eligible",
+      "filter_requirements",
+      "gather_needs"
+     ],
+     "after": [
+      "apply_fee_preference"
+     ],
+     "if": "Gold is not eligible or travel and software are the main share of spending; the customer wants no annual fee; the recommended card passed any filter that ran; and recommend_by_tiebreak did not run",
+     "quote": "You earn 1.0% cash back on eligible purchases.",
+     "doc": "doc_credit_cards_bronze_rewards_card_002",
+     "basis": [
+      {
+       "clause": "Silver 4.0% on travel and software",
+       "quote": "Pay with your card for eligible travel and software transactions to earn 4.0% back",
+       "doc": "doc_credit_cards_silver_rewards_card_002"
+      },
+      {
+       "clause": "Silver 1.0% otherwise",
+       "quote": "Purchases outside top categories earn 1.0% back",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Bronze 1.0%",
+       "quote": "You earn 1.0% cash back on eligible purchases.",
+       "doc": "doc_credit_cards_bronze_rewards_card_002"
+      },
+      {
+       "clause": "Silver 680",
+       "quote": "Minimum credit score: $680",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Bronze 640",
+       "quote": "Minimum credit score: $640",
+       "doc": "doc_credit_cards_bronze_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "recommend_one",
+     "by": "model",
+     "do": "Recommend the Platinum Rewards Card. Explain the 10.0% cash back, the $200.00 annual fee and the $150.00 rebate when at least $7500.00 posts in each of the 12 monthly windows. Each window runs from a monthly anniversary of the account opening date to the day before the next. Tell the customer the card has a minimum credit score of 750.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "compare_cards",
+      "ask_budget_spend",
+      "filter_eligible",
+      "filter_requirements"
+     ],
+     "after": [
+      "compare_cards"
+     ],
+     "if": "expected monthly spend is at least $7500.00; a $50 net fee fits the customer's budget; the customer's score is at least 750 or they have not given it; Platinum passed any filter that ran; and recommend_by_tiebreak did not run",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "10.0% cash back",
+       "quote": "You earn 10.0% cash back on all eligible purchases.",
+       "doc": "doc_credit_cards_platinum_rewards_card_002"
+      },
+      {
+       "clause": "$200.00 fee",
+       "quote": "Annual fee: $200.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      },
+      {
+       "clause": "$150.00 rebate at $7500.00 a month",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "every window must meet the threshold",
+       "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "window bounds",
+       "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "minimum score 750",
+       "quote": "Minimum credit score required: $750.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "recommend_fee_card",
+     "by": "model",
+     "do": "Recommend the eligible fee card whose fee the customer accepts and that has the highest net cash back on their spending, and state its fee clearly. Platinum: 10.0% for $200.00, with the $150.00 rebate only if $7500.00 posts in every monthly window (each runs from a monthly anniversary of the account opening date to the day before the next). Diamond Elite: 5.0% for $495.00, by invitation only. Crypto-Cash Back: 2.0% for $75.00. EcoCard: $50.00.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "apply_fee_preference",
+      "filter_eligible",
+      "filter_requirements"
+     ],
+     "after": [
+      "apply_fee_preference"
+     ],
+     "if": "the customer accepts an annual fee that fits the card's fee; recommend_one does not apply; the card passed any filter that ran; and recommend_by_tiebreak did not run",
+     "quote": "You earn 10.0% cash back on all eligible purchases.",
+     "doc": "doc_credit_cards_platinum_rewards_card_002",
+     "basis": [
+      {
+       "clause": "Platinum 10.0%",
+       "quote": "You earn 10.0% cash back on all eligible purchases.",
+       "doc": "doc_credit_cards_platinum_rewards_card_002"
+      },
+      {
+       "clause": "Platinum rebate",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "window bounds",
+       "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "Diamond 5.0%",
+       "quote": "You earn 5.0% cash back on all eligible purchases posted to your account.",
+       "doc": "doc_credit_cards_diamond_elite_card_003"
+      },
+      {
+       "clause": "Diamond fee",
+       "quote": "Your standard annual fee is $495.00.",
+       "doc": "doc_credit_cards_diamond_elite_card_006"
+      },
+      {
+       "clause": "Diamond invitation",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      },
+      {
+       "clause": "Crypto 2.0%",
+       "quote": "You earn 2.0% on eligible spend.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "Crypto fee",
+       "quote": "Annual fee: $75.00 dollars.",
+       "doc": "doc_credit_cards_crypto-cash_back_008"
+      },
+      {
+       "clause": "EcoCard fee",
+       "quote": "Annual fee: $50.00.",
+       "doc": "doc_credit_cards_ecocard_001"
+      }
+     ]
+    },
+    {
+     "id": "recommend",
+     "by": "model",
+     "do": "Present the card chosen in the branch steps above and explain why: its earn rate, annual fee, requirements such as Rho-Bank+, and the hard requirements it meets. Recommend only cards that meet every hard requirement and eligibility rule. If the customer rejects every card that fits, say so and do not push. If they want to apply, go to card_choice.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "compare_cards",
+      "apply_fee_preference",
+      "filter_requirements"
+     ],
+     "after": [
+      "compare_cards"
+     ],
+     "if": "the customer asks for advice on which card to get",
+     "quote": "Cash back on all purchases: 2.5%",
+     "doc": "doc_credit_cards_gold_rewards_card_001"
+    },
+    {
+     "id": "no_fit",
+     "by": "model",
+     "do": "Tell the customer plainly that no card meets their requirements. If they ask, say which requirement each near-miss card fails. Do not invent exceptions or waivers.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "apply_fee_preference",
+      "filter_eligible",
+      "filter_requirements",
+      "filter_protection_limit"
+     ],
+     "after": [
+      "apply_fee_preference"
+     ],
+     "if": "no eligible card meets the customer's stated requirements",
+     "quote": "Membership is by invitation only (Yes).",
+     "doc": "doc_credit_cards_diamond_elite_card_001"
+    },
+    {
+     "id": "signup_read_promos",
+     "by": "harness",
+     "do": "Read every personal card's new-customer promotion document: Silver Rewards _009 and _010, EcoCard _009 and _010, Bronze Rewards _008, Platinum Rewards _009, Diamond Elite _009. Never judge from one card's page.",
+     "call": "shell",
+     "args": {
+      "command": "cat the promotion documents listed above (fixed list)"
+     },
+     "lookup": [],
+     "after": [
+      "greet"
+     ],
+     "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+     "quote": "Earn a statement credit of $500 when you spend $2,000 in the first 1 month(s) after account opening",
+     "doc": "doc_credit_cards_silver_rewards_card_010"
+    },
+    {
+     "id": "signup_window",
+     "by": "model",
+     "do": "Keep only the bonuses whose offer window includes today's date from check_promo_dates. The windows are: Silver Rewards $500 statement credit, 2025-01-01 to 2025-06-30; EcoCard bonus points, 2025-08-01 through 2025-12-15; Diamond Elite invitation offer, 2025-11-01 to 2026-01-31. Never present a bonus whose window has closed as available.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "check_promo_dates",
+      "signup_read_promos"
+     ],
+     "after": [
+      "check_promo_dates",
+      "signup_read_promos"
+     ],
+     "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+     "quote": "Accounts must be opened within: 2025-01-01 to 2025-06-30",
+     "doc": "doc_credit_cards_silver_rewards_card_010",
+     "basis": [
+      {
+       "clause": "Silver window",
+       "quote": "Accounts must be opened within: 2025-01-01 to 2025-06-30",
+       "doc": "doc_credit_cards_silver_rewards_card_010"
+      },
+      {
+       "clause": "EcoCard window",
+       "quote": "This promotion runs from 2025-08-01 through 2025-12-15.",
+       "doc": "doc_credit_cards_ecocard_009"
+      },
+      {
+       "clause": "Diamond window",
+       "quote": "Campaign window: 2025-11-01 to 2026-01-31.",
+       "doc": "doc_credit_cards_diamond_elite_card_009"
+      }
+     ]
+    },
+    {
+     "id": "signup_recommend",
+     "by": "model",
+     "do": "For each personal card whose bonus is still open after signup_window and is available to the customer (Diamond Elite only with an invitation), report: the bonus as stated, the spend threshold, the qualifying period counted from account opening, the offer window's end date, and the annual fee. The qualifying periods are: Silver $2,000 within the first 1 month after account opening; EcoCard $5,000 within the first 1 month of account opening; Diamond Elite $50,000 within 1 month of account opening or the date in the invitation. The offer windows end on 2025-06-30 (Silver), 2025-12-15 (EcoCard) and 2026-01-31 (Diamond Elite). If more than one card remains, apply the customer's signup_tie_break. If none remains, say so and explain why. Do not promise approval.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "signup_window",
+      "signup_read_promos"
+     ],
+     "after": [
+      "signup_window"
+     ],
+     "if": "the customer asks for the card with the best sign-up, welcome or promotional bonus",
+     "quote": "Spend at least $5,000 in eligible purchases within your first 1 month of account opening.",
+     "doc": "doc_credit_cards_ecocard_009",
+     "basis": [
+      {
+       "clause": "Silver period",
+       "quote": "Earn a statement credit of $500 when you spend $2,000 in the first 1 month(s) after account opening",
+       "doc": "doc_credit_cards_silver_rewards_card_010"
+      },
+      {
+       "clause": "EcoCard period",
+       "quote": "Spend at least $5,000 in eligible purchases within your first 1 month of account opening.",
+       "doc": "doc_credit_cards_ecocard_009"
+      },
+      {
+       "clause": "Diamond period",
+       "quote": "From the date your account opens (or the date specified in your invitation), complete eligible purchases totaling $50,000 within 1 month(s).",
+       "doc": "doc_credit_cards_diamond_elite_card_009"
+      },
+      {
+       "clause": "Silver window end",
+       "quote": "Accounts must be opened within: 2025-01-01 to 2025-06-30",
+       "doc": "doc_credit_cards_silver_rewards_card_010"
+      },
+      {
+       "clause": "EcoCard window end",
+       "quote": "This promotion runs from 2025-08-01 through 2025-12-15.",
+       "doc": "doc_credit_cards_ecocard_009"
+      },
+      {
+       "clause": "Diamond window end",
+       "quote": "Campaign window: 2025-11-01 to 2026-01-31.",
+       "doc": "doc_credit_cards_diamond_elite_card_009"
+      },
+      {
+       "clause": "Diamond invitation",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Only a customer who has received an invitation applies for the Diamond Elite Card.",
+     "quote": "Membership is by invitation only (Yes).",
+     "doc": "doc_credit_cards_diamond_elite_card_001",
+     "basis": []
+    },
+    {
+     "rule": "Downgrading an existing card is a separate procedure. It is used only when the customer explicitly asks to downgrade to avoid annual fees, and for personal cards only to the Bronze Rewards Card.",
+     "quote": "Personal cards: Bronze Rewards Card (no annual fee)",
+     "doc": "doc_credit_cards_credit_card_account_logistics_008",
+     "basis": []
+    },
+    {
+     "rule": "The Gold Rewards Card requires an active Rho-Bank+ subscription.",
+     "quote": "Rho‑Bank+ premium subscription required: Yes",
+     "doc": "doc_credit_cards_gold_rewards_card_001",
+     "basis": []
+    },
+    {
+     "rule": "Silver Rewards Card: the foreign transaction fee is 2.75% without a premium subscription.",
+     "quote": "Foreign transaction fee without a premium subscription: 2.75%",
+     "doc": "doc_credit_cards_silver_rewards_card_001",
+     "basis": []
+    },
+    {
+     "rule": "Platinum Rewards Card: minimum credit score 750.",
+     "quote": "Minimum credit score required: $750.",
+     "doc": "doc_credit_cards_platinum_rewards_card_001",
+     "basis": []
+    },
+    {
+     "rule": "Platinum gives a $150.00 annual fee rebate when the $7500.00 monthly threshold is met.",
+     "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_007",
+     "basis": []
+    },
+    {
+     "rule": "The Diamond Elite annual fee is $495.00.",
+     "quote": "Your standard annual fee is $495.00.",
+     "doc": "doc_credit_cards_diamond_elite_card_006",
+     "basis": []
+    },
+    {
+     "rule": "EcoCard is the only points card; every other card's 'points' are cash back at 1 point = $0.01.",
+     "quote": "The only true points-based card is the EcoCard",
+     "doc": "doc_credit_cards_credit_cards_(general)_006",
+     "basis": []
+    }
+   ],
+   "done_when": "The customer has either applied with apply_for_credit_card (card type, full name, annual income and Rho-Bank+ status) and been told the result, or been told the card is not available to them (Diamond Elite without an invitation, Gold without Rho-Bank+). A customer who asked for advice has been recommended a card that meets every stated requirement, or been told that none fits."
+  }
+ ],
+ "documents": [
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_010",
+   "why": "Rebate eligibility rules, monthly windows, what counts, evaluation and posting"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_007",
+   "why": "Rebate amount and monthly threshold; Platinum purchase protection maximum"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_009",
+   "why": "First-year annual fee waiver promo window and terms"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_001",
+   "why": "Platinum annual fee, score, minimum payment, FX, credit limit"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_002",
+   "why": "Platinum earn rate"
+  },
+  {
+   "id": "doc_credit_cards_platinum_rewards_card_003",
+   "why": "Platinum purchase protection window"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_016",
+   "why": "Dispute history tool, used to find unresolved disputed transactions"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_017",
+   "why": "Statement credit tool (ruled out for posting a missing rebate)"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_017",
+   "why": "Checking credit tool, limited to checking accounts (ruled out)"
+  },
+  {
+   "id": "doc_bank_accounts_bank_accounts_(general)_042",
+   "why": "Reason codes for transfer_to_human_agents"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_001",
+   "why": "Silver terms and how to apply"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_002",
+   "why": "Silver 4.0% categories"
+  },
+  {
+   "id": "doc_credit_cards_silver_rewards_card_010",
+   "why": "Silver sign-up bonus window"
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_001",
+   "why": "Diamond Elite is invitation only; credit score guidance"
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_003",
+   "why": "Diamond Elite earn rate"
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_005",
+   "why": "Diamond Elite minimum payment and credit limit"
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_006",
+   "why": "Diamond Elite annual fee"
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_007",
+   "why": "Diamond Elite purchase protection"
+  },
+  {
+   "id": "doc_credit_cards_diamond_elite_card_009",
+   "why": "Diamond Elite invitation promo window and terms"
+  },
+  {
+   "id": "doc_credit_cards_credit_card_account_logistics_008",
+   "why": "Downgrade procedure (ruled out for new applications)"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_005",
+   "why": "Rewards categories and bonus-category comparison"
+  },
+  {
+   "id": "doc_credit_cards_credit_cards_(general)_006",
+   "why": "EcoCard points and cash back representation"
+  }
+ ],
+ "open_questions": [
+  "get_credit_card_transactions_by_user may show a transaction date rather than a posting date. The rebate counts by posting date; if only one date is shown, the agent uses it and should say so.",
+  "The promo waiver depends on the application date falling inside the window, but the records show only the opening date. The workflow treats the opening date plus no annual fee charge in the first 12 months as evidence of the waiver.",
+  "No document says whether agents may post a missing Platinum rebate by hand, or which statement-credit reason would apply. The workflow explains how the rebate posts and offers a transfer.",
+  "The valid card_type values for apply_for_credit_card are not documented; the tool's error reply lists them.",
+  "No tool can confirm a Diamond Elite invitation, so the workflow relies on the customer's word.",
+  "The Bronze and EcoCard documents read state no purchase protection either way."
+ ],
+ "set_aside": [
+  {
+   "doc": "doc_credit_cards_credit_card_account_logistics_003",
+   "why": "The retention protocol applies to customers who want to close a card. These jobs check a rebate and apply for a new card; neither closes an account."
+  },
+  {
+   "doc": "doc_credit_cards_platinum_rewards_card_004",
+   "why": "Suspected-fraud steps; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_platinum_rewards_card_005",
+   "why": "Virtual card creation; doc_010 already says virtual card purchases count"
+  },
+  {
+   "doc": "doc_credit_cards_platinum_rewards_card_006",
+   "why": "Virtual card usage; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_platinum_rewards_card_008",
+   "why": "Referral program; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_diamond_elite_card_002",
+   "why": "Getting started after approval; the terms used are cited from other documents"
+  },
+  {
+   "doc": "doc_credit_cards_diamond_elite_card_004",
+   "why": "Rewards tips; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_diamond_elite_card_008",
+   "why": "Foreign transaction fees; not needed for these steps"
+  },
+  {
+   "doc": "doc_savings_accounts_diamond_elite_account_004",
+   "why": "Diamond Elite savings account invitation, not the card"
+  },
+  {
+   "doc": "doc_savings_accounts_diamond_elite_account_008",
+   "why": "Diamond Elite savings application declines, not the card"
+  },
+  {
+   "doc": "doc_savings_accounts_diamond_elite_account_007",
+   "why": "Savings account events; not relevant"
+  },
+  {
+   "doc": "doc_savings_accounts_diamond_elite_account_009",
+   "why": "Savings account FAQ; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_003",
+   "why": "Silver travel categories; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_004",
+   "why": "Silver software categories; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_005",
+   "why": "Silver travel insurance; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_006",
+   "why": "Silver insurance claims; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_007",
+   "why": "Silver payments; not needed to apply"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_008",
+   "why": "Silver rewards tips; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_009",
+   "why": "Silver APR promo; an APR offer that does not change the application"
+  },
+  {
+   "doc": "doc_credit_cards_silver_rewards_card_011",
+   "why": "Silver referral program; not relevant"
+  },
+  {
+   "doc": "doc_credit_cards_credit_cards_(general)_015",
+   "why": "Provisional credit for disputes; not relevant"
+  },
+  {
+   "doc": "doc_business_credit_cards_business_platinum_rewards_card_001",
+   "why": "Business card application; these jobs cover personal cards"
+  }
+ ],
+ "unaccounted": [
+  "doc_credit_cards_credit_cards_(general)_017",
+  "doc_customer_support_special_support_codes_001"
+ ],
+ "merge": [
+  {
+   "job": "platinum_rewards_card_annual_fee_rebate_eligibility",
+   "into": [
+    "platinum_rewards_card_annual_fee_rebate_eligibility"
+   ],
+   "previous_sessions": [
+    "20261007T232610Z_banking_knowledge_r3_task_023"
+   ],
+   "changelog": [
+    {
+     "change": "added",
+     "what": "disputes_unlock / disputes (get_user_dispute_history_7291)",
+     "why": "Unresolved disputed transactions are excluded from the totals, and only the dispute history tool reads dispute status.",
+     "quote": "Disputed transactions while unresolved.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "change": "added",
+     "what": "rebate_not_posted",
+     "why": "A qualifying rebate posts after the fee is billed. No document has the agent post a missing one, so the agent explains this and offers a transfer.",
+     "quote": "If you qualified, the rebate is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "change": "changed",
+     "what": "fail_transfer (was r_fail)",
+     "why": "The transfer reason code must come from the KB's list.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "changed",
+     "what": "promo_year",
+     "why": "Added the promo window dates and evidence that no annual fee was charged in the first year.",
+     "quote": "Your first statement should show no annual fee charge for the first year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "change": "removed",
+     "what": "step accounts",
+     "why": "the reviewer still finds it unsupported after the send-back: The only quote is about when the monthly window starts, and nothing quoted requires identity verification, yet the step makes it a gating rule.; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_accounts",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_has_card",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_promo",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_tell_not",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_tell_pending",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_tell_yes",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_txns",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_window_check",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_window_totals",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_year_closed",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "tool get_credit_card_accounts_by_user",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is bill",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 72,
+     "n": 72,
+     "new_unfound": [],
+     "unfound": []
+    },
+    "D2": {
+     "named": [
+      "get_user_dispute_history_7291"
+     ],
+     "missing": [],
+     "n": 1
+    },
+    "D3": {
+     "with_condition": 0,
+     "n": 0
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 2,
+     "n": 2,
+     "done_when": true
+    },
+    "D9": [],
+    "D10": [],
+    "D13": [],
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "D12": {
+     "steps": [],
+     "rules": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    },
+    "D16": [],
+    "D14": {
+     "picked": 4,
+     "no": 1,
+     "partly": 0
+    },
+    "D18": []
+   },
+   "failed": [],
+   "advice": [
+    "step accounts: the reviewer finds \"identity verified\" not supported by its quote (The only quote is about when the monthly window starts, and nothing quoted requires identity verification, yet the step makes it a gating rule.); unsupported: identity verified. Quote the passage that says it, rewrite the clause to what the passage says, or give it a basis entry with source \"none\" and make it a question for the customer"
+   ],
+   "review": {
+    "picked": [
+     {
+      "step": "accounts",
+      "flags": {
+       "C7": [
+        "identity verified"
+       ]
+      }
+     },
+     {
+      "step": "forfeit_note",
+      "flags": {
+       "C7": [
+        "the outcome is (c)",
+        "the customer mentions closing"
+       ]
+      }
+     },
+     {
+      "step": "rebate_not_posted",
+      "flags": {
+       "C7": [
+        "the outcome is (c)"
+       ]
+      }
+     },
+     {
+      "step": "fail_transfer",
+      "flags": {
+       "C7": [
+        "a lookup fails",
+        "a due rebate is missing"
+       ]
+      }
+     }
+    ],
+    "verdicts": [
+     {
+      "step": "accounts",
+      "clause": "identity verified",
+      "verdict": "no",
+      "unsupported": "identity verified",
+      "why": "The only quote is about when the monthly window starts, and nothing quoted requires identity verification, yet the step makes it a gating rule."
+     },
+     {
+      "step": "forfeit_note",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The quote says the rebate is not awarded if the account is closed or product-changed before the year-end evaluation or rebate posting, and the step only explains this to a customer who qualifies or may still qualify when they raise closing or changing the card."
+     },
+     {
+      "step": "rebate_not_posted",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The quotes support that a qualifying customer's $150.00 rebate is applied as a statement credit after that year's annual fee is billed, and the transfer is only offered as a question when the issue cannot be resolved, which the policy allows."
+     },
+     {
+      "step": "fail_transfer",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The step only asks whether the customer wants a transfer and transfers only if they agree, as policy requires, and each reason code matches its quoted tier description and the highest-tier-first rule."
+     }
+    ]
+   },
+   "taken": true,
+   "settled": [
+    {
+     "change": "removed",
+     "what": "step accounts",
+     "why": "the reviewer still finds it unsupported after the send-back: The only quote is about when the monthly window starts, and nothing quoted requires identity verification, yet the step makes it a gating rule.; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_accounts",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_has_card",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_promo",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_tell_not",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_tell_pending",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_tell_yes",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_txns",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_window_check",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_window_totals",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step r_year_closed",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "tool get_credit_card_accounts_by_user",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is bill",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    }
+   ]
+  },
+  {
+   "job": "recommend_personal_credit_card",
+   "into": [
+    "recommend_personal_credit_card"
+   ],
+   "previous_sessions": [
+    "20261008T035524Z_banking_knowledge_r3_task_003"
+   ],
+   "changelog": [
+    {
+     "change": "changed",
+     "what": "card_choice / diamond_invite / gather_app_fields / customer_applies",
+     "why": "The named-card application path now comes from the new draft. It replaces named_card, named_card_terms, named_ask_fields, named_diamond_check, customer_applies_named, apply and cust_apply, which covered the same case.",
+     "quote": "1. Complete the online application with your personal information and income details",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "change": "changed",
+     "what": "transfer_to_human_agents",
+     "why": "Now used for application errors that resubmitting cannot fix, with a reason code from the KB list.",
+     "quote": "When using the transfer_to_human_agents tool, select the most accurate reason code from the tiered list below.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "change": "changed",
+     "what": "recommend_one",
+     "why": "Merged with recommend_platinum_score_unstated (same case). Each clause now has its own quote.",
+     "quote": "Minimum credit score required: $750.",
+     "doc": "doc_credit_cards_platinum_rewards_card_001"
+    },
+    {
+     "change": "changed",
+     "what": "apply_fee_preference",
+     "why": "No document lets the agent push a fee card on a customer who refuses fees. When no fee-free card is left, the agent asks the customer instead.",
+     "quote": "Consider your net rewards after the $200.00 annual fee when planning large purchases.",
+     "doc": "doc_credit_cards_platinum_rewards_card_002"
+    },
+    {
+     "change": "changed",
+     "what": "signup_recommend / signup_window",
+     "why": "Each offer window and qualifying period is now stated with its start event and end date.",
+     "quote": "Spend at least $5,000 in eligible purchases within your first 1 month of account opening.",
+     "doc": "doc_credit_cards_ecocard_009"
+    },
+    {
+     "change": "removed",
+     "what": "step explain_apply",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step named_result",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step recommend_by_requirements",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step recommend_fallback",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_business_option",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_classify",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_eligibility",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_no_match",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_scope",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote - Annual fee: $200.00.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote - Minimum credit score required: $750.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote - Spend $5,000 in eligible purchases within your first month to earn $2,000 sustainability points.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Accounts opened during 2024-10-01 through 2025-03-31 are eligible.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Applications and account openings must occur within: 2025-10-15 to 2025-12-31",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Bonus points typically post after the qualifying period closes and your transactions have cleared.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Complete the application in your Rho‑Bank dashboard and consent to a credit pull (minimum score: $720).",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Complete the online application with your personal and financial details.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Do I need to pay an annual fee to access the rewards program? Annual fee: $75.00 dollars.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Earn 1.0% cash back on all other purchases",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Earn 2.5% cash back on all purchases.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Every Rho-Bank credit card earns rewards on all purchases, but certain categories of spending may earn you bonus rewards",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Foreign transaction fee (international purchases): 1.0%.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Foreign transaction fee: 0%. Your international purchases are not subject to additional bank conversion fees.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote If you maintain the premium subscription, international purchases incur 0% in foreign transaction fees, which helps pres",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote If you meet the invitation spending requirement of $50,000 within the specified promo period, your annual fee is waived ",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote New Business Silver Rewards Card customers can earn 2x cash back on all purchases for the first 6 months after opening t",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote New customers receive a 0% APR on carried balances for the first 12 months from account opening.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Promotional window: 2025-09-01 through 2026-02-28.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every ",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote The waiver applies to the first 12 months from account opening; after the first anniversary, the standard $200.00 annual",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote This offer is available from 2025-10-01 through 2026-03-31.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Use the card for everyday spend to capture 10.0% on all categories.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management availability: Yes.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management available: No",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management available: Yes",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management features are available: Yes.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management is available (Yes).",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management is available in your account: Yes.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You are not charged an annual membership fee; the annual fee is $0.00.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You earn 4.0% back when the transaction is categorized as travel.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You earn rewards at 2.0% on those transactions.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You must claim the promotion within the window starting 2024-01-01 and ending 2025-12-31",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You must open your account during the promotional period to qualify",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your application is evaluated against both personal and business credit standards, including $765 and 77.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your minimum monthly payment is 1.0% of your outstanding balance (plus any past due amounts and fees as applicable).",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your minimum monthly payment is 1.0% of your outstanding balance, subject to any applicable minimum dollar requirement.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your minimum payment is 1.5% of your statement balance (subject to a minimum dollar amount as shown on your statement)",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your starting credit limit will fall within $37,500 to $375,000, based on a review of your profile.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    }
+   ],
+   "checks": {
+    "D1": {
+     "found": 174,
+     "n": 174,
+     "new_unfound": [],
+     "unfound": []
+    },
+    "D2": {
+     "named": [
+      "downgrade_credit_card_3847"
+     ],
+     "missing": [],
+     "n": 1
+    },
+    "D3": {
+     "with_condition": 4,
+     "n": 4
+    },
+    "D4": {
+     "named": 0,
+     "n": 0
+    },
+    "D5": {
+     "set": true
+    },
+    "D6": {
+     "asks": 14,
+     "n": 14,
+     "done_when": true
+    },
+    "D9": [],
+    "D10": [],
+    "D13": [],
+    "D8": {
+     "steps": [],
+     "tools": [],
+     "quotes": []
+    },
+    "D12": {
+     "steps": [],
+     "rules": []
+    },
+    "score": {
+     "D1": 1.0,
+     "D2": 1.0,
+     "D3": 1.0,
+     "D4": 1.0,
+     "D5": 1.0,
+     "D6": 1.0
+    },
+    "D16": [],
+    "D14": {
+     "picked": 19,
+     "no": 0,
+     "partly": 1
+    },
+    "D18": []
+   },
+   "failed": [],
+   "review": {
+    "picked": [
+     {
+      "step": "diamond_invite",
+      "flags": {
+       "C4": {
+        "deciding": 4,
+        "quotes": 3
+       },
+       "C7": [
+        "card_type is Diamond Elite Card"
+       ]
+      }
+     },
+     {
+      "step": "named_diamond_promo",
+      "flags": {
+       "C7": [
+        "the card is the Diamond Elite Card"
+       ]
+      }
+     },
+     {
+      "step": "named_gold_check",
+      "flags": {
+       "C4": {
+        "deciding": 2,
+        "quotes": 1
+       }
+      }
+     },
+     {
+      "step": "named_rebate_warn",
+      "flags": {
+       "C7": [
+        "the customer mentions closing"
+       ]
+      }
+     },
+     {
+      "step": "ask_budget_spend",
+      "flags": {
+       "C7": [
+        "has not already given a fee budget"
+       ]
+      }
+     },
+     {
+      "step": "ask_eligibility",
+      "flags": {
+       "C7": [
+        "the customer asks for advice",
+        "has not already said these"
+       ]
+      }
+     },
+     {
+      "step": "ask_tie_break",
+      "flags": {
+       "C7": [
+        "the customer stated hard requirements",
+        "has not given a tie-break preference"
+       ]
+      }
+     },
+     {
+      "step": "screen_diamond",
+      "flags": {
+       "C7": [
+        "the customer asks for advice on which card to get"
+       ]
+      }
+     },
+     {
+      "step": "filter_protection_limit",
+      "flags": {
+       "C3": true
+      }
+     },
+     {
+      "step": "recommend_by_tiebreak",
+      "flags": {
+       "C7": [
+        "the customer stated a tie-break order"
+       ]
+      }
+     },
+     {
+      "step": "recommend_gold",
+      "flags": {
+       "C7": [
+        "Gold passed any filter that ran",
+        "recommend_by_tiebreak did not run"
+       ]
+      }
+     },
+     {
+      "step": "recommend_silver_or_bronze",
+      "flags": {
+       "C7": [
+        "recommend_by_tiebreak did not run"
+       ]
+      }
+     },
+     {
+      "step": "recommend_one",
+      "flags": {
+       "C7": [
+        "a $50 net fee fits the customer's budget",
+        "recommend_by_tiebreak did not run"
+       ]
+      }
+     },
+     {
+      "step": "recommend_fee_card",
+      "flags": {
+       "C7": [
+        "recommend_by_tiebreak did not run"
+       ]
+      }
+     },
+     {
+      "step": "recommend",
+      "flags": {
+       "C4": {
+        "deciding": 3,
+        "quotes": 1
+       }
+      }
+     },
+     {
+      "step": "no_fit",
+      "flags": {
+       "C4": {
+        "deciding": 2,
+        "quotes": 1
+       }
+      }
+     },
+     {
+      "step": "signup_read_promos",
+      "flags": {
+       "C7": [
+        "welcome"
+       ]
+      }
+     },
+     {
+      "step": "signup_window",
+      "flags": {
+       "C7": [
+        "welcome"
+       ]
+      }
+     },
+     {
+      "step": "signup_recommend",
+      "flags": {
+       "C7": [
+        "welcome"
+       ]
+      }
+     }
+    ],
+    "verdicts": [
+     {
+      "step": "diamond_invite",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The invitation-only quote supports asking about an invitation, explaining the rule and not having an uninvited customer apply; offering another card is only an option for the customer."
+     },
+     {
+      "step": "named_diamond_promo",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The $495.00 fee, the 2025-11-01 to 2026-01-31 window, the $50,000 within 1 month from account opening or the invitation date, and the fee waiver plus $5,000 credit are each quoted, and the surrounding text ties the promo to accepting the invitation in that window."
+     },
+     {
+      "step": "named_gold_check",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "'Rho-Bank+ premium subscription required: Yes' supports explaining the requirement and not having a non-subscriber apply; offering another card is an offer, not a rule."
+     },
+     {
+      "step": "named_rebate_warn",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The quote says that if the account is closed or product-changed before evaluation or posting, the rebate will not be awarded."
+     },
+     {
+      "step": "ask_budget_spend",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The step only asks the customer questions, and the $150.00 rebate tied to a $7500.00 monthly threshold supports why fee budget and monthly spend matter."
+     },
+     {
+      "step": "ask_eligibility",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "These are questions to the customer, and the quotes on the Rho-Bank+ requirement, the minimum credit score and invitation-only membership support asking them."
+     },
+     {
+      "step": "ask_tie_break",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The step asks the customer for a preference and gives an example rather than imposing a rule."
+     },
+     {
+      "step": "screen_diamond",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "Invitation-only membership, a score of at least 780 and a 3.0% minimum payment are quoted, and 'cannot apply without an invitation' follows from invitation-only membership."
+     },
+     {
+      "step": "filter_protection_limit",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "Each card's protection window and per-claim cap, Crypto's lack of protection, each card's top credit-limit figure and the limit being set at approval are quoted; the Bronze/EcoCard gap is given to the customer as an explanation."
+     },
+     {
+      "step": "recommend_by_tiebreak",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "Ranking follows the order the customer states, and telling them the card's minimum score is an explanation, not a new rule."
+     },
+     {
+      "step": "recommend_gold",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "2.5% cash back, the $0.00 fee, the Rho-Bank+ requirement, the 720 minimum and the 0% foreign transaction fee are quoted, and the Silver 4.0% travel/software rate supports preferring Silver when that spending dominates."
+     },
+     {
+      "step": "recommend_silver_or_bronze",
+      "clause": "recommend Bronze if the score is below 680",
+      "verdict": "partly",
+      "unsupported": "for any score below 680, without the Bronze minimum of 640",
+      "why": "The quotes support Bronze only for scores of at least 640, but the step would recommend it to a customer scoring below 640 as well."
+     },
+     {
+      "step": "recommend_one",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "10.0% cash back, the $200.00 fee, the $150.00 rebate at $7500.00 in every monthly window, the window bounds and the 750 minimum are all quoted, and the $50 net fee is $200.00 minus $150.00."
+     },
+     {
+      "step": "recommend_fee_card",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The Platinum, Diamond Elite, Crypto-Cash Back and EcoCard earn rates, fees, rebate condition and invitation requirement stated in the step are each quoted."
+     },
+     {
+      "step": "recommend",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The step presents what earlier steps chose and adds only procedural limits, such as recommending only eligible cards and not pushing, with no new figures."
+     },
+     {
+      "step": "no_fit",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "Saying that no card fits and refusing to invent waivers adds no rule beyond what the documents state."
+     },
+     {
+      "step": "signup_read_promos",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "This is an instruction to read the promotion documents before comparing, not a claim about any card's terms."
+     },
+     {
+      "step": "signup_window",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "The Silver, EcoCard and Diamond Elite offer windows are each quoted, and keeping only bonuses whose window includes today follows from those windows."
+     },
+     {
+      "step": "signup_recommend",
+      "clause": "all",
+      "verdict": "entails",
+      "unsupported": "",
+      "why": "Each card's spend threshold, qualifying period, window end date and the Diamond Elite invitation requirement are quoted."
+     }
+    ]
+   },
+   "taken": true,
+   "settled": [
+    {
+     "change": "removed",
+     "what": "step explain_apply",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step named_result",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step recommend_by_requirements",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step recommend_fallback",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_business_option",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_classify",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_eligibility",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_no_match",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "step signup_scope",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote - Annual fee: $200.00.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote - Minimum credit score required: $750.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote - Spend $5,000 in eligible purchases within your first month to earn $2,000 sustainability points.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Accounts opened during 2024-10-01 through 2025-03-31 are eligible.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Applications and account openings must occur within: 2025-10-15 to 2025-12-31",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Bonus points typically post after the qualifying period closes and your transactions have cleared.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Complete the application in your Rho‑Bank dashboard and consent to a credit pull (minimum score: $720).",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Complete the online application with your personal and financial details.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Do I need to pay an annual fee to access the rewards program? Annual fee: $75.00 dollars.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Earn 1.0% cash back on all other purchases",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Earn 2.5% cash back on all purchases.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Every Rho-Bank credit card earns rewards on all purchases, but certain categories of spending may earn you bonus rewards",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Foreign transaction fee (international purchases): 1.0%.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Foreign transaction fee: 0%. Your international purchases are not subject to additional bank conversion fees.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote If you maintain the premium subscription, international purchases incur 0% in foreign transaction fees, which helps pres",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote If you meet the invitation spending requirement of $50,000 within the specified promo period, your annual fee is waived ",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote New Business Silver Rewards Card customers can earn 2x cash back on all purchases for the first 6 months after opening t",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote New customers receive a 0% APR on carried balances for the first 12 months from account opening.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Promotional window: 2025-09-01 through 2026-02-28.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every ",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote The waiver applies to the first 12 months from account opening; after the first anniversary, the standard $200.00 annual",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote The waiver cannot be retroactively applied to accounts opened outside the promo window.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote This offer is available from 2025-10-01 through 2026-03-31.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Use the card for everyday spend to capture 10.0% on all categories.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management availability: Yes.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management available: No",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management available: Yes",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management features are available: Yes.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management is available (Yes).",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Virtual card management is available in your account: Yes.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You are not charged an annual membership fee; the annual fee is $0.00.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You earn 4.0% back when the transaction is categorized as travel.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You earn rewards at 2.0% on those transactions.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You must claim the promotion within the window starting 2024-01-01 and ending 2025-12-31",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote You must open your account during the promotional period to qualify",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your application is evaluated against both personal and business credit standards, including $765 and 77.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your minimum monthly payment is 1.0% of your outstanding balance (plus any past due amounts and fees as applicable).",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your minimum monthly payment is 1.0% of your outstanding balance, subject to any applicable minimum dollar requirement.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your minimum payment is 1.5% of your statement balance (subject to a minimum dollar amount as shown on your statement)",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    },
+    {
+     "change": "removed",
+     "what": "quote Your starting credit limit will fall within $37,500 to $375,000, based on a review of your profile.",
+     "why": "not carried into the draft-based version; logged by code (r19's draft-first merge)"
+    }
+   ]
+  }
+ ],
+ "rejected": [],
+ "draft": [
+  {
+   "job": "platinum_rewards_card_annual_fee_rebate_eligibility",
+   "aliases": [
+    "check_platinum_annual_fee_rebate",
+    "platinum_rebate_eligibility_and_calculation"
+   ],
+   "when": {
+    "quote": "The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every month of your cardmember year.",
+    "doc": "doc_credit_cards_platinum_rewards_card_010"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks whether they qualify for the Platinum Rewards Card annual fee rebate, or asks about a rebate they think is missing",
+    "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+    "doc": "doc_credit_cards_platinum_rewards_card_010"
+   },
+   "tools": [
+    {
+     "tool": "get_user_information_by_name",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_email",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_information_by_id",
+     "who": "agent",
+     "step": "v_lookup",
+     "not_used": null
+    },
+    {
+     "tool": "get_current_time",
+     "who": "agent",
+     "step": "v_time",
+     "not_used": null
+    },
+    {
+     "tool": "log_verification",
+     "who": "agent",
+     "step": "v_log",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_accounts_by_user",
+     "who": "agent",
+     "step": "accounts",
+     "not_used": null
+    },
+    {
+     "tool": "get_credit_card_transactions_by_user",
+     "who": "agent",
+     "step": "txns",
+     "not_used": null
+    },
+    {
+     "tool": "get_user_dispute_history_7291",
+     "who": "agent",
+     "step": "disputes",
+     "not_used": null
+    },
+    {
+     "tool": "unlock_discoverable_agent_tool",
+     "who": "agent",
+     "step": "disputes_unlock",
+     "not_used": null
+    },
+    {
+     "tool": "call_discoverable_agent_tool",
+     "who": "agent",
+     "step": "disputes",
+     "not_used": null
+    },
+    {
+     "tool": "apply_statement_credit_8472",
+     "who": "agent",
+     "step": "missing_rebate_credit",
+     "not_used": null
+    },
+    {
+     "tool": "apply_checking_account_credit_5829",
+     "who": "agent",
+     "step": null,
+     "not_used": "Never used for this rebate. The Platinum rebate posts to the credit card account, and checking credits are allowed only for checking accounts: 'Credits may ONLY be applied to checking accounts.' (doc_bank_accounts_bank_accounts_(general)_017)"
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "fail_transfer",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "identity_lookup_key",
+     "about": "the customer's full name, email or user id, used to find their record",
+     "from": "customer",
+     "ask": "Could you please give me your full name (or the email on your account) so I can find your profile?",
+     "may_hold_back": false
+    },
+    {
+     "field": "verification_values",
+     "about": "any two of date of birth, email, phone number, home address",
+     "from": "customer",
+     "ask": "To verify your identity, please give me two of the following: your date of birth, email, phone number or home address.",
+     "may_hold_back": true
+    },
+    {
+     "field": "platinum_account_open_date",
+     "about": "date the Platinum Rewards Card account opened",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "posted_transactions",
+     "about": "the card's posted purchases, credits, fees and other transactions",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    },
+    {
+     "field": "unresolved_disputes",
+     "about": "the customer's credit card disputes and their statuses",
+     "from": "records",
+     "ask": null,
+     "may_hold_back": false
+    }
+   ],
+   "steps": [
+    {
+     "id": "v_lookup",
+     "by": "model",
+     "do": "Ask the customer for their name, email or user id. Then look up their record with get_user_information_by_name, get_user_information_by_email or get_user_information_by_id, using the value the customer gave.",
+     "call": "get_user_information_by_name",
+     "args": {
+      "customer_name": "the name the customer gives (case sensitive); or use get_user_information_by_email(email) or get_user_information_by_id(user_id) with the value the customer gives"
+     },
+     "lookup": [],
+     "after": [],
+     "if": null,
+     "quote": null,
+     "doc": null,
+     "basis": [
+      {
+       "clause": "verify identity before reading account records",
+       "source": "none",
+       "why": "From the Rho-Bank Customer Service Policy (Authenticating Users), not a KB document."
+      }
+     ]
+    },
+    {
+     "id": "v_check",
+     "by": "model",
+     "do": "Ask for any two of date of birth, email, phone number or home address. Compare them with the record. If two do not match, do not share any account information and do not go on.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "v_lookup"
+     ],
+     "after": [
+      "v_lookup"
+     ],
+     "if": null,
+     "quote": null,
+     "doc": null,
+     "basis": [
+      {
+       "clause": "two of four identity values must match",
+       "source": "none",
+       "why": "From the Rho-Bank Customer Service Policy (Authenticating Users), not a KB document."
+      }
+     ]
+    },
+    {
+     "id": "v_time",
+     "by": "harness",
+     "do": "Get the current time. It is used to log the verification and to work out which monthly windows have closed.",
+     "call": "get_current_time",
+     "args": {},
+     "lookup": [],
+     "after": [
+      "v_check"
+     ],
+     "if": "identity verified",
+     "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "id": "v_log",
+     "by": "harness",
+     "do": "Log the verification.",
+     "call": "log_verification",
+     "args": {
+      "name": "verified user's record",
+      "user_id": "verified user's record",
+      "address": "verified user's record",
+      "email": "verified user's record",
+      "phone_number": "verified user's record",
+      "date_of_birth": "verified user's record (MM/DD/YYYY)",
+      "time_verified": "v_time result"
+     },
+     "lookup": [],
+     "after": [
+      "v_time"
+     ],
+     "if": "identity verified",
+     "quote": null,
+     "doc": null,
+     "basis": [
+      {
+       "clause": "log the verification after verifying",
+       "source": "none",
+       "why": "From the Rho-Bank Customer Service Policy (Authenticating Users), not a KB document."
+      }
+     ]
+    },
+    {
+     "id": "accounts",
+     "by": "harness",
+     "do": "Get the customer's credit card accounts. Find the Platinum Rewards Card account, its account id and its date opened.",
+     "call": "get_credit_card_accounts_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "v_log"
+     ],
+     "if": "identity verified",
+     "quote": "credit_card_account_id (string, required) - The credit card account ID to apply the credit to. This can be found by calling get_credit_card_accounts_by_user.",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    },
+    {
+     "id": "no_platinum",
+     "by": "model",
+     "do": "If the customer has no open Platinum Rewards Card account, explain that this annual fee rebate is a Platinum Rewards Card benefit, and stop this job. If the Platinum account is closed or was product-changed, explain that the rebate is not awarded.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "accounts"
+     ],
+     "after": [
+      "accounts"
+     ],
+     "if": "no open Platinum Rewards Card in the accounts result",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "the rebate belongs to the Platinum Rewards Card",
+       "quote": "The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every month of your cardmember year.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "closed or product-changed account gets no rebate",
+       "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "txns",
+     "by": "harness",
+     "do": "Get the customer's credit card transactions. Keep those on the Platinum Rewards Card account, with their dates, amounts and types.",
+     "call": "get_credit_card_transactions_by_user",
+     "args": {
+      "user_id": "the verified user"
+     },
+     "lookup": [],
+     "after": [
+      "accounts"
+     ],
+     "if": "customer holds a Platinum Rewards Card",
+     "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold. Authorization dates do not control eligibility.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "id": "disputes_unlock",
+     "by": "harness",
+     "do": "Unlock get_user_dispute_history_7291.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291"
+     },
+     "lookup": [],
+     "after": [
+      "accounts"
+     ],
+     "if": "customer holds a Platinum Rewards Card",
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "id": "disputes",
+     "by": "harness",
+     "do": "Get the customer's credit card disputes. Any Platinum transaction whose dispute is still unresolved (status such as open or under_review) is left out of the monthly totals.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "get_user_dispute_history_7291",
+      "arguments": "{\"user_id\": the verified user}"
+     },
+     "lookup": [],
+     "after": [
+      "disputes_unlock"
+     ],
+     "if": "customer holds a Platinum Rewards Card",
+     "quote": "Disputed transactions while unresolved.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "read disputes with this tool",
+       "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+       "doc": "doc_credit_cards_credit_cards_(general)_016"
+      },
+      {
+       "clause": "unresolved statuses",
+       "quote": "status (for example: open, under_review, closed)",
+       "doc": "doc_credit_cards_credit_cards_(general)_016"
+      },
+      {
+       "clause": "unresolved disputed transactions are excluded",
+       "quote": "Disputed transactions while unresolved.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "promo_year",
+     "by": "model",
+     "do": "Decide which cardmember year is being evaluated. The promo waived the first-year annual fee if the Platinum account was applied for and opened in the promo window (2024-06-01 to 2024-12-31), and no annual fee was charged in the first 12 months. In that case the rebate does not apply to the first cardmember year, whatever the spending. The evaluation year then starts on the first anniversary of the open date, which is the first fee-billed year. Otherwise the evaluation year starts on the account opening date, or on the latest anniversary of it.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "accounts",
+      "txns",
+      "v_time"
+     ],
+     "after": [
+      "txns",
+      "disputes"
+     ],
+     "if": "customer holds a Platinum Rewards Card",
+     "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "promo-waived first year gets no rebate; eligibility starts with the next fee-billed year",
+       "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "promo window start",
+       "quote": "Start date: 2024-06-01",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "promo window end",
+       "quote": "End date: 2024-12-31",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "waiver requires application in the window and approval",
+       "quote": "Submit your application within the promo window and be approved.",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "waiver covers the first 12 months from opening; fee billed after the first anniversary",
+       "quote": "The waiver applies to the first 12 months from account opening; after the first anniversary, the standard $200.00 annual fee applies.",
+       "doc": "doc_credit_cards_platinum_rewards_card_009"
+      },
+      {
+       "clause": "evaluation year starts at opening or at the first fee-billed year",
+       "quote": "Cardmember year: Your rebate evaluation covers 12 consecutive monthly windows, starting from your account opening date (or from the start of the first fee-billed cardmember year after any promotional waiver).",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "windows",
+     "by": "model",
+     "do": "Build the 12 monthly windows of the evaluation year. Each window starts on the monthly anniversary of the account opening day and ends the day before the next one. Using v_time, mark which windows have closed.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "accounts",
+      "v_time",
+      "promo_year"
+     ],
+     "after": [
+      "promo_year"
+     ],
+     "if": "customer holds a Platinum Rewards Card",
+     "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "first window starts on the opening date",
+       "quote": "Start date: Your first monthly window begins on your account opening date.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "window runs anniversary to the day before the next",
+       "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "use anniversary dates, not statement cycles or calendar months",
+       "quote": "Track posted transactions by your monthly anniversary dates, not by statement cycle or calendar month.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "totals",
+     "by": "model",
+     "do": "For each window, add up the net qualifying spend. Count purchases posted in the window, including authorized-user and virtual-card purchases. Subtract returns, refunds and credits in the window in which they post. Leave out fees, interest, adjustments, cash advances and cash equivalents, balance transfers, person-to-person or cash-equivalent funding transactions, and transactions with an unresolved dispute (from the disputes step). Compare each window's total with the $7500.00 monthly threshold.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "txns",
+      "disputes",
+      "windows"
+     ],
+     "after": [
+      "windows"
+     ],
+     "if": "customer holds a Platinum Rewards Card",
+     "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_007",
+     "basis": [
+      {
+       "clause": "threshold $7500.00 a month, rebate $150.00",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "included purchases",
+       "quote": "Net purchases posted to your Platinum Rewards Card, including purchases made by authorized users.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "exclude fees, interest, adjustments",
+       "quote": "Fees, interest charges, and adjustments.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "exclude cash advances and cash equivalents",
+       "quote": "Cash advances and cash-equivalent transactions (for example, money orders, traveler’s checks, and similar cash-like activity).",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "exclude balance transfers",
+       "quote": "Balance transfers.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "exclude P2P or cash-equivalent funding",
+       "quote": "Person-to-person money transfers and funding transactions that are coded as cash equivalents.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "exclude unresolved disputes",
+       "quote": "Disputed transactions while unresolved.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "returns reduce the window in which they post",
+       "quote": "Returns, refunds, or credits reduce the monthly total in the window in which the credit posts.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "count by posting date",
+       "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold. Authorization dates do not control eligibility.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      }
+     ]
+    },
+    {
+     "id": "decide",
+     "by": "model",
+     "do": "Decide the outcome and explain it, with the reason if the customer asks why. (a) If the first year was promo-waived, tell the customer the rebate does not apply to that year. (b) If any window of the evaluation year, closed so far or overall, is below the threshold, the customer does not qualify for that cardmember year. There is no partial or prorated rebate. Name the window(s) that fell short. (c) If all 12 windows have closed and each one met the threshold, the customer qualifies for the $150.00 rebate. It is applied as a statement credit to the Platinum card after that year's $200.00 annual fee is billed. (d) If not all 12 windows have closed and every closed window met the threshold, eligibility has not been assessed yet. Explain that it is decided after the 12th window closes.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "promo_year",
+      "totals",
+      "windows"
+     ],
+     "after": [
+      "totals"
+     ],
+     "if": "customer holds a Platinum Rewards Card",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "promo-waived first year gets no rebate",
+       "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "one short month disqualifies the whole year; nothing partial",
+       "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "all 12 windows must meet the threshold",
+       "quote": "You must meet the monthly threshold in all 12 windows to earn the rebate for that cardmember year.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "assessed after the 12th window closes",
+       "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "posted as a statement credit after the annual fee is billed",
+       "quote": "If you qualified, the rebate is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "annual fee figure",
+       "quote": "Annual fee: $200.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_001"
+      }
+     ]
+    },
+    {
+     "id": "forfeit_note",
+     "by": "model",
+     "do": "If the customer qualifies, or may still qualify, and talks about closing or product-changing the Platinum card, tell them the rebate is not awarded if they do so before the year-end evaluation or rebate posting.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "decide"
+     ],
+     "after": [
+      "decide"
+     ],
+     "if": "outcome (c) or (d) and the customer mentions closing or changing the Platinum card",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "id": "missing_rebate_unlock",
+     "by": "harness",
+     "do": "Unlock apply_statement_credit_8472.",
+     "call": "unlock_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "apply_statement_credit_8472"
+     },
+     "lookup": [
+      "decide",
+      "txns"
+     ],
+     "after": [
+      "decide"
+     ],
+     "if": "outcome (c), the annual fee for that cardmember year has been billed, the transactions show no $150.00 rebate credit for that year, and the customer asks for the missing rebate",
+     "quote": "Call unlock_discoverable_agent_tool with the tool name apply_statement_credit_8472.",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    },
+    {
+     "id": "missing_rebate_credit",
+     "by": "harness",
+     "do": "Apply the missing rebate as a statement credit to the Platinum Rewards Card.",
+     "call": "call_discoverable_agent_tool",
+     "args": {
+      "agent_tool_name": "apply_statement_credit_8472",
+      "user_id": "the verified user",
+      "credit_card_account_id": "Platinum Rewards Card account id from the accounts step",
+      "amount": "150.00 (the rebate amount in doc_credit_cards_platinum_rewards_card_007)",
+      "reason": "'other' (no listed reason names an annual fee rebate; 'annual_fee_reversal' means a reversal of the fee charge itself)"
+     },
+     "lookup": [
+      "decide",
+      "txns",
+      "accounts"
+     ],
+     "after": [
+      "missing_rebate_unlock"
+     ],
+     "if": "outcome (c), the annual fee for that cardmember year has been billed, the transactions show no $150.00 rebate credit for that year, and the customer asks for the missing rebate",
+     "quote": "When an agent needs to apply a statement credit to a customer's credit card account (for goodwill adjustments, promotional credits, fee reversals, or other account credits), use the apply_statement_credit_8472 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_017",
+     "basis": [
+      {
+       "clause": "statement credits use this tool",
+       "quote": "When an agent needs to apply a statement credit to a customer's credit card account (for goodwill adjustments, promotional credits, fee reversals, or other account credits), use the apply_statement_credit_8472 tool.",
+       "doc": "doc_credit_cards_credit_cards_(general)_017"
+      },
+      {
+       "clause": "rebate is a statement credit after the fee is billed",
+       "quote": "If you qualified, the rebate is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed.",
+       "doc": "doc_credit_cards_platinum_rewards_card_010"
+      },
+      {
+       "clause": "amount $150.00",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      },
+      {
+       "clause": "reason 'other'",
+       "quote": "'other': Other reasons not covered above",
+       "doc": "doc_credit_cards_credit_cards_(general)_017"
+      },
+      {
+       "clause": "agent posts a missing Platinum rebate manually",
+       "source": "none",
+       "why": "No document says agents post a missing Platinum rebate. doc_010 only says it is applied, and doc_017 covers 'other account credits'. Use only when the customer asks for it, and if unsure, offer a transfer instead."
+      }
+     ]
+    },
+    {
+     "id": "missing_rebate_confirm",
+     "by": "model",
+     "do": "Confirm that the credit shows as a negative transaction on the card, and tell the customer. If the tool returns an error, read what it says. If the account was not found, recheck the account id from the accounts step and retry once. If the error says the credit may already exist, do not retry, and tell the customer it may already be posted.",
+     "call": null,
+     "args": {},
+     "lookup": [
+      "missing_rebate_credit"
+     ],
+     "after": [
+      "missing_rebate_credit"
+     ],
+     "if": "missing_rebate_credit was called",
+     "quote": "Verify the credit appears as a negative transaction in the customer’s credit card transaction history and reduces the statement balance.",
+     "doc": "doc_credit_cards_credit_cards_(general)_017"
+    },
+    {
+     "id": "fail_transfer",
+     "by": "model",
+     "do": "If a record cannot be read, or the customer still disputes the result after the explanation, ask whether they want a human agent. Transfer only if they agree.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "customer's rebate question and the outcome found",
+      "reason": "what could not be resolved"
+     },
+     "lookup": [],
+     "after": [
+      "decide"
+     ],
+     "if": "a lookup fails, or the customer asks for a human after the explanation, and agrees to a transfer",
+     "quote": null,
+     "doc": null,
+     "basis": [
+      {
+       "clause": "ask before transferring",
+       "source": "none",
+       "why": "From the Rho-Bank Customer Service Policy (guidelines 5 and 6), not a KB document."
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "rule": "The rebate is earned only if every one of the 12 monthly windows in the cardmember year meets the $7500.00 threshold. One short window disqualifies the whole year, with no partial rebate.",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": [
+      {
+       "clause": "threshold and rebate amount",
+       "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+       "doc": "doc_credit_cards_platinum_rewards_card_007"
+      }
+     ]
+    },
+    {
+     "rule": "A cardmember year whose annual fee was waived by promotion earns no rebate.",
+     "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": []
+    },
+    {
+     "rule": "Windows are counted from monthly anniversaries of the account opening date, by posting date.",
+     "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold. Authorization dates do not control eligibility.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010",
+     "basis": []
+    }
+   ],
+   "done_when": "The customer is verified and told whether they qualify, do not qualify, or are not yet assessed for the Platinum annual fee rebate, with the reason (promo-waived year, the window(s) below $7500.00, or the evaluation not yet due). Any missing rebate the customer asked for is credited or handed to a human agent."
+  },
+  {
+   "job": "apply_for_credit_card",
+   "aliases": [
+    "apply_for_new_credit_card",
+    "switch_to_another_credit_card"
+   ],
+   "when": {
+    "quote": "1. Complete the online application with your personal information and income details",
+    "doc": "doc_credit_cards_silver_rewards_card_001"
+   },
+   "starts": {
+    "by": "customer",
+    "note": "customer: only when the customer asks to apply for a credit card; the customer runs apply_for_credit_card themselves",
+    "quote": "1. Complete the online application with your personal information and income details",
+    "doc": "doc_credit_cards_silver_rewards_card_001"
+   },
+   "tools": [
+    {
+     "tool": "apply_for_credit_card",
+     "who": "customer",
+     "step": "customer_applies",
+     "not_used": null
+    },
+    {
+     "tool": "downgrade_credit_card_3847",
+     "who": "agent",
+     "step": null,
+     "not_used": "Only when the customer explicitly asks to downgrade an existing card to avoid annual fees, and only to the Bronze Rewards Card. A request to apply for a new card is not a downgrade. 'Customer request: The customer explicitly asks to downgrade to avoid annual fees.' (doc_credit_cards_credit_card_account_logistics_008)"
+    },
+    {
+     "tool": "transfer_to_human_agents",
+     "who": "agent",
+     "step": "app_fail",
+     "not_used": null
+    }
+   ],
+   "info": [
+    {
+     "field": "card_type",
+     "about": "the card the customer wants to apply for",
+     "from": "customer",
+     "ask": "Which credit card would you like to apply for?",
+     "may_hold_back": false
+    },
+    {
+     "field": "customer_name",
+     "about": "full legal name",
+     "from": "customer",
+     "ask": "What is your full legal name for the application?",
+     "may_hold_back": false
+    },
+    {
+     "field": "annual_income",
+     "about": "annual income in USD, as a number",
+     "from": "customer",
+     "ask": "What is your annual income in US dollars?",
+     "may_hold_back": true
+    },
+    {
+     "field": "rho_bank_subscription",
+     "about": "whether the customer has a Rho-Bank+ subscription",
+     "from": "customer",
+     "ask": "Do you have a Rho-Bank+ subscription?",
+     "may_hold_back": true
+    },
+    {
+     "field": "diamond_invitation",
+     "about": "for the Diamond Elite Card only: whether the customer received an invitation",
+     "from": "customer",
+     "ask": "The Diamond Elite Card is by invitation only. Have you received an invitation to apply?",
+     "may_hold_back": true
+    }
+   ],
+   "steps": [
+    {
+     "id": "card_choice",
+     "by": "model",
+     "do": "Confirm which card the customer wants to apply for. If they ask, give that card's own documented terms (for example, Silver Rewards Card: $0.00 annual fee, minimum credit score 680; Diamond Elite Card: $495.00 annual fee, by invitation only, credit score of at least 780 to be considered). Do not choose the card for them.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [],
+     "if": "customer asks to apply for a credit card",
+     "quote": "Annual fee: $0.00",
+     "doc": "doc_credit_cards_silver_rewards_card_001",
+     "basis": [
+      {
+       "clause": "Silver annual fee",
+       "quote": "Annual fee: $0.00",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Silver credit score",
+       "quote": "Minimum credit score: $680",
+       "doc": "doc_credit_cards_silver_rewards_card_001"
+      },
+      {
+       "clause": "Diamond annual fee",
+       "quote": "Your standard annual fee is $495.00. It appears on your first statement and on the anniversary each year thereafter unless waived by a qualifying promotion.",
+       "doc": "doc_credit_cards_diamond_elite_card_006"
+      },
+      {
+       "clause": "Diamond credit score",
+       "quote": "You should maintain a credit score of at least $780 to be considered.",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      }
+     ]
+    },
+    {
+     "id": "diamond_invite",
+     "by": "model",
+     "do": "If the chosen card is the Diamond Elite Card, ask whether the customer has received an invitation. Do not ask for proof. If they have no invitation, explain that membership is by invitation only, and do not have them apply for it. They may choose another card instead.",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "card_choice"
+     ],
+     "if": "card_type is Diamond Elite Card",
+     "quote": "Membership is by invitation only (Yes).",
+     "doc": "doc_credit_cards_diamond_elite_card_001",
+     "basis": [
+      {
+       "clause": "invitation only",
+       "quote": "Membership is by invitation only (Yes).",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      },
+      {
+       "clause": "respond to an invitation promptly",
+       "quote": "Invitations are time-limited; respond promptly if you receive one.",
+       "doc": "doc_credit_cards_diamond_elite_card_001"
+      },
+      {
+       "clause": "do not ask for documentation",
+       "source": "none",
+       "why": "From Rho-Bank Customer Service Policy guideline 2, not a KB document."
+      }
+     ]
+    },
+    {
+     "id": "gather",
+     "by": "model",
+     "do": "Ask for any application value the customer has not given: full legal name, annual income in USD (a number), and whether they have a Rho-Bank+ subscription (true or false).",
+     "call": null,
+     "args": {},
+     "lookup": [],
+     "after": [
+      "card_choice"
+     ],
+     "if": "customer still wants to apply (and, for Diamond Elite, has an invitation)",
+     "quote": "1. Complete the online application with your personal information and income details",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "id": "customer_applies",
+     "by": "customer",
+     "do": "Have the customer submit the application themselves with apply_for_credit_card.",
+     "call": "apply_for_credit_card",
+     "args": {
+      "card_type": "the card the customer chose, named as the documents title it (e.g. 'Silver Rewards Card', 'Diamond Elite Card')",
+      "customer_name": "customer's full legal name, from the customer",
+      "annual_income": "number in USD, from the customer",
+      "rho_bank_subscription": "true or false, from the customer"
+     },
+     "lookup": [],
+     "after": [
+      "gather",
+      "diamond_invite"
+     ],
+     "if": null,
+     "quote": "1. Complete the online application with your personal information and income details",
+     "doc": "doc_credit_cards_silver_rewards_card_001"
+    },
+    {
+     "id": "app_fail",
+     "by": "model",
+     "do": "Read the application reply. If it is 'Invalid card_type', have the customer resubmit using a value from the valid list the error shows. If it is 'Invalid annual_income', have them resubmit the income as a plain number. Otherwise tell the customer the result. If it cannot be resolved, ask whether they want a human agent, and transfer only if they agree.",
+     "call": "transfer_to_human_agents",
+     "args": {
+      "summary": "card applied for and the error returned",
+      "reason": "application could not be completed"
+     },
+     "lookup": [
+      "customer_applies"
+     ],
+     "after": [
+      "customer_applies"
+     ],
+     "if": "the application returns an error that resubmitting does not fix, and the customer agrees to a transfer",
+     "quote": null,
+     "doc": null,
+     "basis": [
+      {
+       "clause": "error replies and their fixes",
+       "source": "none",
+       "why": "From the apply_for_credit_card tool description (its listed error replies), not a KB document."
+      },
+      {
+       "clause": "ask before transferring",
+       "source": "none",
+       "why": "From the Rho-Bank Customer Service Policy (guideline 5), not a KB document."
+      }
+     ]
+    }
+   ],
+   "rules": [
+    {
+     "rule": "Only a customer who has received an invitation applies for the Diamond Elite Card.",
+     "quote": "Membership is by invitation only (Yes).",
+     "doc": "doc_credit_cards_diamond_elite_card_001",
+     "basis": []
+    },
+    {
+     "rule": "Downgrading an existing card is a separate procedure. It is used only on an explicit downgrade request to avoid annual fees, and only to the Bronze Rewards Card for personal cards.",
+     "quote": "Personal cards: Bronze Rewards Card (no annual fee)",
+     "doc": "doc_credit_cards_credit_card_account_logistics_008",
+     "basis": []
+    }
+   ],
+   "done_when": "The customer has submitted apply_for_credit_card with all four values and been told the result. For the Diamond Elite Card, they applied only after confirming an invitation, or were told it is invitation only."
+  }
+ ],
+ "decision": {
+  "platinum_rewards_card_annual_fee_rebate_eligibility": [
+   "platinum_rewards_card_annual_fee_rebate_eligibility"
+  ],
+  "apply_for_credit_card": [
+   "recommend_personal_credit_card"
+  ]
+ },
+ "lock": {
+  "token": 7,
+  "jobs": [
+   "apply_for_credit_card",
+   "platinum_rewards_card_annual_fee_rebate_eligibility",
+   "recommend_personal_credit_card"
+  ],
+  "waited_ms": 44,
+  "read": {
+   "recommend_personal_credit_card": 0,
+   "platinum_rewards_card_annual_fee_rebate_eligibility": 0
+  },
+  "committed": {
+   "platinum_rewards_card_annual_fee_rebate_eligibility": 1,
+   "recommend_personal_credit_card": 1
+  },
+  "error": null
+ }
+}

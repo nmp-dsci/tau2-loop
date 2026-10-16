@@ -1,0 +1,503 @@
+{
+ "job": "order_replacement_credit_card",
+ "aliases": [
+  "cancel and reissue credit card",
+  "cancel_and_reissue_credit_card",
+  "credit_card_replacement_fraud_suspected",
+  "how_to_order_a_replacement_credit_card",
+  "lost or stolen credit card replacement",
+  "new card number after fraud",
+  "reissue stolen credit card",
+  "replace credit card",
+  "replace lost credit card",
+  "replacement card with expedited shipping after fraud",
+  "replacement credit card accepted after the lost-wallet cross-product offer",
+  "ship replacement card to alternate or work address",
+  "stolen Gold Rewards and EcoCard replaced through the wallet-theft offer"
+ ],
+ "when": {
+  "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+  "doc": "doc_credit_cards_credit_card_replacements_001"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: when the customer asks, accepts the cross-product offer, or wants a card cancelled and reissued during a dispute.",
+  "quote": "3) If yes, proactively offer to order a replacement credit card as a security precaution",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+ },
+ "tools": [
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "rc_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_pending_replacement_orders_5765",
+   "who": "agent",
+   "step": "rc_pending",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "rc_order",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "rc_order",
+   "not_used": null
+  },
+  {
+   "tool": "order_replacement_credit_card_7291",
+   "who": "agent",
+   "step": "rc_order",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "transfer_manual_review",
+   "not_used": null
+  },
+  {
+   "tool": "file_credit_card_transaction_dispute_4829",
+   "who": "agent",
+   "step": null,
+   "not_used": "A dispute is a separate job (filing_a_credit_card_transaction_dispute)."
+  },
+  {
+   "tool": "submit_credit_limit_increase_request_7392",
+   "who": "agent",
+   "step": null,
+   "not_used": "A credit limit increase belongs to its own job. cli_conflict_notice only tells the customer about the conflict."
+  }
+ ],
+ "info": [
+  {
+   "field": "cards_to_replace",
+   "about": "which credit card accounts to replace",
+   "from": "customer",
+   "ask": "Which credit cards would you like replaced?",
+   "may_hold_back": false
+  },
+  {
+   "field": "replacement_reason",
+   "about": "fraud_suspected, lost, stolen, damaged, expired or other",
+   "from": "customer",
+   "ask": "What is the reason for the replacement: lost, stolen, suspected fraud, damaged, expired, or other?",
+   "may_hold_back": false
+  },
+  {
+   "field": "expedited",
+   "about": "whether the customer wants expedited shipping, asked per card",
+   "from": "customer",
+   "ask": "Would you like expedited shipping (2-3 business days)? (give the card's tier fee)",
+   "may_hold_back": true
+  },
+  {
+   "field": "shipping_address",
+   "about": "the address for the new card, including any unit or suite",
+   "from": "customer",
+   "ask": "Should the card go to your address on file, or to another address?",
+   "may_hold_back": true
+  },
+  {
+   "field": "cli_first_choice",
+   "about": "which to do first when a credit limit increase on the same card is also requested and not yet decided",
+   "from": "customer",
+   "ask": "A pending replacement card would hold up the credit limit increase. Would you like the increase handled first?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "ensure_verified",
+   "by": "model",
+   "do": "Make sure the customer was verified and logged earlier in this conversation. If not, verify first (fz_identify to fz_log in freezing_and_unfreezing_a_debit_card).",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Verify the customer's identity using standard verification procedures.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "already_ordered_this_conversation",
+   "by": "model",
+   "do": "Do not order again for this card. Confirm the existing order's address and shipping speed. Give its delivery time counted from when that order was placed earlier in this conversation: standard 7–10 business days, expedited 2–3 business days.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rc_order"
+   ],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": "order_replacement_credit_card_7291 already succeeded for this card in this conversation",
+   "quote": "You cannot submit another replacement while an existing request is still being processed.",
+   "doc": "doc_credit_cards_credit_card_replacements_004",
+   "basis": [
+    {
+     "clause": "delivery times",
+     "quote": "Communicate the expected delivery window based on the selected method (standard: 7–10 business days; expedited: 2–3 business days).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ]
+  },
+  {
+   "id": "rc_lookup",
+   "by": "harness",
+   "do": "Look up the customer's credit card accounts for each credit_card_account_id and card type (tier).",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "verified user_id"
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": "the customer wants a credit card replaced",
+   "quote": "Look up the customer's credit card account.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "cli_conflict_notice",
+   "by": "model",
+   "do": "Before ordering, tell the customer that a pending replacement would block the credit limit increase until it is delivered or cancelled, and ask which request they want first. Order nothing in this step.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rc_lookup"
+   ],
+   "after": [
+    "rc_lookup"
+   ],
+   "if": "the customer also asked in this conversation for a credit limit increase on the same card, and it has not been decided",
+   "quote": "If a replacement is pending, the CLI cannot be processed until the replacement is delivered or cancelled.",
+   "doc": "doc_credit_cards_credit_card_account_logistics_007",
+   "basis": [
+    {
+     "clause": "ask which goes first",
+     "source": "none",
+     "why": "No document orders the two requests. The replacement uses up the increase's eligibility, so the customer chooses (reading rule 7)."
+    }
+   ]
+  },
+  {
+   "id": "rc_pending",
+   "by": "harness",
+   "do": "Unlock get_pending_replacement_orders_5765, then call it through call_discoverable_agent_tool for each card to replace. If the response is empty or ambiguous, retry the call.",
+   "call": "get_pending_replacement_orders_5765",
+   "args": {
+    "credit_card_account_id": "from rc_lookup"
+   },
+   "lookup": [],
+   "after": [
+    "rc_lookup"
+   ],
+   "if": null,
+   "quote": "To check if a credit card account has any pending replacement card orders, use the get_pending_replacement_orders_5765 tool.",
+   "doc": "doc_credit_cards_credit_card_replacements_005",
+   "basis": [
+    {
+     "clause": "unlock before calling",
+     "quote": "The unlock step is required before calling - you cannot call a tool that hasn't been unlocked",
+     "doc": "policy"
+    },
+    {
+     "clause": "retry on empty or ambiguous",
+     "quote": "Retry the call.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    }
+   ]
+  },
+  {
+   "id": "rc_eligibility",
+   "by": "model",
+   "do": "If any order in rc_pending is not delivered or cancelled (for example pending or shipped), the card is not eligible. Tell the customer they must wait until that replacement is delivered or cancelled, and do not unlock or call the order tool. The tier limit (Entry 2, Mid 3, Premium and above 4 replacements in the 60 days up to the order date) cannot be read in advance. If the order is rejected for the limit, handle it in order_error.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rc_pending"
+   ],
+   "after": [
+    "rc_pending"
+   ],
+   "if": null,
+   "quote": "Confirm eligibility for replacement in the knowledge base before proceeding. Do not unlock or call the tool unless the customer is eligible.",
+   "doc": "doc_credit_cards_credit_card_replacements_001",
+   "basis": [
+    {
+     "clause": "pending blocks",
+     "quote": "You cannot submit another replacement while an existing request is still being processed. Wait until the current replacement is delivered or cancelled before submitting a new request.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "clause": "non-final orders count as pending",
+     "quote": "Treat the account as having pending replacement activity unless every order is clearly delivered or cancelled.",
+     "doc": "doc_credit_cards_credit_card_replacements_005"
+    },
+    {
+     "clause": "60-day limit",
+     "quote": "Replacement requests are limited within a 60-day period to help protect your account.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "clause": "no lookup for past replacements",
+     "source": "none",
+     "why": "No tool or document reads replacement history beyond pending orders."
+    }
+   ]
+  },
+  {
+   "id": "rc_reason",
+   "by": "model",
+   "do": "Ask the replacement reason for each card, unless the customer already said, and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, other.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "rc_lookup"
+   ],
+   "if": null,
+   "quote": "Ask for the replacement reason and record exactly one of: fraud_suspected, lost, stolen, damaged, expired, or other.",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "rc_shipping",
+   "by": "model",
+   "do": "For each card separately, ask whether the customer wants expedited shipping (2-3 business days) and give that card's tier fee. Entry tier (Bronze Rewards, EcoCard, Business Bronze): $15.00. Mid tier (Silver Rewards, Business Silver, Green Rewards, Silver Zoom): $10.00. Premium tier and above (Gold, Business Gold, Platinum, Business Platinum, Diamond Elite): $0.00. Standard shipping (7-10 business days) is free. If the reason is fraud_suspected or stolen, strongly recommend expedited shipping. When a fee applies, get the customer's consent to it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rc_lookup",
+    "rc_reason"
+   ],
+   "after": [
+    "rc_reason",
+    "rc_eligibility"
+   ],
+   "if": "rc_eligibility passed",
+   "quote": "Ask whether they want expedited shipping (advise on possible fees by tier; see Shipping selection).",
+   "doc": "doc_credit_cards_credit_card_replacements_001",
+   "basis": [
+    {
+     "clause": "entry fee",
+     "quote": "Entry-tier (Bronze Rewards Card, EcoCard, Business Bronze Rewards Card): $15.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "clause": "mid fee",
+     "quote": "Mid-tier (Silver Rewards Card, Business Silver Rewards Card, Green Rewards Card, Silver Zoom Card): $10.00.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "clause": "premium free",
+     "quote": "Premium-tier and above (Gold Rewards Card, Business Gold Rewards Card, Platinum Rewards Card, Business Platinum Rewards Card, Diamond Elite Card): $0.00 (complimentary).",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "clause": "standard free",
+     "quote": "Standard delivery: 7–10 business days; free for all cardholders.",
+     "doc": "doc_credit_cards_credit_card_replacements_002"
+    },
+    {
+     "clause": "recommend expedited for stolen/fraud",
+     "quote": "If the reason is fraud_suspected or stolen, strongly recommend expedited shipping to minimize exposure and remind the customer to review recent transactions for unauthorized activity.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "clause": "consent to fee",
+     "quote": "Expedited_fee_acknowledgement: customer consent captured if a fee applies based on tier.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ]
+  },
+  {
+   "id": "rc_address",
+   "by": "model",
+   "do": "Confirm the shipping address with the customer: primary or alternate, including any unit or suite.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "ensure_verified"
+   ],
+   "after": [
+    "rc_eligibility"
+   ],
+   "if": "rc_eligibility passed",
+   "quote": "Confirm the shipping address with the customer (primary or alternate, including any unit or suite information).",
+   "doc": "doc_credit_cards_credit_card_replacements_001"
+  },
+  {
+   "id": "rc_order",
+   "by": "harness",
+   "do": "Unlock order_replacement_credit_card_7291, then call it through call_discoverable_agent_tool once per card. If it returns an error, follow order_error.",
+   "call": "order_replacement_credit_card_7291",
+   "args": {
+    "credit_card_account_id": "from rc_lookup",
+    "user_id": "verified user_id",
+    "shipping_address": "the address confirmed in rc_address",
+    "reason": "the value recorded in rc_reason",
+    "expedited_shipping": "true if the customer chose expedited in rc_shipping, else false"
+   },
+   "lookup": [
+    "rc_eligibility"
+   ],
+   "after": [
+    "rc_eligibility",
+    "rc_shipping",
+    "rc_address"
+   ],
+   "if": "the customer wants this card replaced, rc_eligibility found no non-final replacement order, and the customer consented to any fee that applies",
+   "quote": "Use unlock_discoverable_agent_tool with tool_name: order_replacement_credit_card_7291.",
+   "doc": "doc_credit_cards_credit_card_replacements_001",
+   "basis": [
+    {
+     "clause": "only when eligible",
+     "quote": "Do not unlock or call the tool unless the customer is eligible.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "clause": "no pending order",
+     "quote": "You cannot submit another replacement while an existing request is still being processed.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "clause": "fee consent",
+     "quote": "Expedited_fee_acknowledgement: customer consent captured if a fee applies based on tier.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ]
+  },
+  {
+   "id": "order_error",
+   "by": "model",
+   "do": "If the order is rejected for the tier limit, explain the limit for the 60-day period and that a manual review can be requested. For any other error reply, tell the customer what the reply says. For example, 'Order may have already been placed' points to an existing order, so check rc_pending again.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rc_order"
+   ],
+   "after": [
+    "rc_order"
+   ],
+   "if": "rc_order returns an error or rejection",
+   "quote": "If you believe you have a legitimate need for an additional replacement beyond these limits, contact customer support to request a manual review of your case.",
+   "doc": "doc_credit_cards_credit_card_replacements_004",
+   "basis": [
+    {
+     "clause": "limit explanation",
+     "quote": "Replacement requests are limited within a 60-day period to help protect your account.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "clause": "report other replies as they say",
+     "source": "none",
+     "why": "The tool's own description lists 'Error: Order may have already been placed for this card replacement.' among its replies; the step follows what the reply says (reading rule 10)."
+    }
+   ]
+  },
+  {
+   "id": "transfer_manual_review",
+   "by": "model",
+   "do": "Ask whether the customer wants a human agent, and transfer only if they agree. For a manual review of a lost, stolen or fraud replacement, use fraud_or_security_concern. For a system error that prevents the order, use technical_system_error.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "replacement request details (card, reason, address, speed) and the rejection or error",
+    "reason": "fraud_or_security_concern for a manual review of a lost, stolen or fraud_suspected replacement; technical_system_error for a system error"
+   },
+   "lookup": [
+    "order_error"
+   ],
+   "after": [
+    "order_error"
+   ],
+   "if": "the order is blocked by the limit or by an error that cannot be resolved, the customer wants a manual review or help, and agrees to a transfer",
+   "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "fraud/security code",
+     "quote": "Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "manual review",
+     "quote": "If you believe you have a legitimate need for an additional replacement beyond these limits, contact customer support to request a manual review of your case.",
+     "doc": "doc_credit_cards_credit_card_replacements_004"
+    },
+    {
+     "clause": "ask first",
+     "quote": "Do not transfer without asking the user first.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "rc_after",
+   "by": "model",
+   "do": "Tell the customer the following. The old card is cancelled and no longer works for new purchases. The new card has a different number and CVV, and the account number stays the same. Give the delivery time counted from today's order: standard 7-10 business days, expedited 2-3. Tell them to watch for emails when the order is placed and when the card ships, and to update saved card details with merchants. If the reason was fraud_suspected or stolen, remind them to review recent transactions and dispute any unauthorized charges.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "rc_order"
+   ],
+   "after": [
+    "rc_order"
+   ],
+   "if": "rc_order succeeded",
+   "quote": "The old card is automatically cancelled for security and will no longer work for new purchases.",
+   "doc": "doc_credit_cards_credit_card_replacements_001",
+   "basis": [
+    {
+     "clause": "delivery times",
+     "quote": "Communicate the expected delivery window based on the selected method (standard: 7–10 business days; expedited: 2–3 business days).",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "clause": "new number and CVV",
+     "quote": "A new card is created with a different card number and CVV.",
+     "doc": "doc_credit_cards_credit_card_replacements_003"
+    },
+    {
+     "clause": "account number unchanged",
+     "quote": "Your account number remains unchanged, so recurring payments linked to your account continue without interruption.",
+     "doc": "doc_credit_cards_credit_card_replacements_003"
+    },
+    {
+     "clause": "emails",
+     "quote": "Advise the customer to watch for email notifications when the order is placed and when the card ships.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    },
+    {
+     "clause": "update merchants",
+     "quote": "Update any saved card details with merchants after you receive the new card.",
+     "doc": "doc_credit_cards_credit_card_replacements_003"
+    },
+    {
+     "clause": "review transactions",
+     "quote": "If the reason was fraud_suspected or stolen, remind the customer to review recent transactions and dispute any unauthorized charges in the app or website.",
+     "doc": "doc_credit_cards_credit_card_replacements_001"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "The expedited fee depends on each card's tier: Entry $15.00, Mid $10.00, Premium and above $0.00.",
+   "quote": "Entry-tier (Bronze Rewards Card, EcoCard, Business Bronze Rewards Card): $15.00.",
+   "doc": "doc_credit_cards_credit_card_replacements_002"
+  },
+  {
+   "rule": "Replacement limits per 60-day period: Entry 2, Mid 3, Premium and above 4.",
+   "quote": "Premium-tier and above: up to 4 replacements per period.",
+   "doc": "doc_credit_cards_credit_card_replacements_004"
+  }
+ ],
+ "done_when": "For each credit card the customer wanted replaced, one of these holds: a replacement was ordered once, and the customer was told the delivery time and the notices; it was already ordered earlier in this conversation and the customer was told so; or the customer was told why not, and a transfer was offered where the documents allow."
+}

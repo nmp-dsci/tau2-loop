@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
+  type AgentInfo,
   type GoldenSet,
   type RagEvent,
   type RagJob,
@@ -11,6 +12,8 @@ import {
   type RagSession,
   type RagSessionMeta,
   type RagVersion,
+  type Registries,
+  type VersionHistory,
   domainLabel,
   fmtK,
   fmtS,
@@ -19,6 +22,7 @@ import {
   shortModel,
   useGet,
 } from '../lib/api';
+import { RagCaption, RagFigure, RagNodePanel, RagVersionTable, ragClaim, ragParent, readersOf } from '../lib/ragarch';
 import { Kpi, Loading, Points } from '../lib/ui';
 import { taskId, taskPath, useLens, workflowEvalsPath } from '../lib/url';
 import { NoAgent } from './Workflow';
@@ -31,6 +35,11 @@ import { NoAgent } from './Workflow';
  * (`POST /api/workflows/<domain>/rag/sessions`) and this page polls it. The score beside the
  * workflow reads gold only after the session; the agent never sees it. Test questions are sealed
  * and cannot be picked.
+ *
+ * Above the sessions sits the version itself, as the answering agent's tab draws a vN: pick an rN
+ * (`?version=`) and its figure is drawn from its folder, each layer that differs from its parent
+ * marked, a panel for the part picked (`?node=`), and every rN side by side (`lib/ragarch.tsx`).
+ * The session list is that version's sessions; an open one fills the figure with its counts.
  */
 
 const enc = encodeURIComponent;
@@ -513,22 +522,6 @@ function Result({ s, domain }: { s: RagSession; domain: string }) {
   );
 }
 
-function VersionDetails({ v }: { v: RagVersion }) {
-  return (
-    <details>
-      <summary>
-        {v.name}’s prompt and tools <span className="muted">· rag_agents/banking_knowledge/{v.name}/</span>
-      </summary>
-      <p className="small">
-        It calls {v.tools.map((t) => t.name).join(', ')}: the knowledge tools of the answering agent’s retrieval, <code>{v.retrieval}</code>. The answering agent’s other tools and the customer’s are listed in its prompt for it to name, never to call. Each reply is one SDK session on the subscription; a tool result over {v.result_chars.toLocaleString('en-GB')} characters is cut.
-      </p>
-      <div className="code">
-        <pre>{v.prompt}</pre>
-      </div>
-    </details>
-  );
-}
-
 export function WorkflowAgent() {
   const { domain = 'banking_knowledge' } = useParams();
   const [lens, setLens] = useLens();
@@ -536,9 +529,15 @@ export function WorkflowAgent() {
   const has = domain === 'banking_knowledge';
   const { data, error } = useGet<RagPayload>(has ? `/api/workflows/${enc(domain)}/rag` : null, nonce);
   const { data: golden } = useGet<GoldenSet>(has ? `/api/workflows/${enc(domain)}/golden` : null);
+  // the version view: which answering versions read each rN, and their runs
+  const { data: agents } = useGet<{ versions: AgentInfo[]; registry: Registries }>(has ? '/api/agents' : null);
+  const { data: hist } = useGet<Record<string, VersionHistory>>(has ? `/api/versions?domain=${enc(domain)}` : null);
   const sid = lens.get('session') ?? '';
   const { s, err } = useSession(sid ? `/api/workflows/${enc(domain)}/rag/sessions/${enc(sid)}` : null);
-  const v = data?.versions.find((x) => x.name === (lens.get('version') ?? '')) ?? data?.versions[data.versions.length - 1];
+  // the version: the address's, else the open session's, else the newest
+  const vName = lens.get('version') || data?.sessions.find((m) => m.id === sid)?.agent || '';
+  const v = data?.versions.find((x) => x.name === vName) ?? data?.versions[data.versions.length - 1];
+  const node = lens.get('node') ?? 'file:rag_agent.md';
   const [model, setModel] = useState('');
   const [effort, setEffort] = useState('');
   const [busy, setBusy] = useState(false);
@@ -576,11 +575,17 @@ export function WorkflowAgent() {
   };
 
   const running = data.sessions.some((m) => m.status === 'running');
+  const mine = data.sessions.filter((m) => m.agent === v.name);
+  const answering = (agents?.versions ?? []).filter((a) => a.domain === domain);
+  const readers = readersOf(v, answering);
+  const parent = ragParent(v, data.versions);
+  const shown = s && s.meta.agent === v.name ? s : null;
+  const pickVersion = (name: string) => setLens({ version: name, session: '' });
   return (
     <>
       <p className="label">
         Agent · workflow_rag · {domainLabel(domain)} · {v.name} · {shortModel(v.model)} · {v.effort} effort · {v.retrieval} retrieval · max {v.max_steps} steps
-        {v.merge_write === 'edits' && ' · merges written as edits'}
+        {v.merge_write === 'edits' && ' · merges written as edits'} · <a href="#version">the version, drawn</a> · <a href="#versions">every version</a>
       </p>
       <h1>
         workflow_rag {v.name} researches one train question with the answering agent’s own search tools, and writes its <em>workflow</em>
@@ -604,6 +609,22 @@ export function WorkflowAgent() {
       />
 
       <div className="filters agent-filters">
+        <label className="pick">
+          <span className="label">version</span>
+          <select aria-label="workflow_rag version" value={v.name} onChange={(e) => pickVersion(e.target.value)}>
+            {[...data.versions].reverse().map((x) => {
+              const n = data.sessions.filter((m) => m.agent === x.name).length;
+              return (
+                <option key={x.name} value={x.name}>
+                  {x.name}
+                  {x.changes?.defect ? ` · ${x.changes.defect}` : ''}
+                  {x.seed ? ` · seed ${x.seed}` : ''} · {x.library ? `${x.library.workflows} workflows · ` : ''}
+                  {n} {n === 1 ? 'session' : 'sessions'}
+                </option>
+              );
+            })}
+          </select>
+        </label>
         <label className="pick">
           <span className="label">question</span>
           <select aria-label="train question" value={q} onChange={(e) => setLens({ q: e.target.value })}>
@@ -640,7 +661,9 @@ export function WorkflowAgent() {
         <button type="button" className="btn" onClick={run} disabled={busy || !data.live}>
           {busy ? 'Starting…' : `Research ${q}`}
         </button>
-        <span className="count">{data.sessions.length} sessions{running ? ' · one running' : ''}</span>
+        <span className="count">
+          {mine.length} of {data.sessions.length} sessions are {v.name}&rsquo;s{running ? ' · one running' : ''}
+        </span>
       </div>
       {!data.live && <p className="empty">{data.reason}</p>}
       {startErr && <p className="empty v-warn">Could not start: {startErr}</p>}
@@ -654,23 +677,52 @@ export function WorkflowAgent() {
         </p>
       )}
 
-      {data.sessions.length > 0 && (
-        <div className="filters agent-filters">
-          <label className="pick">
-            <span className="label">session</span>
-            <select aria-label="session" value={sid} onChange={(e) => setLens({ session: e.target.value, q: data.sessions.find((m) => m.id === e.target.value)?.task_id ?? q })}>
-              {!sid && <option value="">pick a session</option>}
-              {data.sessions.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {sessionLabel(m)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
+      <div className="filters agent-filters">
+        <label className="pick">
+          <span className="label">session</span>
+          <select aria-label="session" value={shown ? sid : ''} disabled={!mine.length} onChange={(e) => setLens({ session: e.target.value, q: data.sessions.find((m) => m.id === e.target.value)?.task_id ?? q })}>
+            <option value="">{mine.length ? `pick one of ${v.name}'s ${mine.length} sessions` : `${v.name} has no session`}</option>
+            {mine.map((m) => (
+              <option key={m.id} value={m.id}>
+                {sessionLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
-      {v.merge === 'concurrent' && <LibraryPanel domain={domain} version={v.name} open={(session, task) => setLens({ session, q: task ?? q })} />}
+      <h2 id="version">1 · This version — {ragClaim(v, data.versions)}</h2>
+      <div className="agent-cols">
+        <figure className="archfig ragfig">
+          <div className="label fig-title">
+            fig 1 · workflow_rag/{v.name} from its folder alone{parent ? `, each layer that differs from ${parent.name} marked` : ''}
+            {shown ? `, with session ${shown.meta.task_id}'s counts` : ''}
+          </div>
+          <div className="figscroll">
+            <RagFigure domain={domain} v={v} all={data.versions} readers={readers} s={shown} node={node} onPick={(n) => setLens({ node: node === n ? '' : n })} />
+          </div>
+          <RagCaption domain={domain} v={v} all={data.versions} s={shown} />
+        </figure>
+        <RagNodePanel
+          domain={domain}
+          node={node || null}
+          v={v}
+          all={data.versions}
+          readers={readers}
+          hist={hist?.[domain]?.versions ?? null}
+          s={shown}
+          onVersion={pickVersion}
+          onClose={() => setLens({ node: '' })}
+        />
+      </div>
+
+      {v.merge === 'concurrent' && (
+        <LibraryPanel
+          domain={domain}
+          version={v.name}
+          open={(session, task) => setLens({ session, q: task ?? q, version: data.sessions.find((m) => m.id === session)?.agent ?? v.name })}
+        />
+      )}
       {err && <p className="empty">Could not load this session: {err}</p>}
       {sid && !s && !err && <Loading error={null} />}
       {s && (
@@ -689,10 +741,28 @@ export function WorkflowAgent() {
       )}
       {!sid && (
         <p className="empty">
-          Pick a question and press Research. A session takes a few minutes: each step is one model reply, and the page shows it as it lands.
+          Pick a question and press Research, or open one of {v.name}&rsquo;s sessions. A session takes a few minutes: each step is one model reply, and the page shows it as it lands.
         </p>
       )}
-      <VersionDetails v={v} />
+
+      <h2 id="versions">
+        2 · Every version — {domainLabel(domain)}&rsquo;s {data.versions.length} workflow_rag versions, each marked against its parent
+      </h2>
+      <figure>
+        <div className="label fig-title">fig 2 · every workflow_rag version side by side: a row per layer, a marked cell differs from that version&rsquo;s parent</div>
+        <RagVersionTable
+          versions={data.versions}
+          readers={(x: RagVersion) => readersOf(x, answering)}
+          hist={hist?.[domain]?.versions ?? null}
+          sessions={(x: RagVersion) => data.sessions.filter((m) => m.agent === x.name).length}
+          current={v.name}
+          onVersion={pickVersion}
+        />
+        <figcaption>
+          A version&rsquo;s parent is <code>based_on</code> in its change record (r5 on), else its seed; a prompt copied byte for byte reads as the version that wrote it. &ldquo;Read by&rdquo; is each answering version whose workflow tools look jobs up in that library, with its train and test runs.
+          <span className="path">rag_agents/{domain}/*/ · GET /api/workflows/{domain}/rag · GET /api/agents · GET /api/versions</span>
+        </figcaption>
+      </figure>
     </>
   );
 }

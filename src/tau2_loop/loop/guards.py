@@ -94,8 +94,18 @@ def fence_reason(path: str, allowed: set[Path], hidden: list[Path]) -> str | Non
     return None
 
 
+GIT = re.compile(r"(^|[\s;&|(`])git(\s|$)")
+
+
 def bash_fence_reason(cmd: str, hidden: list[Path]) -> str | None:
-    """Why a shell command is refused: it names a fenced folder or a hidden one."""
+    """Why a shell command is refused: it names a fenced folder or a hidden one, or runs git (s23:
+    v23's routing optimiser committed its own diagnosis.json on the person's branch; nothing it
+    writes is a commit, a branch or a push)."""
+    if GIT.search(cmd):
+        return (
+            "git is the harness's, not the session's: write only your files; the harness checks "
+            "and records them"
+        )
     for h in hidden:
         if str(h.relative_to(ROOT)) in cmd or str(h) in cmd:
             return "that folder is another challenger of this cycle"

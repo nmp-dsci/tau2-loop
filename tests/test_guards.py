@@ -116,3 +116,16 @@ def test_a_discoverable_tool_is_named_freely_and_the_ids_in_its_arguments_are_gu
         if k.endswith("_id") and any(c.isdigit() for c in v) and len(v) >= 5
     }
     assert inner and inner <= vals
+
+
+def test_the_optimisers_shell_may_not_run_git() -> None:
+    """s23: v23's routing optimiser ran `git add … && git commit` on the person's branch."""
+    for cmd in (
+        "git commit -m x",
+        "cd /repo && git add agents/x/v24/diagnosis.json && git commit -q -m y",
+        "git push",
+        "(git status)",
+    ):
+        assert bash_fence_reason(cmd, []) is not None, cmd
+    assert bash_fence_reason("grep -n digit agents/x/v24/system.md", []) is None
+    assert bash_fence_reason("python3 -c 'print(\"legit\")'", []) is None

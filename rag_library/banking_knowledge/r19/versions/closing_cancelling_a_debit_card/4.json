@@ -1,0 +1,599 @@
+{
+ "job": "closing_cancelling_a_debit_card",
+ "aliases": [
+  "cancel compromised debit card",
+  "cancel debit card",
+  "cancel stolen debit card",
+  "cancel_debit_card",
+  "close a stolen card that has a pending refund",
+  "close debit card for fraud",
+  "close frozen stolen cards after unfreezing",
+  "close lost debit card",
+  "close several lost debit cards where one is blocked by pending transactions",
+  "close_and_reissue card action",
+  "close_debit_card",
+  "closing_a_debit_card",
+  "deactivate debit card",
+  "report_lost_debit_card"
+ ],
+ "when": {
+  "quote": "Procedure for when a customer wants to close, cancel, or deactivate their debit card.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: when the customer asks to cancel or close a card. The agent may recommend closing a card confirmed lost or stolen. It also proposes closing when the PIN-lock protocol finds unauthorized transactions, and closes only with the customer's agreement.",
+  "quote": "If customer confirms the card is lost/stolen, recommend closing instead of freezing",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+ },
+ "tools": [
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "r_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "cl_cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "cl_txns",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "cl_age",
+   "not_used": null
+  },
+  {
+   "tool": "unfreeze_debit_card_3893",
+   "who": "agent",
+   "step": "cl_unfreeze_first",
+   "not_used": null
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": "cl_close",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "action_error",
+   "not_used": null
+  },
+  {
+   "tool": "freeze_debit_card_3892",
+   "who": "agent",
+   "step": null,
+   "not_used": "For a card confirmed lost or stolen, a permanent close replaces a freeze. Freezing belongs to freezing_and_unfreezing_a_debit_card."
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": null,
+   "not_used": "The replacement is ordered in order_replacement_debit_card (replacement_handoff)."
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": null,
+   "not_used": "Used in the cross-product protocol that cross_product_handoff starts."
+  },
+  {
+   "tool": "close_bank_account_7392",
+   "who": "agent",
+   "step": null,
+   "not_used": "Doc 005 is cited only for its tier list. No account is closed here."
+  }
+ ],
+ "info": [
+  {
+   "field": "close_reason",
+   "about": "one of lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing",
+   "from": "customer",
+   "ask": "What is the reason for closing the card: lost, stolen, suspected fraud, damaged, no longer needed, or closing the account?",
+   "may_hold_back": false
+  },
+  {
+   "field": "cards_to_close",
+   "about": "the accounts whose debit cards are to be closed",
+   "from": "customer",
+   "ask": "Which debit cards should I cancel?",
+   "may_hold_back": false
+  },
+  {
+   "field": "pending_refunds",
+   "about": "whether a refund to the card is pending (no lookup reads card refunds)",
+   "from": "customer",
+   "ask": "Are you expecting any refunds to this card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "wants_replacement",
+   "about": "whether to order a replacement now",
+   "from": "customer",
+   "ask": "Would you like me to order a replacement card right away?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "ensure_verified",
+   "by": "model",
+   "do": "Reuse the verification done earlier in this conversation. If there was none, verify first as in freezing_and_unfreezing_a_debit_card (fz_identify, fz_verify, fz_time, fz_log).",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "1. Customer must be verified",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "cl_reason",
+   "by": "model",
+   "do": "Ask the reason for closing each card, unless the customer already said, and record exactly one of: lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": "the customer asks to close or cancel a debit card",
+   "quote": "2. Ask customer for the reason they want to close the card (select from: lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "r_accounts",
+   "by": "harness",
+   "do": "Read the customer's accounts for each linked checking account's id, class and status.",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "verified user_id"
+   },
+   "lookup": [],
+   "after": [
+    "ensure_verified"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+  },
+  {
+   "id": "cl_cards",
+   "by": "harness",
+   "do": "Re-read the debit cards on each account involved to get each card's current card_id, user_id, status and date_issued. Statuses may have changed earlier in this conversation.",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "the card's checking account_id from r_accounts"
+   },
+   "lookup": [],
+   "after": [
+    "cl_reason",
+    "r_accounts"
+   ],
+   "if": null,
+   "quote": "4. Before closing a card: Confirm the card_id and current status",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "cl_txns",
+   "by": "harness",
+   "do": "Get the linked checking account's transactions and look for any with status 'pending'.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "the card's checking account_id"
+   },
+   "lookup": [],
+   "after": [
+    "cl_cards"
+   ],
+   "if": null,
+   "quote": "Agents can retrieve the transaction history for a customer's bank account (checking or savings) using the get_bank_account_transactions_9173 tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+  },
+  {
+   "id": "cl_age",
+   "by": "model",
+   "do": "If the reason is lost, stolen or fraud_suspected, skip the card-age requirement. For any other reason, call get_current_time and check that at least 14 days have passed from the card's date_issued to today. If not, tell the customer the earliest date the card can be closed (date_issued + 14 days), and do not close it.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [
+    "cl_cards",
+    "cl_reason"
+   ],
+   "after": [
+    "cl_cards"
+   ],
+   "if": null,
+   "quote": "These reasons bypass the minimum card age requirement (requirement 6) for security purposes",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "bypass for lost/stolen/fraud",
+     "quote": "These reasons bypass the minimum card age requirement (requirement 6) for security purposes",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "14 days from date_issued",
+     "quote": "6. Minimum card age: The debit card must have been active for at least 14 days. Calculate this from the date_issued field.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    }
+   ]
+  },
+  {
+   "id": "cl_eligibility",
+   "by": "model",
+   "do": "Check the closure requirements. (1) The card belongs to the verified user. (2) The card is ACTIVE or PENDING; a FROZEN card goes through cl_unfreeze_first first. (3) cl_txns shows no pending transactions; if any are pending, tell the customer they must wait for all transactions to settle before the card can be closed. (4) No pending refunds. No lookup reads refunds to a card, so ask the customer. If a refund is pending, they must wait for it to process (typically 3-5 business days) or acknowledge in writing that it will be credited to the linked checking account. (5) Card age, from cl_age. If any requirement fails, tell the customer what must be resolved and do not close that card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_cards",
+    "cl_txns",
+    "cl_age"
+   ],
+   "after": [
+    "cl_txns",
+    "cl_age"
+   ],
+   "if": null,
+   "quote": "3. Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "stop if any requirement fails",
+     "quote": "3. Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "owner",
+     "quote": "2. Customer must be the owner of the debit card (verify user_id matches)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "ACTIVE or PENDING",
+     "quote": "3. The debit card must currently be in ACTIVE or PENDING status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "no pending transactions",
+     "quote": "4. No pending transactions: The card must not have any pending or processing transactions. If pending transactions exist, inform the customer they must wait for all transactions to settle before the card can be closed.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "pending status read from transactions",
+     "quote": "Transaction status, either 'posted' or 'pending'.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+    },
+    {
+     "clause": "no pending refunds",
+     "quote": "5. No pending refunds: The card must not have any pending refunds.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "refund options",
+     "quote": "If pending refunds exist, inform the customer they must wait for the refunds to process (typically 3-5 business days) or acknowledge in writing that the refunds will be credited to the linked checking account instead.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "ask the customer about refunds",
+     "source": "none",
+     "why": "No tool reads refunds to a debit card (reading rule 9), so the agent asks the customer."
+    }
+   ]
+  },
+  {
+   "id": "per_card_independent",
+   "by": "model",
+   "do": "Check, close and replace each card on its own. One card failing a check does not stop the others. Tell the customer the outcome for each card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_cards",
+    "cl_txns"
+   ],
+   "after": [
+    "cl_eligibility"
+   ],
+   "if": "more than one card is being closed",
+   "quote": "3. Check eligibility requirements. If any requirement is not met, inform the customer what needs to be resolved and do not proceed with closure.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "cl_unfreeze_first",
+   "by": "harness",
+   "do": "A card that is FROZEN (for example, frozen earlier in this conversation) is not in a status that can be closed. Check that its linked checking account is OPEN in r_accounts. Then unfreeze it with unfreeze_debit_card_3893, which makes it active, and close it right away (cl_close). Tell the customer this is done only so the card can be closed permanently. If the unfreeze fails, tell the customer what the reply says and follow action_error.",
+   "call": "unfreeze_debit_card_3893",
+   "args": {
+    "card_id": "card_id from cl_cards"
+   },
+   "lookup": [
+    "cl_cards",
+    "r_accounts",
+    "cl_eligibility"
+   ],
+   "after": [
+    "cl_eligibility"
+   ],
+   "if": "the card's status in cl_cards is FROZEN, its linked account is OPEN, the other closure checks pass, and the customer wants it closed",
+   "quote": "3. The debit card must currently be in ACTIVE or PENDING status",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "close needs ACTIVE or PENDING",
+     "quote": "3. The debit card must currently be in ACTIVE or PENDING status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "unfreeze needs FROZEN",
+     "quote": "3. Card must currently be in FROZEN status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    },
+    {
+     "clause": "unfreeze needs OPEN account",
+     "quote": "4. The linked checking account must still be OPEN",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    },
+    {
+     "clause": "unfreeze tool",
+     "quote": "2. Use unfreeze_debit_card_3893 with the card_id",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    },
+    {
+     "clause": "unfreezing makes the card active",
+     "quote": "3. Confirm the card is now active and ready to use immediately",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ]
+  },
+  {
+   "id": "cl_inform",
+   "by": "model",
+   "do": "Tell the customer that any pending transactions will still be processed, and ask whether they want a replacement card ordered right away (order_replacement_debit_card).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_reason"
+   ],
+   "after": [
+    "cl_eligibility"
+   ],
+   "if": "the reason is lost, stolen or fraud_suspected",
+   "quote": "Ask if they want to order a replacement card immediately",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "lost, stolen or fraud_suspected",
+     "quote": "If reason is 'lost', 'stolen', or 'fraud_suspected':",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "pending transactions still processed",
+     "quote": "Inform customer that any pending transactions will still be processed",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    }
+   ]
+  },
+  {
+   "id": "cl_close",
+   "by": "harness",
+   "do": "Unlock close_debit_card_4721 and call it once for each eligible card. If it returns an error, tell the customer what the reply says (for example, the card's current status) and follow action_error.",
+   "call": "close_debit_card_4721",
+   "args": {
+    "card_id": "card_id from cl_cards",
+    "reason": "the value recorded in cl_reason"
+   },
+   "lookup": [
+    "cl_eligibility",
+    "cl_age",
+    "cl_unfreeze_first"
+   ],
+   "after": [
+    "cl_eligibility",
+    "cl_age",
+    "cl_inform"
+   ],
+   "if": "the customer asked to close this card, every requirement in cl_eligibility and cl_age is met, and the card is ACTIVE or PENDING (or became active through cl_unfreeze_first)",
+   "quote": "5. Use close_debit_card_4721 to close the card with parameters: card_id, reason",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "ACTIVE or PENDING",
+     "quote": "3. The debit card must currently be in ACTIVE or PENDING status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "closed immediately",
+     "quote": "Cards reported as lost or stolen are closed immediately with no cooling-off period",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    }
+   ]
+  },
+  {
+   "id": "note_closure_time",
+   "by": "harness",
+   "do": "Get the current time right after the closure and keep it as the closure time. For an Entry-tier account, the replacement wait runs from this time until 48 hours later.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "cl_close"
+   ],
+   "if": "a card on an Entry-tier account (Light Blue, Light Green, Green Fee-Free) was closed in this conversation",
+   "quote": "48-hour waiting period after card closure before a replacement can be ordered",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_029",
+   "basis": [
+    {
+     "clause": "Entry-tier accounts",
+     "quote": "ENTRY TIER (Light Blue Account, Light Green Account, Green Fee-Free Account)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_005"
+    }
+   ]
+  },
+  {
+   "id": "cl_confirm",
+   "by": "model",
+   "do": "Confirm the card is permanently deactivated and cannot be reactivated. Tell the customer that recurring payments on it must be updated with new payment details, and that a new card can be ordered through the standard process. For fraud_suspected, also advise them to review recent transactions, dispute any unauthorized charges, and change their online banking password.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_close"
+   ],
+   "after": [
+    "cl_close"
+   ],
+   "if": "cl_close succeeded",
+   "quote": "The card is now permanently deactivated and cannot be reactivated",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "recurring payments",
+     "quote": "Any recurring payments linked to this card will need to be updated with new payment information",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "new card",
+     "quote": "If they need a new card, they can order one through the standard ordering process",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "fraud advice",
+     "quote": "If fraud is suspected, advise customer to review recent transactions and file disputes for any unauthorized charges",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "password",
+     "quote": "For fraud_suspected closures, recommend the customer also change their online banking password",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    }
+   ]
+  },
+  {
+   "id": "refund_to_checking_notice",
+   "by": "model",
+   "do": "Confirm that the refund will be credited to the linked checking account.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_eligibility",
+    "cl_close"
+   ],
+   "after": [
+    "cl_close"
+   ],
+   "if": "the closed card had a pending refund that the customer acknowledged",
+   "quote": "Refunds to a closed card will be credited to the linked checking account",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "no_replacement_while_blocked",
+   "by": "model",
+   "do": "Do not order a replacement on that account now. Tell the customer the account still has an active card, and a checking account cannot have more than one active debit card.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_eligibility",
+    "cl_cards"
+   ],
+   "after": [
+    "cl_eligibility"
+   ],
+   "if": "the closure was blocked, the old card is still ACTIVE, and the customer asks for a replacement on that account",
+   "quote": "5) Customer cannot have more than 1 active debit cards per checking account",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_023"
+  },
+  {
+   "id": "replacement_handoff",
+   "by": "model",
+   "do": "Run order_replacement_debit_card for the account.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_close"
+   ],
+   "after": [
+    "cl_confirm"
+   ],
+   "if": "the card was closed and the customer wants a replacement",
+   "quote": "If they need a new card, they can order one through the standard ordering process",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+  },
+  {
+   "id": "cross_product_handoff",
+   "by": "model",
+   "do": "When all of the debit card work is done, run lost_stolen_card_cross_product_security_protocol.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cl_reason",
+    "cl_close"
+   ],
+   "after": [
+    "cl_close"
+   ],
+   "if": "the card was closed because it was lost or stolen",
+   "quote": "1) Complete the standard debit card freeze/close procedure",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_030"
+  },
+  {
+   "id": "action_error",
+   "by": "model",
+   "do": "Explain what the error reply says failed. If it cannot be resolved, ask whether the customer wants a human agent, and transfer only if they agree.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card actions done and the error",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "cl_close",
+    "cl_unfreeze_first"
+   ],
+   "after": [
+    "cl_close"
+   ],
+   "if": "a close or unfreeze call returns an error that cannot be resolved, and the customer agrees to a transfer",
+   "quote": "| technical_system_error | System error or outage preventing completion of the customer's request |",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "ask first",
+     "quote": "Do not transfer without asking the user first.",
+     "doc": "policy"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "A card confirmed lost or stolen is closed, not frozen. Only ACTIVE or PENDING cards can be closed, so a frozen card is unfrozen first. A closed card can never be reopened.",
+   "quote": "Closed cards cannot be reopened - customer must order a new card if needed",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_025",
+   "basis": [
+    {
+     "clause": "ACTIVE or PENDING",
+     "quote": "3. The debit card must currently be in ACTIVE or PENDING status",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_025"
+    },
+    {
+     "clause": "confirmed lost/stolen → close",
+     "quote": "Use when card is confirmed lost/stolen or customer wants to cancel.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_026"
+    }
+   ]
+  },
+  {
+   "rule": "When the PIN-lock protocol finds unauthorized transactions, the card is closed.",
+   "quote": "If unauthorized transactions found: File dispute, close card, order replacement.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  }
+ ],
+ "done_when": "Each card the customer asked to cancel is closed (a frozen card after it is unfrozen), or the customer was told what must be resolved first. The customer was asked whether they want a replacement. For Entry-tier accounts, the closure time is noted. Any error was explained and a transfer was offered."
+}

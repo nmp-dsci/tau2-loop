@@ -372,6 +372,22 @@ async def _query(
 
 
 _RESET_RE = re.compile(r"resets\s+(\d{1,2})(?::(\d{2}))?\s*([ap]m)", re.I)
+# s25 (the person's call, 15 Oct 2026): a weekly limit is days away, so it is not waited for. The
+# first call that meets it records the message, and every call after it fails at once with it: a
+# run ends in minutes, its conversations are infrastructure errors, and none is scored.
+_HARD_LIMIT_RE = re.compile(r"\b(?:weekly|monthly|usage) limit\b", re.I)
+_hard_limit: str | None = None
+
+
+def reset_hard_limit() -> None:
+    """A new run starts clean: the limit that voided the last one is not held against it."""
+    global _hard_limit
+    _hard_limit = None
+
+
+def hard_limit(error: str) -> bool:
+    """A usage limit no wait in this run can outlast: any limit but the 5-hour session one."""
+    return bool(_HARD_LIMIT_RE.search(error)) and "session limit" not in error.lower()
 
 
 def seconds_until_reset(error: str, now: datetime | None = None) -> int | None:
@@ -408,7 +424,10 @@ def run_query(
 
     A subscription window that has run out is waited for, not failed: the
     caller pauses until the reset the CLI names, then carries on."""
+    global _hard_limit
     check_billing()
+    if _hard_limit is not None:
+        return SdkResult("", 0, 0, None, 0, None, error=_hard_limit)
     last: SdkResult | None = None
     attempt = 0
     while attempt < RETRIES:
@@ -425,6 +444,14 @@ def run_query(
             loop.close()
         if last.text or last.tool_uses:
             return last  # a reply came back; an error next to it (e.g. a max-turns note) is recorded, not retried
+        if hard_limit(last.error or ""):
+            _hard_limit = last.error
+            print(
+                f"[claude-sdk] {last.error}: not waited for; every further call fails, so the run "
+                "ends and none of its conversations is scored",
+                flush=True,
+            )
+            return last
         wait = seconds_until_reset(last.error or "")
         if wait is not None:
             print(

@@ -32,6 +32,7 @@ FROZEN = ("agent.yaml",)
 # json: tool calls as the JSON contract in the reply text (every version before v3's milestone 2);
 # native: the model is given the tools and calls them, and each call comes back to tau2 unrun.
 TOOL_MODES = ("json", "native")
+WORKFLOW_VIEWS = (None, "full", "steps")
 
 
 @dataclass(frozen=True)
@@ -55,10 +56,19 @@ class AgentConfig:
     # s22 (v22): the tools the customer holds from the start, listed after the other notes
     # (`compose.customer_tools_note`); off unless set, so every earlier version keeps its bytes
     customer_tools: bool = False
+    # s25 (v27): how find_workflow shows a job: None, the whole job as workflow_rag wrote it;
+    # "steps", its steps, conditions, rules and done_when without the quotes and basis behind
+    # them (the evidence stays in the library for review). Off unless set, so earlier versions
+    # keep their bytes
+    workflow_view: str | None = None
 
     def __post_init__(self) -> None:
         if self.tool_mode not in TOOL_MODES:
             raise ValueError(f"tool_mode must be one of {TOOL_MODES}, got {self.tool_mode!r}")
+        if self.workflow_view not in WORKFLOW_VIEWS:
+            raise ValueError(
+                f"workflow_view must be one of {WORKFLOW_VIEWS}, got {self.workflow_view!r}"
+            )
         if self.parallel_calls and self.tool_mode != "native":
             raise ValueError("parallel_calls needs tool_mode: native")
 
@@ -238,6 +248,7 @@ def fork_version(
     workflows: str | None = None,
     why: str | None = None,
     customer_tools: bool | None = None,
+    workflow_view: str | None = None,
 ) -> AgentVersion:
     """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`. `why` (s22)
     is the reason the person or the session gave, kept in its diagnosis beside what changed.
@@ -261,11 +272,12 @@ def fork_version(
         # s16: a fork keeps the workflow_rag version its source looks up, unless given another
         workflows=workflows or cfg.workflows,
         customer_tools=cfg.customer_tools if customer_tools is None else customer_tools,
+        workflow_view=workflow_view or cfg.workflow_view,
     )
     if new == cfg:
         raise ValueError(
             f"a fork of {domain}/{source} needs a different model, effort, retrieval, tool mode, "
-            "identity note, parallel calls, workflows or customer tools"
+            "identity note, parallel calls, workflows, customer tools or workflow view"
         )
     name = next_version_name(domain)
     dest = version_dir(domain, name)
@@ -285,6 +297,7 @@ def fork_version(
             "parallel_calls",
             "workflows",
             "customer_tools",
+            "workflow_view",
         )
         if getattr(cfg, k) != getattr(new, k)
     ]

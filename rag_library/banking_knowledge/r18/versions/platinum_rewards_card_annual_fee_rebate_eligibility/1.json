@@ -1,0 +1,732 @@
+{
+ "job": "platinum_rewards_card_annual_fee_rebate_eligibility",
+ "aliases": [
+  "check_platinum_annual_fee_rebate",
+  "do_i_qualify_for_the_platinum_fee_rebate",
+  "platinum_rebate_eligibility_and_calculation",
+  "platinum_rewards_card_rebate_eligibility_and_calculation",
+  "platinum_rewards_rebate_eligibility_and_calculation"
+ ],
+ "when": {
+  "quote": "The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every month of your cardmember year.",
+  "doc": "doc_credit_cards_platinum_rewards_card_010"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer asks whether they qualify for the Platinum Rewards Card annual fee rebate. This job only reads records and explains the result. It changes nothing.",
+  "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+  "doc": "doc_credit_cards_platinum_rewards_card_010"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "v_lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "v_time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "v_log",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_accounts_by_user",
+   "who": "agent",
+   "step": "r_accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_credit_card_transactions_by_user",
+   "who": "agent",
+   "step": "r_txns",
+   "not_used": null
+  },
+  {
+   "tool": "apply_statement_credit_8472",
+   "who": "agent",
+   "step": null,
+   "not_used": "Not used. The rebate document says a qualifying rebate is applied as a statement credit after the annual fee is billed, and no document tells the agent to post the Platinum rebate by hand. The customer asked only whether they qualify, so posting a credit would be a write they did not request. See open_questions."
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "r_fail",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "r_disputes_unlock",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "r_disputes",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_dispute_history_7291",
+   "who": "agent",
+   "step": "r_disputes",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_lookup_key",
+   "about": "The full name, email or user id used to find the customer's record",
+   "from": "customer",
+   "ask": "Could you give me your full name, or the email on your account, so I can find your profile?",
+   "may_hold_back": false
+  },
+  {
+   "field": "verification_values",
+   "about": "Any 2 of date of birth, email, phone number and address, checked against the record",
+   "from": "customer",
+   "ask": "To verify your identity, please give me two of these: your date of birth, email, phone number or home address.",
+   "may_hold_back": true
+  },
+  {
+   "field": "platinum_account_open_date",
+   "about": "The opening date of the customer's Platinum Rewards Card account. It sets the monthly windows and shows whether the promotional first-year fee waiver applied.",
+   "from": "records",
+   "ask": "If you have more than one Platinum Rewards Card account, which one should I check?",
+   "may_hold_back": false
+  },
+  {
+   "field": "posted_transactions",
+   "about": "Posted transactions on the Platinum Rewards Card account, with posting dates and types, including any annual fee charge and any rebate credit",
+   "from": "records",
+   "ask": "n/a: read from records",
+   "may_hold_back": false
+  },
+  {
+   "field": "unresolved_disputes",
+   "about": "The customer's credit card disputes and their statuses. A transaction whose dispute is still open or under review does not count toward its window's total.",
+   "from": "records",
+   "ask": "n/a: read from records",
+   "may_hold_back": false
+  }
+ ],
+ "steps": [
+  {
+   "id": "v_lookup",
+   "by": "model",
+   "do": "Ask the customer for a name, email or user id. Look up the record with get_user_information_by_name, get_user_information_by_email or get_user_information_by_id. Share no account details yet.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "as the customer states it (or the email / user_id with the matching tool)"
+   },
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "To verify the identity of the user, call the appropriate read tools, and ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_check",
+   "by": "model",
+   "do": "Ask for any 2 of date of birth, email, phone number and address, and compare them with the v_lookup record. If fewer than 2 match, say you cannot verify the customer, share nothing, and do not continue.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "v_lookup"
+   ],
+   "after": [
+    "v_lookup"
+   ],
+   "if": null,
+   "quote": "Knowing full name or userID is not enough to verify.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_time",
+   "by": "harness",
+   "do": "Get the current time. It is needed for the verification log and to see which monthly windows have closed.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "v_check"
+   ],
+   "if": "verification in v_check succeeded",
+   "quote": "If you need the current time, always use the get_current_time() tool.",
+   "doc": "policy"
+  },
+  {
+   "id": "v_log",
+   "by": "harness",
+   "do": "Log the verification using the v_lookup record and the v_time timestamp.",
+   "call": "log_verification",
+   "args": {
+    "name": "v_lookup record",
+    "user_id": "v_lookup record",
+    "address": "v_lookup record",
+    "email": "v_lookup record",
+    "phone_number": "v_lookup record",
+    "date_of_birth": "v_lookup record",
+    "time_verified": "v_time result"
+   },
+   "lookup": [],
+   "after": [
+    "v_time"
+   ],
+   "if": "verification in v_check succeeded",
+   "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+   "doc": "policy"
+  },
+  {
+   "id": "r_accounts",
+   "by": "harness",
+   "do": "Read the verified user's credit card accounts. Find the Platinum Rewards Card account, its opening date and its status.",
+   "call": "get_credit_card_accounts_by_user",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "v_log"
+   ],
+   "if": null,
+   "quote": "Start date: Your first monthly window begins on your account opening date.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "id": "r_has_card",
+   "by": "model",
+   "do": "Decide whether the customer holds a personal Platinum Rewards Card account. If they do not, explain that the rebate applies only to the Platinum Rewards Card, and stop this job. If the account was closed or product-changed before the year-end evaluation, explain that the rebate is not awarded, and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_accounts"
+   ],
+   "after": [
+    "r_accounts"
+   ],
+   "if": null,
+   "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "the rebate belongs only to the Platinum Rewards Card",
+     "quote": "The Platinum Rewards Card annual fee rebate is earned only if you meet the required monthly spending threshold in every month of your cardmember year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "a closed or product-changed account gets no rebate",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_txns",
+   "by": "harness",
+   "do": "Read the verified user's credit card transactions. Keep only the transactions on the Platinum Rewards Card account from r_accounts.",
+   "call": "get_credit_card_transactions_by_user",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "r_has_card"
+   ],
+   "if": "r_has_card found an open personal Platinum Rewards Card account",
+   "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "id": "r_disputes_unlock",
+   "by": "harness",
+   "do": "Unlock get_user_dispute_history_7291.",
+   "call": "unlock_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_user_dispute_history_7291"
+   },
+   "lookup": [],
+   "after": [
+    "r_txns"
+   ],
+   "if": "r_has_card found an open personal Platinum Rewards Card account",
+   "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+   "doc": "doc_credit_cards_credit_cards_(general)_016"
+  },
+  {
+   "id": "r_disputes",
+   "by": "harness",
+   "do": "Read the customer's credit card dispute history. List each disputed Platinum Rewards Card transaction whose status is not yet resolved, for example open or under_review. r_window_totals leaves these out.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_user_dispute_history_7291",
+    "arguments": "{\"user_id\": \"<the verified user's id>\"}"
+   },
+   "lookup": [],
+   "after": [
+    "r_disputes_unlock"
+   ],
+   "if": "r_has_card found an open personal Platinum Rewards Card account",
+   "quote": "Disputed transactions while unresolved.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "read disputes with this tool",
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "clause": "the statuses that show whether a dispute is resolved",
+     "quote": "status (for example: open, under_review, closed)",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    },
+    {
+     "clause": "transactions with an unresolved dispute are excluded",
+     "quote": "Disputed transactions while unresolved.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_promo",
+   "by": "model",
+   "do": "Decide which cardmember year to evaluate. Check whether the account opening date from r_accounts falls in the new-customer promo window (2024-06-01 to 2024-12-31), and check r_txns for an annual fee charged in the first year. If the first year's fee was waived (opened in the window, with no first-year annual fee in r_txns), the rebate does not apply to that first year; evaluate the next cardmember year, in which the $200.00 annual fee is billed. Otherwise evaluate the cardmember year that starts on the opening date or its anniversary.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_accounts",
+    "r_txns"
+   ],
+   "after": [
+    "r_txns"
+   ],
+   "if": null,
+   "quote": "the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "a promo-waived first year gets no rebate; eligibility starts with the next fee-billed year",
+     "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "promo window start",
+     "quote": "Start date: 2024-06-01",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "clause": "promo window end",
+     "quote": "End date: 2024-12-31",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "clause": "the waiver requires applying in the window and being approved",
+     "quote": "Submit your application within the promo window and be approved.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "clause": "the waiver covers the first 12 months; $200.00 is billed after the first anniversary",
+     "quote": "The waiver applies to the first 12 months from account opening; after the first anniversary, the standard $200.00 annual fee applies.",
+     "doc": "doc_credit_cards_platinum_rewards_card_009"
+    },
+    {
+     "clause": "the standard annual fee is $200.00",
+     "quote": "Annual fee: $200.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_001"
+    },
+    {
+     "clause": "the evaluation year starts at opening, or at the first fee-billed year after a waiver",
+     "quote": "Cardmember year: Your rebate evaluation covers 12 consecutive monthly windows, starting from your account opening date (or from the start of the first fee-billed cardmember year after any promotional waiver).",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_year_closed",
+   "by": "model",
+   "do": "Build the 12 monthly windows of the year chosen in r_promo. Each window runs from a monthly anniversary of the opening date to the day before the next one. Compare the current time from v_time with the end of the 12th window. If the 12th window has not closed, that year has not been evaluated yet. Still check the windows that have closed, because one closed window below the threshold already disqualifies the year.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_accounts",
+    "v_time",
+    "r_promo"
+   ],
+   "after": [
+    "r_promo"
+   ],
+   "if": null,
+   "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "the first window starts on the opening date",
+     "quote": "Start date: Your first monthly window begins on your account opening date.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "each window runs from one anniversary to the day before the next",
+     "quote": "Refresh cadence: Each new monthly window begins on the same calendar day each month (the monthly anniversary of your account opening) and ends the day before the next monthly anniversary.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "the year is not evaluated until the 12th window closes",
+     "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "one closed window below the threshold already disqualifies the year",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_window_totals",
+   "by": "model",
+   "do": "For each window from r_year_closed, total the net purchases that posted in that window, by posting date. Include purchases by authorized users, virtual-card purchases and international purchases. Exclude fees, interest, adjustments, cash advances, cash-equivalent transactions, balance transfers, person-to-person transfers or funding coded as cash equivalents, and every transaction that r_disputes shows with a dispute still unresolved. Subtract returns, refunds and credits in the window in which they post.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_txns",
+    "r_accounts",
+    "r_disputes"
+   ],
+   "after": [
+    "r_year_closed",
+    "r_disputes"
+   ],
+   "if": null,
+   "quote": "Returns, refunds, or credits reduce the monthly total in the window in which the credit posts.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "count by posting date",
+     "quote": "Posting date rule: Only transactions that post within a given monthly window count toward that month’s threshold. Authorization dates do not control eligibility.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "include authorized-user purchases",
+     "quote": "Net purchases posted to your Platinum Rewards Card, including purchases made by authorized users.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "include virtual-card purchases",
+     "quote": "Purchases made using virtual card numbers associated with your account (counted the same as your physical card).",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "include international purchases",
+     "quote": "International purchases, provided they post as purchases.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "exclude fees, interest and adjustments",
+     "quote": "Fees, interest charges, and adjustments.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "exclude cash advances and cash equivalents",
+     "quote": "Cash advances and cash-equivalent transactions (for example, money orders, traveler’s checks, and similar cash-like activity).",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "exclude balance transfers",
+     "quote": "Balance transfers.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "exclude person-to-person transfers and funding coded as cash equivalents",
+     "quote": "Person-to-person money transfers and funding transactions that are coded as cash equivalents.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "exclude unresolved disputes, as read in r_disputes",
+     "quote": "Disputed transactions while unresolved.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "returns reduce the window in which they post",
+     "quote": "Returns, refunds, or credits reduce the monthly total in the window in which the credit posts.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_window_check",
+   "by": "model",
+   "do": "Decide eligibility. The customer qualifies only if every one of the 12 windows has at least $7500.00 in net qualifying purchases. One closed window below $7500.00 disqualifies the whole cardmember year. There is no partial or prorated rebate.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_window_totals",
+    "r_promo",
+    "r_year_closed"
+   ],
+   "after": [
+    "r_window_totals"
+   ],
+   "if": null,
+   "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "the threshold is $7500.00",
+     "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_007"
+    },
+    {
+     "clause": "all 12 windows must meet it",
+     "quote": "You must meet the monthly threshold in all 12 windows to earn the rebate for that cardmember year.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "one short window disqualifies the year, with no partial rebate",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_tell_not",
+   "by": "model",
+   "do": "Tell the customer they do not qualify and give the specific reason, without revealing internal procedures. The reason is one of: (a) the first cardmember year's fee was waived under the promotional offer, so the rebate does not apply to that year (then also report how the following year stands); (b) a monthly window had less than $7500.00 in net qualifying purchases (name that window); (c) the account was closed or product-changed. Explain that there is no partial rebate. If the customer asks why, repeat the specific reason.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_window_check",
+    "r_promo",
+    "r_has_card"
+   ],
+   "after": [
+    "r_window_check"
+   ],
+   "if": "r_window_check, r_promo or r_has_card shows the customer does not qualify for the year evaluated",
+   "quote": "You must meet the monthly threshold in all 12 windows to earn the rebate for that cardmember year.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "(a) a promo-waived first year earns no rebate",
+     "quote": "If your first cardmember year’s annual fee is waived under a promotional offer, the rebate does not apply to that year. Eligibility begins with the next cardmember year in which the annual fee is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "(b) a window below $7500.00",
+     "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_007"
+    },
+    {
+     "clause": "(c) the account was closed or product-changed",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "there is no partial rebate",
+     "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "do not reveal internal procedures",
+     "quote": "Do not give intermediate responses to users while processing that would give away internal rho-bank information/policies.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "r_tell_pending",
+   "by": "model",
+   "do": "Tell the customer the year being evaluated has not ended yet. Say which closed windows have met $7500.00 so far. Explain that eligibility is assessed after the 12th window closes and that every remaining window must also meet the threshold.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_year_closed",
+    "r_window_check"
+   ],
+   "after": [
+    "r_window_check"
+   ],
+   "if": "the 12th window has not closed and every closed window met $7500.00",
+   "quote": "Eligibility is assessed after the close of your 12th monthly window in the cardmember year.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "id": "r_tell_yes",
+   "by": "model",
+   "do": "Tell the customer they qualify for the $150.00 annual fee rebate. It is applied as a statement credit to the Platinum Rewards Card account after that year's annual fee is billed. Use r_txns to say whether the credit has already posted. Warn them that closing or product-changing the card before the rebate posts forfeits it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_window_check",
+    "r_txns"
+   ],
+   "after": [
+    "r_window_check"
+   ],
+   "if": "all 12 windows of a closed, fee-billed cardmember year met $7500.00",
+   "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_007",
+   "basis": [
+    {
+     "clause": "a $150.00 rebate",
+     "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+     "doc": "doc_credit_cards_platinum_rewards_card_007"
+    },
+    {
+     "clause": "posted as a statement credit after that year's fee is billed",
+     "quote": "If you qualified, the rebate is applied as a statement credit to your Platinum Rewards Card account after the annual fee for that cardmember year is billed.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    },
+    {
+     "clause": "closing or product-changing the card forfeits the rebate",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_next",
+   "by": "model",
+   "do": "If the customer then asks to apply for another credit card, ask which card they want and help them with that request (the library job recommend_personal_credit_card covers it). Do not verify them a second time. If they say they will close the Platinum card or change its product while a rebate is still pending, tell them the rebate would not be awarded.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "r_window_check"
+   ],
+   "after": [
+    "r_tell_not",
+    "r_tell_pending",
+    "r_tell_yes"
+   ],
+   "if": "the customer asks to apply for another credit card after hearing the result",
+   "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "help with the card the customer asks for, in recommend_personal_credit_card",
+     "source": "none",
+     "why": "No document routes a rebate question to a card application. This is a library handoff that happens only when the customer asks, and the customer names the card."
+    },
+    {
+     "clause": "do not verify a second time",
+     "quote": "No need to verify more than once in a single conversation.",
+     "doc": "policy"
+    },
+    {
+     "clause": "closing or product-changing the card forfeits a pending rebate",
+     "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+     "doc": "doc_credit_cards_platinum_rewards_card_010"
+    }
+   ]
+  },
+  {
+   "id": "r_fail",
+   "by": "model",
+   "do": "If a read tool returns an error, or the records lack the opening date or posting dates needed to decide, tell the customer you cannot confirm eligibility right now. Ask whether they want to be transferred to a human agent, and transfer only if they agree. For a tool error or outage, use reason 'technical_system_error'. Otherwise use the highest-tier code from the transfer reason list that applies.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the customer's rebate question, what was read, and what failed or was missing",
+    "reason": "'technical_system_error' for a tool error or outage; otherwise the highest-tier code that applies from doc_bank_accounts_bank_accounts_(general)_042"
+   },
+   "lookup": [
+    "r_accounts",
+    "r_txns"
+   ],
+   "after": [
+    "r_accounts"
+   ],
+   "if": "a read tool errors or the needed data is missing, and the customer agrees to a transfer",
+   "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "ask before transferring",
+     "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+     "doc": "policy"
+    },
+    {
+     "clause": "reason code for a tool error",
+     "quote": "System error or outage preventing completion of the customer's request",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "choose from the highest tier that applies",
+     "quote": "Reasons are organized into 4 priority tiers - always select from the highest tier that applies.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "The monthly spend threshold is $7500.00 in net qualifying purchases per monthly window. The rebate is $150.00. The annual fee is $200.00.",
+   "quote": "Earn a $150.00 rebate on your annual fee by meeting a monthly spend threshold of $7500.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_007"
+  },
+  {
+   "rule": "All 12 monthly windows of the cardmember year must meet the threshold. One miss disqualifies the year, and there is no proration.",
+   "quote": "A single month below the threshold disqualifies you from receiving the rebate for that entire cardmember year; there is no partial or prorated rebate.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "rule": "Accounts approved in the promo window (2024-06-01 to 2024-12-31) had their first-year fee waived, so the rebate does not apply to that first year.",
+   "quote": "The waiver applies to the first 12 months from account opening; after the first anniversary, the standard $200.00 annual fee applies.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "rule": "The first-year waiver applies only to applications made and approved inside the promo window.",
+   "quote": "Apply during the promo window and, if approved, your first year annual fee is $0.00 instead of $200.00.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "rule": "A waived first year shows no annual fee charge. Use the transactions to confirm whether the fee was billed.",
+   "quote": "Your first statement should show no annual fee charge for the first year.",
+   "doc": "doc_credit_cards_platinum_rewards_card_009"
+  },
+  {
+   "rule": "Windows follow the monthly anniversary of the opening date and the posting date, not the statement cycle or the calendar month.",
+   "quote": "Track posted transactions by your monthly anniversary dates, not by statement cycle or calendar month.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "rule": "Excluded from the threshold: fees, interest, adjustments, cash advances and cash equivalents, balance transfers, person-to-person transfers or funding coded as cash equivalents, and disputed transactions while unresolved.",
+   "quote": "Disputed transactions while unresolved.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "rule": "Closing or product-changing the card before the evaluation or the rebate posting forfeits the rebate.",
+   "quote": "If the account is closed or product-changed before the year-end evaluation or rebate posting, the rebate will not be awarded.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010"
+  },
+  {
+   "rule": "get_user_dispute_history_7291 reads dispute status. A Platinum transaction whose dispute is still open or under review does not count toward its window.",
+   "quote": "Disputed transactions while unresolved.",
+   "doc": "doc_credit_cards_platinum_rewards_card_010",
+   "basis": [
+    {
+     "clause": "the tool that reads disputes",
+     "quote": "To retrieve a user's credit card dispute history, use the get_user_dispute_history_7291 tool.",
+     "doc": "doc_credit_cards_credit_cards_(general)_016"
+    }
+   ]
+  }
+ ],
+ "done_when": "The customer is verified and logged. The agent has read the Platinum account records, the posted transactions and the dispute history, with unresolved disputes left out of each anniversary window. It has told the customer one of three results: they qualify; they do not qualify, with the specific reason (a promo-waived first year, a named window below $7500.00, or a closed or product-changed account); or the year cannot be evaluated yet. Or a data or tool failure was explained and a transfer offered with a valid reason code."
+}

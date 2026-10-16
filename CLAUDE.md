@@ -159,7 +159,13 @@
   scored on the 29 conversations whose gold has the customer run their own tool. v23 (v22 on
   `claude-sonnet-5-5`, played with a Haiku 5.5 customer, the person's call) is held: train 43 of 60
   and test 20 of 37 against v8's 38 and 21 (test fixed 5, broke 6, p = 0.726; train `20261011T055438Z`,
-  test `20261011T055440Z`), not like for like since v8's customer was Sonnet 5. **Every rN from r5
+  test `20261011T055440Z`), not like for like since v8's customer was Sonnet 5. From s25 (15 Oct
+  2026, the person's call) banking experiments play the Haiku 5.5 customer at high effort, one trial
+  on v23's 34 failures, and a change ships as an rN plus a vN together: v26 (v24 + r18) is the
+  baseline at train 6/17 and test 5/17. r19 re-merged r18's research with the draft as the base
+  (`make rag-remerge`, `drafts_from`, `merge_base: draft`, `review_binding`); v27 (v26 reading it,
+  plus the steps view) is held at 7/17 and 3/17. The draft-first merge dropped rules that were
+  backed by a quote, so it is not the merge from r20 on (`r19/changes.json`). **Every rN from r5
   has `changes.json`** (`based_on`, `seed`, why, each file's change); a test fails when it does not
   match the files that differ from its base.
 - **Visuals follow DESIGN.md**: tokens verbatim, assertion headings, one `<em>`
