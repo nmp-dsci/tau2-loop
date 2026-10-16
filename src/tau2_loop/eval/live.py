@@ -143,7 +143,9 @@ def _play(d: Path, meta: LiveMeta, user_model: str, user_effort: str) -> None:
         _point_judge_at_sdk()
         scrub_injected_key()
         version = load_version(meta.domain, meta.agent)
-        config = _run_config(meta.domain, version, [meta.task_id], 1, 1, SPLIT_SEED, user_model, user_effort)
+        config = _run_config(
+            meta.domain, version, [meta.task_id], 1, 1, SPLIT_SEED, user_model, user_effort
+        )
         task = get_tasks(meta.domain, config.task_split_name, task_ids=[meta.task_id])[0]
         orch = build_orchestrator(config, task, seed=SPLIT_SEED, simulation_id=meta.id)
         emit({"kind": "start", "task_id": meta.task_id, "agent": meta.agent})
