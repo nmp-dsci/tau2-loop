@@ -379,6 +379,12 @@ _HARD_LIMIT_RE = re.compile(r"\b(?:weekly|monthly|usage) limit\b", re.I)
 _hard_limit: str | None = None
 
 
+def reset_hard_limit() -> None:
+    """A new run starts clean: the limit that voided the last one is not held against it."""
+    global _hard_limit
+    _hard_limit = None
+
+
 def hard_limit(error: str) -> bool:
     """A usage limit no wait in this run can outlast: any limit but the 5-hour session one."""
     return bool(_HARD_LIMIT_RE.search(error)) and "session limit" not in error.lower()

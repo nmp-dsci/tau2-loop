@@ -73,6 +73,7 @@ from tau2_loop.eval import retrieval as retrieval_mod
 from tau2_loop.eval import review as review_store
 from tau2_loop.eval.compare import compare
 from tau2_loop.eval.health import run_health
+from tau2_loop.llm import core
 from tau2_loop.eval.profile import profile
 from tau2_loop.eval.results import TaskResult, check_counts, read_results, slug
 from tau2_loop.eval.runner import RunMeta, list_runs, load_run
@@ -470,6 +471,7 @@ def create_app() -> FastAPI:
         if s.demo_mode or not replay.available():
             raise HTTPException(503, "the demo image calls no model and ships no tau2")
         try:
+            core.reset_hard_limit()
             meta = live_mod.start(domain, agent, body.task_id, body.user_model)
         except live_mod.LiveError as e:
             raise HTTPException(422, str(e)) from e
@@ -503,6 +505,7 @@ def create_app() -> FastAPI:
         if s.demo_mode or not replay.available():
             raise HTTPException(503, "the demo image calls no model and ships no tau2")
         try:
+            core.reset_hard_limit()
             meta = workflow_rag.start(domain, body.task_id, body.agent, body.model, body.effort)
         except workflow_rag.RagAgentError as e:
             raise HTTPException(422, str(e)) from e

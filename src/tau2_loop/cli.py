@@ -133,8 +133,10 @@ def rag_build(
     import queue as queues
     import threading
 
+    from tau2_loop.llm.core import reset_hard_limit
     from tau2_loop.workflows import library, rag_agent
 
+    reset_hard_limit()
     agent = rag_agent.load(domain, rag)
     if agent.merge not in ("sequential", "concurrent"):
         raise typer.BadParameter(f"{rag} does not merge; its sessions run one by one in the viewer")
@@ -224,8 +226,10 @@ def rag_remerge(
     import queue as queues
     import threading
 
+    from tau2_loop.llm.core import reset_hard_limit
     from tau2_loop.workflows import library, rag_agent
 
+    reset_hard_limit()
     agent = rag_agent.load(domain, rag)
     todo = rag_agent.remerge_queue(domain, rag)
     todo = todo[:limit] if limit else todo

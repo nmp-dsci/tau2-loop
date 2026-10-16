@@ -39,6 +39,42 @@ def test_a_weekly_limit_is_not_waited_for_and_every_later_call_fails_at_once(
     assert second.error == WEEKLY and calls == ["q"]  # never reached the SDK
 
 
+def test_a_reset_lets_the_next_call_reach_the_sdk_and_a_new_run_start_resets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(core, "_hard_limit", None)
+    monkeypatch.setattr(core, "check_billing", lambda: None)
+    calls: list[str] = []
+
+    async def fake_query(*args: Any, **kwargs: Any) -> core.SdkResult:
+        calls.append("q")
+        return core.SdkResult("", 0, 0, None, 0, None, error=WEEKLY)
+
+    monkeypatch.setattr(core, "_query", fake_query)
+    core.run_query("sys", "hi", "claude-sonnet-5-5")
+    core.run_query("sys", "again", "claude-sonnet-5-5")
+    assert calls == ["q"]
+    core.reset_hard_limit()
+    core.run_query("sys", "after reset", "claude-sonnet-5-5")
+    assert calls == ["q", "q"]
+
+    from tau2_loop import llm
+    from tau2_loop.eval.runner import run_eval
+
+    class Stop(Exception):
+        pass
+
+    def stop() -> None:
+        raise Stop
+
+    monkeypatch.setattr(llm, "require_live", stop)
+    core.run_query("sys", "again", "claude-sonnet-5-5")
+    assert core._hard_limit == WEEKLY
+    with pytest.raises(Stop):
+        run_eval("airline")
+    assert core._hard_limit is None
+
+
 def test_only_the_session_limit_is_waited_for() -> None:
     assert core.hard_limit(WEEKLY)
     assert not core.hard_limit(SESSION)

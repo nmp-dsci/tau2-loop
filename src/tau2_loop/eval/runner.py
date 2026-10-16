@@ -30,6 +30,7 @@ from tau2_loop.config import (
     settings,
 )
 from tau2_loop.data.splits import split_ids, split_version
+from tau2_loop.llm.core import reset_hard_limit
 from tau2_loop.eval.results import (
     Summary,
     TaskResult,
@@ -221,6 +222,7 @@ def run_eval(
     if domain not in DOMAINS and domain != SMOKE_DOMAIN:
         raise ValueError(f"domain must be one of {DOMAINS + (SMOKE_DOMAIN,)}, got {domain!r}")
     quiet_tau2()
+    reset_hard_limit()
     if not dry_run:
         from tau2_loop.llm import require_live
 
