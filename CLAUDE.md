@@ -44,6 +44,14 @@
   (`20261004T222002Z`, test `20261004T113341Z`). v3 before that (4 Oct, the person's call): v1's
   prompt with AllTools (`alltools_minilm`), native calls and the identity note. Loop cycles start
   from v8; CI's gate needs the sandbox and MiniLM to re-score it (`.github/workflows/ci.yml`).
+- **Telecom's champion is v2** (16 Oct 2026, the person's call, a `model swap`, s27): v1 on
+  `claude-haiku-5-5` at high effort, its prompt unchanged, played against a Haiku 5.5 customer at high
+  (`runner.DOMAIN_CUSTOMER`, telecom's default from s27) on telecom split v3: all 114 drawn afresh, seed
+  300, 74 train / 40 test by symptom × persona (`config.STRATA`; v1's sides not kept, the v1 and v2 lists
+  stay in the file). Train 45/74 (`20261016T124631Z`, a 6-task smoke extended), test 24/40
+  (`20261016T112041Z`); Hard persona 6 of 36 across both. Promoted without re-playing v1, whose 19/20
+  and 19/20 were on v1's 20/20 cut with a Haiku 4.5 customer before `tau2_loop/2`: not comparable.
+  Results and the failures: `.lavish/s28_telecom-v2-results.html`.
 - **Banking's base is v1, its split is v3** (3 Oct 2026): v0 is retired and
   deleted; every banking experiment is scored on split v3's 60 train / 37 test
   tasks. v1's runs were extended to it (`make extend RUN=`: only the new tasks
