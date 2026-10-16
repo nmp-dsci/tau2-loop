@@ -93,7 +93,12 @@ def test_telecom_split_v3_is_a_fresh_seeded_draw_by_symptom_and_persona() -> Non
     }
     assert (len(s["v2"]["train"]), len(s["v2"]["test"])) == (57, 57)
     assert set(s["v1"]["train"]) | set(s["v1"]["test"]) <= set(s["train"]) | set(s["test"])
-    old = [m for m in list_runs("telecom") if m.split_version != 3]
+    # the 20-task cut's runs; v2's smoke and its 68-task extension are partial `custom` runs
+    old = [
+        m
+        for m in list_runs("telecom")
+        if m.split_version != 3 and not m.run_id.endswith("_custom")
+    ]
     assert old and all(set(m.task_ids) == set(s["v1"][m.split]) for m in old)
 
 
