@@ -19,6 +19,11 @@ the file under `v2`. The halves stay in the file as s09's record, but the loop n
 longer uses them: since 3 Oct 2026 banking's gate decides on test (`GATE_ON_TEST`)
 and its optimiser reads all of train.
 
+Telecom is at a different version 3 (`STRATA`, s27): its 114 tasks drawn afresh with the
+same seed, 74 train and 40 test, each symptom × persona group given its share of the 40. Tasks
+do change side here (the person's call); the v1 and v2 lists stay in the file, so the runs played
+on them still name their cut.
+
 Alongside each split the selected tasks themselves are extracted to
 `data/tasks/<domain>.json` (the task spec as tau2 dumps it, plus the policy),
 so the viewer and the demo image can show a task without the 140 MB submodule.
@@ -28,6 +33,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +45,7 @@ from tau2_loop.config import (
     SPLIT_SEED,
     SPLIT_VERSION,
     SPLITS_DIR,
+    STRATA,
     TASKS_DIR,
     TEST_CAP,
     TRAIN_FROM_RESERVE,
@@ -99,7 +106,72 @@ def cut(domain: str, seed: int = SPLIT_SEED) -> dict[str, Any]:
         split = cap_test(split, TEST_CAP[domain])
     if domain in TRAIN_FROM_RESERVE:
         split = deal_reserve(split, TRAIN_FROM_RESERVE[domain], seed)
+    if domain in STRATA:
+        test_n, keys = STRATA[domain]
+        split = deal_by_strata(split, ids, test_n, keys, seed)
     return split
+
+
+# What a telecom id says about its task: `[mms_issue]airplane_mode_on|…[PERSONA:Easy]`
+STRATUM_KEYS = {
+    "symptom": re.compile(r"^\[(\w+)\]"),
+    "persona": re.compile(r"\[PERSONA:(\w+)\]"),
+}
+
+
+def stratum(task_id: str, keys: tuple[str, ...]) -> tuple[str, ...]:
+    """The group a task is dealt in: one value per key, `none` where its id has none."""
+    out = []
+    for k in keys:
+        m = STRATUM_KEYS[k].search(task_id)
+        out.append(m.group(1) if m else "none")
+    return tuple(out)
+
+
+def deal_by_strata(
+    split: dict[str, Any],
+    ids: list[str],
+    test_n: int,
+    keys: tuple[str, ...],
+    seed: int = SPLIT_SEED,
+) -> dict[str, Any]:
+    """Version 3 by strata (s27): every base task dealt afresh. Each group (in sorted order) gets its
+    share of `test_n` by largest remainder, a tie going to the group first in that order; its tasks,
+    in base order, are shuffled with `random.Random(seed)` and the first ones go to test. The v1 and
+    v2 lists stay under `v1` and `v2`."""
+    groups: dict[tuple[str, ...], list[str]] = {}
+    for t in ids:
+        groups.setdefault(stratum(t, keys), []).append(t)
+    order = sorted(groups)
+    quota = {g: len(groups[g]) * test_n // len(ids) for g in order}
+    rest = sorted(
+        order, key=lambda g: -(len(groups[g]) * test_n % len(ids))
+    )  # stable: ties in order
+    for g in rest[: test_n - sum(quota.values())]:
+        quota[g] += 1
+    train: list[str] = []
+    test: list[str] = []
+    for g in order:
+        dealt = random.Random(seed).sample(groups[g], len(groups[g]))
+        test += dealt[: quota[g]]
+        train += dealt[quota[g] :]
+    out = dict(split)
+    out["version"] = 3
+    out["method"] = (
+        f"{split['method']}; v3 (s27) draws all {len(ids)} afresh: grouped by {' x '.join(keys)}, "
+        f"each group's share of {test_n} test tasks by largest remainder (ties to the first group "
+        f"in sorted order), random.Random({seed}).sample(group, len(group)) per group in sorted "
+        "order, the first quota to test, the rest to train"
+    )
+    out["strata"] = {
+        "keys": list(keys),
+        "test_n": test_n,
+        "groups": {"|".join(g): {"n": len(groups[g]), "test": quota[g]} for g in order},
+    }
+    out["v2"] = {"train": list(split["train"]), "test": list(split["test"])}
+    out["train"], out["test"] = train, test
+    out["reserve_n"] = len(ids) - len(train) - len(test)
+    return out
 
 
 def deal_reserve(split: dict[str, Any], train_n: int, seed: int = SPLIT_SEED) -> dict[str, Any]:

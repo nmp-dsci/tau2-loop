@@ -34,8 +34,9 @@ def test_domains_and_tasks() -> None:
     c = client()
     ds = c.get("/api/domains").json()
     assert [d["domain"] for d in ds] == ["airline", "retail", "telecom", "banking_knowledge"]
-    # split v2: half of each base set on each side; banking at split v3, 60 train / 37 test
-    assert [(d["train"], d["test"]) for d in ds] == [(25, 25), (57, 57), (57, 57), (60, 37)]
+    # split v2: half of each base set on each side; banking at split v3, 60 train / 37 test;
+    # telecom at its own v3, 74 / 40 (s27)
+    assert [(d["train"], d["test"]) for d in ds] == [(25, 25), (57, 57), (74, 40), (60, 37)]
     airline = c.get("/api/domains/airline").json()
     assert airline["policy_words"] > 1000 and len(airline["tasks"]) == 50
     first = airline["tasks"][0]

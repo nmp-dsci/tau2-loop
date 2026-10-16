@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from tau2_loop.agent.versions import list_versions, load_version, next_version_name
-from tau2_loop.config import DOMAINS, SPLIT_SEED, SPLIT_VERSION, V1_SIZE
+from tau2_loop.config import DOMAINS, SPLIT_SEED, SPLIT_VERSION, STRATA, V1_SIZE
 from tau2_loop.data.splits import read_split, read_task_extract, split_ids
 from tau2_loop.eval.compare import compare, mcnemar_one_sided
 from tau2_loop.eval.results import TaskResult, read_results, slug, summarise, write_results
@@ -28,11 +28,12 @@ def _r(tid: str, ok: bool, trial: int = 1) -> TaskResult:
 
 
 # ── splits ───────────────────────────────────────────────────────────────
-# (train, test, split version): half of each base set, except banking at split v3 (60 / 37)
+# (train, test, split version): half of each base set, except banking at split v3 (60 / 37) and
+# telecom at its own v3 (74 / 40, s27)
 SIDES = {
     "airline": (25, 25, SPLIT_VERSION),
     "retail": (57, 57, SPLIT_VERSION),
-    "telecom": (57, 57, SPLIT_VERSION),
+    "telecom": (74, 40, 3),
     "banking_knowledge": (60, 37, 3),
 }
 
@@ -63,16 +64,65 @@ def test_banking_split_v3_is_its_seeded_cut_and_moves_no_task_side() -> None:
     assert set(s["train"][48:]) == set(read[24:]) | set(gate[24:])
 
 
+def test_telecom_split_v3_is_a_fresh_seeded_draw_by_symptom_and_persona() -> None:
+    """s27 (16 Oct 2026, the person's call): all 114 drawn afresh, seed 300, 74 train and 40 test,
+    each symptom x persona group given its share of the 40 by largest remainder. The v1 and v2
+    lists stay in the file, and the telecom runs before it are all on v1's."""
+    from collections import Counter
+
+    from tau2_loop.data.splits import cut, stratum
+    from tau2_loop.eval.runner import list_runs
+
+    s = read_split("telecom")
+    assert cut("telecom") == s
+    keys = ("symptom", "persona")
+    assert s["strata"]["keys"] == list(keys) and s["strata"]["test_n"] == 40
+    tested = Counter(stratum(t, keys) for t in s["test"])
+    for g, row in s["strata"]["groups"].items():
+        assert tested[tuple(g.split("|"))] == row["test"]
+        assert abs(row["test"] - row["n"] * 40 / 114) < 1  # its share, rounded
+    assert Counter(stratum(t, ("symptom",)) for t in s["test"]) == {
+        ("mms_issue",): 17,
+        ("mobile_data_issue",): 14,
+        ("service_issue",): 9,
+    }
+    assert Counter(stratum(t, ("persona",)) for t in s["test"]) == {
+        ("Easy",): 13,
+        ("Hard",): 13,
+        ("None",): 14,
+    }
+    assert (len(s["v2"]["train"]), len(s["v2"]["test"])) == (57, 57)
+    assert set(s["v1"]["train"]) | set(s["v1"]["test"]) <= set(s["train"]) | set(s["test"])
+    old = [m for m in list_runs("telecom") if m.split_version != 3]
+    assert old and all(set(m.task_ids) == set(s["v1"][m.split]) for m in old)
+
+
+def test_deal_by_strata_gives_each_group_its_share_and_ties_to_the_first() -> None:
+    from tau2_loop.data.splits import deal_by_strata
+
+    ids = [f"[a]{i}[PERSONA:Easy]" for i in range(5)] + [f"[b]{i}[PERSONA:Easy]" for i in range(5)]
+    base = {"method": "m", "train": ids[:5], "test": ids[5:]}
+    one = deal_by_strata(base, ids, 3, ("symptom",), seed=7)
+    assert deal_by_strata(base, ids, 3, ("symptom",), seed=7) == one  # seeded
+    assert one["strata"]["groups"] == {"a": {"n": 5, "test": 2}, "b": {"n": 5, "test": 1}}
+    assert sorted(one["train"] + one["test"]) == sorted(ids) and len(one["test"]) == 3
+    assert one["v2"] == {"train": ids[:5], "test": ids[5:]} and one["reserve_n"] == 0
+
+
 @pytest.mark.parametrize("domain", DOMAINS)
 def test_split_v2_keeps_what_was_held_out_held_out(domain: str) -> None:
-    """Every task a committed run scored on train is still train, and every test task still test."""
+    """Every task a committed run scored on train is still train, and every test task still test.
+    Telecom's v3 drew its tasks afresh (s27, the person's call): there a run must sit on one side of
+    a cut the file keeps, today's or the v1 and v2 lists the older runs were played on."""
     from tau2_loop.eval.runner import list_runs
 
     s = read_split(domain)
-    assert s["train"][:V1_SIZE] == s["v1"]["train"] and s["test"][:V1_SIZE] == s["v1"]["test"]
+    cuts = [s, s["v2"], s["v1"]] if domain in STRATA else [s]
+    if domain not in STRATA:
+        assert s["train"][:V1_SIZE] == s["v1"]["train"] and s["test"][:V1_SIZE] == s["v1"]["test"]
     for m in list_runs(domain):
         if m.split in ("train", "test") and not m.dry_run:
-            assert set(m.task_ids) <= set(s[m.split]), m.run_id
+            assert any(set(m.task_ids) <= set(c[m.split]) for c in cuts), m.run_id
 
 
 @pytest.mark.parametrize("domain", DOMAINS)
