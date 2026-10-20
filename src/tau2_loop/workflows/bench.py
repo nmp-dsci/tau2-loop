@@ -68,6 +68,8 @@ def load_option(domain: str, opt: str) -> rag_agent.RagAgent:
         rubric=tuple(str(x) for x in cfg.get("rubric") or base.rubric),
         merge_base="draft",
         review_binding=bool(cfg.get("review_binding", True)),
+        merge_steps=int(cfg.get("merge_steps", base.merge_steps)),  # s31 (O4)
+        merge_write=str(cfg.get("merge_write", base.merge_write)),  # s31 (O1)
         **rag_agent.merge_settings(cfg, d),
     )
 
@@ -124,12 +126,16 @@ def run(
     stamp: str | None = None,
     resume: Path | None = None,
     why: str = "",
+    upto: int | None = None,
 ) -> Path:
     """Replay `job`'s merges under option `opt`, one after another, on a scratch library. Returns
     the run folder. A live run (no `ask`) builds the research tools' environment, since a merge
     turn may search the documents again. `resume` continues a run that stopped on a fault in the
     harness's code (never a usage limit), from the merge that failed, on the library it left; the
-    failed merge's session stays in the folder and the record says why it was resumed."""
+    failed merge's session stays in the folder and the record says why it was resumed.
+
+    s31 (O8): `upto` stops the run once that many of its merges are done, so its heads are scored
+    before the rest is spent; it stops as a pause does, and resumes the same way."""
     from tau2_loop.llm import core
 
     cfg = config(domain)["jobs"][job]
@@ -165,6 +171,13 @@ def run(
         "reviewer": list(agent.reviewer) if agent.reviewer else None,
         "merge_mode": agent.merge_mode,
         "merge_account": agent.merge_account,
+        "merge_write": agent.merge_write,
+        "merge_steps": agent.merge_steps,
+        "send_back": agent.send_back,
+        "held_only": agent.held_only,
+        "review_once": agent.review_once,
+        "post_audit": agent.post_audit,
+        "review_binding": agent.review_binding,
         "rubric": list(agent.rubric),
         "prompts": {
             "merge": _sha(agent.merge_prompt),
@@ -193,6 +206,12 @@ def run(
 
     save()
     for task in todo:
+        n_done = sum(m["status"] == "done" for m in record["merges"])
+        if upto is not None and n_done >= upto:
+            record["status"] = "stopped"
+            record["error"] = f"stopped by the protocol after {n_done} merges (O8), before {task}"
+            save()
+            return out
         source = str(cfg["sessions"][task])
         replay, drafted = replay_for(domain, job, source, system)
         sid = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}_{domain}_{agent.name}_{task}"
@@ -284,14 +303,16 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--job", default="filing_a_debit_card_transaction_dispute")
     r.add_argument("--option", required=True)
     r.add_argument("--trial", type=int, default=1)
+    r.add_argument("--upto", type=int, help="stop once this many merges are done (O8)")
     c = sub.add_parser(
         "resume", help="continue a run that stopped on a code fault (calls the model)"
     )
     c.add_argument("run_dir")
     c.add_argument("--why", required=True)
+    c.add_argument("--upto", type=int, help="stop once this many merges are done (O8)")
     a = ap.parse_args(argv)
     if a.cmd == "run":
-        print(run(a.domain, a.job, a.option, a.trial))
+        print(run(a.domain, a.job, a.option, a.trial, upto=a.upto))
     elif a.cmd == "resume":
         d = Path(a.run_dir)
         rec = json.loads((d / "run.json").read_text())
@@ -299,7 +320,17 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(
                 f"{d.name} is {rec['status']}: only a run stopped by a code fault resumes"
             )
-        print(run(rec["domain"], rec["job"], rec["option"], rec["trial"], resume=d, why=a.why))
+        print(
+            run(
+                rec["domain"],
+                rec["job"],
+                rec["option"],
+                rec["trial"],
+                resume=d,
+                why=a.why,
+                upto=a.upto,
+            )
+        )
 
 
 if __name__ == "__main__":

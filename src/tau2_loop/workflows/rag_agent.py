@@ -148,6 +148,14 @@ class RagAgent:
     # s30 (option D): after the send-back the auditor reads the merged job against its whole
     # documents and rewrites what they do not support, in place of the reviewer's binding removal
     post_audit: bool = False
+    # s31 (the person's calls O1-O5 on .lavish/s31_merge-bench-token-use.html): `send_back`
+    # "failed" asks again only for what failed, as edits on the job as it then stood (O2);
+    # `held_only` drops a written job the merge does not hold before any check reads it (O3);
+    # `review_once` has the reviewer read the first reply only, when the auditor reads the last
+    # (O5). O1 is `merge_write: edits` on the version the merge was shown, O4 `merge_steps: 0`.
+    send_back: str = "whole"
+    held_only: bool = False
+    review_once: bool = False
 
 
 def versions(domain: str) -> list[str]:
@@ -214,6 +222,9 @@ def merge_settings(cfg: dict[str, Any], d: Path) -> dict[str, Any]:
         "merge_account": bool(cfg.get("merge_account", False)),
         "merge_mode": str(cfg.get("merge_mode", "turn")),
         "post_audit": bool(cfg.get("post_audit", False)),
+        "send_back": str(cfg.get("send_back", "whole")),
+        "held_only": bool(cfg.get("held_only", False)),
+        "review_once": bool(cfg.get("review_once", False)),
         "stages": (str(st["model"]), str(st["effort"])) if isinstance(st, dict) else None,
         "stage_prompts": tuple(
             (s, (d / f"{s}.md").read_text()) for s in STAGE_FILES if (d / f"{s}.md").is_file()
@@ -1075,6 +1086,7 @@ def _assess(
     review: Callable[[str], str | None] | None = None,
     review_prompt: str = "",
     draft_base: bool = False,
+    bases: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Each merged job with the library versions it merged and its checks; `why` lists what
     stops it being taken. Under locks (`held`), a job may write only a name it holds and merge
@@ -1082,7 +1094,11 @@ def _assess(
     one job it names in `into`; edits that do not apply are sent back, then not taken. A version
     that gates on more checks (`gate_checks`, r5: D9, D10) sends a job back for them too; a new
     job that still fails them is taken as written, a merge keeps the previous version. A job's
-    `kept` (r7: the steps and rules it re-read and kept as they were) is checked, not stored."""
+    `kept` (r7: the steps and rules it re-read and kept as they were) is checked, not stored.
+
+    s31: `bases` gives, per library job, the version edits apply to in place of its newest one:
+    the audited version the merge was shown (O1), or after a send-back the job as the first reply
+    left it (O2), whose `changelog` and option fields (`opt`) the second reply's add to."""
     from tau2_loop.workflows import edits, library, rubric, toolspec
 
     rows: list[dict[str, Any]] = []
@@ -1099,6 +1115,7 @@ def _assess(
         if edits.is_edits(job):
             name = edits.base_name(job)
             base = library.by_name(lib, name) if name else None
+            given = (bases or {}).get(base["job"]) if base else None
             written = {"edits": len(job["edits"]), "chars": edits.size(job)}
             try:
                 if base is None:
@@ -1106,7 +1123,14 @@ def _assess(
                         "edits apply to the newest version of one library job: name it, and only "
                         "it, in `into`; a job that merges several, or a new job, is written in full"
                     )
-                job = edits.apply(job, base["workflow"])
+                if given is None:
+                    job = edits.apply(job, base["workflow"])
+                else:  # s31: on the version the merge was shown, its step marks dropped
+                    opt = merge_opts.join_opts(
+                        given.get("opt"), opt, {"accounted": merge_opts.edit_accounts(job)}
+                    )
+                    job, _ = merge_opts.take_fields(edits.apply(job, given["workflow"]))
+                    job["changelog"] = [*(given.get("changelog") or []), *job["changelog"]]
             except edits.EditError as err:
                 rows.append(
                     {
@@ -1247,6 +1271,151 @@ def _send_back(
     )
     again: dict[str, Any] | None = turns(max(agent.merge_steps // 2, 4), MERGE_WRITE_NOW)
     return again
+
+
+def _write_turn(
+    agent: RagAgent, turns: Callable[..., Any], say: Callable[[str], None], text: str, budget: int
+) -> Any:
+    """The harness's message and the reply it asks for. s31 (O4): with `merge_steps` 0 the
+    message is the question itself, with no turns to search first: the tools stay listed when the
+    version keeps them (so the prompt cache holds) and a call is refused."""
+    if agent.merge_steps == 0:
+        return turns(0, text)
+    say(text)
+    return turns(budget, MERGE_WRITE_NOW)
+
+
+def _named_steps(row: dict[str, Any], lines: list[str]) -> list[dict[str, Any]]:
+    """s31 (O2): the steps of a checked job that its failure lines name by id, or that hold a
+    quote the checks did not find."""
+    text = " ".join(lines)
+    unfound = [
+        str(q)[:60] for q in ((row.get("checks") or {}).get("D1") or {}).get("unfound") or []
+    ]
+    out = []
+    for st in row["job"].get("steps") or []:
+        if not isinstance(st, dict) or not st.get("id"):
+            continue
+        sid = re.escape(str(st["id"]))
+        body = json.dumps(st, ensure_ascii=False)
+        if re.search(rf"(?<![\w-]){sid}(?![\w-])", text) or any(q and q in body for q in unfound):
+            out.append(st)
+    return out
+
+
+def _send_back_failed(
+    agent: RagAgent,
+    rows: list[dict[str, Any]],
+    turns: Callable[..., Any],
+    say: Callable[[str], None],
+    emit: Callable[[dict[str, Any]], None],
+    extra: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """s31 (O2): the send-back asks again only for what failed: each failing job's lines and the
+    steps they name as the job now has them, answered with edits on that job, not the whole job."""
+    parts = []
+    for r in rows:
+        lines = [*r["why"], *(r.get("advise") or [])]
+        if not lines:
+            continue
+        parts.append(f"### {r['job'].get('job')}\n" + "\n".join(f"- {x}" for x in lines))
+        named = _named_steps(r, lines)
+        if named:
+            parts.append(
+                "The steps these lines name, as the job now has them:\n"
+                + json.dumps(named, ensure_ascii=False, indent=1)
+            )
+    if extra:
+        parts.append("\n".join(f"- {x}" for x in extra))
+    text = "\n\n".join(parts)
+    emit(
+        {
+            "kind": "note",
+            "text": f"The merge failed its checks; sent back once, for what failed.\n{text}",
+        }
+    )
+    after = (
+        "an auditor reads the job against its whole documents and rewrites what they do not support"
+        if agent.post_audit
+        else "a step the reviewer still finds unsupported is removed"
+        if agent.review_binding
+        else "the job is taken"
+    )
+    again: dict[str, Any] | None = _write_turn(
+        agent,
+        turns,
+        say,
+        "The harness applied your edits and checked each job; these lines fail:\n\n"
+        f"{text}\n\n"
+        "Reply with edits on each job as it now stands (your edits applied to the version you were "
+        "shown) that fix what is listed and nothing else: whatever you do not edit is kept as it "
+        "is, so do not copy it, and a job with nothing to fix is left out of the reply. Use the "
+        "same JSON shape, each job's `into` naming its library job. A `remove` of an audited step "
+        "still says what takes its place."
+        + (
+            " A clause the reviewer finds unsupported is quoted from the passage that says it, "
+            'rewritten to what the passage says, or given a basis entry with source "none" and '
+            "made a question for the customer."
+            if "D14" in agent.rubric
+            else ""
+        )
+        + " After this reply, an audited step still unaccounted is carried into the job as it was, "
+        f"a quote that is still not found loses its place, and {after}.",
+        max(agent.merge_steps // 2, 4),
+    )
+    return again
+
+
+def _join_rounds(
+    first: list[dict[str, Any]],
+    second: list[dict[str, Any]],
+    emit: Callable[[dict[str, Any]], None],
+) -> list[dict[str, Any]]:
+    """s31 (O2): a second reply that holds only the jobs it fixed, joined with the first: a job
+    it rewrote replaces the first reply's, a job it left out stands as the first reply left it,
+    and a job whose second edits do not apply stands too, unless the first was blocked."""
+    by = {str(r["job"].get("job")): r for r in second}
+    out = []
+    for r in first:
+        r2 = by.pop(str(r["job"].get("job")), None)
+        if r2 is None:
+            out.append(r)
+        elif r2.get("blocked") and r2.get("written") is not None and not r.get("blocked"):
+            emit(
+                {
+                    "kind": "note",
+                    "text": f"The second reply's edits to {r['job'].get('job')} did not apply "
+                    f"({'; '.join(r2['why'])[:300]}); it stands as the first reply left it.",
+                }
+            )
+            out.append({**r, "second_reply": r2["why"]})
+        else:
+            out.append(r2)
+    return [*out, *by.values()]
+
+
+def _held_jobs(
+    merged: dict[str, Any], held: set[str], emit: Callable[[dict[str, Any]], None]
+) -> dict[str, Any]:
+    """s31 (O3): a reply without the jobs that touch nothing the merge holds (they could never be
+    taken), so no check and no reviewer reads them. A job that merges a held job under another
+    name stays, and is sent back as before."""
+    from tau2_loop.workflows import library
+
+    keep: list[Any] = []
+    drop: list[Any] = []
+    for j in merged.get("jobs") or []:
+        names = [str(j.get("job")), *library.merged_names(j)] if isinstance(j, dict) else []
+        (keep if any(n in held for n in names) else drop).append(j)
+    if drop:
+        emit(
+            {
+                "kind": "note",
+                "text": f"Dropped {len(drop)} written job(s) the merge does not hold, unread: "
+                + ", ".join(str(j.get("job")) if isinstance(j, dict) else "?" for j in drop),
+            }
+        )
+    return {**merged, "jobs": keep}
 
 
 def _take(
@@ -1755,15 +1924,18 @@ def _merge_concurrent(
                     {**e, "workflow": audits[e["job"]]["shown"]} if e["job"] in audits else e
                     for e in mine
                 ]
-            say(
+            merged = _write_turn(
+                agent,
+                turns,
+                say,
                 agent.merge_prompt.format(
                     pairs=pairs, current=_versions_text(shown, changed) or "(none)"
                 )
                 + merge_opts.removed_text(audits)
                 + _tool_docs_text(agent, {"held": mine}, draft)
-                + _read_text(agent, messages, draft)
+                + _read_text(agent, messages, draft),
+                agent.merge_steps,
             )
-            merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
         protect = (
             {j: a["protected"] for j, a in audits.items()}
             if audits
@@ -1774,7 +1946,16 @@ def _merge_concurrent(
             else None
         )
 
+        shown_bases = (  # s31 (O1): edits apply to the audited version the merge was shown
+            {j: {"workflow": a["shown"]} for j, a in audits.items()}
+            if agent.merge_write == "edits"
+            else {}
+        )
+
         def assess(m: dict[str, Any], **kw: Any) -> list[dict[str, Any]]:
+            if agent.held_only:  # s31 (O3)
+                m = _held_jobs(m, held, emit)
+            kw.setdefault("bases", shown_bases)
             rs = _assess(meta.domain, m, heads, policy, held, agent.rubric, draft_base=base, **kw)
             for r in rs:  # s30: an option's own lines join the reviewer's in the one send-back
                 r["advise"] = [
@@ -1793,12 +1974,39 @@ def _merge_concurrent(
             again = (
                 _ledger_send_back(rows, ledgers, merged, call, emit)
                 if ledgers and call is not None
+                else _send_back_failed(agent, rows, turns, say, emit, extra)
+                if agent.send_back == "failed"
                 else _send_back(agent, rows, turns, say, emit, extra)
             )
-            if again is not None:
+            second = None if agent.review_once else review  # s31 (O5): the auditor reads it
+            if again is not None and agent.send_back == "failed":  # s31 (O2): on the first reply
+                bases = {
+                    **shown_bases,
+                    **{
+                        e["job"]: {
+                            "workflow": r["job"],
+                            "changelog": r["job"].get("changelog") or [],
+                            "opt": r.get("opt"),
+                        }
+                        for r in rows
+                        if not (r.get("blocked") and r.get("written") is not None)
+                        for e in r["previous"]
+                    },
+                }
+                rows = _join_rounds(
+                    rows,
+                    assess(again, review=second, review_prompt=agent.review_prompt, bases=bases),
+                    emit,
+                )
+                merged = {
+                    **merged,
+                    **{k: v for k, v in again.items() if k != "jobs" and v},
+                    "jobs": [r["job"] for r in rows],
+                }
+            elif again is not None:
                 merged, rows = (
                     again,
-                    assess(again, review=review, review_prompt=agent.review_prompt),
+                    assess(again, review=second, review_prompt=agent.review_prompt),
                 )
         if merged is None:  # nothing written: only the draft's new jobs, and only those it holds
             merged = {

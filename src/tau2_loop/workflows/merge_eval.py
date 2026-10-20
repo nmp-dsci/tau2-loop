@@ -47,23 +47,47 @@ def _prompt(domain: str, name: str) -> str:
     return (bench.BENCH_DIR / domain / "eval" / name).read_text()
 
 
-def live_ask(domain: str) -> Ask:
-    """The grader's model and effort from bench.yaml, on the subscription."""
+class Grader:
+    """A grader call with its tag (s31, O8): the cache and the eval file of a grader other than
+    bench.yaml's carry the tag, so one model's replies are never read as another's."""
+
+    def __init__(self, ask: Ask, tag: str = "") -> None:
+        self.ask, self.tag = ask, tag
+
+    def __call__(self, text: str) -> str | None:
+        return self.ask(text)
+
+
+def live_ask(domain: str, grader: str = "") -> Grader:
+    """The grader's model and effort from bench.yaml, on the subscription; `grader`
+    ("<model>:<effort>", s31 O8) names another, which is then the tag."""
     from tau2_loop.llm import core, require_live
 
     require_live()
     g = bench.config(domain).get("grader") or {}
-    model, effort = core.resolve_model(str(g.get("model", "opus"))), str(g.get("effort", "high"))
+    model, effort = str(g.get("model", "opus")), str(g.get("effort", "high"))
+    tag = ""
+    if grader and grader != f"{model}:{effort}":
+        model, _, effort = grader.partition(":")
+        effort = effort or "high"
+        tag = f"{model}-{effort}"
+    resolved = core.resolve_model(model)
 
     def ask(text: str) -> str | None:
-        ans = core.answer([{"role": "user", "content": text}], None, model, effort=effort)
+        ans = core.answer([{"role": "user", "content": text}], None, resolved, effort=effort)
         return str(ans.content) if ans.content is not None else None
 
-    return ask
+    return Grader(ask, tag)
+
+
+def tag_of(ask: Ask) -> str:
+    return str(getattr(ask, "tag", "") or "")
 
 
 def _cached(kind: str, text: str, ask: Ask, log: Path | None) -> str | None:
     h = hashlib.sha256(text.encode()).hexdigest()[:24]
+    if tag_of(ask):
+        kind = f"{kind}@{tag_of(ask)}"
     p = CACHE / kind / f"{h}.json"
     if p.is_file():
         return str(json.loads(p.read_text())["reply"])
@@ -326,8 +350,15 @@ def run_eval(run_dir: Path, ask: Ask, workers: int = 4) -> dict[str, Any]:
         "E3_last": e3_last,
         "evaluated": datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"),
     }
-    (run_dir / "eval.json").write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+    if tag_of(ask):
+        out["grader"] = tag_of(ask)
+    (run_dir / eval_name(ask)).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     return out
+
+
+def eval_name(ask: Ask) -> str:
+    """bench.yaml's grader writes eval.json; another writes eval@<tag>.json beside it."""
+    return f"eval@{tag_of(ask)}.json" if tag_of(ask) else "eval.json"
 
 
 BASELINES = {  # the versions that already exist: r17's seed, r18's head, r19's three
@@ -349,6 +380,17 @@ def baseline_version(domain: str, job: str, where: tuple[str, Any]) -> dict[str,
         (ROOT / "rag_library" / domain / kind / "versions" / job / f"{ref}.json").read_text()
     )
     return wf2
+
+
+def calibrate(domain: str, job: str, ask: Ask, workers: int = 3) -> dict[str, Any]:
+    """s31 (O8): E1 alone on the versions the key has hand labels for, against those labels: what
+    a new grader must reproduce before it scores a merge (Opus agreed on 20 of 22 cells)."""
+    k = key(domain, job)
+    names = [n for n in k["calibration"] if n in BASELINES]
+    wfs = [baseline_version(domain, job, BASELINES[n]) for n in names]
+    with ThreadPoolExecutor(workers) as ex:
+        graded = dict(zip(names, ex.map(lambda wf: e1(domain, wf, k, ask), wfs), strict=True))
+    return {"grader": tag_of(ask) or "bench.yaml", **calibration(k, graded)}
 
 
 def baselines(domain: str, job: str, ask: Ask, out: Path, workers: int = 5) -> dict[str, Any]:
@@ -374,7 +416,7 @@ def baselines(domain: str, job: str, ask: Ask, out: Path, workers: int = 5) -> d
         )
     res = {n: {**sc[n], "E3": e3s[n]} for n in wfs}
     res["calibration"] = calibration(k, {n: r["E1"] for n, r in res.items() if n in wfs})
-    (out / "eval.json").write_text(json.dumps(res, indent=1, ensure_ascii=False) + "\n")
+    (out / eval_name(ask)).write_text(json.dumps(res, indent=1, ensure_ascii=False) + "\n")
     return res
 
 
@@ -403,13 +445,19 @@ def main(argv: list[str] | None = None) -> None:
     r = sub.add_parser("run", help="score a bench run (calls the grader)")
     r.add_argument("run_dir")
     b = sub.add_parser("baselines", help="score r17, r18 and r19's versions and calibrate")
-    b.add_argument("--domain", default="banking_knowledge")
-    b.add_argument("--job", default="filing_a_debit_card_transaction_dispute")
+    c = sub.add_parser("calibrate", help="E1 on the hand-labelled versions only (O8)")
+    for s in (b, c):
+        s.add_argument("--domain", default="banking_knowledge")
+        s.add_argument("--job", default="filing_a_debit_card_transaction_dispute")
+    for s in (r, b, c):
+        s.add_argument("--grader", default="", help="<model>:<effort> in place of bench.yaml's")
     a = ap.parse_args(argv)
-    if a.cmd == "run":
+    if a.cmd == "calibrate":
+        print(json.dumps(calibrate(a.domain, a.job, live_ask(a.domain, a.grader)), indent=1))
+    elif a.cmd == "run":
         d = Path(a.run_dir)
         rec = json.loads((d / "run.json").read_text())
-        res = run_eval(d, live_ask(rec["domain"]))
+        res = run_eval(d, live_ask(rec["domain"], a.grader))
         print(
             json.dumps(
                 [
@@ -427,7 +475,7 @@ def main(argv: list[str] | None = None) -> None:
         res = baselines(
             a.domain,
             a.job,
-            live_ask(a.domain),
+            live_ask(a.domain, a.grader),
             ROOT / "merge_runs" / f"{stamp}_{a.domain}_baselines",
         )
         print(json.dumps(res["calibration"], indent=1))

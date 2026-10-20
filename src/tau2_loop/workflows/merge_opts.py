@@ -98,6 +98,41 @@ def take_fields(job: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     return job, extra
 
 
+def join_opts(*opts: dict[str, Any] | None) -> dict[str, Any]:
+    """s31: the option fields of several replies to one merge as one (a second reply written as
+    edits on the first): their lists joined in order, their step marks merged."""
+    out: dict[str, Any] = {}
+    for o in opts:
+        for k, v in (o or {}).items():
+            if isinstance(v, list):
+                if v:
+                    out[k] = [*(out.get(k) or []), *v]
+            elif isinstance(v, dict):
+                out[k] = {**(out.get(k) or {}), **v}
+            else:
+                out[k] = v
+    return out
+
+
+def edit_accounts(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """s31 (O1): the account a `remove` edit of a step gives, read as `accounted` reads it: its
+    `covered_by` step, or the `quote` and `doc` of the passage that decides the step's case."""
+    out: list[dict[str, Any]] = []
+    for e in entry.get("edits") or []:
+        if not isinstance(e, dict) or e.get("op") != "remove" or e.get("list") != "steps":
+            continue
+        sid = str(e.get("key") or "")
+        if not sid:
+            continue
+        if e.get("covered_by"):
+            out.append({"step": sid, "covered_by": str(e["covered_by"])})
+        elif e.get("quote"):
+            out.append(
+                {"step": sid, "replaced_by": {"quote": e["quote"], "doc": e.get("doc") or ""}}
+            )
+    return out
+
+
 # ── A and B: an old step leaves only with an account ──
 
 

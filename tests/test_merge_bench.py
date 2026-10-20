@@ -278,7 +278,7 @@ def _fake_ask(seen: list[str]):  # type: ignore[no-untyped-def]
         if first.startswith("You review one workflow job"):
             return Reply(json.dumps({"verdicts": []}))
         if first.startswith("You audit one workflow job"):
-            ids = re.findall(r'^  "id": "([^"]+)"', text, re.M)
+            ids = re.findall(r'^   "id": "([^"]+)"', text, re.M)  # a step of the audited job
             return Reply(
                 json.dumps({"steps": [{"step": i, "verdict": "valid"} for i in ids], "rules": []})
             )
@@ -333,7 +333,7 @@ def _fake_ask(seen: list[str]):  # type: ignore[no-untyped-def]
 
 
 @needs_docs
-@pytest.mark.parametrize("opt", ["A", "B", "C", "D"])
+@pytest.mark.parametrize("opt", ["A", "B", "C", "D", "D-lean"])
 def test_each_option_replays_the_four_merges_and_no_prompt_holds_the_answer_key(
     opt: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -440,3 +440,156 @@ def test_d_post_audit_rewrites_and_never_removes_a_step_the_gate_needs() -> None
     assert [s["id"] for s in job["steps"]] == ["f", "y"]
     assert job["steps"][1]["do"] == "new" and row["post_audit"]["kept_for_the_gate"] == ["f"]
     assert any("step x" in x["what"] for x in job["changelog"])
+
+
+# ── s31: D-lean, the person's calls O1-O5 and O8 on .lavish/s31_merge-bench-token-use.html ──
+
+
+def _lean_ask(seen: list[str]):  # type: ignore[no-untyped-def]
+    """D-lean's replies: the merge turn removes an audited step with no account, adds one and
+    writes a job the merge does not hold; the send-back changes the added step only, as edits."""
+    base = _fake_ask([])
+    n = [0]
+
+    def ask(messages, tools, model, effort, tool_mode):  # type: ignore[no-untyped-def]
+        text = str(messages[-1]["content"] or "")
+        if len(messages) == 1:  # the auditor's and the reviewer's own contexts
+            return base(messages, tools, model, effort, tool_mode)
+        seen.append(text)
+        if text.startswith("The harness applied your edits"):
+            key = f"lean_new_{n[0]}"
+            edit = {"op": "change", "list": "steps", "key": key, "why": "the send-back"}
+            edit["fields"] = {"do": "ask which card, then file"}
+            return Reply(json.dumps({"jobs": [{"job": J, "into": [J], "edits": [edit]}]}))
+        current = text.split("as the audit left them", 1)[1]
+        n[0] += 1
+        item = {"id": f"lean_new_{n[0]}", "do": "ask the customer which card the charge was on"}
+        first, second = re.findall(r'^   "id": "([^"]+)"', current, re.M)[:2]
+        edits = [
+            {"op": "remove", "list": "steps", "key": first, "why": "no account given"},
+            {"op": "add", "list": "steps", "after": second, "item": item, "why": "the draft"},
+        ]
+        other = {"job": "a_job_it_does_not_hold", "into": [], "steps": [], "changelog": []}
+        return Reply(json.dumps({"jobs": [{"job": J, "into": [J], "edits": edits}, other]}))
+
+    return ask
+
+
+@needs_docs
+def test_d_lean_writes_edits_sends_back_what_failed_and_reviews_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(store, "LIBRARY_DIR", store.LIBRARY_DIR)
+    seen: list[str] = []
+    out = bench.run(D, J, "D-lean", 1, ask=_lean_ask(seen), tools=[], root=tmp_path, stamp="1")
+    rec = json.loads((out / "run.json").read_text())
+    assert rec["status"] == "done", rec.get("error")
+    assert (rec["merge_write"], rec["merge_steps"], rec["send_back"]) == ("edits", 0, "failed")
+    assert all(m["taken"] for m in rec["merges"])
+    for m in rec["merges"]:
+        ev = _session_events(out, m["session"])
+        users = [e["text"] for e in ev if e["kind"] == "user"]
+        # O4: the merge prompt is the question itself, with no turns to search first
+        assert not any(rag_agent.MERGE_WRITE_NOW in u for u in users)
+        assert users[0].startswith("The library is holding") and len(users) == 2
+        # O3: the job it does not hold is dropped before the checks and the reviewer
+        notes = [e["text"] for e in ev if e["kind"] == "note"]
+        assert any(n.startswith("Dropped 1 written job") for n in notes)
+        reviews = [e for e in ev if e["kind"] == "review"]
+        assert not any("a_job_it_does_not_hold" in e["text"] for e in reviews)
+        # O5: the reviewer reads the first reply only; the auditor reads the last
+        back = next(
+            i
+            for i, e in enumerate(ev)
+            if e["kind"] == "user"
+            and e is not ev[0]
+            and str(e["text"]).startswith("The harness applied")
+        )
+        assert reviews and all(ev.index(e) < back for e in reviews)
+        assert any(e.get("stage") == "post_audit" for e in ev if e["kind"] == "stage")
+        out_j = json.loads((out / "sessions" / m["session"] / "output.json").read_text())
+        merge = next(x for x in out_j["merge"] if x["job"] == J)
+        assert merge["written"]["edits"] == 1  # the second reply's one edit
+    # O2: the second reply's edit applied to the job as the first left it, and both changelogs
+    # stand; the step removed with no account was carried back (O1's accounts read by code)
+    head = bench.heads(out, J)[-1]["workflow"]
+    new = {s["id"]: s["do"] for s in head["steps"] if str(s.get("id")).startswith("lean_new")}
+    assert new == {f"lean_new_{k}": "ask which card, then file" for k in (1, 2, 3, 4)}
+    last = json.loads((out / "sessions" / rec["merges"][-1]["session"] / "output.json").read_text())
+    record = next(x for x in last["merge"] if x["job"] == J)
+    log = [str(x.get("what")) + " " + str(x.get("why")) for x in record["changelog"]]
+    assert any("steps lean_new_4" in x and "the draft" in x for x in log)
+    assert any("the send-back" in x for x in log)
+    assert any("carried over as it was" in x for x in log)
+    assert not any('"audit":' in json.dumps(s) for s in head["steps"])
+    assert sum(t.startswith("The harness applied your edits") for t in seen) == 4
+
+
+def _session_events(out: Path, sid: str) -> list[dict[str, Any]]:
+    p = out / "sessions" / sid / "events.jsonl"
+    return [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+
+
+def test_a_remove_edit_accounts_for_the_step_and_a_second_reply_keeps_the_first() -> None:
+    entry = {
+        "edits": [
+            {"op": "remove", "list": "steps", "key": "a", "covered_by": "b"},
+            {"op": "remove", "list": "steps", "key": "c", "quote": "q", "doc": "doc_1"},
+            {"op": "remove", "list": "steps", "key": "d", "why": "nothing takes its place"},
+            {"op": "remove", "list": "rules", "key": "a rule", "quote": "q"},
+        ]
+    }
+    assert merge_opts.edit_accounts(entry) == [
+        {"step": "a", "covered_by": "b"},
+        {"step": "c", "replaced_by": {"quote": "q", "doc": "doc_1"}},
+    ]
+    joined = merge_opts.join_opts({"accounted": [1], "marks": {"s": 1}}, None, {"accounted": [2]})
+    assert joined == {"accounted": [1, 2], "marks": {"s": 1}}
+    ok = {"job": {"job": J}, "why": ["a line"], "blocked": False}
+    failed = {"job": {"job": J}, "why": ["edits: edit 1: no item"], "blocked": True, "written": {}}
+    notes: list[dict[str, Any]] = []
+    rows = rag_agent._join_rounds([ok], [failed], notes.append)
+    assert rows[0]["why"] == ["a line"] and rows[0]["second_reply"] == failed["why"]
+    assert "did not apply" in notes[0]["text"]
+    fixed = {"job": {"job": J}, "why": [], "blocked": False}
+    assert rag_agent._join_rounds([ok], [fixed], notes.append) == [fixed]
+
+
+@needs_docs
+def test_upto_stops_a_run_for_scoring_and_it_resumes_where_it_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(store, "LIBRARY_DIR", store.LIBRARY_DIR)
+    ask = _lean_ask([])
+    out = bench.run(D, J, "D-lean", 1, ask=ask, tools=[], root=tmp_path, stamp="1", upto=2)
+    rec = json.loads((out / "run.json").read_text())
+    assert rec["status"] == "stopped" and "O8" in rec["error"] and len(rec["merges"]) == 2
+    assert "limit" not in rec["error"].lower()  # the resume command takes it
+    bench.run(D, J, "D-lean", 1, ask=ask, tools=[], resume=out, why="scored after two")
+    rec = json.loads((out / "run.json").read_text())
+    assert rec["status"] == "done" and [m["task"] for m in rec["merges"]] == [
+        "task_084",
+        "task_088",
+        "task_090",
+        "task_086",
+    ]
+    assert [v["version"] for v in bench.heads(out, J)] == [0, 1, 2, 3, 4]
+
+
+def test_a_second_grader_never_reads_the_first_graders_cached_replies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tau2_loop.workflows import merge_eval
+
+    monkeypatch.setattr(merge_eval, "CACHE", tmp_path)
+    opus = merge_eval.Grader(lambda text: "opus says", "")
+    sonnet = merge_eval.Grader(lambda text: "sonnet says", "claude-sonnet-5-5-high")
+    assert merge_eval._cached("grade", "same prompt", opus, None) == "opus says"
+    assert merge_eval._cached("grade", "same prompt", sonnet, None) == "sonnet says"
+    assert merge_eval._cached("grade", "same prompt", opus, None) == "opus says"
+    assert {p.parent.name for p in tmp_path.rglob("*.json")} == {
+        "grade",
+        "grade@claude-sonnet-5-5-high",
+    }
+    assert merge_eval.eval_name(sonnet) == "eval@claude-sonnet-5-5-high.json"
+    assert merge_eval.eval_name(lambda text: None) == "eval.json"
