@@ -67,7 +67,7 @@ def load_option(domain: str, opt: str) -> rag_agent.RagAgent:
         review_prompt=(BENCH_DIR / domain / "review.md").read_text(),
         rubric=tuple(str(x) for x in cfg.get("rubric") or base.rubric),
         merge_base="draft",
-        review_binding=True,
+        review_binding=bool(cfg.get("review_binding", True)),
         **rag_agent.merge_settings(cfg, d),
     )
 

@@ -333,7 +333,7 @@ def _fake_ask(seen: list[str]):  # type: ignore[no-untyped-def]
 
 
 @needs_docs
-@pytest.mark.parametrize("opt", ["A", "B", "C"])
+@pytest.mark.parametrize("opt", ["A", "B", "C", "D"])
 def test_each_option_replays_the_four_merges_and_no_prompt_holds_the_answer_key(
     opt: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -384,7 +384,59 @@ def test_d10_reads_a_job_that_changes_a_pin_and_closes_a_card() -> None:
     from tau2_loop.workflows import toolspec
 
     def call(sid: str, tool: str) -> dict[str, Any]:
-        return {"id": sid, "call": "call_discoverable_agent_tool", "args": {"agent_tool_name": tool}}
+        return {
+            "id": sid,
+            "call": "call_discoverable_agent_tool",
+            "args": {"agent_tool_name": tool},
+        }
 
-    job = {"steps": [call("pin", "reset_debit_card_pin_6284"), call("close", "close_debit_card_4721")]}
+    job = {
+        "steps": [call("pin", "reset_debit_card_pin_6284"), call("close", "close_debit_card_4721")]
+    }
     assert toolspec.unmet_status(D, job) == []
+
+
+@needs_docs
+def test_d_post_audit_rewrites_and_never_removes_a_step_the_gate_needs() -> None:
+    """D: the post-merge auditor's "invalid" removes a step only if the job still passes the gate:
+    the reviewer's binding removal took the filing step out of r19 086 and of A's and C's merges."""
+    from tau2_loop.workflows import toolspec
+
+    filing = "file_debit_card_transaction_dispute_6281"
+    params = toolspec.tools(D)[filing]["required"]
+    f = {
+        "id": "f",
+        "call": "call_discoverable_agent_tool",
+        "args": {"agent_tool_name": filing, **{p: "x" for p in params}},
+    }
+    job = {
+        "job": "j",
+        "tools": [{"tool": filing, "who": "agent", "step": "f"}],
+        "steps": [f, {"id": "x", "do": "say a rule no passage gives"}, {"id": "y", "do": "old"}],
+    }
+    reply = {
+        "steps": [
+            {"step": "f", "verdict": "invalid", "why": "one clause unsupported"},
+            {"step": "x", "verdict": "invalid", "why": "no passage"},
+            {
+                "step": "y",
+                "verdict": "rewrite",
+                "rewrite": {"do": "new"},
+                "why": "the passage says new",
+            },
+        ],
+        "rules": [],
+    }
+    row = {"job": job, "previous": [{"job": "j", "workflow": dict(job)}], "checks": {}, "why": []}
+    merge_opts.post_audit(
+        D,
+        "{job}{version}{documents}{tools}",
+        [row],
+        "",
+        ("D20",),
+        lambda m, s: json.dumps(reply),
+        lambda e: None,
+    )
+    assert [s["id"] for s in job["steps"]] == ["f", "y"]
+    assert job["steps"][1]["do"] == "new" and row["post_audit"]["kept_for_the_gate"] == ["f"]
+    assert any("step x" in x["what"] for x in job["changelog"])

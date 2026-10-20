@@ -391,7 +391,9 @@ def unmet_status(domain: str, job: dict[str, Any]) -> list[dict[str, Any]]:
         (k, step_tool(job, k)) for k in range(len(steps)) if steps[k].get("call") not in NOT_A_CALL
     ]
     called = {t for _, t in calls}
-    made = {rules[t]["effect"] for _, t in calls if t in rules and rules[t]["effect"]}  # a PIN change makes none
+    made = {
+        rules[t]["effect"] for _, t in calls if t in rules and rules[t]["effect"]
+    }  # a PIN change makes none
     acts_on: dict[str, set[str]] = {}
     for name, rule in rules.items():
         if len(rule["allowed"]) == 1:

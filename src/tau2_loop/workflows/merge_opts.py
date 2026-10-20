@@ -717,3 +717,105 @@ def option_lines(
     if led is not None:
         lines += coverage_lines(claims_from_opt(row.get("opt")), led["_surv"], led["rejected"])
     return lines
+
+
+def post_audit(
+    domain: str,
+    prompt: str,
+    rows: list[dict[str, Any]],
+    policy: str,
+    gate_checks: tuple[str, ...],
+    call: Call,
+    emit: Callable[[dict[str, Any]], None],
+) -> None:
+    """D's last word on each merged job, after the send-back: the auditor reads it with the whole
+    documents it cites, its rewrites replace the clauses they fix, and an invalid step goes only if
+    the job still passes the gate without it (the reviewer removed r19 086's filing step over one
+    clause, and the same removal refused A's and C's merges). Changes are written to the changelog."""
+    from tau2_loop.workflows import rubric
+
+    for r in rows:
+        if r.get("blocked") or not r.get("previous"):
+            continue
+        job = r["job"]
+        reply = call(
+            [{"role": "user", "content": audit_request(domain, prompt, job, policy)}], "post_audit"
+        )
+        v = parse_audit(reply)
+        if v is None:
+            emit(
+                {
+                    "kind": "note",
+                    "text": f"The post-merge audit of {job.get('job')} was unreadable; the job is kept as merged.",
+                }
+            )
+            continue
+        a = audited(job, v)
+        new_steps = [{k: x for k, x in st.items() if k != "audit"} for st in a["shown"]["steps"]]
+        prev = [e["workflow"] for e in r["previous"]]
+        before = rubric.gate(rubric.check(domain, job, prev, policy), gate_checks, draft_base=True)
+        trial = {**job, "steps": new_steps, "rules": a["shown"]["rules"]}
+        after = rubric.gate(rubric.check(domain, trial, prev, policy), gate_checks, draft_base=True)
+        kept_back: list[str] = []
+        if len(after) > len(before):  # an invalid step the job needs stays, as it was merged
+            steps = [st for st in job.get("steps") or [] if isinstance(st, dict)]
+            calls = {str(st.get("id")): rubric.step_tool(job, k) for k, st in enumerate(steps)}
+            gone = [x["step"] for x in a["removed"] if "step" in x]
+            failing = " ".join(after)
+            need = [g for g in gone if g in failing or (calls.get(g) or "\0") in failing]
+            audited_steps = {str(st.get("id")): st for st in new_steps}
+
+            def keep(
+                back: list[str],
+                steps: list[dict[str, Any]] = steps,
+                audited_steps: dict[str, dict[str, Any]] = audited_steps,
+            ) -> list[dict[str, Any]]:
+                return [
+                    audited_steps.get(str(st.get("id")), st)
+                    for st in steps
+                    if str(st.get("id")) in audited_steps or str(st.get("id")) in back
+                ]
+
+            new_steps = keep(need)
+            trial = {**job, "steps": new_steps, "rules": a["shown"]["rules"]}
+            again = rubric.gate(
+                rubric.check(domain, trial, prev, policy), gate_checks, draft_base=True
+            )
+            if len(again) > len(before):  # not enough: every step the audit removed stays
+                need = gone
+                new_steps = keep(need)
+                trial = {**job, "steps": new_steps, "rules": a["shown"]["rules"]}
+            kept_back = need
+        log = [
+            {
+                "change": "changed",
+                "what": f"step {sid}",
+                "why": f"rewritten by the post-merge audit: {str(v['steps'][sid].get('why') or '')[:200]}; {CODE}",
+            }
+            for sid, x in v["steps"].items()
+            if x["verdict"] == "rewrite"
+        ] + [
+            {
+                "change": "removed",
+                "what": f"step {x['step']}" if "step" in x else f"rule {x['rule'][:80]}",
+                "why": f"the post-merge audit finds it unsupported: {x['why'][:200]}; {CODE}",
+            }
+            for x in a["removed"]
+            if x.get("step") not in kept_back
+        ]
+        job["steps"], job["rules"] = trial["steps"], trial["rules"]
+        job["changelog"] = [*(job.get("changelog") or []), *log]
+        r["post_audit"] = {
+            "verdicts": v,
+            "removed": [x for x in a["removed"] if x.get("step") not in kept_back],
+            "kept_for_the_gate": kept_back,
+        }
+        emit(
+            {
+                "kind": "post_audited",
+                "job": job.get("job"),
+                "rewrite": sum(x["verdict"] == "rewrite" for x in v["steps"].values()),
+                "invalid": sum(x["verdict"] == "invalid" for x in v["steps"].values()),
+                "kept_for_the_gate": kept_back,
+            }
+        )

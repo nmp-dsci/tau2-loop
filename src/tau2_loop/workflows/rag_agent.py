@@ -145,6 +145,9 @@ class RagAgent:
     merge_mode: str = "turn"
     stages: tuple[str, str] | None = None
     stage_prompts: tuple[tuple[str, str], ...] = ()
+    # s30 (option D): after the send-back the auditor reads the merged job against its whole
+    # documents and rewrites what they do not support, in place of the reviewer's binding removal
+    post_audit: bool = False
 
 
 def versions(domain: str) -> list[str]:
@@ -210,6 +213,7 @@ def merge_settings(cfg: dict[str, Any], d: Path) -> dict[str, Any]:
     return {
         "merge_account": bool(cfg.get("merge_account", False)),
         "merge_mode": str(cfg.get("merge_mode", "turn")),
+        "post_audit": bool(cfg.get("post_audit", False)),
         "stages": (str(st["model"]), str(st["effort"])) if isinstance(st, dict) else None,
         "stage_prompts": tuple(
             (s, (d / f"{s}.md").read_text()) for s in STAGE_FILES if (d / f"{s}.md").is_file()
@@ -1200,8 +1204,13 @@ def _send_back(
             "A step of the library's version that stands on its documents stays unless a step "
             "of yours now handles its case or a passage decides its case otherwise: name which in "
             "`accounted`. After this reply, one still unaccounted is carried into the job as it "
-            "was, a quote that is still not found loses its place, and a step the reviewer still "
-            "finds unsupported is removed."
+            "was, a quote that is still not found loses its place, and "
+            + (
+                "an auditor reads the job against its whole documents and rewrites what they do "
+                "not support."
+                if agent.post_audit
+                else "a step the reviewer still finds unsupported is removed."
+            )
             if agent.merge_account or agent.merge_mode == "audit"
             else "The draft is the base: a step of the versions you merged stays only when it covers a "
             "case no step of the draft covers, its quote is found in the document it cites, and "
@@ -1273,6 +1282,7 @@ def _take(
                 **({"option": r["opt"]} if r.get("opt") else {}),  # s30: accounts, marks
                 **({"audit": r["audit"]} if r.get("audit") else {}),
                 **({"ledger": r["ledger"]} if r.get("ledger") else {}),
+                **({"post_audit": r["post_audit"]} if r.get("post_audit") else {}),
             }
         )
         job.pop("changelog", None)
@@ -1800,6 +1810,16 @@ def _merge_concurrent(
                 ],
             }
             rows = _assess(meta.domain, merged, heads, policy, held, agent.rubric, draft_base=base)
+        if agent.post_audit and call is not None:  # s30 (D): the auditor's last word
+            merge_opts.post_audit(
+                meta.domain,
+                dict(agent.stage_prompts)["audit"],
+                rows,
+                policy,
+                agent.rubric,
+                call,
+                emit,
+            )
         if base:
             _settle(
                 meta.domain, rows, policy, agent.rubric, agent.review_binding, protect, bool(audits)

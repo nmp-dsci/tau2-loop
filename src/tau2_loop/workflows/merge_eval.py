@@ -151,6 +151,9 @@ def e2(
         for x in j.get("removed") or []:
             if x.get("step"):
                 named[str(x["step"])] = "removed by the audit"
+    for x in (rec.get("post_audit") or {}).get("removed") or []:
+        if x.get("step"):
+            named[str(x["step"])] = "removed by the post-merge audit"
     for x in rec.get("settled") or []:
         w = str(x.get("what", ""))
         if w.startswith("step ") and "reviewer" in str(x.get("why", "")):
