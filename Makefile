@@ -40,6 +40,15 @@ rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (def
 rag-remerge: ## s25: merge again, with RAG='s merge (default r19), every session of the version it takes drafts from (r18's): no research runs; resumable (LIMIT=, WORKERS=)
 	uv run tau2loop rag-remerge --domain banking_knowledge --rag $(or $(RAG),r19) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS))
 
+merge-bench: ## s30: replay JOB='s merges (default the debit dispute job) under merge option OPTION= (A, B or C), trial TRIAL= (default 1): no research, a scratch library under merge_runs/; calls the model
+	uv run python -m tau2_loop.workflows.bench run --option $(OPTION) --trial $(or $(TRIAL),1) $(if $(JOB),--job $(JOB))
+
+merge-eval: ## s30: score bench run RUN= (a merge_runs/ folder): the answer key per head (E1), accounting (E2), every step reviewed (E3), structure (E4)
+	uv run python -m tau2_loop.workflows.merge_eval run $(RUN)
+
+merge-baselines: ## s30: the same eval on r17's, r18's and r19's versions of the job, and the grader against the hand labels
+	uv run python -m tau2_loop.workflows.merge_eval baselines $(if $(JOB),--job $(JOB))
+
 rag-locks: ## s21: who is updating which workflow in RAG='s library (default r3): held and waiting locks
 	uv run tau2loop rag-locks --domain banking_knowledge --rag $(or $(RAG),r3)
 
@@ -159,4 +168,4 @@ lint: ## ruff + mypy (+ frontend design lint when node_modules exist)
 fmt: ## ruff format + fix
 	uv run ruff format src tests && uv run ruff check --fix src tests
 
-.PHONY: rag-build rag-remerge rag-locks rag-replay rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab
+.PHONY: rag-build rag-remerge merge-bench merge-eval merge-baselines rag-locks rag-replay rag-rubric judge-labels judge-gold judge-gold-freeze judge-probe judge-replay judge-loop judge-score help setup splits documents fork agent-service platform-up platform-status smoke eval baselines score rescore compare register promote loop challenge ledger snapshot gate dev viewer demo-up test lint fmt ab

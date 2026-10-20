@@ -135,6 +135,16 @@ class RagAgent:
     drafts_from: str | None = None
     merge_base: str = "library"  # "library" (r2-r18) or "draft" (r19)
     review_binding: bool = False
+    # s30 (the merge bench, `workflows/merge_opts.py`): `merge_account` (option A) carries an old
+    # step whose quotes are found unless the merge names what covers or replaces it; `merge_mode`
+    # "audit" (B) has an auditor read the library's version against its documents before the merge
+    # turn, "ledger" (C) merges by claims in fresh contexts instead of a merge turn. `stages` is
+    # the (model, effort) of those calls; their instructions are audit.md, extract.md, verify.md
+    # and write.md.
+    merge_account: bool = False
+    merge_mode: str = "turn"
+    stages: tuple[str, str] | None = None
+    stage_prompts: tuple[tuple[str, str], ...] = ()
 
 
 def versions(domain: str) -> list[str]:
@@ -186,7 +196,25 @@ def load(domain: str, name: str) -> RagAgent:
         drafts_from=cfg.get("drafts_from"),
         merge_base=str(cfg.get("merge_base", "library")),
         review_binding=bool(cfg.get("review_binding", False)),
+        **merge_settings(cfg, d),
     )
+
+
+STAGE_FILES = ("audit", "extract", "verify", "write")
+
+
+def merge_settings(cfg: dict[str, Any], d: Path) -> dict[str, Any]:
+    """s30: the merge options' settings from a yaml and the folder beside it (an rN or a bench
+    option, `workflows/bench.py`)."""
+    st = cfg.get("stages")
+    return {
+        "merge_account": bool(cfg.get("merge_account", False)),
+        "merge_mode": str(cfg.get("merge_mode", "turn")),
+        "stages": (str(st["model"]), str(st["effort"])) if isinstance(st, dict) else None,
+        "stage_prompts": tuple(
+            (s, (d / f"{s}.md").read_text()) for s in STAGE_FILES if (d / f"{s}.md").is_file()
+        ),
+    }
 
 
 def train_question(domain: str, task_id: str, split: str = "train") -> str:
@@ -751,6 +779,33 @@ def run_session(
         )
         return str(ans.content) if ans.content is not None else None
 
+    def call(msgs: list[dict[str, Any]], stage: str) -> str | None:
+        """s30: one call of a merge option's stage (audit, extract, verify, write) in its own
+        context, no tools; the last message and the reply are saved as a `stage` event."""
+        from tau2_loop.llm import core
+
+        model, effort = agent.stages or (agent.model, agent.effort)
+        ans = ask(msgs, None, core.resolve_model(model), effort, agent.tool_mode)
+        res = getattr(ans, "result", None)
+        if res is not None:
+            meta.input_tokens += int(res.input_tokens or 0)
+            meta.output_tokens += int(res.output_tokens or 0)
+        emit(
+            {
+                "kind": "stage",
+                "stage": stage,
+                "messages": len(msgs),
+                "text": msgs[-1]["content"],
+                "reply": ans.content,
+                "model": model,
+                "effort": effort,
+                "input_tokens": getattr(res, "input_tokens", None),
+                "output_tokens": getattr(res, "output_tokens", None),
+                "ms": getattr(res, "duration_ms", None),
+            }
+        )
+        return str(ans.content) if ans.content is not None else None
+
     wf: dict[str, Any] | None = None
     try:
         if replay is not None:
@@ -771,11 +826,25 @@ def run_session(
         if wf is not None and agent.merge and meta.source in ("question", "remerge"):
             if replay is not None:
                 wf = _merge_concurrent(
-                    meta, agent, wf, messages, turns, say, emit, policy, review, replay.decision
+                    meta,
+                    agent,
+                    wf,
+                    messages,
+                    turns,
+                    say,
+                    emit,
+                    policy,
+                    review,
+                    replay.decision,
+                    call,
                 )
             else:
-                merge = _merge_concurrent if agent.merge == "concurrent" else _merge
-                wf = merge(meta, agent, wf, messages, turns, say, emit, policy, review)
+                if agent.merge == "concurrent":
+                    wf = _merge_concurrent(
+                        meta, agent, wf, messages, turns, say, emit, policy, review, None, call
+                    )
+                else:
+                    wf = _merge(meta, agent, wf, messages, turns, say, emit, policy, review)
         meta.status = "done" if wf is not None else "failed"
         if wf is None:
             meta.error = "no workflow JSON in the final reply"
@@ -985,6 +1054,10 @@ def _advice(
             "say it from the records the step reads (reading rule 5)"
             for sid in c["D18"]
         ]
+    if "D19" in gate_checks:  # s30: a step id the job points to is one of its steps
+        from tau2_loop.workflows import rubric
+
+        lines += rubric.structure_reasons(c, ("D19",))
     return lines, record
 
 
@@ -1016,6 +1089,9 @@ def _assess(
         written = None
         job = dict(job)
         kept = job.pop("kept", None)
+        from tau2_loop.workflows import merge_opts
+
+        job, opt = merge_opts.take_fields(job)  # s30: an option's accounts and step marks
         if edits.is_edits(job):
             name = edits.base_name(job)
             base = library.by_name(lib, name) if name else None
@@ -1096,6 +1172,7 @@ def _assess(
                 "blocked": bool(blocked),
                 "written": written,
                 "kept": kept,
+                "opt": opt,
             }
         )
     return rows
@@ -1120,7 +1197,13 @@ def _send_back(
         "The harness checked your merge and these jobs fail:\n"
         f"{lines}\n\n"
         + (
-            "The draft is the base: a step of the versions you merged stays only when it covers a "
+            "A step of the library's version that stands on its documents stays unless a step "
+            "of yours now handles its case or a passage decides its case otherwise: name which in "
+            "`accounted`. After this reply, one still unaccounted is carried into the job as it "
+            "was, a quote that is still not found loses its place, and a step the reviewer still "
+            "finds unsupported is removed."
+            if agent.merge_account or agent.merge_mode == "audit"
+            else "The draft is the base: a step of the versions you merged stays only when it covers a "
             "case no step of the draft covers, its quote is found in the document it cites, and "
             "its clauses follow from that quote. You need not account for what you leave out: "
             "code logs it. After this reply, a quote that is still not found loses its place, and "
@@ -1187,6 +1270,9 @@ def _take(
                 **({"written": r["written"]} if r.get("written") else {}),
                 **({"kept": r["kept"]} if r.get("kept") else {}),
                 **({"settled": r["settled"]} if r.get("settled") else {}),
+                **({"option": r["opt"]} if r.get("opt") else {}),  # s30: accounts, marks
+                **({"audit": r["audit"]} if r.get("audit") else {}),
+                **({"ledger": r["ledger"]} if r.get("ledger") else {}),
             }
         )
         job.pop("changelog", None)
@@ -1244,27 +1330,48 @@ def _settle(
     policy: str,
     gate_checks: tuple[str, ...],
     binding: bool,
+    protect: dict[str, dict[str, dict[str, Any]]] | None = None,
+    audited: bool = False,
 ) -> None:
     """s25 (r19): a draft-based merge's last word, after its one send-back. A quote still not
     found loses its place, not the merge (M3); a step the reviewer still finds unsupported is
     removed (R1, `binding`); what the job leaves out of the versions it merged is written into its
-    changelog by code (M3). The checks are then run again on what is left."""
-    from tau2_loop.workflows import rubric, toolspec
+    changelog by code (M3). The checks are then run again on what is left.
+
+    s30: `protect` (options A and B) holds, per library job, the old steps that leave only with an
+    account; one the merge still leaves out unaccounted is carried over as it was. Under the audit
+    (B, `audited`) the reviewer's "no" does not remove a step the auditor found valid and the merge
+    kept as the audit left it: the auditor read it against the whole documents."""
+    from tau2_loop.workflows import merge_opts, rubric, toolspec
 
     for r in rows:
         if r.get("blocked"):
             continue
         job = r["job"]
+        guard: dict[str, dict[str, Any]] = {}
+        for e in r["previous"]:
+            guard |= (protect or {}).get(str(e.get("job"))) or {}
         log = _unquote(domain, job, policy)
+        reviewed_out: set[str] = set()
         if binding:
             no = {
                 v["step"]
                 for v in (r.get("review") or {}).get("verdicts") or []
                 if v.get("verdict") == "no"
             }
+            if audited:
+                no = {
+                    sid
+                    for sid in no
+                    if not any(
+                        isinstance(st, dict) and st.get("id") == sid and st == guard.get(sid)
+                        for st in job.get("steps") or []
+                    )
+                }
             gone = [
                 st for st in job.get("steps") or [] if isinstance(st, dict) and st.get("id") in no
             ]
+            reviewed_out = {str(st.get("id")) for st in gone}
             if gone:
                 job["steps"] = [st for st in job.get("steps") or [] if st not in gone]
                 for st in gone:
@@ -1284,6 +1391,19 @@ def _settle(
                         }
                     )
         prev = [e["workflow"] for e in r["previous"]]
+        if guard and prev:  # s30 (A, B): no protected step leaves without an account
+            left = {k: v for k, v in guard.items() if k not in reviewed_out}
+            missing = merge_opts.unaccounted(
+                domain, job, left, merge_opts.accounts(r.get("opt")), policy
+            )
+            if missing:
+                order = [
+                    str(s.get("id"))
+                    for p in prev
+                    for s in p.get("steps") or []
+                    if isinstance(s, dict)
+                ]
+                log += merge_opts.carry(job, order, guard, missing)
         if prev:
             for kind, items in rubric.lost(job, prev).items():
                 for x in items:
@@ -1415,6 +1535,97 @@ def _holds(decision: dict[str, list[str]], lib: list[dict[str, Any]]) -> set[str
     return out
 
 
+def _ledger_merge(
+    meta: SessionMeta,
+    agent: RagAgent,
+    draft: dict[str, Any],
+    decision: dict[str, list[str]],
+    mine: list[dict[str, Any]],
+    policy: str,
+    call: Callable[[list[dict[str, Any]], str], str | None],
+    emit: Callable[[dict[str, Any]], None],
+    ledgers: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """s30 (option C): each drafted job merged into the library jobs it names by the claim
+    ledger, in fresh contexts; a drafted job that names none is new and taken as drafted."""
+    from tau2_loop.workflows import library, merge_opts
+
+    prompts = dict(agent.stage_prompts)
+    schema = merge_opts.schema_text(agent.prompt)
+    by_name = {str(j.get("job")): j for j in draft.get("jobs") or [] if isinstance(j, dict)}
+    jobs = []
+    for drafted, names in decision.items():
+        d = by_name.get(drafted)
+        olds: list[dict[str, Any]] = []
+        for n in names:
+            e = library.by_name(mine, n)
+            if e is not None and e not in olds:
+                olds.append(e)
+        if not olds:
+            if d is not None:
+                jobs.append(d)
+            continue
+        name = olds[0]["job"]
+        job, ledger = merge_opts.ledger_job(
+            meta.domain, prompts, name, [e["workflow"] for e in olds], d, policy, schema, call, emit
+        )
+        ledgers[name] = ledger
+        if job is not None:
+            jobs.append({**job, "into": [e["job"] for e in olds]})
+    if not jobs:
+        return None
+    return {**{k: v for k, v in draft.items() if k != "jobs"}, "jobs": jobs}
+
+
+def _ledger_send_back(
+    rows: list[dict[str, Any]],
+    ledgers: dict[str, dict[str, Any]],
+    merged: dict[str, Any],
+    call: Callable[[list[dict[str, Any]], str], str | None],
+    emit: Callable[[dict[str, Any]], None],
+) -> dict[str, Any] | None:
+    """s30 (C): the one send-back goes to the writer's own conversation, job by job."""
+    jobs = list(merged.get("jobs") or [])
+    changed = False
+    for r in rows:
+        names = [e["job"] for e in r["previous"]]
+        name = next((n for n in names if n in ledgers), None)
+        lines = [*r["why"], *(r.get("advise") or [])]
+        if name is None or not lines:
+            continue
+        emit(
+            {
+                "kind": "note",
+                "text": f"The merge failed its checks; sent back once.\n- {name}: "
+                + "; ".join(lines),
+            }
+        )
+        conv = ledgers[name]["_writer"]
+        conv.append(
+            {
+                "role": "user",
+                "content": "The harness checked the job you wrote and it fails:\n"
+                + "\n".join(f"- {x}" for x in lines)
+                + "\n\nEvery claim that survived is carried by a step or rule that lists its id "
+                "in `claims`, and no rejected claim is. A clause the reviewer finds unsupported is "
+                "quoted from the passage that says it, rewritten to what the passage says, or made "
+                "a question for the customer. Reply with the whole JSON again, fixed.",
+            }
+        )
+        reply = call(conv, "write")
+        conv.append({"role": "assistant", "content": reply or ""})
+        job = next(
+            (j for j in (parse_workflow(reply) or {}).get("jobs") or [] if isinstance(j, dict)),
+            None,
+        )
+        if job is None:
+            continue
+        job = {**job, "job": name, "into": names}
+        jobs = [job if str(j.get("job")) == name else j for j in jobs]
+        changed = True
+    return {**merged, "jobs": jobs} if changed else None
+
+
 def _merge_concurrent(
     meta: SessionMeta,
     agent: RagAgent,
@@ -1426,13 +1637,15 @@ def _merge_concurrent(
     policy: str,
     review: Callable[[str], str | None] | None = None,
     decision: dict[str, list[str]] | None = None,
+    call: Callable[[list[dict[str, Any]], str], str | None] | None = None,
 ) -> dict[str, Any]:
     """s21 (r3): the merge while other workers merge too. Name the jobs it will write, lock them
     all at once (waiting, and logging who holds them, if another worker does), read their newest
     versions, merge and check as r2 does, and commit under the version check. Only the jobs it
     holds may be merged; a merge of another is sent back once, then not taken. A re-merge (s25)
-    brings the source session's `decision`, so no decide turn runs."""
-    from tau2_loop.workflows import library, store
+    brings the source session's `decision`, so no decide turn runs. s30: `call` runs a merge
+    option's stages in their own contexts (`merge_opts`)."""
+    from tau2_loop.workflows import library, merge_opts, store
 
     st = library.store_for(meta.domain, agent.name)
     snap = st.entries()
@@ -1516,31 +1729,66 @@ def _merge_concurrent(
             f"- {name}: {', '.join(n for n in names) or 'a new job'}"
             for name, names in decision.items()
         )
-        say(
-            agent.merge_prompt.format(
-                pairs=pairs, current=_versions_text(mine, changed) or "(none)"
-            )
-            + _tool_docs_text(agent, {"held": mine}, draft)
-            + _read_text(agent, messages, draft)
-        )
         held = set(lock.jobs)
-        merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
-        rev = (review, agent.review_prompt)
         base = agent.merge_base == "draft"
+        audits: dict[str, dict[str, Any]] = {}
+        ledgers: dict[str, dict[str, Any]] = {}
+        if agent.merge_mode == "ledger" and call is not None:  # s30 (C): no merge turn
+            merged = _ledger_merge(meta, agent, draft, decision, mine, policy, call, emit, ledgers)
+        else:
+            shown = mine
+            if agent.merge_mode == "audit" and call is not None:  # s30 (B): audited first
+                audits = merge_opts.audit_heads(
+                    meta.domain, dict(agent.stage_prompts)["audit"], mine, policy, call, emit
+                )
+                shown = [
+                    {**e, "workflow": audits[e["job"]]["shown"]} if e["job"] in audits else e
+                    for e in mine
+                ]
+            say(
+                agent.merge_prompt.format(
+                    pairs=pairs, current=_versions_text(shown, changed) or "(none)"
+                )
+                + merge_opts.removed_text(audits)
+                + _tool_docs_text(agent, {"held": mine}, draft)
+                + _read_text(agent, messages, draft)
+            )
+            merged = turns(agent.merge_steps, MERGE_WRITE_NOW)
+        protect = (
+            {j: a["protected"] for j, a in audits.items()}
+            if audits
+            else {
+                e["job"]: merge_opts.sourced_steps(meta.domain, e["workflow"], policy) for e in mine
+            }
+            if agent.merge_account
+            else None
+        )
+
+        def assess(m: dict[str, Any], **kw: Any) -> list[dict[str, Any]]:
+            rs = _assess(meta.domain, m, heads, policy, held, agent.rubric, draft_base=base, **kw)
+            for r in rs:  # s30: an option's own lines join the reviewer's in the one send-back
+                r["advise"] = [
+                    *(r.get("advise") or []),
+                    *merge_opts.option_lines(meta.domain, r, protect, ledgers, policy),
+                ]
+            return rs
+
         rows = (
-            _assess(meta.domain, merged, heads, policy, held, agent.rubric, *rev, draft_base=base)
+            assess(merged, review=review, review_prompt=agent.review_prompt)
             if merged is not None
             else []
         )
-        extra = _unaccounted_lines(agent, messages, merged)
+        extra = [] if ledgers else _unaccounted_lines(agent, messages, merged)
         if merged is not None and (any(r["why"] or r.get("advise") for r in rows) or extra):
-            again = _send_back(agent, rows, turns, say, emit, extra)
+            again = (
+                _ledger_send_back(rows, ledgers, merged, call, emit)
+                if ledgers and call is not None
+                else _send_back(agent, rows, turns, say, emit, extra)
+            )
             if again is not None:
                 merged, rows = (
                     again,
-                    _assess(
-                        meta.domain, again, heads, policy, held, agent.rubric, *rev, draft_base=base
-                    ),
+                    assess(again, review=review, review_prompt=agent.review_prompt),
                 )
         if merged is None:  # nothing written: only the draft's new jobs, and only those it holds
             merged = {
@@ -1553,7 +1801,24 @@ def _merge_concurrent(
             }
             rows = _assess(meta.domain, merged, heads, policy, held, agent.rubric, draft_base=base)
         if base:
-            _settle(meta.domain, rows, policy, agent.rubric, agent.review_binding)
+            _settle(
+                meta.domain, rows, policy, agent.rubric, agent.review_binding, protect, bool(audits)
+            )
+        for r in rows:  # s30: what the option did, kept in the merge record
+            names = [e["job"] for e in r["previous"]]
+            if audits:
+                r["audit"] = {
+                    j: {k: audits[j][k] for k in ("verdicts", "removed", "unaudited")}
+                    for j in names
+                    if j in audits
+                }
+            led = next((ledgers[j] for j in names if j in ledgers), None)
+            if led is not None:
+                r["ledger"] = {k: v for k, v in led.items() if not k.startswith("_")}
+                r["job"]["changelog"] = [
+                    *(r["job"].get("changelog") or []),
+                    *merge_opts.ledger_changelog(led),
+                ]
         taken, records, rejected = _take(rows)
         writes = [
             {

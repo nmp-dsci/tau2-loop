@@ -1,0 +1,84 @@
+{
+ "job": "filing_a_debit_card_transaction_dispute",
+ "written": "2026-10-20",
+ "confirmed": "the person's call on 20 Oct 2026 ('go with your recommendations'): s30 Fig 11's draft, with each fact's passage found in the documents",
+ "from": "train gold only: tasks 082, 083, 084, 086, 087, 088 file debit disputes; 090 files none. Test tasks never shape it. Read by the eval's grader (merge_eval.py), never by a merge prompt (tests/test_merge_bench.py)",
+ "facts": [
+  {
+   "id": "K1",
+   "field": "disputed_amount",
+   "fact": "disputed_amount is the part of the charge in dispute: the overcharge (charged minus expected) for incorrect_amount, the cash not received for atm_cash_discrepancy, the amount not credited for atm_deposit_not_credited, and the whole charge for the other categories",
+   "gold": "084 incorrect_amount 100 · 086 incorrect_amount 200, atm_cash_discrepancy 100, atm_deposit_not_credited 100",
+   "passage": "derived: doc 031 arg 8 'The dollar amount being disputed' with the category definitions 'Charged different amount than expected', 'ATM dispensed wrong amount or no cash', 'ATM deposit not reflected in account'"
+  },
+  {
+   "id": "K2",
+   "field": "customer_max_liability_amount",
+   "fact": "customer_max_liability_amount follows the Regulation E tier counted from the statement date that shows the charge (within 2 business days of the statement: 50; within 60 days of the statement: 500; after 60 days: -1, unlimited), and is never more than the disputed amount",
+   "gold": "084 412.88 on a $412.88 charge reported late · 086 500 on $625 reported late · 50 on charges since the last statement",
+   "passage": "doc 031 'Reported within 2 business days of statement: Maximum liability $50' / 'Reported within 60 days of statement: Maximum liability $500'; the tool's description: 'based on Regulation E reporting timing rules and the disputed amount. Use -1 for unlimited liability.'"
+  },
+  {
+   "id": "K3",
+   "field": "transaction_type",
+   "fact": "transaction_type is decided from how the card was used (pin_purchase in store with a PIN, signature_purchase in store with a signature, online_purchase, atm_withdrawal, atm_deposit, recurring_payment, person_to_person), and the agent asks when neither the customer nor the record says which",
+   "gold": "088 signature_purchase · 084 pin_purchase (duplicate) · 082 recurring_payment",
+   "passage": "doc 031 arg 9 'Determine from user circumstances. Must be exactly one of: ...'"
+  },
+  {
+   "id": "K4",
+   "field": "provisional_credit_eligible",
+   "fact": "provisional_credit_eligible is true only when all four conditions hold (reported within 60 days of the statement, a category among unauthorized_transaction, card_present_fraud, card_not_present_fraud, atm_cash_discrepancy and duplicate_charge, a written statement, an open account); it is false for incorrect_amount, goods_services_not_received, recurring_charge_after_cancellation and atm_deposit_not_credited, and when the customer shared their PIN",
+   "gold": "084, 086 incorrect_amount false · 083, 086 goods false · 086 deposit false · 082, 083 yes_shared false",
+   "passage": "doc 032 'Provisional Credit is REQUIRED when ALL of these conditions are met' and 'NOT REQUIRED ... when'"
+  },
+  {
+   "id": "K5",
+   "field": "card_action",
+   "fact": "card_action follows the category mapping: close_and_reissue for card_present_fraud and card_not_present_fraud, freeze_pending_investigation for unauthorized_transaction, keep_active for every other category",
+   "gold": "084, 086, 087, 088 fraud close_and_reissue · 083 unauthorized_transaction freeze_pending_investigation · the rest keep_active",
+   "passage": "doc 031 'Card Action Mapping by Dispute Category'"
+  },
+  {
+   "id": "K6",
+   "field": "pin_compromised",
+   "fact": "pin_compromised is the customer's answer to whether their PIN may have been compromised: yes_shared when they shared it, yes_observed when they believe it was seen or skimmed, no when it was not, unknown when they are unsure",
+   "gold": "084, 086 fraud unknown · 082, 083 yes_shared · the rest no",
+   "passage": "doc 031 arg 11"
+  },
+  {
+   "id": "K7",
+   "field": "contacted_merchant",
+   "fact": "contacted_merchant is the customer's answer to whether they tried to resolve it with the merchant, asked for non-fraud disputes (incorrect_amount, goods not received, a recurring charge after cancellation)",
+   "gold": "084, 086 incorrect_amount true · 083, 086 goods true · 082 recurring true",
+   "passage": "doc 031 arg 12 'Required for non-fraud disputes'"
+  },
+  {
+   "id": "K8",
+   "field": "dispute_category",
+   "fact": "a charge the customer denies, made in store with a card they still hold (a cloned or skimmed card, for example after a chip or CVV mismatch), is card_present_fraud, not card_not_present_fraud; card_not_present_fraud is for online or phone transactions",
+   "gold": "088 card_present_fraud on an in-store charge, card in the customer's hand",
+   "passage": "doc 031 'use card_present_fraud (for in-store/physical transactions) or card_not_present_fraud (for online/phone transactions)'"
+  },
+  {
+   "id": "K9",
+   "field": "what is filed",
+   "fact": "one dispute is filed for each transaction the customer disputes (the earliest of duplicates), and none for a transaction the customer has not disowned",
+   "gold": "090 files none · 084 files no card_not_present_fraud",
+   "passage": "doc 031 'Dispute the earliest (first) transaction when multiple duplicates exist'; each dispute is filed on its own transaction_id"
+  }
+ ],
+ "traps": [
+  {"id": "T1", "rule": "the liability tier is counted from when the customer noticed the charge, or from the discovery date, instead of from the statement", "where": "r19 088's merge, against its draft ('after noticing'); r19 086's merge ('from the discovery date')"},
+  {"id": "T2", "rule": "disputed_amount is the full transaction amount for every category, the overcharge and the cash not received included", "where": "the v24-v27 system.md line (s26 §05); no job may restate it"},
+  {"id": "T3", "rule": "customer_max_liability_amount is a flat 500 for a late report, never the lesser of the tier and the disputed amount", "where": "r18 rule 14 on 084 (s25 §02)"},
+  {"id": "T4", "rule": "an ATM deposit dispute is dropped, or not filed, when the customer corrects a figure or accepts the record's figure", "where": "deposit_compare, kept from r17 by r18 (s25 Fig 1, 086)"},
+  {"id": "T5", "rule": "pin_purchase (or signature_purchase) offered with nothing that decides between them, PIN by default", "where": "r18's gather step (s25 Fig 1, 088)"}
+ ],
+ "calibration": {
+  "about": "s30 Fig 13, read by hand from the versions: what the grader must reproduce before it scores a new merge. right | partly | missing for facts, present | absent for traps; a cell not listed is not checked",
+  "r17_v0": {"K1": "partly", "K2": "right", "K8": "right", "T4": "present", "T5": "present", "T1": "absent", "T3": "absent"},
+  "r18_v1": {"K1": "partly", "K2": "partly", "K8": "right", "T3": "present", "T4": "present", "T5": "present", "T1": "absent"},
+  "r19_v3": {"K1": "missing", "K2": "missing", "K3": "right", "K8": "missing", "T1": "present", "T3": "absent", "T4": "absent", "T5": "absent"}
+ }
+}
