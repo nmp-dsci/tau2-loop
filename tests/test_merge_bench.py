@@ -351,6 +351,15 @@ def test_each_option_replays_the_four_merges_and_no_prompt_holds_the_answer_key(
     texts = [f["fact"] for f in key["facts"]] + [t["rule"] for t in key["traps"]]
     joined = "\n".join(seen)
     assert seen and not any(t in joined for t in texts)
+    # E5 plays it: r19's library with this run's last version of the job in place of r19's
+    monkeypatch.setattr(bench, "RUNS_DIR", tmp_path)
+    lib = library.entries(D, f"r19@{out.name}")
+    r19 = library.entries(D, "r19")
+    assert len(lib) == len(r19)
+    mine = library.by_name(lib, J)
+    assert mine is not None and mine["workflow"] == hs[-1]["workflow"]
+    assert mine["session"] == f"{out.name} v{hs[-1]['version']}"
+    assert {e["job"] for e in lib} == {e["job"] for e in r19}
 
 
 def test_the_grader_is_checked_against_the_hand_labels_and_its_reply_must_cover_the_key() -> None:

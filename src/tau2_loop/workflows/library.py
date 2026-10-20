@@ -121,6 +121,8 @@ def entries(domain: str, rag_version: str, root: Path | None = None) -> list[dic
     wrote merged versions: a job replaces its own name and every name it lists in `aliases`
     or merged `into` it, so two names for one procedure become one job."""
     root = root or rag_agent.RAG_RUNS_DIR
+    if "@" in rag_version:  # s30: a version's library with one merge bench run's job in place
+        return bench_entries(domain, rag_version)
     if _concurrent(domain, rag_version):
         return store_for(domain, rag_version).entries()
     seed = _seed(domain, rag_version)
@@ -153,6 +155,31 @@ def entries(domain: str, rag_version: str, root: Path | None = None) -> list[dic
                     "task_id": meta.get("task_id"),
                 }
     return list(out.values())
+
+
+def bench_entries(domain: str, spec: str) -> list[dict[str, Any]]:
+    """`<rN>@<merge_runs run id>` (s30, E5): rN's library, with the job the bench run replayed
+    replaced by the last version that run committed of it. The answering agent then reads every
+    other job exactly as rN's readers did, so a play differs from rN's only by that job."""
+    from tau2_loop.workflows import bench
+
+    base, run = spec.split("@", 1)
+    run_dir = bench.RUNS_DIR / run
+    rec = json.loads((run_dir / "run.json").read_text())
+    job = str(rec["job"])
+    head = bench.heads(run_dir, job)[-1]
+    lib = entries(domain, base)
+    old = by_name(lib, job)
+    out = [e for e in lib if e is not old]
+    out.append(
+        {
+            "job": job,
+            "workflow": head["workflow"],
+            "session": f"{run} v{head['version']}",
+            "task_id": head["task"],
+        }
+    )
+    return out
 
 
 def _concurrent(domain: str, rag_version: str) -> bool:
@@ -309,8 +336,8 @@ def request(
     on_start: Callable[[rag_agent.SessionMeta], None] | None = None,
 ) -> tuple[str, str]:
     """`request_workflow`'s result and the session id: workflow_rag researches the request now."""
-    meta = rag_agent.start_request(
-        domain, text, rag_version, conversation=conversation, on_start=on_start
+    meta = rag_agent.start_request(  # s30: a bench library researches as its base rN does
+        domain, text, rag_version.split("@", 1)[0], conversation=conversation, on_start=on_start
     )
     got = rag_agent.session(domain, meta.id)
     wf = got.get("output")
