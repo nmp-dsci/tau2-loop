@@ -373,9 +373,8 @@ def test_the_grader_is_checked_against_the_hand_labels_and_its_reply_must_cover_
     assert merge_eval.parse_grade(json.dumps({"facts": facts[:3], "traps": traps}), k) is None
     cal = merge_eval.calibration(k, {"r19_v3": g})
     wrong = {r["cell"] for r in cal["rows"] if not r["agree"]}
-    assert wrong == {
-        "K3"
-    }  # the hand label says r19 v3 decides PIN or signature; this grade says not
+    # the hand labels say r19 v3 decides PIN or signature and states T3 and T4; this grade says not
+    assert wrong == {"K3", "T3", "T4"}
     assert cal["of"] == len(k["calibration"]["r19_v3"])
 
 
