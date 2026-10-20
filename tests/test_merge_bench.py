@@ -377,3 +377,15 @@ def test_the_grader_is_checked_against_the_hand_labels_and_its_reply_must_cover_
         "K3"
     }  # the hand label says r19 v3 decides PIN or signature; this grade says not
     assert cal["of"] == len(k["calibration"]["r19_v3"])
+
+
+def test_d10_reads_a_job_that_changes_a_pin_and_closes_a_card() -> None:
+    """s30: option A's 090 merge called reset_debit_card_pin_6284, a write that leaves no status,
+    beside close_debit_card_4721, and D10 crashed sorting None among the statuses."""
+    from tau2_loop.workflows import toolspec
+
+    def call(sid: str, tool: str) -> dict[str, Any]:
+        return {"id": sid, "call": "call_discoverable_agent_tool", "args": {"agent_tool_name": tool}}
+
+    job = {"steps": [call("pin", "reset_debit_card_pin_6284"), call("close", "close_debit_card_4721")]}
+    assert toolspec.unmet_status(D, job) == []

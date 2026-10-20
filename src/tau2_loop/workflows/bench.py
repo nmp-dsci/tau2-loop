@@ -122,19 +122,25 @@ def run(
     run_tool: rag_agent.RunTool | None = None,
     root: Path | None = None,
     stamp: str | None = None,
+    resume: Path | None = None,
+    why: str = "",
 ) -> Path:
     """Replay `job`'s merges under option `opt`, one after another, on a scratch library. Returns
     the run folder. A live run (no `ask`) builds the research tools' environment, since a merge
-    turn may search the documents again."""
+    turn may search the documents again. `resume` continues a run that stopped on a fault in the
+    harness's code (never a usage limit), from the merge that failed, on the library it left; the
+    failed merge's session stays in the folder and the record says why it was resumed."""
     from tau2_loop.llm import core
 
     cfg = config(domain)["jobs"][job]
     agent = load_option(domain, opt)
     stamp = stamp or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    out = (root or RUNS_DIR) / f"{stamp}_{domain}_{opt}_t{trial}"
-    out.mkdir(parents=True, exist_ok=False)
+    out = resume or (root or RUNS_DIR) / f"{stamp}_{domain}_{opt}_t{trial}"
+    if resume is None:
+        out.mkdir(parents=True, exist_ok=False)
     store.LIBRARY_DIR = out / "rag_library"  # every store built from here on is the scratch one
-    fresh_store(domain, agent.name, str(cfg["seed"]))
+    if resume is None:
+        fresh_store(domain, agent.name, str(cfg["seed"]))
     system = (rag_agent.RAG_RUNS_DIR / str(cfg["system_from"]) / "system.md").read_text()
     if ask is None:
         from tau2_loop.llm import require_live
@@ -172,12 +178,21 @@ def run(
         "merges": [],
         "status": "running",
     }
+    todo = list(cfg["order"])
+    if resume is not None:
+        record = json.loads((out / "run.json").read_text())
+        done = [m["task"] for m in record["merges"] if m["status"] == "done"]
+        todo = [t for t in cfg["order"] if t not in done]
+        record.setdefault("resumed", []).append(
+            {"at": stamp, "git_sha": _git_sha(), "from": todo[0] if todo else None, "why": why}
+        )
+        record["status"], record["error"] = "running", None
 
     def save() -> None:
         (out / "run.json").write_text(json.dumps(record, indent=1) + "\n")
 
     save()
-    for task in cfg["order"]:
+    for task in todo:
         source = str(cfg["sessions"][task])
         replay, drafted = replay_for(domain, job, source, system)
         sid = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}_{domain}_{agent.name}_{task}"
@@ -221,7 +236,7 @@ def run(
                 "error": meta.error,
                 "read": (lock.get("read") or {}).get(job),
                 "committed": (lock.get("committed") or {}).get(job),
-                "taken": job in [j.get("job") for j in got.get("jobs") or []],
+                "taken": (lock.get("committed") or {}).get(job) is not None,
                 "input_tokens": meta.input_tokens,
                 "output_tokens": meta.output_tokens,
                 "duration_ms": meta.duration_ms,
@@ -269,9 +284,22 @@ def main(argv: list[str] | None = None) -> None:
     r.add_argument("--job", default="filing_a_debit_card_transaction_dispute")
     r.add_argument("--option", required=True)
     r.add_argument("--trial", type=int, default=1)
+    c = sub.add_parser(
+        "resume", help="continue a run that stopped on a code fault (calls the model)"
+    )
+    c.add_argument("run_dir")
+    c.add_argument("--why", required=True)
     a = ap.parse_args(argv)
     if a.cmd == "run":
         print(run(a.domain, a.job, a.option, a.trial))
+    elif a.cmd == "resume":
+        d = Path(a.run_dir)
+        rec = json.loads((d / "run.json").read_text())
+        if rec["status"] != "stopped" or "limit" in str(rec.get("error") or "").lower():
+            raise SystemExit(
+                f"{d.name} is {rec['status']}: only a run stopped by a code fault resumes"
+            )
+        print(run(rec["domain"], rec["job"], rec["option"], rec["trial"], resume=d, why=a.why))
 
 
 if __name__ == "__main__":
