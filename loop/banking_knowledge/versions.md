@@ -1,6 +1,6 @@
 # banking_knowledge: every answering-agent version, in build order
 
-The Optimise tab draws the 7 of 28 versions played on every task of their split: v1–v4, v7, v8, v23. The other 21 (v5, v6, v9–v22, v24–v28) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
+The Optimise tab draws the 7 of 29 versions played on every task of their split: v1–v4, v7, v8, v23. The other 22 (v5, v6, v9–v22, v24–v29) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
 
 Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_knowledge/v*/`, `loop/banking_knowledge/ledger.jsonl`, `loop/banking_knowledge/registry.json` and the run folders, the reading `GET /api/versions` serves. Re-run it when a version is added or played; do not edit it by hand.
 
@@ -34,6 +34,7 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 | v26 | no | workflow tools | v24 | 6 of 17 played | 5 of 17 played | not gated |
 | v27 | no | tool change | v26 | 0 of 1 played | 3 of 17 played | not gated |
 | v28 | no | workflow tools | v27 | 1 of 5 played | — | not gated |
+| v29 | no | workflow tools | v27 | — | — | never played |
 
 ## v1 · on the Optimise tab
 
@@ -196,7 +197,7 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Why:** the person's call: v22 with the answering agent on Sonnet 5.5 (claude-sonnet-5-5; v22's 'sonnet' is claude-sonnet-5), played with a Haiku 5.5 customer on v8's 20-task smoke before a full train and test run
 - **Runs:** `20261011T055438Z_banking_knowledge_v23_train`, `20261011T055440Z_banking_knowledge_v23_test`
 
-## After v23 · 5 versions left off the tab
+## After v23 · 6 versions left off the tab
 
 ### v24
 
@@ -231,3 +232,9 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Played:** train 1 of 5 played, of the split's 60 · no test run · sonnet-5-5 · medium · not gated
 - **Why:** s30 E5 (the person's call, 20 Oct 2026): v27 reading r19's library with option B's trial-1 debit dispute job (merge bench) in place of r19 v3; held, scored on the job's train conversations only
 - **Runs:** `20261020T015818Z_banking_knowledge_v28_custom`
+
+### v29
+
+- **Made:** workflow tools from v27: workflows: r19 → r19@20261020T213717Z_banking_knowledge_D-lean_t1
+- **Played:** no train run · no test run · sonnet-5-5 · medium · never played
+- **Why:** s32 E5 (the person's call, 21 Oct 2026): v27 reading r19's library with merge-bench option D-lean trial 1's debit dispute job in place of r19 v3; held, scored on the job's five train conversations only, as v28 was for option B
