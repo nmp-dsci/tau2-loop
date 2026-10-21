@@ -333,7 +333,7 @@ def _fake_ask(seen: list[str], name: str = J):  # type: ignore[no-untyped-def]
 
 
 @needs_docs
-@pytest.mark.parametrize("opt", ["A", "B", "C", "D", "D-lean"])
+@pytest.mark.parametrize("opt", ["A", "B", "C", "D", "D-lean", "D2"])
 def test_each_option_replays_the_four_merges_and_no_prompt_holds_the_answer_key(
     opt: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

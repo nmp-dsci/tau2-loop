@@ -2489,7 +2489,14 @@ def session(domain: str, session_id: str) -> dict[str, Any]:
     }
 
 
-CHANGE_FILES = ("rag_agent.md", "merge.md", "decide.md", "review.md", "rag_agent.yaml")
+CHANGE_FILES = (
+    "rag_agent.md",
+    "merge.md",
+    "decide.md",
+    "review.md",
+    "rag_agent.yaml",
+    *(f"{s}.md" for s in STAGE_FILES),  # s34: r20 is the first rN with an audit.md
+)
 
 
 def changes(domain: str, name: str) -> dict[str, Any] | None:
@@ -2499,7 +2506,13 @@ def changes(domain: str, name: str) -> dict[str, Any] | None:
     return json.loads(p.read_text()) if p.is_file() else None
 
 
-PROMPT_FILES = ("rag_agent.md", "decide.md", "merge.md", "review.md")
+PROMPT_FILES = (
+    "rag_agent.md",
+    "decide.md",
+    "merge.md",
+    "review.md",
+    *(f"{s}.md" for s in STAGE_FILES),
+)
 
 
 def describe(domain: str, name: str) -> dict[str, Any]:
