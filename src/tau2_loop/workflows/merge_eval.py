@@ -297,9 +297,19 @@ def e4(domain: str, wf: dict[str, Any], files: str = FILING) -> dict[str, Any]:
 
 
 def score_version(
-    domain: str, wf: dict[str, Any], k: dict[str, Any], ask: Ask, log: Path | None = None
+    domain: str,
+    wf: dict[str, Any],
+    k: dict[str, Any],
+    ask: Ask,
+    log: Path | None = None,
+    files: str = FILING,
 ) -> dict[str, Any]:
-    return {"E1": e1(domain, wf, k, ask, log), "E4": e4(domain, wf)}
+    return {"E1": e1(domain, wf, k, ask, log), "E4": e4(domain, wf, files)}
+
+
+def key_write(domain: str, job: str) -> str:
+    """s33: the write E4 looks for in a job (bench.yaml's `key_write`), the debit filing if none."""
+    return str(bench.config(domain)["jobs"][job].get("key_write") or FILING)
 
 
 def run_eval(run_dir: Path, ask: Ask, workers: int = 4) -> dict[str, Any]:
@@ -314,7 +324,8 @@ def run_eval(run_dir: Path, ask: Ask, workers: int = 4) -> dict[str, Any]:
     hs = bench.heads(run_dir, job)
     log = run_dir / "eval_calls.jsonl"
     with ThreadPoolExecutor(workers) as ex:
-        scored = list(ex.map(lambda h: score_version(domain, h["workflow"], k, ask, log), hs))
+        w = key_write(domain, job)
+        scored = list(ex.map(lambda h: score_version(domain, h["workflow"], k, ask, log, w), hs))
         last = ex.submit(e3, domain, hs[-1]["workflow"], ask, policy, log)
         e3_last = last.result()
     by_v = {h["version"]: h["workflow"] for h in hs}
@@ -361,13 +372,15 @@ def eval_name(ask: Ask) -> str:
     return f"eval@{tag_of(ask)}.json" if tag_of(ask) else "eval.json"
 
 
-BASELINES = {  # the versions that already exist: r17's seed, r18's head, r19's three
-    "r17_v0": ("session", "20261009T102616Z_banking_knowledge_r8_task_084"),
-    "r18_v1": ("r18", 1),
-    "r19_v1": ("r19", 1),
-    "r19_v2": ("r19", 2),
-    "r19_v3": ("r19", 3),
-}
+def baselines_of(domain: str, job: str) -> dict[str, tuple[str, Any]]:
+    """s33: the versions of a job that already exist (bench.yaml's `baselines`): a session's
+    (`session`) or a version of an rN's library (`rag`, `version`). s30 kept the debit job's here."""
+    out: dict[str, tuple[str, Any]] = {}
+    for name, w in (bench.config(domain)["jobs"][job].get("baselines") or {}).items():
+        out[str(name)] = (
+            ("session", w["session"]) if "session" in w else (str(w["rag"]), w["version"])
+        )
+    return out
 
 
 def baseline_version(domain: str, job: str, where: tuple[str, Any]) -> dict[str, Any]:
@@ -386,8 +399,9 @@ def calibrate(domain: str, job: str, ask: Ask, workers: int = 3) -> dict[str, An
     """s31 (O8): E1 alone on the versions the key has hand labels for, against those labels: what
     a new grader must reproduce before it scores a merge (Opus agreed on 20 of 22 cells)."""
     k = key(domain, job)
-    names = [n for n in k["calibration"] if n in BASELINES]
-    wfs = [baseline_version(domain, job, BASELINES[n]) for n in names]
+    base = baselines_of(domain, job)
+    names = [n for n in k["calibration"] if n in base]
+    wfs = [baseline_version(domain, job, base[n]) for n in names]
     with ThreadPoolExecutor(workers) as ex:
         graded = dict(zip(names, ex.map(lambda wf: e1(domain, wf, k, ask), wfs), strict=True))
     return {"grader": tag_of(ask) or "bench.yaml", **calibration(k, graded)}
@@ -400,14 +414,15 @@ def baselines(domain: str, job: str, ask: Ask, out: Path, workers: int = 5) -> d
         rag_agent.RAG_RUNS_DIR / str(bench.config(domain)["jobs"][job]["system_from"]) / "system.md"
     ).read_text()
     policy = bench.policy_of(system)
-    wfs = {n: baseline_version(domain, job, w) for n, w in BASELINES.items()}
+    wfs = {n: baseline_version(domain, job, w) for n, w in baselines_of(domain, job).items()}
+    w = key_write(domain, job)
     out.mkdir(parents=True, exist_ok=True)
     log = out / "eval_calls.jsonl"
     with ThreadPoolExecutor(workers) as ex:
         sc = dict(
             zip(
                 wfs,
-                ex.map(lambda wf: score_version(domain, wf, k, ask, log), wfs.values()),
+                ex.map(lambda wf: score_version(domain, wf, k, ask, log, w), wfs.values()),
                 strict=True,
             )
         )

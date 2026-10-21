@@ -268,7 +268,7 @@ def test_c_flags_a_slot_with_two_values_and_keeps_what_the_verifier_settled() ->
 KEY = ROOT / "merge_bench" / D / "eval" / "keys" / f"{J}.json"
 
 
-def _fake_ask(seen: list[str]):  # type: ignore[no-untyped-def]
+def _fake_ask(seen: list[str], name: str = J):  # type: ignore[no-untyped-def]
     """Plausible replies for every call a bench merge makes, recording each prompt."""
 
     def ask(messages, tools, model, effort, tool_mode):  # type: ignore[no-untyped-def]
@@ -326,8 +326,8 @@ def _fake_ask(seen: list[str]):  # type: ignore[no-untyped-def]
                 "tools": [],
             }
             return Reply(json.dumps({"jobs": [job]}))
-        job = {**draft["jobs"][0], "job": J, "into": [J], "changelog": []}
-        return Reply(json.dumps({"jobs": [job], "documents": [], "open_questions": []}))
+        out = {**draft["jobs"][0], "job": name, "into": [name], "changelog": []}
+        return Reply(json.dumps({"jobs": [out], "documents": [], "open_questions": []}))
 
     return ask
 
@@ -593,3 +593,60 @@ def test_a_second_grader_never_reads_the_first_graders_cached_replies(
     }
     assert merge_eval.eval_name(sonnet) == "eval@claude-sonnet-5-5-high.json"
     assert merge_eval.eval_name(lambda text: None) == "eval.json"
+
+
+# ── s33: the second job, pin_lock_investigation_protocol (the person's call on s33) ──
+
+PIN = "pin_lock_investigation_protocol"
+PIN_KEY = ROOT / "merge_bench" / D / "eval" / "keys" / f"{PIN}.json"
+
+
+@needs_docs
+def test_d_replays_the_pin_lock_jobs_one_merge_and_no_prompt_holds_its_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tau2_loop.workflows import merge_eval
+
+    monkeypatch.setattr(store, "LIBRARY_DIR", store.LIBRARY_DIR)
+    seen: list[str] = []
+    out = bench.run(D, PIN, "D", 1, ask=_fake_ask(seen, PIN), tools=[], root=tmp_path, stamp="1")
+    assert out.name == f"1_{D}_{PIN}_D_t1"  # a job other than the first is named in its folder
+    rec = json.loads((out / "run.json").read_text())
+    assert rec["status"] == "done", rec.get("error")
+    assert [m["task"] for m in rec["merges"]] == ["task_090"]
+    hs = bench.heads(out, PIN)
+    # the bench starts from r17's version, the baseline the grader is calibrated on
+    assert hs[0]["workflow"] == merge_eval.baseline_version(
+        D, PIN, merge_eval.baselines_of(D, PIN)["r17_v0"]
+    )
+    k = json.loads(PIN_KEY.read_text())
+    texts = [f["fact"] for f in k["facts"]] + [t["rule"] for t in k["traps"]]
+    assert seen and not any(x in "\n".join(seen) for x in texts)
+    assert merge_eval.key_write(D, PIN) == "reset_debit_card_pin_6284"
+
+
+def test_the_pin_lock_key_is_train_gold_only_and_its_labels_cover_every_cell() -> None:
+    from tau2_loop.workflows import merge_eval
+
+    k = json.loads(PIN_KEY.read_text())
+    ids = {f["id"] for f in k["facts"]} | {t["id"] for t in k["traps"]}
+    assert ids == {"K1", "K2", "K3", "K4", "K5", "K6", "K7", "T1", "T2", "T4"}  # T3 dropped (s33)
+    split = json.loads((ROOT / "data" / "splits" / f"{D}.json").read_text())
+    test_ids = set(split["test"])
+    golds = " ".join(f["gold"] for f in k["facts"])
+    assert not any(re.search(rf"\b{tid[-3:]}\b", golds) for tid in test_ids)
+    assert set(merge_eval.baselines_of(D, PIN)) == {"r17_v0", "r18_v1", "r19_v1"}
+    for name in ("r17_v0", "r18_v1", "r19_v1"):
+        assert set(k["calibration"][name]) == ids
+    assert k["calibration"]["r19_v1"]["K3"] == "wrong"
+    facts = [
+        {"id": i, "verdict": k["calibration"]["r19_v1"][i]} for i in sorted(ids) if i[0] == "K"
+    ]
+    traps = [
+        {"id": i, "present": k["calibration"]["r19_v1"][i] == "present"}
+        for i in sorted(ids)
+        if i[0] == "T"
+    ]
+    g = merge_eval.parse_grade(json.dumps({"facts": facts, "traps": traps}), k)
+    cal = merge_eval.calibration(k, {"r19_v1": g})
+    assert g is not None and cal["agree"] == cal["of"] == len(ids)

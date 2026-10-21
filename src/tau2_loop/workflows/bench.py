@@ -141,7 +141,9 @@ def run(
     cfg = config(domain)["jobs"][job]
     agent = load_option(domain, opt)
     stamp = stamp or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    out = resume or (root or RUNS_DIR) / f"{stamp}_{domain}_{opt}_t{trial}"
+    first = next(iter(config(domain)["jobs"]))  # s33: another job is named in its folder
+    tag = "" if job == first else f"{job}_"
+    out = resume or (root or RUNS_DIR) / f"{stamp}_{domain}_{tag}{opt}_t{trial}"
     if resume is None:
         out.mkdir(parents=True, exist_ok=False)
     store.LIBRARY_DIR = out / "rag_library"  # every store built from here on is the scratch one

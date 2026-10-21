@@ -1,0 +1,117 @@
+{
+ "job": "pin_lock_investigation_protocol",
+ "written": "2026-10-21",
+ "confirmed": "the person's call on 21 Oct 2026 (.lavish/s33_pin-lock-key-review.html, 'go with recommendations'): every fact kept; T2, K3 and T4 kept; T3 dropped; r19 v1's K3 labelled wrong",
+ "from": "train gold only: task 090 (its user_scenario, evaluation_criteria.actions and the card and transaction records in initial_state), the only train task with a PIN lock. Test tasks 091 and 092 never read; r17 v0 was written by task_092's r3 session and is read only as a library version. Read by the eval's grader (merge_eval.py), never by a merge prompt",
+ "facts": [
+  {
+   "id": "K1",
+   "field": "overnight_denial",
+   "fact": "declined attempts in another US state between 2 AM and 6 AM that the customer denies, saying she was asleep at home, make the card CRITICAL (likely fraud): it is not unlocked, whatever the total; the job reaches this for a different state, not only for a different country",
+   "gold": "090 Evergreen: three declined ATM attempts at CHASE ATM NEWARK NJ, 02:14-02:17, $800/$500/$300, address Boston MA; the customer was asleep in Boston with the card in her wallet: no unlock and no PIN reset on it",
+   "passage": "doc_bank_accounts_bank_accounts_(general)_041 \"Different state: 2 points\" / \"2 AM - 6 AM: 3 points (HIGH RISK)\" / \"If customer says 'I was asleep' or similar: CRITICAL - likely fraud.\""
+  },
+  {
+   "id": "K2",
+   "field": "critical_outcome",
+   "fact": "a CRITICAL card with no successful unauthorized transaction is recommended for closure and replacement because fraud is suspected, and on the customer's yes it is closed and a replacement ordered for the same checking account (the closing and the order may run in the jobs this one names)",
+   "gold": "090 Evergreen: close_debit_card_4721 reason fraud_suspected, then order_debit_card_5739 on chk_er38a7c9d2_evergreen (EXPEDITED, delivery_fee 0, CLASSIC, design_fee 0, the address on file: premium tier, decided in the closing and ordering jobs). Only the no-unauthorized-transaction branch is shown",
+   "passage": "derived: doc_bank_accounts_bank_accounts_(general)_041 \"CANNOT unlock. Check for successful unauthorized transactions. Recommend card closure and replacement.\" (the 15+ CRITICAL row) / \"Card closure and replacement (recommended if fraud suspected)\"; doc_bank_accounts_bank_accounts_(general)_025 \"(select from: lost, stolen, fraud_suspected, damaged, no_longer_needed, account_closing)\""
+  },
+  {
+   "id": "K3",
+   "field": "suspicious_period",
+   "fact": "the suspicious period checked for successful unauthorized transactions is the window of the declined attempts the customer denies (from the first of them to now): successful transactions before it, her usual home-city activity, are not put to her as possibly unauthorized and not disputed, so a card whose period holds only declined attempts gets no dispute and she is told no money was taken",
+   "gold": "090 Evergreen: all three Newark attempts declined; the customer says she hasn't withdrawn anything recently, yet gold files no dispute on the 11/08 and 11/12 Boston ATM withdrawals or the other pre-attempt Boston charges. The document leaves 'suspicious period' undefined: 090 alone decides it (v23, v26 and v27 lost 090 by disputing them)",
+   "passage": "derived: doc_bank_accounts_bank_accounts_(general)_041 \"Check transaction history for any successful unauthorized transactions during the suspicious period.\" with Step 4, which ties the suspicion to the declined attempts' place and time (\"These attempts occurred at [time]. Were you trying to use your card at that time?\")"
+  },
+  {
+   "id": "K4",
+   "field": "admitted_attempts",
+   "fact": "a card whose declined attempts the customer confirms were hers (at that store, at that time, for that amount: she mixed up PINs) has its location flags removed and its score recalculated, and with no 3-point flag, fewer than 3 prior locks and a recalculated score of 10 or less it is cleared for unlock: not closed, not escalated, not sent to the cannot-unlock options",
+   "gold": "090 Blue: three POS declines at TARGET STORE CAMBRIDGE MA, 14:30-14:35, $127.43 each, 2 prior locks; the customer confirms them: no closure, its PIN reset (which unlocks it). The task's note scores it 8: one case, the 8-10 band",
+   "passage": "doc_bank_accounts_bank_accounts_(general)_041 \"If customer says YES: Remove location flags, recalculate score.\" / \"Must ask specific questions about location and time. Only unlock if customer confirms AND provides satisfactory explanation.\""
+  },
+  {
+   "id": "K5",
+   "field": "card_order",
+   "fact": "locked cards on different checking accounts are taken one at a time, in the order the customer chooses, each to its outcome before the next is investigated; the trigger to finish investigating every locked card before any unlock applies only to locked cards on the same checking account",
+   "gold": "090: the Evergreen card is closed and replaced (090_8, 090_10) before the Blue account's cards are read (090_11), and the Blue PIN is reset (090_14) before the Green account's cards are read (090_15); three cards on three checking accounts. The document decides the trigger's scope; the order itself is 090's",
+   "passage": "doc_bank_accounts_bank_accounts_(general)_041 \"If another card on the same account also has pin_locked = TRUE → Finish investigating all cards before any unlock.\""
+  },
+  {
+   "id": "K6",
+   "field": "two_prior_locks",
+   "fact": "a card cleared for unlock with 2 prior PIN locks in the last 90 days must be asked 'This is your third PIN lock in 90 days. Would you like me to reset your PIN to a new number?', and on a yes its PIN is reset to the new PIN the customer chooses (reset_debit_card_pin_6284, here or in the PIN-reset job this one names)",
+   "gold": "090 Blue (pin_locks_last_90_days 2): reset_debit_card_pin_6284 card dbc_er38a7c9d2_blue, last_4_digits 6183, new_pin 7294 (her choice); no other write on the card. Only the 2-lock row of Step 5 is shown",
+   "passage": "derived: doc_bank_accounts_bank_accounts_(general)_041 \"After unlock, MUST ask: 'This is your third PIN lock in 90 days. Would you like me to reset your PIN to a new number? Frequent locks sometimes indicate the current PIN is difficult to remember.'\"; the tool's description \"new_pin (string): The new 4-digit PIN chosen by the customer\""
+  },
+  {
+   "id": "K7",
+   "field": "security_hold",
+   "fact": "a card with pin_lock_reason security_hold is not scored, unlocked or reset: the agent offers a transfer to the security team, and when the customer declines it does nothing more on that card (no transfer, no write)",
+   "gold": "090 Green (security_hold): the customer declines the offered transfer; gold reads its cards (090_15) and nothing else: no transactions, no transfer, no write. Only the decline branch is shown",
+   "passage": "doc_bank_accounts_bank_accounts_(general)_041 \"If pin_lock_reason = 'security_hold' → This card cannot be unlocked by chat agents. Offer to transfer the customer to the security team for this card.\""
+  }
+ ],
+ "traps": [
+  {
+   "id": "T1",
+   "rule": "every locked card the customer has, on any checking account, is investigated and scored before any of them is unlocked (the same-account trigger applied across accounts)",
+   "where": "r17 v0 triggers ('If several cards are locked, investigate every card before unlocking any of them'), check_other_locked, ask_which_card, unlock_handoff and done_when; r18's 090 merge narrowed it to the same account (its last rule) and r19 v1 has other_locked_same_account"
+  },
+  {
+   "id": "T2",
+   "rule": "a PIN reset is offered, beside closure and a transfer, for a CRITICAL card (one whose overnight attempts the customer slept through); the reset clears the lock, so taking it unlocks a card that cannot be unlocked",
+   "where": "r17 v0 and r18 v1 cannot_unlock_options ('offer three options: card closure and replacement (recommended when fraud is suspected), a transfer to the security team, or a PIN reset'), reached from decide's CRITICAL row and r18's overnight_out_of_state_denied; r19 v1 no_unauthorized. Doc 041 Step 6 lists the reset; the trap reads it against the CRITICAL row ('CANNOT unlock ... Recommend card closure and replacement'): the person's call"
+  },
+  {
+   "id": "T4",
+   "rule": "the suspicious period reaches back before the first declined attempt the customer denies (to the last transaction she confirms as hers, or over the recent successful activity), so earlier home-city transactions she does not recognise are put to her and disputed",
+   "where": "r19 v1 cannot_unlock_check ('The period starts just after the last transaction on the card that the customer confirms as theirs, before the declined attempts'); the r18 090 draft had 'the window of the declined attempts the customer denied', and r18 v1 kept r17's undefined 'suspicious period'"
+  }
+ ],
+ "calibration": {
+  "about": "hand reading (21 Oct 2026, s32 Q1 job2, reviewed in s33) of r17 v0, r18 v1 and r19 v1 as library.steps_view shows them: right | partly | missing | wrong for facts, present | absent for traps; every cell listed; not yet run against the grader",
+  "r17_v0": {
+   "K1": "right",
+   "K2": "right",
+   "K3": "partly",
+   "K4": "right",
+   "K5": "wrong",
+   "K6": "partly",
+   "K7": "right",
+   "T1": "present",
+   "T2": "present",
+   "T4": "absent"
+  },
+  "r18_v1": {
+   "K1": "right",
+   "K2": "right",
+   "K3": "partly",
+   "K4": "right",
+   "K5": "right",
+   "K6": "partly",
+   "K7": "right",
+   "T1": "absent",
+   "T2": "present",
+   "T4": "absent"
+  },
+  "r19_v1": {
+   "K1": "right",
+   "K2": "right",
+   "K3": "wrong",
+   "K4": "right",
+   "K5": "right",
+   "K6": "right",
+   "K7": "right",
+   "T1": "absent",
+   "T2": "present",
+   "T4": "present"
+  },
+  "corrected": [
+   "T3 (a security transfer offered beside a supervisor-review closure) dropped on review: a transfer writes nothing, so 090's gold does not rule it out; ids kept stable, so the traps are T1, T2 and T4",
+   "r19_v1 K3 partly -> wrong: its suspicious period starts after the last transaction she confirms, which takes in the Boston withdrawals she says were not hers, a different answer on 090 (grade.md's wrong)"
+  ]
+ }
+}
