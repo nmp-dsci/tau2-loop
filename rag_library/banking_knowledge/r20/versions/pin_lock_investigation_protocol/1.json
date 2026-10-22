@@ -1,0 +1,1376 @@
+{
+ "job": "pin_lock_investigation_protocol",
+ "aliases": [
+  "CODE 55 incorrect PIN",
+  "CODE 75 PIN tries exceeded",
+  "CODE 83 unable to verify PIN",
+  "PIN lock with overnight out-of-state attempts and money already taken",
+  "PIN-locked card with a security hold",
+  "debit card PIN locked",
+  "debit card declined PIN error",
+  "decline code 55 / 75 PIN locked",
+  "four PIN-locked cards on four checking accounts: overnight foreign attempts, rapid attempts the customer admits, a routine local lock, and a security hold",
+  "fourth PIN lock in 90 days needs a new PIN",
+  "fraud risk scoring for PIN lock",
+  "pin_lock_investigation_protocol_fraud_risk_scoring",
+  "rapid PIN attempts under a minute apart that the customer admits were theirs",
+  "several PIN-locked debit cards on different checking accounts with different outcomes",
+  "several debit cards PIN-locked on the same day",
+  "three PIN-locked cards on three checking accounts: overnight out-of-state ATM attempts the customer denies, an in-state store lock the customer admits, and a security hold the customer declines to transfer",
+  "unlock debit card",
+  "unlock debit card after failed PIN attempts"
+ ],
+ "when": {
+  "quote": "When a debit card shows pin_locked = TRUE, agents must perform a comprehensive fraud risk assessment before unlocking. DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: start only when the customer reports a debit card declined or locked because of the PIN (CODE 55, 75 or 83). Investigate every locked card before unlocking any of them. Offer closure, replacement, disputes, a PIN reset or a security-team transfer only on the paths the protocol names, and carry one out only when the customer accepts. The exception is 3+ prior locks, where the protocol requires a PIN reset instead of an unlock.",
+  "quote": "Do NOT simply unlock the card without completing the fraud risk assessment.",
+  "doc": "doc_checking_accounts_green_account_(checking)_010"
+ },
+ "tools": [
+  {
+   "tool": "get_user_information_by_name",
+   "who": "agent",
+   "step": "identify",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_email",
+   "who": "agent",
+   "step": "identify",
+   "not_used": null
+  },
+  {
+   "tool": "get_user_information_by_id",
+   "who": "agent",
+   "step": "identify",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "time",
+   "not_used": null
+  },
+  {
+   "tool": "log_verification",
+   "who": "agent",
+   "step": "log_verif",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "accounts",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "accounts",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "cards",
+   "not_used": null
+  },
+  {
+   "tool": "get_bank_account_transactions_9173",
+   "who": "agent",
+   "step": "txns",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "security_hold_transfer",
+   "not_used": null
+  },
+  {
+   "tool": "reset_debit_card_pin_6284",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job does not reset PINs. A reset the customer accepts, or one that 3+ prior locks require (three_plus_locks_reset), runs in unlock_and_post_unlock_pin_reset."
+  },
+  {
+   "tool": "change_debit_card_pin_6285",
+   "who": "agent",
+   "step": null,
+   "not_used": "If the customer knows the current PIN, the PIN change runs in unlock_and_post_unlock_pin_reset."
+  },
+  {
+   "tool": "file_debit_card_transaction_dispute_6281",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job does not file disputes. When successful unauthorized transactions are found, filing_a_debit_card_transaction_dispute files them, applying Regulation E liability and the Provisional Credit Guidelines (see cannot_unlock_options)."
+  },
+  {
+   "tool": "close_debit_card_4721",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job does not close cards. After a cannot-unlock outcome, closure runs in closing_cancelling_a_debit_card."
+  },
+  {
+   "tool": "order_debit_card_5739",
+   "who": "agent",
+   "step": null,
+   "not_used": "This job does not order cards. A replacement runs in order_replacement_debit_card or in the closing job."
+  }
+ ],
+ "info": [
+  {
+   "field": "identity_values",
+   "about": "Any 2 of date of birth, email, phone number and address, checked against the records",
+   "from": "customer",
+   "ask": "To verify your identity, could you please provide two of the following: your date of birth, email, phone number, or address on file?",
+   "may_hold_back": true
+  },
+  {
+   "field": "locked_cards",
+   "about": "Which debit cards or checking accounts the customer says are locked",
+   "from": "customer",
+   "ask": "Which of your Rho-Bank debit cards are being declined, and which one would you like to start with?",
+   "may_hold_back": false
+  },
+  {
+   "field": "decline_description",
+   "about": "What the decline said (PIN locked, incorrect PIN, unable to verify PIN) and where it happened",
+   "from": "customer",
+   "ask": "What message did you see when the card was declined, and where were you using it?",
+   "may_hold_back": true
+  },
+  {
+   "field": "decline_circumstances",
+   "about": "The customer's own account of each locked card: where they were, roughly when, and what amount they tried",
+   "from": "customer",
+   "ask": "Can you tell me what happened when this card was locked? Where were you, roughly what time was it, and what amount were you trying to spend or withdraw?",
+   "may_hold_back": true
+  },
+  {
+   "field": "card_status_fields",
+   "about": "For each card: pin_locked, pin_lock_reason, pin_attempts_remaining, status, issue_reason, date_issued, daily_atm_limit, card_number_last_4, and prior PIN locks in the last 90 days",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "declined_transactions",
+   "about": "Each account's declined transactions (type atm_withdrawal_declined or pos_declined) with their city, time, amount and spacing; its successful transactions; any overdraft fees; and its balance",
+   "from": "records",
+   "ask": null,
+   "may_hold_back": false
+  },
+  {
+   "field": "customer_location_time_confirmation",
+   "about": "Whether the customer was at the declined attempt's location at that time",
+   "from": "customer",
+   "ask": "I see your card was locked after failed PIN attempts at [location from transaction]. Were you at that location? / These attempts occurred at [time]. Were you trying to use your card at that time?",
+   "may_hold_back": true
+  },
+  {
+   "field": "amount_confirmation",
+   "about": "Whether the customer tried the declined amounts (asked only when the amount-pattern flag scored)",
+   "from": "customer",
+   "ask": "The attempts were for [amount 1], then [amount 2], then [amount 3]. Do you remember trying those specific amounts?",
+   "may_hold_back": true
+  },
+  {
+   "field": "attempts_were_yours",
+   "about": "For a medium score: whether the failed PIN attempts were the customer's own",
+   "from": "customer",
+   "ask": "I see failed PIN attempts on your card. Were those attempts yours?",
+   "may_hold_back": true
+  },
+  {
+   "field": "unrecognized_successful_transactions",
+   "about": "For a card that cannot be unlocked: which successful transactions on the card the customer did not make",
+   "from": "customer",
+   "ask": "Here are the recent successful transactions on this card. Did you make all of them, or are any of them not yours?",
+   "may_hold_back": true
+  },
+  {
+   "field": "cannot_unlock_choice",
+   "about": "For a card that cannot be unlocked: which offered option the customer wants",
+   "from": "customer",
+   "ask": "For your protection I can't unlock this card. I can close it and send a replacement with a new number, transfer you to our security team, or reset your PIN. Which would you like?",
+   "may_hold_back": true
+  },
+  {
+   "field": "transfer_accepted",
+   "about": "Whether the customer wants a transfer to the security team for a card on security hold, and whether now or after the other cards",
+   "from": "customer",
+   "ask": "This card needs our security team. Would you like me to transfer you to them for this card, now or after we finish your other cards?",
+   "may_hold_back": true
+  }
+ ],
+ "done_when": "Every locked card has been scored or triaged, and each has an outcome: unlock, a required PIN reset (3+ prior locks), fraud closure, or the security-team offer. Cards eligible for unlock were handed to unlock_and_post_unlock_pin_reset only after all locked cards were investigated. No card with a 3-point flag was unlocked. For each card that cannot be unlocked, the successful transactions from its earliest declined attempt to now were reviewed, the customer was told whether money was taken, and whatever the customer accepted (dispute, closure and replacement, PIN reset or transfer) was carried out. A security-hold card got the transfer offer, and the customer's choice was respected.",
+ "steps": [
+  {
+   "id": "identify",
+   "by": "model",
+   "do": "Look up the customer by name, email or id. Ask for 2 of these: date of birth, email, phone, address. Compare the answers with the record.",
+   "call": "get_user_information_by_name",
+   "args": {
+    "customer_name": "the customer's stated name (or get_user_information_by_email / _by_id with what they gave)"
+   },
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "Verify customer identity using standard verification procedures",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "check_identity",
+   "by": "model",
+   "do": "Confirm that at least 2 values match the record from identify. Share no card or account information before they match. If they still do not match after you ask again, tell the customer you cannot verify them and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "identify"
+   ],
+   "after": [
+    "identify"
+   ],
+   "if": null,
+   "quote": "Verify customer identity using standard verification procedures",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_027"
+  },
+  {
+   "id": "time",
+   "by": "harness",
+   "do": "Get the current time. It is needed for the verification log and for the date checks below.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "check_identity"
+   ],
+   "if": "two of the identity values match the record",
+   "quote": "If you need the current time, always use the get_current_time() tool.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "get the current time from the tool",
+     "quote": "If you need the current time, always use the get_current_time() tool.",
+     "doc": "policy"
+    },
+    {
+     "clause": "two values match",
+     "quote": "ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "log_verif",
+   "by": "harness",
+   "do": "Log the verification.",
+   "call": "log_verification",
+   "args": {
+    "name": "verified user's name",
+    "user_id": "verified user id",
+    "address": "record address",
+    "email": "record email",
+    "phone_number": "record phone",
+    "date_of_birth": "record DOB",
+    "time_verified": "time from get_current_time"
+   },
+   "lookup": [
+    "check_identity"
+   ],
+   "after": [
+    "time"
+   ],
+   "if": "two of the identity values match the record",
+   "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+   "doc": "policy",
+   "basis": [
+    {
+     "clause": "log the verification",
+     "quote": "After verification, you must call the verification logging tool to properly log the information into the verification records.",
+     "doc": "policy"
+    },
+    {
+     "clause": "two values match",
+     "quote": "ensure that they are able to give correctly any 2 out of the following values: date of birth, email, phone number, address.",
+     "doc": "policy"
+    }
+   ]
+  },
+  {
+   "id": "accounts",
+   "by": "harness",
+   "do": "Unlock the tool that lists all of the user's bank accounts, then call it. Read each account's account_id, account_type, account_class, status, balance and date_opened.",
+   "call": "get_all_user_accounts_by_user_id_3847",
+   "args": {
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "log_verif"
+   ],
+   "if": null,
+   "quote": "Use get_all_user_accounts_by_user_id_3847 to retrieve the bank accounts (checkings, savings) for a customer.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_009",
+   "basis": [
+    {
+     "clause": "returned fields",
+     "quote": "The tool requires the customer's user_id and returns all account information including:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_009"
+    },
+    {
+     "clause": "date_opened feeds the account-age flag",
+     "quote": "Calculate how long the account has been open",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "cards",
+   "by": "harness",
+   "do": "Unlock the tool, then call it once for each checking account. It returns the account's debit cards with their pin_locked and pin_lock_reason fields.",
+   "call": "get_debit_cards_by_account_id_7823",
+   "args": {
+    "account_id": "each checking account id"
+   },
+   "lookup": [],
+   "after": [
+    "accounts"
+   ],
+   "if": null,
+   "quote": "Use get_debit_cards_by_account_id_7823 to look up all debit cards associated with a specific checking account.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_028"
+  },
+  {
+   "id": "txns",
+   "by": "harness",
+   "do": "Unlock the tool, then call it once for each account that has a locked card. It returns the declined attempts and the recent successful activity.",
+   "call": "get_bank_account_transactions_9173",
+   "args": {
+    "account_id": "each checking account with a locked card"
+   },
+   "lookup": [],
+   "after": [
+    "cards"
+   ],
+   "if": "a card has pin_locked = TRUE",
+   "quote": "Review the declined transaction history (transactions with type 'atm_withdrawal_declined' or 'pos_declined') and card data to calculate the following flags:",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "ask_which_card",
+   "by": "model",
+   "do": "If several cards are affected, ask the customer which one to discuss first, and go through the cards in that order. Still finish investigating every locked card (check_other_locked) before unlocking any of them.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards"
+   ],
+   "after": [
+    "cards"
+   ],
+   "if": "more than one of the customer's cards is declined or locked",
+   "quote": "Finish investigating all cards before any unlock. Each card must be scored individually and may have different outcomes.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "ask_circumstances",
+   "by": "model",
+   "do": "For each locked card, ask the customer what happened: where they were, roughly when, and what amount they tried. Never reveal the scoring.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "txns"
+   ],
+   "if": "a card has pin_locked TRUE and the customer has not yet described how it was locked",
+   "quote": "DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "never reveal the scoring",
+     "quote": "DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "ask the customer what happened",
+     "source": "none",
+     "why": "No passage scripts this opening question. It is a question for the customer about the facts the later Step 4 questions turn on."
+    }
+   ]
+  },
+  {
+   "id": "not_locked_branch",
+   "by": "model",
+   "do": "If the card's pin_locked is FALSE but pin_attempts_remaining is low, tell the customer how many attempts remain before the card locks. If they have forgotten the PIN, offer a PIN reset (unlock_and_post_unlock_pin_reset).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards"
+   ],
+   "after": [
+    "cards"
+   ],
+   "if": "the card's pin_locked is FALSE and pin_attempts_remaining is low",
+   "quote": "Warn customer: 'You have [X] PIN attempts remaining before your card is temporarily locked.'",
+   "doc": "doc_checking_accounts_green_account_(checking)_010"
+  },
+  {
+   "id": "code_83_branch",
+   "by": "model",
+   "do": "If the decline was a PIN verification or network error (CODE 83), explain that the PIN was not wrong and advise retrying. If it keeps failing, suggest a signature transaction, a different terminal or merchant, or waiting 10-15 minutes.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards"
+   ],
+   "after": [
+    "cards"
+   ],
+   "if": "the decline was 'unable to verify PIN' (CODE 83)",
+   "quote": "Explain: 'There was a temporary issue verifying your PIN. This wasn't because your PIN was incorrect - it was a network communication problem.'",
+   "doc": "doc_checking_accounts_green_account_(checking)_010"
+  },
+  {
+   "id": "triggers",
+   "by": "model",
+   "do": "For each locked card, check the automatic triggers first:\n- A security_hold card cannot be unlocked by chat agents; offer the security-team transfer (check_security_hold).\n- If several cards are locked, investigate every card before unlocking any of them.\n- If a card on the account was replaced as stolen in the last 90 days, enhanced verification is required (check_recent_stolen).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards",
+    "txns",
+    "time"
+   ],
+   "after": [
+    "txns"
+   ],
+   "if": null,
+   "quote": "If another card on the same account also has pin_locked = TRUE → Finish investigating all cards before any unlock. Each card must be scored individually and may have different outcomes.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "security hold",
+     "quote": "If pin_lock_reason = 'security_hold' → This card cannot be unlocked by chat agents. Offer to transfer the customer to the security team for this card.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "other cards locked",
+     "quote": "If another card on the same account also has pin_locked = TRUE → Finish investigating all cards before any unlock. Each card must be scored individually and may have different outcomes.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "recent stolen card",
+     "quote": "If any card on the account was replaced in last 90 days with issue_reason = 'stolen' → Enhanced verification required.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "check_security_hold",
+   "by": "model",
+   "do": "For each locked card, read pin_lock_reason. If it is 'security_hold', do not score or unlock the card. Offer to transfer the customer to the security team for that card, and keep handling their other cards normally.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards"
+   ],
+   "after": [
+    "triggers"
+   ],
+   "if": "a card has pin_locked TRUE",
+   "quote": "This card cannot be unlocked by chat agents. Offer to transfer the customer to the security team for this card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "security_hold_transfer",
+   "by": "model",
+   "do": "If the customer accepts the transfer offer, ask whether they want to go now or after their other cards are handled. Then call transfer_to_human_agents with reason fraud_or_security_concern. In the summary, name the card on security hold and say what was done for the other cards.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card with pin_lock_reason security_hold needs security team review; outcomes for the customer's other cards",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "check_security_hold"
+   ],
+   "after": [
+    "check_security_hold"
+   ],
+   "if": "pin_lock_reason = 'security_hold' AND the customer accepts the transfer offer",
+   "quote": "Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "offer the transfer for this card",
+     "quote": "Offer to transfer the customer to the security team for this card.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "reason code",
+     "quote": "Fraud, identity theft, unauthorized transactions, or security concerns requiring specialist handling",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "transfer only when the customer accepts",
+     "quote": "Do not transfer without asking the user first.",
+     "doc": "policy"
+    },
+    {
+     "clause": "ask when to go; summary contents",
+     "source": "none",
+     "why": "No passage sets when the transfer happens relative to the other cards, so the customer is asked. The summary follows the tool's summary argument: the issue and what was attempted."
+    }
+   ]
+  },
+  {
+   "id": "security_hold_declined",
+   "by": "model",
+   "do": "If the customer declines the transfer, acknowledge it and tell them they can contact Rho-Bank later about that card. Do not unlock, reset or otherwise act on it.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_security_hold"
+   ],
+   "after": [
+    "check_security_hold"
+   ],
+   "if": "pin_lock_reason = 'security_hold' AND the customer declines the transfer",
+   "quote": "This card cannot be unlocked by chat agents. Offer to transfer the customer to the security team for this card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "check_other_locked",
+   "by": "model",
+   "do": "If more than one card has pin_locked TRUE, finish investigating and scoring every locked card before unlocking any of them. Each card gets its own score and outcome.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards"
+   ],
+   "after": [
+    "triggers"
+   ],
+   "if": "more than one card has pin_locked TRUE",
+   "quote": "Finish investigating all cards before any unlock. Each card must be scored individually and may have different outcomes.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "check_recent_stolen",
+   "by": "model",
+   "do": "If any card on the account has issue_reason 'stolen' with date_issued within 90 days of get_current_time, enhanced verification is required. No tool performs enhanced verification, so do not unlock the card. Follow the Step 6 path instead: check_unauthorized, then cannot_unlock_options.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards",
+    "time"
+   ],
+   "after": [
+    "triggers"
+   ],
+   "if": "a card on the account has issue_reason 'stolen' and date_issued within 90 days",
+   "quote": "If any card on the account was replaced in last 90 days with issue_reason = 'stolen' → Enhanced verification required.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "enhanced verification required",
+     "quote": "If any card on the account was replaced in last 90 days with issue_reason = 'stolen' → Enhanced verification required.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "follow the escalation path",
+     "quote": "If any automatic trigger is present, follow that escalation path.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "Step 6 covers automatic triggers",
+     "quote": "For scores above thresholds or automatic escalation triggers:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "no enhanced-verification tool, so no unlock",
+     "source": "none",
+     "why": "No tool or document performs the last-4 SSN and security-question check, so the agent takes the path that does less and does not unlock."
+    }
+   ]
+  },
+  {
+   "id": "score",
+   "by": "model",
+   "do": "Score each locked card that has no security hold and is on an account with no card replaced as stolen in the last 90 days, using the flags below. Never reveal the calculation.\n- A1: compare the declined city with the address city. Same city 0; other city, same state 1; other state 2; other country 3.\n- A2: 2 locations 1; 3+ locations 2.\n- A3: all successful transactions in the last 7 days at home, but declines elsewhere: +1.\n- B1: hour of the attempt. 6AM-10PM 0; 10PM-12AM 1; 12-2AM 2; 2-6AM 3.\n- B2: last successful PIN use 7-30 days ago 1; over 30 days 2.\n- B3: gap between attempts. 2-5 min 1; 1-2 min 2; under 1 min 3.\n- C1: decreasing amounts 2.\n- C2: all round hundreds 1.\n- C3: 2-5x the average ATM withdrawal 1; over 5x 2.\n- C4: 80-100% of daily_atm_limit 1; attempts totalling over the limit 2.\n- D1: 1, 2 or 3+ prior locks in 90 days score 1, 2 or 3.\n- D2: card age 1-3 months 1; under 1 month 2.\n- D3: another card with a velocity block +1; with a fraud alert +2.\n- E1: account age 3-6 months 1; under 3 months 2.\n- E2: 1 overdraft 1; 2+ overdrafts 2.\n- E3: balance $50-100 1; under $50 2.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards",
+    "txns",
+    "accounts",
+    "identify",
+    "time"
+   ],
+   "after": [
+    "triggers",
+    "check_security_hold",
+    "check_other_locked",
+    "check_recent_stolen"
+   ],
+   "if": "pin_lock_reason is not 'security_hold' AND no card on the account has issue_reason 'stolen' with date_issued within 90 days",
+   "quote": "When a debit card shows pin_locked = TRUE, agents must perform a comprehensive fraud risk assessment before unlocking. DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "score only cards without the security-hold or recent-stolen trigger",
+     "quote": "If any automatic trigger is present, follow that escalation path. Otherwise, proceed to Step 2.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "cards under the other-cards-locked trigger are still scored",
+     "quote": "Each card must be scored individually and may have different outcomes.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "A1 comparison",
+     "quote": "Compare city in declined transaction description to customer's address city:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "A1 same state",
+     "quote": "Different city, same state: 1 point",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "A1 other state",
+     "quote": "Different state: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "A1 other country",
+     "quote": "Different country: 3 points (CRITICAL)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "A2",
+     "quote": "3+ different locations: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "A3",
+     "quote": "If all successful transactions were in customer's home city but declines are elsewhere: +1 point",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "B1 late evening",
+     "quote": "10 PM - 12 AM: 1 point",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "B1 after midnight",
+     "quote": "12 AM - 2 AM: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "B1 2-6 AM",
+     "quote": "2 AM - 6 AM: 3 points (HIGH RISK)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "B2",
+     "quote": "More than 30 days: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "B3",
+     "quote": "Less than 1 minute apart: 3 points (SCRIPTED ATTACK)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "C1",
+     "quote": "Decreasing amounts (e.g., 800→500→300): 2 points (FRAUD PATTERN)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "C2",
+     "quote": "All round hundreds (800, 500, 300, etc.): 1 point",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "C3",
+     "quote": "Attempted amount more than 5x average: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "C4",
+     "quote": "Multiple attempts totaling more than daily limit: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "D1",
+     "quote": "3+ prior locks: 3 points (AUTOMATIC PIN RESET REQUIRED - cannot unlock)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "D2",
+     "quote": "Less than 1 month: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "D3 velocity block",
+     "quote": "Another card has a velocity block: +1 point",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "D3 fraud alert",
+     "quote": "Another card has a fraud alert active: +2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "E1",
+     "quote": "Less than 3 months: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "E2",
+     "quote": "2+ overdrafts: 2 points",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "E3",
+     "quote": "Less than $50: 2 points (account may be abandoned/compromised)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "do not reveal",
+     "quote": "DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "ask_location",
+   "by": "model",
+   "do": "If the card's score is 5 or higher and the Location Mismatch flag (A1) scored, ask: 'I see your card was locked after failed PIN attempts at [location]. Were you at that location?'\n- Yes: remove the location flags and rescore.\n- No: keep the score and proceed with caution. The card's outcome then follows decide.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "score",
+    "txns"
+   ],
+   "after": [
+    "score"
+   ],
+   "if": "the card's score is 5 or higher and the Location Mismatch flag (A1) scored",
+   "quote": "If customer says YES: Remove location flags, recalculate score.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "score 5 or higher",
+     "quote": "For scores of 5 or higher, ask these questions based on flags present:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "asked when A1 scored",
+     "quote": "If Location Mismatch flag is scored:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "question",
+     "quote": "'I see your card was locked after failed PIN attempts at [location from transaction]. Were you at that location?'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "yes removes the location flags",
+     "quote": "If customer says YES: Remove location flags, recalculate score.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "no keeps the score",
+     "quote": "If customer says NO: Maintain score, proceed with caution.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "ask_time",
+   "by": "model",
+   "do": "If the card's score is 5 or higher and the time-of-day flag scored 2 or more, ask: 'These attempts occurred at [time]. Were you trying to use your card at that time?'\n- If the customer confirms, remove the time flag and recalculate.\n- If they say they were asleep or similar, the card is CRITICAL (likely fraud).\nDo not ask this for a card scoring below 5.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "score",
+    "txns"
+   ],
+   "after": [
+    "score"
+   ],
+   "if": "the card's score is 5 or higher and the time-of-day flag (B1) is 2 or more",
+   "quote": "If customer says 'I was asleep' or similar: CRITICAL - likely fraud.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "score 5 or higher",
+     "quote": "For scores of 5 or higher, ask these questions based on flags present:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "time flag 2+ and question",
+     "quote": "'These attempts occurred at [time]. Were you trying to use your card at that time?'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "confirm removes flag",
+     "quote": "If customer confirms: Remove time flag.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "asleep is CRITICAL",
+     "quote": "If customer says 'I was asleep' or similar: CRITICAL - likely fraud.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "ask_amount",
+   "by": "model",
+   "do": "If the card's score is 5 or higher and the amount-pattern flag (C1) scored, ask: 'The attempts were for [amount 1], then [amount 2], then [amount 3]. Do you remember trying those specific amounts?'\n- If they confirm, remove the amount-pattern flag and recalculate.\n- If they deny it or seem confused, keep the flag.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "score",
+    "txns"
+   ],
+   "after": [
+    "score"
+   ],
+   "if": "the card's score is 5 or higher and the amount pattern flag scored",
+   "quote": "If customer confirms: Remove amount pattern flag.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "score 5 or higher",
+     "quote": "For scores of 5 or higher, ask these questions based on flags present:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "question",
+     "quote": "'The attempts were for [amount 1], then [amount 2], then [amount 3]. Do you remember trying those specific amounts?'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "confirm removes flag",
+     "quote": "If customer confirms: Remove amount pattern flag.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "deny keeps flag",
+     "quote": "If customer denies or seems confused: Maintain flag.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "velocity_flag_stays",
+   "by": "model",
+   "do": "B3 scores 3 when consecutive failed attempts are less than 1 minute apart. The Step 4 questions cover only the location, amount-pattern and time-of-day flags, so the customer's answers never remove B3. That holds even when the customer says the attempts were theirs. The card therefore keeps a 3-point flag, and single_flag_escalation applies.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "score",
+    "txns"
+   ],
+   "after": [
+    "score"
+   ],
+   "if": "the card's consecutive failed attempts were less than 1 minute apart (B3 = 3)",
+   "quote": "Less than 1 minute apart: 3 points (SCRIPTED ATTACK)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "B3 = 3",
+     "quote": "Less than 1 minute apart: 3 points (SCRIPTED ATTACK)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "questions are tied to their flags",
+     "quote": "For scores of 5 or higher, ask these questions based on flags present:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "no question removes B3",
+     "source": "none",
+     "why": "Derived: Step 4 lists questions only for the Location Mismatch, Amount Pattern and Time of Day flags, and none of them removes the velocity flag."
+    },
+    {
+     "clause": "single-flag escalation applies",
+     "quote": "If ANY single flag equals 3 points, escalate to supervisor review regardless of total score.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "medium_question",
+   "by": "model",
+   "do": "For a final score of 5-7, ask: 'I see failed PIN attempts on your card. Were those attempts yours?' Unlock only if the customer says yes. If they say no, follow cannot_unlock_options.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "score",
+    "ask_location",
+    "ask_amount"
+   ],
+   "after": [
+    "ask_location",
+    "ask_time",
+    "ask_amount"
+   ],
+   "if": "the card's recalculated score is 5-7",
+   "quote": "Unlock only after asking: 'I see failed PIN attempts on your card. Were those attempts yours?'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "decide",
+   "by": "model",
+   "do": "Apply the thresholds to each scored card, using its score after the Step 4 questions:\n- If any single flag still scores 3 points, whatever the total, do not unlock; follow single_flag_escalation.\n- 0-4: unlock.\n- 5-7: unlock only after asking whether the attempts were the customer's.\n- 8-10: ask specific questions about location and time; unlock only if the customer confirms and gives a satisfactory explanation.\n- 11-14: no unlock on this call.\n- 15+, or 'I was asleep' or similar: CRITICAL. Do not unlock. Run check_unauthorized, then recommend card closure and replacement through cannot_unlock_options.\n- 3+ prior locks: reset the PIN instead of unlocking.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "score",
+    "ask_location",
+    "ask_time",
+    "ask_amount",
+    "medium_question"
+   ],
+   "after": [
+    "ask_location",
+    "ask_time",
+    "ask_amount",
+    "medium_question"
+   ],
+   "if": null,
+   "quote": "CANNOT unlock. Check for successful unauthorized transactions. Recommend card closure and replacement.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "a 3-point flag overrides the total",
+     "quote": "If ANY single flag equals 3 points, escalate to supervisor review regardless of total score.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "score after the questions",
+     "quote": "If customer says YES: Remove location flags, recalculate score.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "0-4",
+     "quote": "Unlock after standard identity verification",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "5-7",
+     "quote": "Unlock only after asking: 'I see failed PIN attempts on your card. Were those attempts yours?'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "8-10",
+     "quote": "Must ask specific questions about location and time. Only unlock if customer confirms AND provides satisfactory explanation.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "11-14",
+     "quote": "Cannot unlock on this call.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "CRITICAL",
+     "quote": "CANNOT unlock. Check for successful unauthorized transactions. Recommend card closure and replacement.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "asleep",
+     "quote": "If customer says 'I was asleep' or similar: CRITICAL - likely fraud.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "3+ prior locks",
+     "quote": "Cannot unlock. Must reset PIN.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "three_plus_locks_reset",
+   "by": "model",
+   "do": "If the card has had 3 or more prior PIN locks in the last 90 days, do not unlock it. Tell the customer that, because the card has been locked several times recently, it needs a new PIN. Run unlock_and_post_unlock_pin_reset (three_plus_reset) for the card. D1 is then a 3-point flag, so single_flag_escalation also applies. Never reveal the scoring.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "cards",
+    "score",
+    "decide"
+   ],
+   "after": [
+    "decide"
+   ],
+   "if": "D1 for the card is 3 or more prior locks in 90 days",
+   "quote": "3+ prior locks: 3 points (AUTOMATIC PIN RESET REQUIRED - cannot unlock)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "no unlock, PIN reset",
+     "quote": "Cannot unlock. Must reset PIN.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "automatic reset, 3 points",
+     "quote": "3+ prior locks: 3 points (AUTOMATIC PIN RESET REQUIRED - cannot unlock)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "single-flag escalation also applies",
+     "quote": "If ANY single flag equals 3 points, escalate to supervisor review regardless of total score.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "never reveal",
+     "quote": "DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "single_flag_escalation",
+   "by": "model",
+   "do": "If any single flag on the card still scores 3 points after the questions, do not unlock it; the card needs supervisor review. Examples: a 2-6 AM attempt the customer did not make, attempts under 1 minute apart, or D1 at 3+ prior locks. No tool performs supervisor review, so follow check_unauthorized and cannot_unlock_options; those include the security-team transfer. For D1 at 3+ prior locks, the PIN reset in three_plus_locks_reset is required as well.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "score",
+    "ask_time",
+    "ask_location"
+   ],
+   "after": [
+    "decide"
+   ],
+   "if": "any single flag equals 3 points",
+   "quote": "If ANY single flag equals 3 points, escalate to supervisor review regardless of total score.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "any 3-point flag escalates",
+     "quote": "If ANY single flag equals 3 points, escalate to supervisor review regardless of total score.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "D1 3+ also requires a reset",
+     "quote": "Cannot unlock. Must reset PIN.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "no unlock; route through cannot-unlock options",
+     "source": "none",
+     "why": "No passage or tool says how supervisor review is reached. The agent takes the path that does less (no unlock) and offers the documented Step 6 options, which include the security-team transfer."
+    }
+   ]
+  },
+  {
+   "id": "very_high_branch",
+   "by": "model",
+   "do": "For a final score of 11-14, tell the customer the card cannot be unlocked on this call. No callback or enhanced-verification tool is documented, so offer the cannot_unlock_options.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "decide"
+   ],
+   "after": [
+    "decide"
+   ],
+   "if": "the card's final score is 11-14",
+   "quote": "Cannot unlock on this call. Require callback verification OR enhanced verification (last 4 SSN + security question).",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "id": "unlock_handoff",
+   "by": "model",
+   "do": "A card may be unlocked in three cases: it scored 0-4; it scored 5-7 and the customer said the attempts were theirs; or it scored 8-10 and the customer confirmed and gave a satisfactory explanation. It must also have no security hold, no stolen replacement on the account in the last 90 days, no 3-point flag, and fewer than 3 prior locks. Send such a card to unlock_and_post_unlock_pin_reset, and do so only after every locked card has been investigated.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "decide",
+    "check_other_locked",
+    "cards"
+   ],
+   "after": [
+    "decide",
+    "single_flag_escalation"
+   ],
+   "if": "decide allows an unlock for the card",
+   "quote": "Unlock after standard identity verification",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "0-4",
+     "quote": "Unlock after standard identity verification",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "5-7",
+     "quote": "Unlock only after asking: 'I see failed PIN attempts on your card. Were those attempts yours?'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "8-10",
+     "quote": "Only unlock if customer confirms AND provides satisfactory explanation.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "security hold",
+     "quote": "This card cannot be unlocked by chat agents.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "recent stolen",
+     "quote": "If any card on the account was replaced in last 90 days with issue_reason = 'stolen' → Enhanced verification required.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "no 3-point flag",
+     "quote": "If ANY single flag equals 3 points, escalate to supervisor review regardless of total score.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "post-unlock by lock count",
+     "quote": "After unlocking (for eligible cases), complete these steps based on D1 Lock Frequency:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "all investigated first",
+     "quote": "Finish investigating all cards before any unlock.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "check_unauthorized",
+   "by": "model",
+   "do": "For a card that cannot be unlocked, look in txns for the card's successful transactions (status posted or pending, not the declined types). Doc 041 does not bound the suspicious period. Show the customer a window from the earliest declined PIN attempt that led to the lock (type 'atm_withdrawal_declined' or 'pos_declined' in txns) to the current time from time. Ask which successful transactions in that window were not theirs, and whether any other recent successful transaction on the card was not theirs. Then tell the customer whether any money was taken, without revealing the scoring.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "txns",
+    "time"
+   ],
+   "after": [
+    "decide",
+    "single_flag_escalation"
+   ],
+   "if": "the card cannot be unlocked (CRITICAL, 11-14, a 3-point flag, a recent stolen card, or the customer denies the attempts)",
+   "quote": "Check transaction history for any successful unauthorized transactions during the suspicious period.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "check for successful unauthorized transactions",
+     "quote": "Check transaction history for any successful unauthorized transactions during the suspicious period.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "declined attempt types start the window",
+     "quote": "Review the declined transaction history (transactions with type 'atm_withdrawal_declined' or 'pos_declined')",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "successful means posted or pending",
+     "quote": "**status**: Transaction status, either 'posted' or 'pending'",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_018"
+    },
+    {
+     "clause": "window bounds and other recent transactions",
+     "source": "none",
+     "why": "Doc 041 gives the suspicious period no start or end. The window runs from the earliest declined attempt in the records to now, and the customer's denial decides which transactions are unauthorized."
+    },
+    {
+     "clause": "no scoring disclosed",
+     "quote": "DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "cannot_unlock_options",
+   "by": "model",
+   "do": "If unauthorized transactions were found: file a dispute for each through filing_a_debit_card_transaction_dispute (that job tells the customer their Regulation E liability and decides provisional credit), then close the card and order a replacement (closing_cancelling_a_debit_card). These three actions are what the protocol requires for this case; they are not offered as options.\nIf none were found: explain the security concern without revealing the scoring, and offer three options: card closure and replacement (recommended when fraud is suspected), a transfer to the security team, or a PIN reset. Do only the option the customer accepts.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "check_unauthorized"
+   ],
+   "after": [
+    "check_unauthorized"
+   ],
+   "if": "the card cannot be unlocked",
+   "quote": "If unauthorized transactions found: File dispute, close card, order replacement.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041",
+   "basis": [
+    {
+     "clause": "found: dispute, close, replace",
+     "quote": "If unauthorized transactions found: File dispute, close card, order replacement.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "Regulation E liability in the dispute",
+     "quote": "If someone uses your debit card without permission, your liability is limited based on how quickly you report it:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_037"
+    },
+    {
+     "clause": "provisional credit in the dispute",
+     "quote": "Under Regulation E, Rho-Bank is REQUIRED to provide provisional credit for debit card disputes under certain conditions.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_032"
+    },
+    {
+     "clause": "none found: explain and offer options; the customer chooses",
+     "quote": "If no unauthorized transactions: Explain the security concern and offer options:",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "closure recommended if fraud suspected",
+     "quote": "Card closure and replacement (recommended if fraud suspected)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    },
+    {
+     "clause": "no scoring disclosed",
+     "quote": "DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+    }
+   ]
+  },
+  {
+   "id": "security_team_transfer",
+   "by": "model",
+   "do": "If the customer chooses the security-team option for a card that cannot be unlocked, transfer them with reason fraud_or_security_concern.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card that could not be unlocked after the PIN lock investigation, and what was done for other cards",
+    "reason": "fraud_or_security_concern"
+   },
+   "lookup": [
+    "cannot_unlock_options"
+   ],
+   "after": [
+    "cannot_unlock_options"
+   ],
+   "if": "the card cannot be unlocked AND the customer chooses the security-team transfer",
+   "quote": "Transfer to security team for investigation",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  }
+ ],
+ "rules": [
+  {
+   "rule": "Never unlock a PIN-locked card before the fraud risk assessment is complete",
+   "quote": "Before unlocking, you MUST follow the 'Internal: PIN Lock Investigation Protocol - Fraud Risk Scoring' document.",
+   "doc": "doc_checking_accounts_green_account_(checking)_010"
+  },
+  {
+   "rule": "Handle CODE 75 like CODE 55 with pin_locked TRUE",
+   "quote": "Same as Code 55 when pin_locked is TRUE. Follow the PIN Lock Investigation Protocol before taking any action.",
+   "doc": "doc_checking_accounts_green_account_(checking)_010"
+  },
+  {
+   "rule": "A card with pin_lock_reason = 'security_hold' cannot be unlocked in chat; offer a transfer to the security team",
+   "quote": "If pin_lock_reason = 'security_hold' → This card cannot be unlocked by chat agents. Offer to transfer the customer to the security team for this card.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "If any card on the account was replaced as stolen in the last 90 days, enhanced verification is required",
+   "quote": "If any card on the account was replaced in last 90 days with issue_reason = 'stolen' → Enhanced verification required.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "B1: a declined attempt between 2 AM and 6 AM scores 3 points",
+   "quote": "2 AM - 6 AM: 3 points (HIGH RISK)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "A1: a declined attempt in a different city of the customer's home state scores 1 point",
+   "quote": "Different city, same state: 1 point",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Any single flag worth 3 points means supervisor review, whatever the total",
+   "quote": "If ANY single flag equals 3 points, escalate to supervisor review regardless of total score.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "D1 at 3+ prior locks in 90 days scores 3 points: no unlock, and the PIN must be reset",
+   "quote": "3+ prior locks: 3 points (AUTOMATIC PIN RESET REQUIRED - cannot unlock)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Score 0-4: unlock after standard verification",
+   "quote": "Unlock after standard identity verification",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Score 5-7: ask the medium-risk question before unlocking",
+   "quote": "Unlock only after asking: 'I see failed PIN attempts on your card. Were those attempts yours?'",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Score 8-10: unlock only after the customer confirms and explains",
+   "quote": "Must ask specific questions about location and time. Only unlock if customer confirms AND provides satisfactory explanation.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Score 11-14: no unlock on this call",
+   "quote": "Cannot unlock on this call. Require callback verification OR enhanced verification (last 4 SSN + security question).",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Score 15+: CRITICAL. Do not unlock; check for unauthorized transactions and recommend closure and replacement.",
+   "quote": "15+ | CRITICAL | CANNOT unlock. Check for successful unauthorized transactions. Recommend card closure and replacement.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "3 or more prior locks in 90 days: do not unlock; reset the PIN",
+   "quote": "Cannot unlock. Must reset PIN.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "If the customer answers the time question by saying they were asleep or similar, the card is CRITICAL",
+   "quote": "If customer says 'I was asleep' or similar: CRITICAL - likely fraud.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "When unauthorized transactions are found on a card that cannot be unlocked: dispute, close, replace",
+   "quote": "If unauthorized transactions found: File dispute, close card, order replacement.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "Never reveal the scoring calculation",
+   "quote": "DO NOT REVEAL THE SPECIFIC CALCULATIONS TO USERS.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "B3: failed attempts less than 1 minute apart score 3 points",
+   "quote": "Less than 1 minute apart: 3 points (SCRIPTED ATTACK)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "A1: declines in a different country score 3 points",
+   "quote": "Different country: 3 points (CRITICAL)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_041"
+  },
+  {
+   "rule": "D3 reads the other cards' fraud alert field from the debit card lookup",
+   "quote": "Check the card's fraud_alert_active field from the debit card lookup response.",
+   "doc": "doc_checking_accounts_checking_accounts_(general)_003"
+  }
+ ]
+}

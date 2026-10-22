@@ -1,0 +1,558 @@
+{
+ "job": "activating_a_debit_card",
+ "aliases": [
+  "activate replacement debit card",
+  "activate the Mid-tier replacement card ordered earlier in the same conversation",
+  "activate the replacement card that arrived after a lost wallet",
+  "activate_replacement_debit_card",
+  "set PIN on new debit card"
+ ],
+ "when": {
+  "quote": "Procedure for when a customer has received their new debit card and wants to activate it with Rho-Bank customer service.",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+ },
+ "starts": {
+  "by": "customer",
+  "note": "customer: only when the customer has received the card, has it in hand, and asks to activate it",
+  "quote": "Customer must have the physical card in their possession",
+  "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+ },
+ "tools": [
+  {
+   "tool": "get_all_user_accounts_by_user_id_3847",
+   "who": "agent",
+   "step": "get_accounts_a",
+   "not_used": null
+  },
+  {
+   "tool": "get_debit_cards_by_account_id_7823",
+   "who": "agent",
+   "step": "lookup",
+   "not_used": null
+  },
+  {
+   "tool": "get_current_time",
+   "who": "agent",
+   "step": "get_time_a",
+   "not_used": null
+  },
+  {
+   "tool": "unlock_discoverable_agent_tool",
+   "who": "agent",
+   "step": "activate",
+   "not_used": null
+  },
+  {
+   "tool": "call_discoverable_agent_tool",
+   "who": "agent",
+   "step": "activate",
+   "not_used": null
+  },
+  {
+   "tool": "activate_debit_card_8292",
+   "who": "agent",
+   "step": "activate",
+   "not_used": null
+  },
+  {
+   "tool": "activate_debit_card_8291",
+   "who": "agent",
+   "step": "activate_new",
+   "not_used": null
+  },
+  {
+   "tool": "activate_debit_card_8293",
+   "who": "agent",
+   "step": "activate_reissued",
+   "not_used": null
+  },
+  {
+   "tool": "transfer_to_human_agents",
+   "who": "agent",
+   "step": "activate_system_error",
+   "not_used": null
+  }
+ ],
+ "info": [
+  {
+   "field": "card_account",
+   "about": "Which checking account the new card is for",
+   "from": "customer",
+   "ask": "Which account is the new card linked to?",
+   "may_hold_back": false
+  },
+  {
+   "field": "card_last4",
+   "about": "Last 4 digits of the new card",
+   "from": "customer",
+   "ask": "What are the last 4 digits of the new card?",
+   "may_hold_back": true
+  },
+  {
+   "field": "expiration",
+   "about": "MM/YY",
+   "from": "customer",
+   "ask": "What is the card's expiration date?",
+   "may_hold_back": true
+  },
+  {
+   "field": "cvv",
+   "about": "3-digit CVV",
+   "from": "customer",
+   "ask": "What is the 3-digit CVV on the back?",
+   "may_hold_back": true
+  },
+  {
+   "field": "pin",
+   "about": "4-digit PIN, not sequential and not repeating",
+   "from": "customer",
+   "ask": "What 4-digit PIN would you like to set?",
+   "may_hold_back": true
+  }
+ ],
+ "steps": [
+  {
+   "id": "verified_a",
+   "by": "model",
+   "do": "Make sure the customer was verified and logged in this conversation. If not, verify them first (lookup, 2 matching values, get_current_time, log_verification). Confirm they have the physical card.",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [],
+   "if": null,
+   "quote": "1. Verify customer identity using standard verification procedures",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024",
+   "basis": [
+    {
+     "clause": "verify",
+     "quote": "1. Verify customer identity using standard verification procedures",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "card in hand",
+     "quote": "2. Customer must have the physical card in their possession",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    }
+   ]
+  },
+  {
+   "id": "get_accounts_a",
+   "by": "harness",
+   "do": "Read the customer's accounts to get the linked checking account's account_id and status (unlock get_all_user_accounts_by_user_id_3847 if needed).",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_all_user_accounts_by_user_id_3847",
+    "user_id": "the verified user"
+   },
+   "lookup": [],
+   "after": [
+    "verified_a"
+   ],
+   "if": null,
+   "quote": "4. The linked checking account must still be OPEN",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "id": "which_card_account",
+   "by": "model",
+   "do": "If the customer has more than one checking account, confirm which account the arrived card belongs to (for example, the account whose replacement was ordered), and look up only that account's cards.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_a"
+   ],
+   "after": [
+    "get_accounts_a"
+   ],
+   "if": "the customer has more than one checking account and has not said which one the card is for",
+   "quote": "2. Look up the card in the debit_cards table and check the 'issue_reason' field to determine which activation tool to use",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "id": "lookup",
+   "by": "harness",
+   "do": "Look up the account's debit cards, find the PENDING card and its issue_reason",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "get_debit_cards_by_account_id_7823",
+    "account_id": "checking account id"
+   },
+   "lookup": [],
+   "after": [
+    "get_accounts_a"
+   ],
+   "if": null,
+   "quote": "2. Look up the card in the debit_cards table and check the 'issue_reason' field to determine which activation tool to use",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "id": "get_time_a",
+   "by": "harness",
+   "do": "Get the current date for the expiration check.",
+   "call": "get_current_time",
+   "args": {},
+   "lookup": [],
+   "after": [
+    "verified_a"
+   ],
+   "if": null,
+   "quote": "5. Card must not be expired (check expiration_date)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "id": "ask_card",
+   "by": "model",
+   "do": "Ask for the last 4 digits, the expiration date and the CVV, and check them against the record",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "lookup"
+   ],
+   "after": [
+    "lookup"
+   ],
+   "if": null,
+   "quote": "6. Verify the card details match the customer's account",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024",
+   "basis": [
+    {
+     "clause": "last 4",
+     "quote": "3. Ask customer for the last 4 digits of the card number",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "expiration",
+     "quote": "4. Ask customer for the card expiration date",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "cvv",
+     "quote": "5. Ask customer for the 3-digit CVV on the back",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "match",
+     "quote": "6. Verify the card details match the customer's account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    }
+   ]
+  },
+  {
+   "id": "check_activation",
+   "by": "model",
+   "do": "Check four things: the card is PENDING, the linked account is OPEN, the card is not expired, and the last 4 digits and expiration match the record. If the details do not match, ask once more; after 2 incorrect attempts the card is locked and the customer must visit a branch, so stop. If any other check fails, explain why and stop.",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "get_accounts_a",
+    "lookup",
+    "get_time_a",
+    "ask_card"
+   ],
+   "after": [
+    "ask_card",
+    "get_time_a"
+   ],
+   "if": null,
+   "quote": "If the customer provides incorrect card details 2 times, the card will be locked for security and they must visit a branch in person",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024",
+   "basis": [
+    {
+     "clause": "PENDING",
+     "quote": "3. The debit card must be in PENDING status (not already ACTIVE)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "OPEN",
+     "quote": "4. The linked checking account must still be OPEN",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "not expired",
+     "quote": "5. Card must not be expired (check expiration_date)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "2 attempts",
+     "quote": "If the customer provides incorrect card details 2 times, the card will be locked for security and they must visit a branch in person",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    }
+   ]
+  },
+  {
+   "id": "ask_pin",
+   "by": "model",
+   "do": "Ask for a valid 4-digit PIN",
+   "call": null,
+   "args": {},
+   "lookup": [],
+   "after": [
+    "ask_card",
+    "check_activation"
+   ],
+   "if": null,
+   "quote": "7. Ask customer to set a 4-digit PIN for the card (must be exactly 4 digits, cannot be sequential like 1234 or repeating like 1111)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "id": "activate",
+   "by": "model",
+   "do": "Activate with the tool that matches issue_reason (lost, stolen or fraud: 8292). Unlock only that tool.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "activate_debit_card_8292",
+    "card_id": "the PENDING card id from lookup",
+    "last_4_digits": "from the customer (ask_card)",
+    "expiration_date": "from the customer (ask_card), MM/YY",
+    "cvv": "from the customer (ask_card)",
+    "pin": "from the customer (ask_pin)"
+   },
+   "lookup": [
+    "lookup",
+    "check_activation"
+   ],
+   "after": [
+    "ask_pin"
+   ],
+   "if": "issue_reason is lost, stolen or fraud and check_activation passed",
+   "quote": "- activate_debit_card_8292: Use for REPLACEMENT cards (replacing lost/stolen/fraud cards, issue_reason = 'lost', 'stolen', or 'fraud')",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024",
+   "basis": [
+    {
+     "clause": "tool by issue_reason",
+     "quote": "- activate_debit_card_8292: Use for REPLACEMENT cards (replacing lost/stolen/fraud cards, issue_reason = 'lost', 'stolen', or 'fraud')",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "last 4 digits",
+     "quote": "Last 4 digits of the debit card number (printed on the card)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "expiration",
+     "quote": "Card expiration date (MM/YY format)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "cvv",
+     "quote": "The 3-digit CVV on the back of the card",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    }
+   ]
+  },
+  {
+   "id": "activate_new",
+   "by": "model",
+   "do": "Unlock and call activate_debit_card_8291 for a first card on the account.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "activate_debit_card_8291",
+    "card_id": "the PENDING card id from lookup",
+    "last_4_digits": "from the customer (ask_card)",
+    "expiration_date": "from the customer (ask_card), MM/YY",
+    "cvv": "from the customer (ask_card)",
+    "pin": "from the customer (ask_pin)"
+   },
+   "lookup": [
+    "lookup",
+    "check_activation"
+   ],
+   "after": [
+    "ask_pin"
+   ],
+   "if": "issue_reason is new_account or first_card and check_activation passed",
+   "quote": "activate_debit_card_8291: Use for NEW cards (first-time card for this checking account, issue_reason = 'new_account' or 'first_card')",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "id": "activate_reissued",
+   "by": "model",
+   "do": "Unlock and call activate_debit_card_8293 for a reissued card. Then tell the customer the old card stays active for 24 hours and to update recurring payments if the number changed.",
+   "call": "call_discoverable_agent_tool",
+   "args": {
+    "agent_tool_name": "activate_debit_card_8293",
+    "card_id": "the PENDING card id from lookup",
+    "last_4_digits": "from the customer (ask_card)",
+    "expiration_date": "from the customer (ask_card), MM/YY",
+    "cvv": "from the customer (ask_card)",
+    "pin": "from the customer (ask_pin)"
+   },
+   "lookup": [
+    "lookup",
+    "check_activation"
+   ],
+   "after": [
+    "ask_pin"
+   ],
+   "if": "issue_reason is expired, damaged, upgrade or bank_reissue and check_activation passed",
+   "quote": "activate_debit_card_8293: Use for REISSUED cards (expiration renewal, damaged card, design upgrade, or bank-initiated, issue_reason = 'expired', 'damaged', 'upgrade', or 'bank_reissue')",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024",
+   "basis": [
+    {
+     "clause": "tool",
+     "quote": "activate_debit_card_8293: Use for REISSUED cards (expiration renewal, damaged card, design upgrade, or bank-initiated, issue_reason = 'expired', 'damaged', 'upgrade', or 'bank_reissue')",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "grace",
+     "quote": "Inform customer that their old card will remain active for 24 hours as a grace period",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "recurring",
+     "quote": "Remind them to update any recurring payments with the new card details if the card number changed",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    }
+   ]
+  },
+  {
+   "id": "post",
+   "by": "model",
+   "do": "Confirm the card is active; for a replacement card, remind the customer to review transactions, ask whether they noticed suspicious activity, and suggest a password change if fraud was suspected",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "activate"
+   ],
+   "after": [
+    "activate"
+   ],
+   "if": null,
+   "quote": "- After activation, remind customer to review recent transactions for any unauthorized charges",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024",
+   "basis": [
+    {
+     "clause": "confirm",
+     "quote": "9. Confirm activation was successful",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "review",
+     "quote": "- After activation, remind customer to review recent transactions for any unauthorized charges",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "ask",
+     "quote": "Ask if they have noticed any suspicious activity on their account",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "password",
+     "quote": "Recommend changing their online banking password if fraud was suspected",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    }
+   ]
+  },
+  {
+   "id": "activate_error",
+   "by": "model",
+   "do": "If an activation call returns an error, act on what it names. 'Wrong activation tool': check issue_reason, unlock the tool the error names, and call it with the same details. 'Card verification failed': count it as an incorrect card-details attempt; ask once more, and after 2 incorrect attempts tell the customer the card is locked and they must visit a branch in person, then stop. A PIN error: ask for a new PIN that is exactly 4 digits and not sequential or repeating, then retry. A CVV or last-4-digits format error: ask the customer for that detail again, then retry. 'already active', 'Only PENDING cards can be activated' or 'no longer open': explain that the card cannot be activated and why, and stop. Any other error: explain it to the customer (activate_system_error).",
+   "call": null,
+   "args": {},
+   "lookup": [
+    "activate",
+    "activate_new",
+    "activate_reissued"
+   ],
+   "after": [
+    "activate"
+   ],
+   "if": "an activation call returned an error",
+   "quote": "Using the wrong activation tool will result in an error. Always verify the issue reason before selecting the tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024",
+   "basis": [
+    {
+     "clause": "Wrong activation tool: use the tool the error names",
+     "quote": "Using the wrong activation tool will result in an error. Always verify the issue reason before selecting the tool.",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "Card verification failed counts toward the 2-attempt lock",
+     "quote": "If the customer provides incorrect card details 2 times, the card will be locked for security and they must visit a branch in person",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "PIN error: ask for a valid PIN",
+     "quote": "Ask customer to set a 4-digit PIN for the card (must be exactly 4 digits, cannot be sequential like 1234 or repeating like 1111)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "CVV or last-4 format error: ask again",
+     "quote": "The 3-digit CVV on the back of the card",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "not PENDING: explain and stop",
+     "quote": "3. The debit card must be in PENDING status (not already ACTIVE)",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "account not open: explain and stop",
+     "quote": "4. The linked checking account must still be OPEN",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+    },
+    {
+     "clause": "Any other error: explain it",
+     "source": "none",
+     "why": "No cited passage decides other activation errors, so the step explains the error to the customer instead of ruling."
+    }
+   ]
+  },
+  {
+   "id": "activate_system_error",
+   "by": "model",
+   "do": "If an activation call keeps returning a system error that none of the cases in activate_error explains, tell the customer the card was not activated and ask whether they want a human agent. Transfer only if they agree, with reason technical_system_error.",
+   "call": "transfer_to_human_agents",
+   "args": {
+    "summary": "the card being activated (account, issue_reason), the tool used and the error returned",
+    "reason": "technical_system_error"
+   },
+   "lookup": [
+    "activate",
+    "activate_new",
+    "activate_reissued"
+   ],
+   "after": [
+    "activate_error"
+   ],
+   "if": "an activation call returns a system error that persists and the customer agrees to a transfer",
+   "quote": "System error or outage preventing completion of the customer's request",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_042",
+   "basis": [
+    {
+     "clause": "technical_system_error",
+     "quote": "System error or outage preventing completion of the customer's request",
+     "doc": "doc_bank_accounts_bank_accounts_(general)_042"
+    },
+    {
+     "clause": "ask first",
+     "quote": "Generally, if the issue cannot be resolved or is outside your capabilities, ask the user whether they would like to be transferred to a human agent.",
+     "doc": "policy"
+    }
+   ]
+  }
+ ],
+ "rules": [
+  {
+   "rule": "The card must be PENDING, its account OPEN, and the card not expired",
+   "quote": "3. The debit card must be in PENDING status (not already ACTIVE)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "rule": "Pick the activation tool by issue_reason; the wrong tool errors",
+   "quote": "Using the wrong activation tool will result in an error. Always verify the issue reason before selecting the tool.",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "rule": "Two wrong attempts at the card details lock the card",
+   "quote": "If the customer provides incorrect card details 2 times, the card will be locked for security and they must visit a branch in person",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  },
+  {
+   "rule": "Activating a new card deactivates earlier cards on the same account, except reissued cards, which keep a 24-hour grace period",
+   "quote": "Previous debit cards linked to the same account will be automatically deactivated when the new card is activated (except for reissued cards which have a 24-hour grace period)",
+   "doc": "doc_bank_accounts_bank_accounts_(general)_024"
+  }
+ ],
+ "done_when": "The card is activated with the tool matching its issue_reason and the customer's PIN, and the follow-up reminders were given; or the customer was told why activation cannot proceed; or a persistent system error led to an offered transfer."
+}
