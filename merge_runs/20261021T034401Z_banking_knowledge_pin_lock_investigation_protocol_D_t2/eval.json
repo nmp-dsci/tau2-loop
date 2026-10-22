@@ -1,0 +1,656 @@
+{
+ "run": "20261021T034401Z_banking_knowledge_pin_lock_investigation_protocol_D_t2",
+ "option": "D",
+ "trial": 2,
+ "status": "done",
+ "heads": [
+  {
+   "version": 0,
+   "task": null,
+   "E1": {
+    "facts": {
+     "K1": {
+      "id": "K1",
+      "verdict": "right",
+      "where": [
+       "ask_time",
+       "decide",
+       "rule: A customer who says they were asleep at the time of the attempts means CRITICAL, likely fraud",
+       "single_flag_escalation"
+      ],
+      "evidence": "If the time-of-day flag scored 2 or more... If they say they were asleep or similar, treat the card as CRITICAL (likely fraud).",
+      "why": "ask_time and the asleep rule make any overnight denial CRITICAL regardless of country, and B1 = 3 alone blocks the unlock through single_flag_escalation."
+     },
+     "K2": {
+      "id": "K2",
+      "verdict": "right",
+      "where": [
+       "decide",
+       "cannot_unlock_options",
+       "rule: Score 15+: CRITICAL; cannot unlock; check for unauthorized transactions; recommend closure and replacement"
+      ],
+      "evidence": "card closure and replacement (recommended when fraud is suspected)... Do only what the customer accepts.",
+      "why": "A CRITICAL card goes to cannot_unlock_options, where closure and replacement is recommended and carried out in the named closing job on the customer's yes."
+     },
+     "K3": {
+      "id": "K3",
+      "verdict": "partly",
+      "where": [
+       "check_unauthorized"
+      ],
+      "evidence": "look in the txns results for successful (posted or pending) transactions in the suspicious period that the customer did not make",
+      "why": "The job never defines the suspicious period as starting at the first denied declined attempt, so an agent could scan the wider 7-day activity it gathered."
+     },
+     "K4": {
+      "id": "K4",
+      "verdict": "right",
+      "where": [
+       "ask_location",
+       "medium_question",
+       "decide",
+       "unlock_handoff"
+      ],
+      "evidence": "If yes, remove the location flags and rescore... A card may be unlocked when it scored 0-4, or 5-10 with the customer's confirmation",
+      "why": "Confirmed attempts remove the location flags and trigger a rescore, and a card scoring 10 or less with no trigger, no 3-point flag and fewer than 3 prior locks goes to unlock."
+     },
+     "K5": {
+      "id": "K5",
+      "verdict": "wrong",
+      "where": [
+       "check_other_locked",
+       "ask_which_card",
+       "unlock_handoff"
+      ],
+      "evidence": "If more than one card has pin_locked TRUE, finish investigating and scoring every locked card before unlocking any of them.",
+      "why": "The job applies the investigate-all-first trigger across all of the customer's locked cards, not only to cards on the same checking account."
+     },
+     "K6": {
+      "id": "K6",
+      "verdict": "right",
+      "where": [
+       "unlock_handoff"
+      ],
+      "evidence": "Send it to unlock_and_post_unlock_pin_reset for the unlock and the post-unlock offer that matches its prior lock count.",
+      "why": "The cleared card goes to the named PIN-reset job for the offer that matches its prior lock count, which is where the key allows the reset to run."
+     },
+     "K7": {
+      "id": "K7",
+      "verdict": "right",
+      "where": [
+       "check_security_hold",
+       "security_hold_declined",
+       "rule: pin_lock_reason = 'security_hold': the chat agent cannot unlock the card; offer a transfer to the security team"
+      ],
+      "evidence": "If the customer declines the transfer... Do not unlock, reset or otherwise act on it.",
+      "why": "A security-hold card is not scored or unlocked, gets the transfer offer, and receives no further action when the customer declines."
+     }
+    },
+    "traps": {
+     "T1": {
+      "id": "T1",
+      "present": true,
+      "where": [
+       "check_other_locked",
+       "ask_which_card",
+       "unlock_handoff"
+      ],
+      "evidence": "Still finish investigating every locked card (check_other_locked) before unlocking any of them."
+     },
+     "T2": {
+      "id": "T2",
+      "present": true,
+      "where": [
+       "cannot_unlock_options",
+       "foreign_location_denied",
+       "info: cannot_unlock_choice"
+      ],
+      "evidence": "Then offer three options: card closure and replacement (recommended when fraud is suspected), a transfer to the security team, or a PIN reset."
+     },
+     "T4": {
+      "id": "T4",
+      "present": false,
+      "where": [],
+      "evidence": ""
+     }
+    },
+    "conflicts": [
+     {
+      "case": "A CRITICAL card (15+ or a denied overnight attempt) with no unauthorized transactions",
+      "where": [
+       "decide",
+       "cannot_unlock_options"
+      ],
+      "why": "decide sends a CRITICAL card straight to the fraud closure path, while cannot_unlock_options offers closure, a transfer or a PIN reset for the customer to choose."
+     },
+     {
+      "id_note": "",
+      "case": "A card scoring 5-7 with attempts under 1 minute apart (B3 = 3) that the customer says were hers",
+      "where": [
+       "medium_question",
+       "velocity_flag_stays"
+      ],
+      "why": "medium_question says to unlock if the customer says yes, while velocity_flag_stays and single_flag_escalation forbid unlocking a card with a 3-point flag."
+     }
+    ],
+    "score": 5.5,
+    "of": 7,
+    "traps_present": [
+     "T1",
+     "T2"
+    ]
+   },
+   "E4": {
+    "chars": 35177,
+    "steps": 33,
+    "rules": 20,
+    "files": false,
+    "D9": [],
+    "D19": [],
+    "D20": []
+   }
+  },
+  {
+   "version": 1,
+   "task": "task_090",
+   "E1": {
+    "facts": {
+     "K1": {
+      "id": "K1",
+      "verdict": "right",
+      "where": [
+       "ask_time",
+       "decide",
+       "single_flag_escalation",
+       "rule: A customer who says they were asleep at the time of the attempts means CRITICAL, likely fraud"
+      ],
+      "evidence": "If they say they were asleep or similar, treat the card as CRITICAL (likely fraud).",
+      "why": "An other-state decline (A1=2) plus a 2-6 AM attempt (B1=3) reaches score 5, which triggers ask_time; a sleeping answer makes the card CRITICAL, and the unremoved 3-point B1 also blocks the unlock whatever the country."
+     },
+     "K2": {
+      "id": "K2",
+      "verdict": "right",
+      "where": [
+       "decide",
+       "cannot_unlock_options"
+      ],
+      "evidence": "card closure and replacement (recommend it when fraud is suspected)... Do only what the customer accepts.",
+      "why": "A CRITICAL card goes to cannot_unlock_options, where closure and replacement are recommended and carried out through the named closing job when the customer accepts."
+     },
+     "K3": {
+      "id": "K3",
+      "verdict": "partly",
+      "where": [
+       "check_unauthorized"
+      ],
+      "evidence": "starting at that card's earliest declined attempt in txns and ending at the time from get_current_time, and ask the customer whether it should start earlier",
+      "why": "The default window matches the key, but the instruction to ask whether the period should start earlier lets the agent reach back over earlier home-city activity."
+     },
+     "K4": {
+      "id": "K4",
+      "verdict": "right",
+      "where": [
+       "ask_location",
+       "ask_time",
+       "ask_amount",
+       "decide",
+       "unlock_handoff"
+      ],
+      "evidence": "If yes, remove the location flags and rescore.",
+      "why": "Confirmed answers remove the location, time and amount flags, and a rescored card with no 3-point flag, fewer than 3 prior locks and a score of 10 or less qualifies under unlock_handoff."
+     },
+     "K5": {
+      "id": "K5",
+      "verdict": "partly",
+      "where": [
+       "ask_which_card",
+       "check_other_locked",
+       "starts"
+      ],
+      "evidence": "The agent then investigates every locked card before unlocking any.",
+      "why": "The steps limit the wait-before-unlock rule to the same account and take cards in the customer's order, but the start note applies it to every locked card on every account."
+     },
+     "K6": {
+      "id": "K6",
+      "verdict": "right",
+      "where": [
+       "unlock_handoff"
+      ],
+      "evidence": "Send it to unlock_and_post_unlock_pin_reset for the unlock and for the post-unlock offer that matches its prior lock count.",
+      "why": "The post-unlock reset offer for the card's prior lock count is delegated to the named PIN-reset job, which the key accepts."
+     },
+     "K7": {
+      "id": "K7",
+      "verdict": "wrong",
+      "where": [
+       "security_hold_declined",
+       "check_unauthorized"
+      ],
+      "evidence": "follow the cannot-unlock path for that card... offer closure and replacement, or a PIN reset.",
+      "why": "After the customer declines the transfer, the job still sends the card to disputes, closure or a PIN reset instead of doing nothing more."
+     }
+    },
+    "traps": {
+     "T1": {
+      "id": "T1",
+      "present": true,
+      "where": [
+       "starts"
+      ],
+      "evidence": "The agent then investigates every locked card before unlocking any."
+     },
+     "T2": {
+      "id": "T2",
+      "present": true,
+      "where": [
+       "cannot_unlock_options",
+       "info: cannot_unlock_choice"
+      ],
+      "evidence": "offer three options: card closure and replacement..., a transfer to the security team, or a PIN reset."
+     },
+     "T4": {
+      "id": "T4",
+      "present": true,
+      "where": [
+       "check_unauthorized"
+      ],
+      "evidence": "ask the customer whether it should start earlier"
+     }
+    },
+    "conflicts": [
+     {
+      "case": "Locked cards on different checking accounts",
+      "where": [
+       "starts",
+       "check_other_locked"
+      ],
+      "why": "The start note says to investigate every locked card before any unlock, while check_other_locked and ask_which_card apply that rule only to cards on the same account."
+     },
+     {
+      "case": "Security-hold card whose customer declines the transfer",
+      "where": [
+       "check_security_hold",
+       "security_hold_declined"
+      ],
+      "why": "check_security_hold says only to offer the transfer and carry on with the other cards, while security_hold_declined sends the card to disputes, closure or a PIN reset."
+     },
+     {
+      "case": "CRITICAL card with no unauthorized transactions",
+      "where": [
+       "rule: Score 15+: CRITICAL; cannot unlock; check for unauthorized transactions; recommend closure and replacement",
+       "cannot_unlock_options"
+      ],
+      "why": "The rule says the card cannot be unlocked and should be closed and replaced, but cannot_unlock_options offers a PIN reset that clears the lock."
+     }
+    ],
+    "score": 5.0,
+    "of": 7,
+    "traps_present": [
+     "T1",
+     "T2",
+     "T4"
+    ]
+   },
+   "E4": {
+    "chars": 60376,
+    "steps": 33,
+    "rules": 20,
+    "files": false,
+    "D9": [],
+    "D19": [],
+    "D20": []
+   }
+  }
+ ],
+ "merges": [
+  {
+   "task": "task_090",
+   "read": 0,
+   "committed": 1,
+   "taken": true,
+   "failed": [],
+   "E2": {
+    "sourced": 33,
+    "kept": 33,
+    "accounted": {},
+    "silent": [],
+    "old_quotes": 39,
+    "old_quotes_kept": 38
+   }
+  }
+ ],
+ "E3_last": {
+  "steps": 33,
+  "no": [
+   "foreign_location_denied",
+   "log_verif",
+   "security_hold_transfer",
+   "single_flag_escalation",
+   "time",
+   "unlock_handoff"
+  ],
+  "partly": [
+   "ask_circumstances",
+   "check_identity",
+   "check_security_hold",
+   "check_unauthorized",
+   "identify",
+   "score",
+   "txns",
+   "velocity_flag_stays",
+   "very_high_branch"
+  ],
+  "clean": 18,
+  "derived_clauses": 6,
+  "verdicts": [
+   {
+    "step": "identify",
+    "clause": "Ask for 2 of these: date of birth, email, phone, address. Compare the answers with the record.",
+    "verdict": "partly",
+    "unsupported": "2 of these: date of birth, email, phone, address",
+    "why": "The quote asks only for identity verification by 'standard verification procedures' and does not name the fields or the 2-of-4 count."
+   },
+   {
+    "step": "check_identity",
+    "clause": "Confirm that at least 2 values match the record... If they still do not match after you ask again, tell the customer you cannot verify them and stop.",
+    "verdict": "partly",
+    "unsupported": "at least 2 values match; after you ask again ... stop",
+    "why": "The quote and its context ('Customer must be verified') support requiring verification before acting, but not the 2-match threshold, the one retry or the stop."
+   },
+   {
+    "step": "time",
+    "clause": "if: identity verified in check_identity",
+    "verdict": "no",
+    "unsupported": "identity verified (2 of 4 values match)",
+    "why": "The step marks this as coming from no document, citing the policy section, and uses it as a gating rule, not a question or an explanation."
+   },
+   {
+    "step": "time",
+    "clause": "Use it as the timestamp for the verification log",
+    "verdict": "no",
+    "unsupported": "get the current time for the verification log",
+    "why": "The step marks this as coming from no document, citing a tool description that is not among its quotes, and makes it a required action."
+   },
+   {
+    "step": "time",
+    "clause": "as 'now' for the 90-day and age calculations below",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "derived: the D1 quote counts locks 'in the last 90 days', and its context ('Calculate how long the card has been active') measures card age, so both windows need the current time as their end."
+   },
+   {
+    "step": "log_verif",
+    "clause": "if: identity verified in check_identity",
+    "verdict": "no",
+    "unsupported": "identity verified",
+    "why": "The step marks this as coming from no document, citing the policy section, and uses it as a gating rule."
+   },
+   {
+    "step": "log_verif",
+    "clause": "Log the verification record with the verified user's details and the time from the time step.",
+    "verdict": "no",
+    "unsupported": "log the verification",
+    "why": "The step marks this as coming from no document, citing the policy and the tool description, which are not among its quotes, and makes it a required action."
+   },
+   {
+    "step": "accounts",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The quote names get_all_user_accounts_by_user_id_3847 as the tool that retrieves the customer's bank accounts."
+   },
+   {
+    "step": "cards",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The quotes say the tool returns the debit cards of a checking account and only of checking accounts, and that the PIN fields come from this lookup."
+   },
+   {
+    "step": "txns",
+    "clause": "to get the declined attempts and the recent successful activity",
+    "verdict": "partly",
+    "unsupported": "and the recent successful activity",
+    "why": "The quote supports reviewing the declined transaction history, but none of this step's quotes mention successful activity."
+   },
+   {
+    "step": "ask_which_card",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The ordering is only a question for the customer, and the rule to finish investigating all locked cards before any unlock is quoted directly."
+   },
+   {
+    "step": "ask_circumstances",
+    "clause": "The customer's answers change the score only through the Step 4 questions",
+    "verdict": "partly",
+    "unsupported": "only",
+    "why": "The quote says which questions to ask at scores of 5 or higher; it does not say that no other customer input affects the score, and the overview names 'customer verification' among the scoring inputs."
+   },
+   {
+    "step": "not_locked_branch",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The condition, the warning and the PIN-reset offer for a forgotten PIN are each quoted from the CODE 55 passage."
+   },
+   {
+    "step": "code_83_branch",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The CODE 83 explanation, the retry, the signature or different-terminal options, the 10-15 minute wait and the rule that a locked card is not unlocked without the assessment all appear in the quotes and their context."
+   },
+   {
+    "step": "triggers",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "All three automatic triggers and the 'follow that escalation path, otherwise proceed to Step 2' rule are quoted directly."
+   },
+   {
+    "step": "check_security_hold",
+    "clause": "If it is 'security_hold', do not score ... the card",
+    "verdict": "partly",
+    "unsupported": "do not score",
+    "why": "The quote supports not unlocking and offering the security-team transfer, but the only quote here does not include 'Otherwise, proceed to Step 2', so nothing in this step's quotes says to skip scoring."
+   },
+   {
+    "step": "security_hold_transfer",
+    "clause": "In the summary, give the customer's issue and what was attempted",
+    "verdict": "no",
+    "unsupported": "summary content",
+    "why": "The step marks this as coming from no document, citing a tool description that is not quoted, and makes it a rule for the transfer summary."
+   },
+   {
+    "step": "security_hold_declined",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The quotes say a security-hold card cannot be unlocked by chat agents and that Step 6 covers automatic escalation triggers, with its found and none-found branches; 'contact later' is only an explanation."
+   },
+   {
+    "step": "security_hold_last",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The quote supports per-card outcomes, and the ordering is only a question for the customer."
+   },
+   {
+    "step": "check_other_locked",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The quote states this rule directly."
+   },
+   {
+    "step": "check_recent_stolen",
+    "clause": "enhanced verification (last 4 SSN plus a security question)",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "derived: the stolen-card trigger requires 'Enhanced verification', and the 11-14 quote defines that same term as 'last 4 SSN + security question'."
+   },
+   {
+    "step": "check_recent_stolen",
+    "clause": "issue_reason 'stolen' with date_issued within 90 days ... follow the escalation path: check_unauthorized, then cannot_unlock_options",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "derived: the trigger quote ('replaced in last 90 days with issue_reason = stolen') fixes the window, and the Step 6 quote ('For ... automatic escalation triggers') supplies the path."
+   },
+   {
+    "step": "score",
+    "clause": "flag values (A2, A3, B1, C2, C3, D3, E1, E2)",
+    "verdict": "partly",
+    "unsupported": "A2: 2 locations 1, 3 or more 2; A3 +1; B1 hour bands; C2 round hundreds 1; C3 2-5x / >5x; D3 velocity +1 / fraud alert +2; E1 account-age bands; E2 1 overdraft 1",
+    "why": "The quoted passages show the A1, B2, B3, C1, C4, D1, D2 and E3 values, but the text shown does not contain these other values, and the D3 quote comes from a fraud-alert procedure that assigns no points."
+   },
+   {
+    "step": "ask_location",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The trigger, the question and both answer branches are quoted directly."
+   },
+   {
+    "step": "foreign_location_denied",
+    "clause": "The customer still having the physical card does not change this.",
+    "verdict": "no",
+    "unsupported": "The customer still having the physical card does not change this",
+    "why": "No quote mentions possession of the physical card, and the step makes this a rule."
+   },
+   {
+    "step": "foreign_location_denied",
+    "clause": "If the customer also answers the time question with 'I was asleep' ... CRITICAL: do not unlock it. Go to check_unauthorized, then recommend closure and replacement",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "derived: the 'I was asleep ... CRITICAL' quote and the CRITICAL-row quote ('CANNOT unlock. Check for successful unauthorized transactions. Recommend card closure and replacement') together give the action."
+   },
+   {
+    "step": "ask_time",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The 2+ point trigger, the question and both answer branches are quoted directly."
+   },
+   {
+    "step": "ask_amount",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The trigger, the question and both answer branches are quoted directly."
+   },
+   {
+    "step": "velocity_flag_stays",
+    "clause": "no customer answer removes B3",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "derived: Step 4 lists questions only for the location, amount-pattern and time flags, and the B3 quote sets 3 points for attempts under 1 minute apart."
+   },
+   {
+    "step": "velocity_flag_stays",
+    "clause": "Do not unlock it; escalate it as single_flag_escalation says.",
+    "verdict": "partly",
+    "unsupported": "Do not unlock it",
+    "why": "The quote requires escalation to supervisor review regardless of score, but it does not say the card cannot be unlocked; a required escalation is turned into a refusal."
+   },
+   {
+    "step": "single_flag_escalation",
+    "clause": "For a flag other than D1: do not unlock; follow check_unauthorized and cannot_unlock_options",
+    "verdict": "partly",
+    "unsupported": "do not unlock; follow check_unauthorized and cannot_unlock_options",
+    "why": "The quote requires supervisor review, but Step 6 is scoped to 'scores above thresholds or automatic escalation triggers', and the single-flag rule is neither of these; nothing makes the escalation a prohibition on unlocking."
+   },
+   {
+    "step": "single_flag_escalation",
+    "clause": "When D1 (3+ prior locks) is the only 3-point flag: the PIN reset is required (three_plus_locks_reset)",
+    "verdict": "no",
+    "unsupported": "D1 3+: reset required",
+    "why": "The step marks this as coming from no document because its quote was not found, and it is a rule; none of this step's own quotes state it."
+   },
+   {
+    "step": "single_flag_escalation",
+    "clause": "after the reset tell the customer the card is referred for review, and ask whether they want a transfer to the security team",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "This is marked as coming from no document, but it is only an explanation and a question for the customer."
+   },
+   {
+    "step": "three_plus_locks_reset",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The quotes say '3+ prior locks: Cannot unlock. Must reset PIN' and '(AUTOMATIC PIN RESET REQUIRED)', which makes the reset this card's prescribed path; single-flag escalation and non-disclosure are quoted directly."
+   },
+   {
+    "step": "medium_question",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The question-before-unlock rule is quoted; what follows a denial is only a question for the customer, and the PIN-reset choice rests on 'Customer suspects someone knows their PIN'."
+   },
+   {
+    "step": "decide",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "Each threshold row, the 'asleep' rule and the 3+ locks rule are quoted directly."
+   },
+   {
+    "step": "very_high_branch",
+    "clause": "No callback or enhanced-verification tool is documented, so follow check_unauthorized and cannot_unlock_options.",
+    "verdict": "partly",
+    "unsupported": "No callback or enhanced-verification tool is documented, so follow check_unauthorized and cannot_unlock_options",
+    "why": "The quote supports 'cannot unlock on this call' and requires callback or enhanced verification, but this step's only quote does not route the card to Step 6, and the claim that no tool exists is unmarked and unquoted."
+   },
+   {
+    "step": "unlock_handoff",
+    "clause": "It must also have ... no 3-point flag",
+    "verdict": "partly",
+    "unsupported": "no 3-point flag",
+    "why": "The quote requires escalation to supervisor review for any 3-point flag, but it does not say that such a card may not be unlocked."
+   },
+   {
+    "step": "unlock_handoff",
+    "clause": "fewer than 3 prior locks",
+    "verdict": "no",
+    "unsupported": "fewer than 3 prior locks",
+    "why": "The step marks this as coming from no document because its quote was not found, and it is a gating rule; none of this step's quotes contain the 3+ locks 'cannot unlock' text."
+   },
+   {
+    "step": "check_unauthorized",
+    "clause": "successful transactions (status posted or pending, not a declined type)",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "derived: the status-field quote ('posted' or 'pending') and the declined-type quote ('atm_withdrawal_declined' or 'pos_declined') together fix what counts as a successful transaction."
+   },
+   {
+    "step": "check_unauthorized",
+    "clause": "Take it as starting at that card's earliest declined attempt in txns and ending at the time from get_current_time",
+    "verdict": "partly",
+    "unsupported": "starting at that card's earliest declined attempt; ending at the time from get_current_time",
+    "why": "The protocol leaves 'the suspicious period' unbounded; the quote about reviewing declined history does not set the start, and the end is marked as coming from no document yet applied as a rule (only the earlier start is put to the customer)."
+   },
+   {
+    "step": "check_unauthorized",
+    "clause": "if: ... a single 3-point flag other than D1 alone",
+    "verdict": "partly",
+    "unsupported": "a single 3-point flag",
+    "why": "Step 6's quoted scope is 'scores above thresholds or automatic escalation triggers', and the single-flag escalation is not stated to be either one."
+   },
+   {
+    "step": "cannot_unlock_options",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "Both Step 6 branches, the three options with closure recommended if fraud is suspected, and the dispute's Regulation E, liability and provisional-credit handling are each quoted."
+   },
+   {
+    "step": "security_team_transfer",
+    "clause": "all",
+    "verdict": "entails",
+    "unsupported": "",
+    "why": "The transfer option and the fraud_or_security_concern reason code are quoted, and the ordering is only a question for the customer."
+   }
+  ]
+ },
+ "evaluated": "20261021T040643Z"
+}

@@ -259,8 +259,9 @@ def _cited(job: Any) -> set[str]:
 
 def unread_pointers(domain: str, job: dict[str, Any]) -> list[dict[str, Any]]:
     """D13: each pointer tool the job calls or rules out while citing none of the documents that
-    name it, with the documents to read."""
-    text = json.dumps(job, ensure_ascii=False)
+    name it, with the documents to read. s30: the changelog is not the job: code writes every
+    tool a merge left out into it, and that named a removed tool as one the job rules out."""
+    text = json.dumps({k: v for k, v in job.items() if k != "changelog"}, ensure_ascii=False)
     cited = _cited(job)
     out = []
     for tool, words in pointer_tools(domain).items():
@@ -390,7 +391,9 @@ def unmet_status(domain: str, job: dict[str, Any]) -> list[dict[str, Any]]:
         (k, step_tool(job, k)) for k in range(len(steps)) if steps[k].get("call") not in NOT_A_CALL
     ]
     called = {t for _, t in calls}
-    made = {rules[t]["effect"] for _, t in calls if t in rules}
+    made = {
+        rules[t]["effect"] for _, t in calls if t in rules and rules[t]["effect"]
+    }  # a PIN change makes none
     acts_on: dict[str, set[str]] = {}
     for name, rule in rules.items():
         if len(rule["allowed"]) == 1:

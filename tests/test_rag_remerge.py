@@ -9,6 +9,7 @@ refusing. No model is called: each test drives the merge with scripted replies.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,14 @@ def library_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return runs
 
 
-def r18_session(runs: Path, task: str, started: str, locked_ms: int) -> str:
+def r18_session(
+    runs: Path,
+    task: str,
+    started: str,
+    locked_ms: int,
+    draft: dict[str, Any] = DRAFT,
+    decision: dict[str, list[str]] = DECISION,
+) -> str:
     """A finished r18 session as the build left it: research events up to the draft, then its merge."""
     sid = f"{started}_{D}_r18_{task}"
     d = runs / sid
@@ -71,19 +79,24 @@ def r18_session(runs: Path, task: str, started: str, locked_ms: int) -> str:
         },
         {"t": 30, "kind": "model", "step": 2, "text": "not JSON", "calls": []},
         {"t": 31, "kind": "user", "step": 3, "text": "Reply with the JSON."},
-        {"t": 40, "kind": "model", "step": 3, "text": json.dumps(DRAFT), "calls": []},
+        {"t": 40, "kind": "model", "step": 3, "text": json.dumps(draft), "calls": []},
         {
             "t": 50,
             "kind": "merge",
-            "candidates": {"submitting_a_cash_back_dispute": ["cash_back_dispute"]},
+            "candidates": {k: v or [] for k, v in decision.items()},
         },
-        {"t": 60, "kind": "decided", "decision": DECISION},
-        {"t": locked_ms, "kind": "locked", "token": 1, "jobs": ["cash_back_dispute"]},
+        {"t": 60, "kind": "decided", "decision": decision},
+        {
+            "t": locked_ms,
+            "kind": "locked",
+            "token": 1,
+            "jobs": sorted({j for v in decision.values() for j in v}),
+        },
         {"t": locked_ms + 10, "kind": "user", "step": 4, "text": "r18's merge message"},
         {"t": locked_ms + 20, "kind": "model", "step": 4, "text": "r18's merge", "calls": []},
     ]
     (d / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
-    out = {"jobs": [], "merge": [], "draft": DRAFT["jobs"], "decision": DECISION}
+    out = {"jobs": [], "merge": [], "draft": draft["jobs"], "decision": decision}
     (d / "output.json").write_text(json.dumps(out))
     return sid
 
@@ -257,3 +270,93 @@ def test_the_remerge_queue_takes_r18s_sessions_in_the_order_they_locked_and_resu
     assert rag_agent.remerge_queue(D, "r19") == [late]
     with pytest.raises(rag_agent.RagAgentError):
         rag_agent.remerge_queue(D, "r18")  # r18 takes no other version's drafts
+
+
+# ── s34 (r20, the person's call, 21 Oct 2026): the merge bench's option D2 as workflow_rag's merge ──
+def test_r20_is_the_benchs_d2_on_r18s_drafts_onto_r17() -> None:
+    import dataclasses
+
+    from tau2_loop.workflows import bench
+
+    r20 = rag_agent.load(D, "r20")
+    d2 = bench.load_option(D, "D2")
+    assert dataclasses.replace(d2, name="r20") == r20  # field for field, the bench's D2
+    assert (r20.drafts_from, r20.seed, r20.merge_mode, r20.post_audit, r20.review_binding) == (
+        "r18",
+        "r17",
+        "audit",
+        True,
+        False,
+    )
+
+
+def test_r20_merges_a_session_of_two_jobs_auditing_the_library_job_before_and_after(
+    library_dirs: Path,
+) -> None:
+    from tau2_loop.workflows import library
+
+    new_job = {
+        "job": "checking_interest_question",
+        "when": OLD["when"],
+        "info": [],
+        "steps": [VERIFY],
+    }
+    new_job |= {"rules": [], "done_when": "the question is answered"}
+    draft = {"jobs": [DRAFT["jobs"][0], new_job]}
+    decision = {"submitting_a_cash_back_dispute": ["cash_back_dispute"], new_job["job"]: []}
+    sid = r18_session(library_dirs, "task_019", "20261013T050000Z", 5000, draft, decision)
+    audits: list[str] = []
+    turns: list[list[dict[str, Any]]] = []
+
+    def ask(messages, tools, model, effort, tool_mode):  # type: ignore[no-untyped-def]
+        first = str(messages[0]["content"] or "")
+        if first.startswith("You review one workflow job"):
+            return Reply(json.dumps({"verdicts": []}))
+        if first.startswith("You audit one workflow job"):
+            audits.append(first)
+            ids = sorted(set(re.findall(r'"id": "([^"]+)"', first)))
+            return Reply(
+                json.dumps({"steps": [{"step": i, "verdict": "valid"} for i in ids], "rules": []})
+            )
+        turns.append(list(messages))
+        jobs = [
+            {
+                **OLD,
+                "steps": [VERIFY, OLD["steps"][1]],  # verify with every parameter (D9)
+                "into": ["cash_back_dispute"],
+                "aliases": ["submitting_a_cash_back_dispute"],
+            },
+            {**new_job, "into": []},
+        ]
+        return Reply(
+            json.dumps(
+                {
+                    "jobs": [{**j, "changelog": []} for j in jobs],
+                    "documents": [],
+                    "open_questions": [],
+                }
+            )
+        )
+
+    meta = rag_agent.remerge(D, "r20", sid, ask=ask, run_tool=lambda n, a: "", env=FakeEnv())
+    s = rag_agent.session(D, meta.id)
+    assert s["meta"]["status"] == "done", s["meta"].get("error")
+    assert len(turns) == 1  # one merge turn wrote both jobs; no research or decide turn ran
+    assert {r["job"] for r in s["output"]["merge"] if r["taken"]} == {
+        "cash_back_dispute",
+        "checking_interest_question",
+    }
+    kinds = [
+        (e["kind"], e.get("job")) for e in s["events"] if e["kind"] in ("audited", "post_audited")
+    ]
+    assert ("audited", "cash_back_dispute") in kinds  # the library's version, before the merge
+    assert ("post_audited", "cash_back_dispute") in kinds  # the merged job, after it
+    assert not any(k == "audited" and j == "checking_interest_question" for k, j in kinds)
+    # the audit as the auditor received it holds the gap rule (D2), before and after the merge
+    assert audits and all(
+        "A gap in the documents is not permission" in " ".join(a.split()) for a in audits
+    )
+    assert {e["job"] for e in library.entries(D, "r20")} == {
+        "cash_back_dispute",
+        "checking_interest_question",
+    }

@@ -1,6 +1,6 @@
 # banking_knowledge: every answering-agent version, in build order
 
-The Optimise tab draws the 7 of 27 versions played on every task of their split: v1–v4, v7, v8, v23. The other 20 (v5, v6, v9–v22, v24–v27) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
+The Optimise tab draws the 7 of 30 versions played on every task of their split: v1–v4, v7, v8, v23. The other 23 (v5, v6, v9–v22, v24–v30) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
 
 Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_knowledge/v*/`, `loop/banking_knowledge/ledger.jsonl`, `loop/banking_knowledge/registry.json` and the run folders, the reading `GET /api/versions` serves. Re-run it when a version is added or played; do not edit it by hand.
 
@@ -32,7 +32,10 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 | v24 | no | optimise | v23 | 5 of 17 played | 4 of 17 played | not gated |
 | v25 | no | workflow tools | v23 | — | — | never played |
 | v26 | no | workflow tools | v24 | 6 of 17 played | 5 of 17 played | not gated |
-| v27 | no | tool change | v26 | — | — | never played |
+| v27 | no | tool change | v26 | 0 of 1 played | 3 of 17 played | not gated |
+| v28 | no | workflow tools | v27 | 1 of 5 played | — | not gated |
+| v29 | no | workflow tools | v27 | 2 of 5 played | — | not gated |
+| v30 | no | workflow tools | v27 | — | — | never played |
 
 ## v1 · on the Optimise tab
 
@@ -195,7 +198,7 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Why:** the person's call: v22 with the answering agent on Sonnet 5.5 (claude-sonnet-5-5; v22's 'sonnet' is claude-sonnet-5), played with a Haiku 5.5 customer on v8's 20-task smoke before a full train and test run
 - **Runs:** `20261011T055438Z_banking_knowledge_v23_train`, `20261011T055440Z_banking_knowledge_v23_test`
 
-## After v23 · 4 versions left off the tab
+## After v23 · 7 versions left off the tab
 
 ### v24
 
@@ -220,5 +223,26 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 ### v27
 
 - **Made:** tool change from v26: workflows: r18 → r19; workflow_view: None → steps
-- **Played:** no train run · no test run · sonnet-5-5 · medium · never played
+- **Played:** train 0 of 1 played, of the split's 60 · test 3 of 17 played, of the split's 37 · sonnet-5-5 · medium · not gated
 - **Why:** s25 bundle (the person's calls, 15 Oct 2026): v26 reading r19 (r18's drafts re-merged draft-first), find_workflow showing steps without quotes or basis (A2), the shown job kept in the hooks' state with a next-steps note (A1, A3), D2 accepting the amount under a tier (H1), a transfer before the 4th request sent back once (H2), transaction_type from doc 031's definitions (P1); 084: v24's line and hook D2 forced 500 over a $412.88 late charge; the tool's description weighs the disputed amount; 088: v24's 'pin_purchase only if the PIN may be compromised' read 'I don't know if the PIN was compromised' as pin_purchase; 084: in v24's run D2 sent the correct 412.88 back; no gold debit dispute in any run files 500 for an amount under $500; train replay: 43 transfers gold never makes, in 19 tasks, at a count under 4; policy rule 6; the person's ask for runtime workflow enforcement; test only (040, 085) shows the pattern, no train failure; A3 needs the calls already made
+- **Runs:** `20261020T015825Z_banking_knowledge_v27_custom`, `20261015T170743Z_banking_knowledge_v27_custom`
+
+### v28
+
+- **Made:** workflow tools from v27: workflows: r19 → r19@20261020T000056Z_banking_knowledge_B_t1
+- **Played:** train 1 of 5 played, of the split's 60 · no test run · sonnet-5-5 · medium · not gated
+- **Why:** s30 E5 (the person's call, 20 Oct 2026): v27 reading r19's library with option B's trial-1 debit dispute job (merge bench) in place of r19 v3; held, scored on the job's train conversations only
+- **Runs:** `20261020T015818Z_banking_knowledge_v28_custom`
+
+### v29
+
+- **Made:** workflow tools from v27: workflows: r19 → r19@20261020T213717Z_banking_knowledge_D-lean_t1
+- **Played:** train 2 of 5 played, of the split's 60 · no test run · sonnet-5-5 · medium · not gated
+- **Why:** s32 E5 (the person's call, 21 Oct 2026): v27 reading r19's library with merge-bench option D-lean trial 1's debit dispute job in place of r19 v3; held, scored on the job's five train conversations only, as v28 was for option B
+- **Runs:** `20261020T230653Z_banking_knowledge_v29_custom`
+
+### v30
+
+- **Made:** workflow tools from v27: workflows: r19 → r20
+- **Played:** no train run · no test run · sonnet-5-5 · medium · never played
+- **Why:** s34 (the person's calls, 22 Oct 2026): v27 reading r20, the merge bench's option D2 as workflow_rag's merge, on r18's research (43 of 44 merges taken). Graded against the keys: debit dispute job 8.0 of 9 (r19 v3 5.0), PIN-lock job 4.5 of 7 (r19 v1 5.5). The gap rule kept T1's cross-account wait. The PIN-lock gate missed, and the person chose to play v30 anyway. Only the library differs from v27.

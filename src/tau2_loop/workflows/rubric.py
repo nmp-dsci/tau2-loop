@@ -25,6 +25,11 @@ carry no signal.
 
 D18 bounds          a step that names a period or window says where it starts and ends (s25,
                       r19; `provenance.unbounded_periods`, sent back once, never blocking)
+  D19 references      every step id the job points to (a `tools` entry's step, a `lookup`, an
+                      `after`) is a step of the job (s30: r19 v3's filing tool pointed to a removed
+                      step; sent back once, never blocking)
+  D20 writes called   every write tool the job lists for the agent has a step that calls it, or a
+                      `not_used` reason (s30: r19 v3 lists the filing tool and never files)
 
 D9, D10 and D12 are reported for every version and gated only by one that names them (r5's
 `rubric: [D10]`, r7's `[D9, D10, D12]`). D8 and D1's "no new quote that is not found" are the merge gate (`gate()`): a merged version
@@ -172,6 +177,8 @@ def check(
     out["D9"] = toolspec.missing_params(domain, job)  # s22: reported always, gated by r5
     out["D10"] = toolspec.unmet_status(domain, job)
     out["D13"] = toolspec.unread_pointers(domain, job)  # s22 r16
+    out["D19"] = dangling(job)  # s30: reported always, sent back by a version that names it
+    out["D20"] = uncalled_writes(domain, job)
     if previous:
         out["D8"] = lost(job, previous)
         out["D12"] = unread(job, previous, kept)
@@ -274,6 +281,64 @@ def unread(job: dict[str, Any], previous: list[dict[str, Any]], kept: Any) -> di
     return {k: list(dict.fromkeys(v)) for k, v in out.items()}
 
 
+def dangling(job: dict[str, Any]) -> list[dict[str, str]]:
+    """D19 (s30): each step id the job points to that is not one of its steps: a `tools` entry's
+    `step`, a step's `lookup` or `after`."""
+    steps = [s for s in job.get("steps") or [] if isinstance(s, dict)]
+    ids = {str(s.get("id")) for s in steps}
+    out: list[dict[str, str]] = []
+    for t in job.get("tools") or []:
+        ref = t.get("step") if isinstance(t, dict) else None
+        if isinstance(ref, str) and ref and ref not in ids:
+            out.append({"where": f"tools: {t.get('tool')}", "ref": ref})
+    for s in steps:
+        for key in ("lookup", "after"):
+            refs = s.get(key) or []
+            for ref in [refs] if isinstance(refs, str) else refs:
+                if isinstance(ref, str) and ref and ref not in ids:
+                    out.append({"where": f"step {s.get('id')}: {key}", "ref": ref})
+    return out
+
+
+def uncalled_writes(domain: str, job: dict[str, Any]) -> list[str]:
+    """D20 (s30): each write tool the job lists for the agent that no step calls and no `not_used`
+    explains. A job that lists the filing tool and has no step that files never files."""
+    from tau2_loop.workflows import toolspec
+
+    spec = toolspec.tools(domain)
+    steps = [s for s in job.get("steps") or [] if isinstance(s, dict)]
+    called = {step_tool(job, k) for k in range(len(steps))}
+    out: list[str] = []
+    for t in job.get("tools") or []:
+        if not isinstance(t, dict) or t.get("not_used") or t.get("who") == "customer":
+            continue
+        name = str(t.get("tool") or "")
+        info = spec.get(name)
+        if not TOOL.fullmatch(name):  # the wrappers that call a discoverable tool are not writes
+            continue
+        if info and info["write"] and not info["user"] and name not in called and name not in out:
+            out.append(name)
+    return out
+
+
+def structure_reasons(c: dict[str, Any], which: tuple[str, ...]) -> list[str]:
+    """The send-back lines for D19 and D20, for a version that names them."""
+    why = []
+    if "D19" in which:
+        for m in c.get("D19") or []:
+            why.append(
+                f"{m['where']} points to step {m['ref']}, which the job does not have: point it "
+                "to the step that does it, or write that step"
+            )
+    if "D20" in which:
+        for t in c.get("D20") or []:
+            why.append(
+                f"the job lists {t} for the agent and no step calls it: write the step that calls "
+                "it with every parameter, or give the tools entry a `not_used` reason"
+            )
+    return why
+
+
 def _quotes(o: Any) -> list[dict[str, str]]:
     from tau2_loop.workflows.rag_agent import quotes
 
@@ -309,7 +374,13 @@ def gate(c: dict[str, Any], extra: tuple[str, ...] = (), draft_base: bool = Fals
                 "documents say otherwise; remove it, saying what you searched, if no document "
                 "supports it"
             )
-    return [*why, *toolspec.reasons(c, extra)]
+    # s30: a listed write no step makes keeps the previous version (D20); a dangling step id is
+    # sent back once and never blocks (D19, `rag_agent._advice`)
+    return [
+        *why,
+        *toolspec.reasons(c, extra),
+        *structure_reasons(c, ("D20",) if "D20" in extra else ()),
+    ]
 
 
 def library_report(domain: str, rag_version: str) -> dict[str, Any]:
