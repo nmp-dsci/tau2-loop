@@ -40,7 +40,7 @@ rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (def
 rag-remerge: ## s25: merge again, with RAG='s merge (default r19), every session of the version it takes drafts from (r18's): no research runs; resumable (LIMIT=, WORKERS=)
 	uv run tau2loop rag-remerge --domain banking_knowledge --rag $(or $(RAG),r19) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS))
 
-merge-bench: ## s30: replay JOB='s merges (default the debit dispute job) under merge option OPTION= (A, B, C, D, D-lean), trial TRIAL= (default 1), UPTO= stops after that many merges (s31, O8): no research, a scratch library under merge_runs/; calls the model
+merge-bench: ## s30: replay JOB='s merges (default the debit dispute job) under merge option OPTION= (A, B, C, D, D-lean, D2), trial TRIAL= (default 1), UPTO= stops after that many merges (s31, O8): no research, a scratch library under merge_runs/; calls the model
 	uv run python -m tau2_loop.workflows.bench run --option $(OPTION) --trial $(or $(TRIAL),1) $(if $(JOB),--job $(JOB)) $(if $(UPTO),--upto $(UPTO))
 
 merge-resume: ## s31: continue bench run RUN= that stopped on a code fault, a pause or UPTO, WHY= the reason (recorded); UPTO= stops again

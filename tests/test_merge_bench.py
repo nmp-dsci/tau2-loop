@@ -635,7 +635,8 @@ def test_the_pin_lock_key_is_train_gold_only_and_its_labels_cover_every_cell() -
     test_ids = set(split["test"])
     golds = " ".join(f["gold"] for f in k["facts"])
     assert not any(re.search(rf"\b{tid[-3:]}\b", golds) for tid in test_ids)
-    assert set(merge_eval.baselines_of(D, PIN)) == {"r17_v0", "r18_v1", "r19_v1"}
+    # s34 added r20_v1 as a graded baseline; it has no hand labels, so calibration skips it
+    assert set(merge_eval.baselines_of(D, PIN)) == {"r17_v0", "r18_v1", "r19_v1", "r20_v1"}
     for name in ("r17_v0", "r18_v1", "r19_v1"):
         assert set(k["calibration"][name]) == ids
     assert k["calibration"]["r19_v1"]["K3"] == "wrong"
