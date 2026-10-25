@@ -10,8 +10,8 @@ customer its turn. Each agent turn is one request:
   and their tool results) is rebuilt as Pydantic AI messages (`to_model_messages`), DeepSeek's
   reasoning put back as a thinking part on each earlier reply, which DeepSeek requires on every
   tool-call turn;
-- tau2's tools go as tool definitions only. Pydantic AI never runs one (`model_request_sync`
-  makes one request and returns), so a tool call comes back to tau2 unrun, as the subscription
+- tau2's tools go as tool definitions only. Pydantic AI never runs one (`model_request` makes
+  one request and returns), so a tool call comes back to tau2 unrun, as the subscription
   core's native mode does;
 - the reply comes back as tau2's `AssistantMessage` (`to_assistant_message`) with `raw_data` in
   the shape tau2 saves for a litellm reply, `choices[0].message.reasoning_content` holding the
@@ -30,6 +30,7 @@ errors, unscored, never fails.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import random
@@ -162,8 +163,6 @@ class _RetryTransport(httpx.AsyncHTTPTransport):
         super().__init__(retries=0)
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        import asyncio
-
         for attempt in range(ATTEMPTS):
             last = attempt == ATTEMPTS - 1
             try:
@@ -180,9 +179,21 @@ class _RetryTransport(httpx.AsyncHTTPTransport):
         raise RuntimeError("unreachable")
 
 
-# one model per thread and setting: tau2 plays conversations on worker threads, and an async
-# HTTP client belongs to the event loop of the thread that made it
+# one event loop and one model per thread and setting: tau2 plays conversations on worker
+# threads, and an async HTTP client belongs to the loop it first ran on. The loop is the
+# backend's own, never the thread's current one: the customer's SDK call on the same thread
+# replaces that between two agent turns (the smoke, 20261025T104429Z: 3 of 6 conversations hit
+# "Event loop is closed" and were played again)
 _local = threading.local()
+
+
+def _loop() -> asyncio.AbstractEventLoop:
+    loop: asyncio.AbstractEventLoop | None = getattr(_local, "loop", None)
+    if loop is None or loop.is_closed():
+        loop = asyncio.new_event_loop()
+        _local.loop = loop
+        _local.models = {}  # a client made on another loop cannot run on this one
+    return loop
 
 
 def build_model(model: str, effort: str, transport: httpx.AsyncBaseTransport | None = None) -> Any:
@@ -463,10 +474,10 @@ def generate(
 ) -> Any:
     """One agent turn: tau2's history and tools in, tau2's `AssistantMessage` out.
 
-    `model_request_sync` makes one request and never runs a tool. A reply with neither text nor
+    `model_request` makes one request, on the thread's own loop, and never runs a tool. A reply with neither text nor
     a call is asked for again (`EMPTY_RETRIES`); every attempt is charged. The reply is kept as
     the harness keeps one (`keep`)."""
-    from pydantic_ai.direct import model_request_sync
+    from pydantic_ai.direct import model_request
     from pydantic_ai.models import ModelRequestParameters
 
     from tau2_loop.llm.core import check_billing
@@ -474,6 +485,7 @@ def generate(
     check_billing()
     if _stopped is not None:
         raise BackendStoppedError(_stopped)
+    loop = _loop()
     llm = build_model(model, effort)
     history = to_model_messages(messages)
     params = ModelRequestParameters(function_tools=tool_definitions(tools))
@@ -481,7 +493,9 @@ def generate(
     for attempt in range(1 + EMPTY_RETRIES):
         started, at = time.perf_counter(), datetime.now(UTC)
         try:
-            response = model_request_sync(llm, history, model_request_parameters=params)
+            response = loop.run_until_complete(
+                model_request(llm, history, model_request_parameters=params)
+            )
         except Exception as e:
             if _status(e) == 402:
                 _stop(f"DeepSeek returned 402 (insufficient balance): {e}"[:300])

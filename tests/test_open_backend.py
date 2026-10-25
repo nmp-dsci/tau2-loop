@@ -476,3 +476,59 @@ def test_two_long_task_ids_cut_alike_get_two_trace_files() -> None:
     short = "[mobile_data_issue]airplane_mode_on[PERSONA:Easy]"
     assert trace_file(short, 1, 1) == f"{slug(short)}.json"  # a name that fit is unchanged
     assert trace_file(short, 2, 3) == f"{slug(short)}_t2.json"
+
+
+def test_a_thread_whose_event_loop_another_caller_swapped_still_reaches_deepseek(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The smoke's bug (20261025T104429Z: 3 of 6 conversations hit "Event loop is closed" and were
+    played again): the customer's SDK call on the same worker thread replaces the thread's event
+    loop between two agent turns, and a client kept from the first turn must still work."""
+    import asyncio
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    body = json.dumps(_reply(content="Hello.")).encode()
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"  # keep-alive, so the second turn reuses the connection
+
+        def do_POST(self) -> None:  # noqa: N802 - http.server's name
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a: Any) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_address[1]
+
+    class Local(open_backend._RetryTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            request.url = request.url.copy_with(scheme="http", host="127.0.0.1", port=port)
+            return await super().handle_async_request(request)
+
+    monkeypatch.setattr(open_backend, "_RetryTransport", Local)
+    monkeypatch.setenv(open_backend.KEY, SENTINEL)
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    open_backend.reset()
+    out: list[Any] = []
+
+    def turns() -> None:
+        try:
+            out.append(open_backend.generate("deepseek-flash", "high", _history()[:2], []))
+            asyncio.run(asyncio.sleep(0))  # what another caller on this thread does to its loop
+            out.append(open_backend.generate("deepseek-flash", "high", _history()[:2], []))
+        except Exception as e:  # noqa: BLE001 - reported by the assert below
+            out.append(e)
+
+    worker = threading.Thread(target=turns)
+    worker.start()
+    worker.join(30)
+    server.shutdown()
+    assert [getattr(m, "content", m) for m in out] == ["Hello.", "Hello."]
