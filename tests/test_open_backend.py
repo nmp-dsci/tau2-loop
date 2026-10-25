@@ -209,6 +209,19 @@ def test_a_reply_with_no_text_and_no_call_is_asked_for_again_and_charged(api: An
     assert open_backend.spent() == pytest.approx(2 * m.cost)
 
 
+def test_the_harness_keeps_one_call_and_no_text_beside_it_unless_the_version_keeps_them_all(
+    api: Any,
+) -> None:
+    two = [_call(), {**_call("get_details_by_id", '{"id": "C1"}'), "id": "call_2"}]
+    api(_reply(content="Let me check.", calls=two), _reply(content="Let me check.", calls=two))
+    one = open_backend.generate("deepseek-flash", "high", _history()[:2], _tools())
+    assert one.content is None and [tc.id for tc in one.tool_calls] == ["call_1"]
+    assert one.raw_data["backend"]["dropped"] == {"text": True, "calls": 1}
+    assert len(one.raw_data["choices"][0]["message"]["tool_calls"]) == 2  # DeepSeek's reply, whole
+    both = open_backend.generate("deepseek-flash", "high", _history()[:2], _tools(), parallel=True)
+    assert [tc.id for tc in both.tool_calls] == ["call_1", "call_2"]
+
+
 # ── the key and the bill ─────────────────────────────────────────────────
 
 

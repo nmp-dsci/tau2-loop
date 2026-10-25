@@ -280,7 +280,11 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
                 from tau2_loop.llm import open_backend
 
                 out = open_backend.generate(
-                    self.version.config.model, self.version.config.effort, messages, tools
+                    self.version.config.model,
+                    self.version.config.effort,
+                    messages,
+                    tools,
+                    parallel=self.version.config.parallel_calls,
                 )
             else:
                 out = generate(

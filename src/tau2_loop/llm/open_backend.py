@@ -440,11 +440,32 @@ def _status(exc: BaseException) -> int | None:
     return None
 
 
-def generate(model: str, effort: str, messages: Sequence[Any], tools: Iterable[Any]) -> Any:
+def keep(message: Any, parallel: bool) -> Any:
+    """What the harness keeps of a reply, as the subscription core's native mode does: tool calls
+    win and the text beside them is dropped, and only the first call unless the version keeps
+    them all (`parallel_calls`). `raw_data` keeps DeepSeek's reply whole, and records the drop."""
+    calls = list(message.tool_calls or [])
+    if not calls:
+        return message
+    dropped = {
+        "text": bool((message.content or "").strip()),
+        "calls": 0 if parallel else len(calls) - 1,
+    }
+    message.content = None
+    message.tool_calls = calls if parallel else calls[:1]
+    if dropped["text"] or dropped["calls"]:
+        message.raw_data["backend"]["dropped"] = dropped
+    return message
+
+
+def generate(
+    model: str, effort: str, messages: Sequence[Any], tools: Iterable[Any], parallel: bool = False
+) -> Any:
     """One agent turn: tau2's history and tools in, tau2's `AssistantMessage` out.
 
     `model_request_sync` makes one request and never runs a tool. A reply with neither text nor
-    a call is asked for again (`EMPTY_RETRIES`); every attempt is charged."""
+    a call is asked for again (`EMPTY_RETRIES`); every attempt is charged. The reply is kept as
+    the harness keeps one (`keep`)."""
     from pydantic_ai.direct import model_request_sync
     from pydantic_ai.models import ModelRequestParameters
 
@@ -471,7 +492,7 @@ def generate(model: str, effort: str, messages: Sequence[Any], tools: Iterable[A
         )
         _charge(float(message.cost or 0.0))
         if (message.content or "").strip() or message.tool_calls:
-            return message
+            return keep(message, parallel)
     assert message is not None
     raise RuntimeError(
         f"{model} gave no text and no tool call in {1 + EMPTY_RETRIES} attempts "
