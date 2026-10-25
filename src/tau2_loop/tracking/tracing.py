@@ -85,6 +85,15 @@ def _tokens(usage: Any) -> tuple[int, int]:
     return int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
 
 
+def _reasoning(raw: Any) -> str:
+    """The reasoning in a reply's `raw_data` (`choices[0].message`, a litellm reply's shape)."""
+    if not isinstance(raw, dict):
+        return ""
+    choices = raw.get("choices") or [{}]
+    msg = (choices[0] if isinstance(choices[0], dict) else {}).get("message") or {}
+    return str(msg.get("reasoning_content") or msg.get("reasoning") or "")
+
+
 def emit_spans(
     client: Any, trace_id: str, parent_id: str, messages: list[dict[str, Any]], t0: int
 ) -> int:
@@ -107,6 +116,10 @@ def emit_spans(
             start = at - int(float(secs) * 1e9) if isinstance(secs, int | float) else last
             prompt, completion = _tokens(m.get("usage"))
             calls = m.get("tool_calls") or []
+            # s36: a reply's reasoning, as tau2 keeps it in `raw_data` (a DeepSeek agent's every
+            # turn); cut like the text, and absent from a span whose reply had none
+            reasoning = _reasoning(m.get("raw_data"))
+            details = (m.get("usage") or {}).get("completion_tokens_details") or {}
             span = client.start_span(
                 name=f"{'turn' if role == 'assistant' else 'user'} {turns[role]}",
                 trace_id=trace_id,
@@ -121,6 +134,7 @@ def emit_spans(
                 outputs={
                     "text": _cut(str(m.get("content") or "")),
                     "tool_calls": [c.get("name") for c in calls],
+                    **({"reasoning": _cut(reasoning)} if reasoning else {}),
                 },
                 attributes={
                     "mlflow.chat.tokenUsage": {
@@ -129,6 +143,11 @@ def emit_spans(
                         "total_tokens": prompt + completion,
                     },
                     "cost_usd": float(m.get("cost") or 0.0),
+                    **(
+                        {"reasoning_tokens": int(details.get("reasoning_tokens") or 0)}
+                        if reasoning
+                        else {}
+                    ),
                 },
                 end_time_ns=at,
             )
@@ -193,7 +212,7 @@ def _log_conversation(meta: RunMeta, result: TaskResult, transcript: dict[str, A
                 "judge_model": meta.judge_model,
             },
             tags={
-                **required_tags(),
+                **required_tags(meta.billing),
                 "run_id": meta.run_id,
                 "domain": meta.domain,
                 "task": result.task_id,

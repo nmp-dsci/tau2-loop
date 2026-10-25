@@ -17,7 +17,13 @@
   SDK. `.env` has `BILLING=subscription` and no `ANTHROPIC_API_KEY`;
   `llm.require_live()` refuses to start otherwise and scrubs a key that tau2's
   `load_dotenv()` search pulls from `~/.env`. The demo image has `DEMO_MODE=1`
-  baked in and cannot call a model.
+  baked in and cannot call a model. **One exception** (s36, 25 Oct 2026, the person's
+  call): an answering version with `backend: pydantic_ai` (telecom v3) calls DeepSeek's
+  API through Pydantic AI (`llm/open_backend.py`) with `DEEPSEEK_API_KEY` from `~/.env`,
+  read at call time and never written to a run file; its customer, judge, the optimiser
+  and workflow_rag stay on the subscription, and `check_billing()` still runs first.
+  Every agent turn's reasoning is kept word for word in `raw_data`
+  (`choices[0].message.reasoning_content`) and the run's `trajectories.jsonl.gz`.
 - **tau2 is a pinned, unmodified submodule.** Never edit `vendor/tau2-bench`;
   route a change through our own code (`sdk_provider`, `factory`, `runner`).
 - **Neither side may know the real date, and the customer is ours.** The Claude

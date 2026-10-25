@@ -21,7 +21,10 @@ airline, retail, telecom, banking_knowledge. This project:
    through tau2's own harness — orchestrator, tools, user simulator, evaluator
    all unmodified — with **every model call on the Claude subscription** via a
    sealed core over the Claude Agent SDK (`src/tau2_loop/llm/`), in-process or
-   as a service the harness reaches over HTTP;
+   as a service the harness reaches over HTTP. One exception (s36, 25 Oct 2026, the
+   person's call): an answering version with `backend: pydantic_ai` (telecom v3) makes
+   its model call on DeepSeek's API through Pydantic AI (`llm/open_backend.py`); its
+   customer, judge and every optimiser stay on the subscription;
 2. scores it on our own committed split per domain, half the base set train and
    half test (`data/splits/`, seed 300, version 2), and keeps every run as a
    folder under `runs/`, indexed in the central MLflow (nmp-central-ai);
@@ -64,7 +67,7 @@ leaderboard submission in this build (that is M6, a separate decision).
 | Sampling | the CLI default; tau2's `temperature: 0.0` does not apply | the SDK exposes no temperature; recorded as `sampling: cli-default` on every run |
 | Trials | one per cycle for the gate (`TRIALS=` on `make loop` for more); `pass^k` over trials when `TRIALS>1` | one trial keeps a cycle inside a subscription window; the board's ≥4 trials is a submission requirement, not a loop one |
 | Tracking | MLflow 3 on the central platform (`nmp-central-ai`, http://localhost:5000; `MLFLOW_TRACKING_URI` overrides); `loop/<domain>/registry.json` is the truth | one server for the portfolio (DABStep-loop logs to the same one, experiment `dabstep-loop`); the run folder is the record, MLflow the index; the old sqlite store under `.mlflow/` is an archive |
-| Billing | `require_live()` refuses a key alongside `BILLING=subscription`, scrubs a key tau2's dotenv search injects from `~/.env`, blanks the key in the SDK child; the service image sets `BILLING=subscription` and logs in with `CLAUDE_CODE_OAUTH_TOKEN` | tau2's `utils.py` calls `load_dotenv()` with a directory search on import |
+| Billing | `require_live()` refuses a key alongside `BILLING=subscription`, scrubs a key tau2's dotenv search injects from `~/.env`, blanks the key in the SDK child; the service image sets `BILLING=subscription` and logs in with `CLAUDE_CODE_OAUTH_TOKEN`. s36: a `backend: pydantic_ai` agent reads `DEEPSEEK_API_KEY` from the environment or `~/.env` at call time (never into `os.environ`, `llm_args` or a run file), `subscription_env()` blanks it for any session with Bash, a run's `--cap` stops its DeepSeek calls (the rest unscored), and the run's `billing` tag reads `agent:deepseek-api,customer:subscription` | tau2's `utils.py` calls `load_dotenv()` with a directory search on import |
 | Deploy | DABStep-loop's pattern: ECR + App Runner, OIDC role, `workflow_run` after CI, `DEMO_MODE=1` in the Dockerfile | keyless by construction |
 | Frontend | React 18 + Vite + TS, plain CSS on `tokens.css` from DESIGN.md | the Field Guide brief; no Tailwind/DaisyUI |
 | Judge checkpoints (s11, 2026-10-02) | the judge is called only when the agent issues a write or a transfer, before it runs; never on a text reply. J0 keeps every checkpoint (golden answers are keyed by position) and marks writes and transfers `judged` (`labels.JUDGED_KINDS`): 181 calls in 174 messages, 118 of 165 conversations. `live` still marks what the retired plan judge (j1–j3) reviewed, so its replays score as they did | a call that changes something is where a wrong direction costs; a text reply can be rewritten. Every write and transfer already had a golden answer, so the set needed no new annotation |

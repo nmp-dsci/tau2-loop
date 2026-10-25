@@ -80,7 +80,7 @@ def log_run(run_dir: Path, meta: RunMeta, results: list[TaskResult]) -> str:
     with mlflow.start_run(run_name=meta.run_id) as run:
         mlflow.set_tags(
             {
-                **required_tags(),
+                **required_tags(meta.billing),
                 "domain": meta.domain,
                 "agent": meta.agent,
                 "fingerprint": meta.fingerprint,
@@ -102,8 +102,11 @@ def log_run(run_dir: Path, meta: RunMeta, results: list[TaskResult]) -> str:
                 "n_tasks": meta.n_tasks,
                 "fingerprint": meta.fingerprint,
                 "tool_mode": meta.tool_mode,
+                **({"backend": meta.backend, "cap_usd": meta.cap_usd} if meta.backend else {}),
             }
         )
+        if meta.agent_api_usd is not None:
+            mlflow.log_metric("agent_api_usd", float(meta.agent_api_usd))
         if s.get("n_scored"):
             mlflow.log_metrics(
                 {
@@ -137,7 +140,8 @@ def log_run(run_dir: Path, meta: RunMeta, results: list[TaskResult]) -> str:
                 key = f"task_{r.task_id}_t{r.trial}"[:250]
                 key = "".join(ch if ch.isalnum() or ch in "_-./ " else "_" for ch in key)
                 mlflow.log_metric(key, 1.0 if r.correct else 0.0)
-        for name in ("run.json", "results.jsonl"):
+        # s36: an open-backend run's trajectory file, the training source (ConvFinQA-agent's name)
+        for name in ("run.json", "results.jsonl", "trajectories.jsonl.gz"):
             if (run_dir / name).exists():
                 mlflow.log_artifact(str(run_dir / name))
         if (run_dir / "agent").is_dir():

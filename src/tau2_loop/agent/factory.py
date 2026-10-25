@@ -34,6 +34,12 @@ Since s16 a version whose `agent.yaml` names `workflows: rN` gets two harness to
 asks the model again with the result, so tau2 never sees them and they change nothing it grades;
 the calls and results stay in the agent's own history, and are recorded under
 `raw_data["tau2_loop"]["workflow"]`. A live conversation (`eval/live.py`) also streams them.
+
+Since s36 a version whose `agent.yaml` says `backend: pydantic_ai` makes the same one call per
+attempt on DeepSeek's API through Pydantic AI (`llm/open_backend.py`) instead of tau2's
+`generate()`: the same composed prompt, history and tools, the reply as tau2's `AssistantMessage`
+with DeepSeek's reasoning in its `raw_data`. Everything around the call (hooks, checks, workflow
+tools) is unchanged; the litellm route, the effort parameter and the service are not used.
 """
 
 from __future__ import annotations
@@ -73,6 +79,20 @@ from tau2_loop.llm.core import NATIVE_PARALLEL, TOOL_MODE_PARAM
 AGENT_NAME = "tau2_loop"
 VERSION_KEY = "tau2_loop_version"
 SERVICE_PREFIX = "openai/"
+
+
+def system_prompt_for(version: AgentVersion, domain_policy: str) -> str:
+    """The prompt a version is sent with this policy: the one composition, shared by the agent,
+    the viewer's `GET /api/runs/{id}/agent` and a run's trajectory file (s36)."""
+    return compose(
+        version.system_prompt,
+        domain_policy,
+        load_helper(version),
+        identity=version.config.identity_note,
+        customer_tools=customer_tools_note(version.domain)
+        if version.config.customer_tools
+        else None,
+    ).text
 
 
 def with_effort(llm_args: dict[str, Any], effort: str) -> dict[str, Any]:
@@ -189,13 +209,15 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
         self.llm = llm or sdk_model(version.config.model)
         args = {k: v for k, v in (llm_args or {}).items() if k != VERSION_KEY}
         self.llm_args = with_effort(args, version.config.effort)
-        if version.config.tool_mode == "native":
+        # s36: DeepSeek through Pydantic AI makes the call; the litellm arguments are not used
+        self.backend = version.config.backend
+        if version.config.tool_mode == "native" and not self.backend:
             self.llm_args = with_tool_mode(
                 self.llm_args,
                 service=self.llm.startswith(SERVICE_PREFIX),
                 parallel=version.config.parallel_calls,
             )
-        if self.llm.startswith(SERVICE_PREFIX):
+        if self.llm.startswith(SERVICE_PREFIX) and not self.backend:
             token = settings().agent_service_token.get_secret_value()
             if not token:
                 raise RuntimeError(
@@ -253,13 +275,21 @@ class LoopAgent(HalfDuplexAgent[LoopAgentState]):  # type: ignore[misc]
             call = call + [SystemMessage(role="system", content=reminder)]
 
         def ask(messages: list[Any], workflow: bool = True) -> AssistantMessage:
-            out = generate(
-                model=self.llm,
-                tools=self.tools + (self.workflow_tools if workflow else []),
-                messages=messages,
-                call_name="tau2_loop_agent",
-                **self.llm_args,
-            )
+            tools = self.tools + (self.workflow_tools if workflow else [])
+            if self.backend:
+                from tau2_loop.llm import open_backend
+
+                out = open_backend.generate(
+                    self.version.config.model, self.version.config.effort, messages, tools
+                )
+            else:
+                out = generate(
+                    model=self.llm,
+                    tools=tools,
+                    messages=messages,
+                    call_name="tau2_loop_agent",
+                    **self.llm_args,
+                )
             state.n_model_calls += 1
             if looks_unparsed(out.content):
                 state.parse_failures += 1
