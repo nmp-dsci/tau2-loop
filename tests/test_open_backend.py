@@ -516,6 +516,7 @@ def test_a_thread_whose_event_loop_another_caller_swapped_still_reaches_deepseek
     monkeypatch.setattr(open_backend, "_RetryTransport", Local)
     monkeypatch.setenv(open_backend.KEY, SENTINEL)
     monkeypatch.delenv("DEMO_MODE", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     open_backend.reset()
     out: list[Any] = []
 
