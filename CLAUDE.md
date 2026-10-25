@@ -55,7 +55,8 @@
   native tools, one call a reply), so the champion and every fork of it call DeepSeek's API under the
   billing exception above. Like for like with v2 (split v3, seed 300, the Haiku 5.5 customer at high,
   `tau2_loop/2`): train 61/74 (`20261025T120059Z`, the smoke `20261025T104429Z` extended), test 31/40
-  (`20261025T120225Z`) against v2's 45 and 24 (fixed 30, broke 7, McNemar p = 0.0002 over both);
+  (`20261025T120225Z`) against v2's 45 and 24. The gate's one-sided McNemar clears each split alone
+  (train fixed 21, broke 5, p = 0.001; test fixed 9, broke 2, p = 0.033; two-sided over both p = 0.0002);
   Hard persona 20 of 36. The model and the tool mode changed together. Step one cost $0.93 on
   DeepSeek. Results and the 22 failures: `.lavish/s37_v3-deepseek-results.html`. Only the agent's
   turns train a student in tau-telecom-sft (its mask), so the Claude customer is fine there (the person's call).
