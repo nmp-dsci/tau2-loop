@@ -109,7 +109,7 @@ rag_library/<domain>/rN/  a concurrent version's library (s21): commits.jsonl (a
                           seed.json (pinned); locks.json is runtime only (git-ignored)
 src/tau2_loop/
   config.py               paths, Settings (boots keyless), DOMAINS, split seed
-  llm/                    core (sealed: models, billing check, env allow-list, one SDK answer) · prompting (contract)
+  llm/                    core (sealed: models, billing check, env allow-list, one SDK answer) · prompting (contract) · open_backend (s36: Pydantic AI, DeepSeek)
                           service (POST /v1/chat/completions over core) · sdk_provider (litellm CustomLLM → core)
                           __init__ (the harness's side: prefix, dotenv scrub, the optimiser's env, redaction)
   agent/                  versions (per domain, fingerprint) · factory (LoopAgent, registered as "tau2_loop")
