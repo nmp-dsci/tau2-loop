@@ -33,6 +33,9 @@ FROZEN = ("agent.yaml",)
 # native: the model is given the tools and calls them, and each call comes back to tau2 unrun.
 TOOL_MODES = ("json", "native")
 WORKFLOW_VIEWS = (None, "full", "steps")
+# s36: who makes the agent's model call. None is the subscription core (`claude-sdk/`), every
+# version before v3 of telecom; `pydantic_ai` is DeepSeek through Pydantic AI (`llm/open_backend`)
+BACKENDS = (None, "pydantic_ai")
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,10 @@ class AgentConfig:
     # them (the evidence stays in the library for review). Off unless set, so earlier versions
     # keep their bytes
     workflow_view: str | None = None
+    # s36 (telecom v3, the person's call): the agent's model call on DeepSeek's API through
+    # Pydantic AI (`llm/open_backend.py`) in place of the subscription core; tools native only.
+    # None, the subscription, for every earlier version, so they keep their bytes
+    backend: str | None = None
 
     def __post_init__(self) -> None:
         if self.tool_mode not in TOOL_MODES:
@@ -71,6 +78,18 @@ class AgentConfig:
             )
         if self.parallel_calls and self.tool_mode != "native":
             raise ValueError("parallel_calls needs tool_mode: native")
+        if self.backend not in BACKENDS:
+            raise ValueError(f"backend must be one of {BACKENDS}, got {self.backend!r}")
+        from tau2_loop.llm import open_backend
+
+        if self.backend == open_backend.BACKEND:
+            open_backend.check(self.model, self.effort)
+            if self.tool_mode != "native":
+                raise ValueError(
+                    f"backend {self.backend} passes the tools natively: tool_mode: native"
+                )
+        elif open_backend.is_open_model(self.model):
+            raise ValueError(f"{self.model} runs on backend {open_backend.BACKEND} only")
 
     def yaml(self) -> str:
         """The fields as `agent.yaml` lines, a field left at None omitted."""
@@ -249,6 +268,7 @@ def fork_version(
     why: str | None = None,
     customer_tools: bool | None = None,
     workflow_view: str | None = None,
+    backend: str | None = None,
 ) -> AgentVersion:
     """A hand-made version: `source`'s surfaces unchanged, a different `agent.yaml`. `why` (s22)
     is the reason the person or the session gave, kept in its diagnosis beside what changed.
@@ -273,11 +293,13 @@ def fork_version(
         workflows=workflows or cfg.workflows,
         customer_tools=cfg.customer_tools if customer_tools is None else customer_tools,
         workflow_view=workflow_view or cfg.workflow_view,
+        # s36: a fork keeps its source's backend unless given another
+        backend=backend or cfg.backend,
     )
     if new == cfg:
         raise ValueError(
             f"a fork of {domain}/{source} needs a different model, effort, retrieval, tool mode, "
-            "identity note, parallel calls, workflows, customer tools or workflow view"
+            "identity note, parallel calls, workflows, customer tools, workflow view or backend"
         )
     name = next_version_name(domain)
     dest = version_dir(domain, name)
@@ -298,6 +320,7 @@ def fork_version(
             "workflows",
             "customer_tools",
             "workflow_view",
+            "backend",
         )
         if getattr(cfg, k) != getattr(new, k)
     ]

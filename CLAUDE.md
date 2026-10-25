@@ -17,7 +17,13 @@
   SDK. `.env` has `BILLING=subscription` and no `ANTHROPIC_API_KEY`;
   `llm.require_live()` refuses to start otherwise and scrubs a key that tau2's
   `load_dotenv()` search pulls from `~/.env`. The demo image has `DEMO_MODE=1`
-  baked in and cannot call a model.
+  baked in and cannot call a model. **One exception** (s36, 25 Oct 2026, the person's
+  call): an answering version with `backend: pydantic_ai` (telecom v3) calls DeepSeek's
+  API through Pydantic AI (`llm/open_backend.py`) with `DEEPSEEK_API_KEY` from `~/.env`,
+  read at call time and never written to a run file; its customer, judge, the optimiser
+  and workflow_rag stay on the subscription, and `check_billing()` still runs first.
+  Every agent turn's reasoning is kept word for word in `raw_data`
+  (`choices[0].message.reasoning_content`) and the run's `trajectories.jsonl.gz`.
 - **tau2 is a pinned, unmodified submodule.** Never edit `vendor/tau2-bench`;
   route a change through our own code (`sdk_provider`, `factory`, `runner`).
 - **Neither side may know the real date, and the customer is ours.** The Claude
@@ -44,7 +50,17 @@
   (`20261004T222002Z`, test `20261004T113341Z`). v3 before that (4 Oct, the person's call): v1's
   prompt with AllTools (`alltools_minilm`), native calls and the identity note. Loop cycles start
   from v8; CI's gate needs the sandbox and MiniLM to re-score it (`.github/workflows/ci.yml`).
-- **Telecom's champion is v2** (16 Oct 2026, the person's call, a `model swap`, s27): v1 on
+- **Telecom's champion is v3** (26 Oct 2026, the person's call, a `model swap`, s36–s37): v2's
+  prompt unchanged on `deepseek-flash` (thinking high) through Pydantic AI (`backend: pydantic_ai`,
+  native tools, one call a reply), so the champion and every fork of it call DeepSeek's API under the
+  billing exception above. Like for like with v2 (split v3, seed 300, the Haiku 5.5 customer at high,
+  `tau2_loop/2`): train 61/74 (`20261025T120059Z`, the smoke `20261025T104429Z` extended), test 31/40
+  (`20261025T120225Z`) against v2's 45 and 24. The gate's one-sided McNemar clears each split alone
+  (train fixed 21, broke 5, p = 0.001; test fixed 9, broke 2, p = 0.033; two-sided over both p = 0.0002);
+  Hard persona 20 of 36. The model and the tool mode changed together. Step one cost $0.93 on
+  DeepSeek. Results and the 22 failures: `.lavish/s37_v3-deepseek-results.html`. Only the agent's
+  turns train a student in tau-telecom-sft (its mask), so the Claude customer is fine there (the person's call).
+  v2 before it (16 Oct 2026, the person's call, a `model swap`, s27): v1 on
   `claude-haiku-5-5` at high effort, its prompt unchanged, played against a Haiku 5.5 customer at high
   (`runner.DOMAIN_CUSTOMER`, telecom's default from s27) on telecom split v3: all 114 drawn afresh, seed
   300, 74 train / 40 test by symptom × persona (`config.STRATA`; v1's sides not kept, the v1 and v2 lists

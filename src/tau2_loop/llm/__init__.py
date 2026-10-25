@@ -2,7 +2,8 @@
 
 Every model call in this repo — the agent under test, tau2's user simulator,
 tau2's NL-assertion judge, the optimiser — goes through the Claude Agent SDK on
-the subscription. Nothing builds an Anthropic client or reads an API key. The
+the subscription, except one: an answering version with `backend: pydantic_ai`
+calls DeepSeek's API (s36, `open_backend.py`). Nothing builds an Anthropic client or reads an API key. The
 demo image cannot call a model at all: `require_live()` raises under DEMO_MODE
 before any session starts. The model names, the effort and the billing check
 live in `core.py`, the sealed part the agent service ships alone; this module
@@ -105,13 +106,15 @@ def subscription_env() -> dict[str, str]:
     session. The SDK merges this mapping over the parent's environment, so
     omitting a key is not enough — it has to be blanked.
     """
-    drop = {"ANTHROPIC_API_KEY", "CLAUDECODE"}
+    drop = {"ANTHROPIC_API_KEY", "CLAUDECODE", "DEEPSEEK_API_KEY"}
     env = {
         k: v for k, v in os.environ.items() if k not in drop and not k.startswith("CLAUDE_CODE_")
     }
     if settings().billing == "subscription":
         env["ANTHROPIC_API_KEY"] = ""
         env["CLAUDECODE"] = ""
+    # s36: the DeepSeek agent's key is the agent's alone; a session with Bash never holds it
+    env["DEEPSEEK_API_KEY"] = ""
     # DABStep-loop s02: the CLI names every session with a separate Haiku call
     # (≈1.9k tokens). Here every model call is its own session, so that call
     # would be paid per turn; this switch stops it.

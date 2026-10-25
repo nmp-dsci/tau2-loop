@@ -12,6 +12,7 @@ banking the viewer shows it beside pass/fail as a second accuracy metric,
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass, field
@@ -187,6 +188,18 @@ def slug(task_id: str) -> str:
     """A filesystem-safe name for a task id (telecom ids carry brackets, pipes and colons)."""
     s = re.sub(r"[^A-Za-z0-9_.-]+", "_", task_id).strip("_")
     return s[:80] if len(s) > 80 else s
+
+
+def trace_file(task_id: str, trial: int, trials: int) -> str:
+    """A conversation's file under `traces/`, one per task and trial (s36). A slug cut at 80
+    characters ends in a hash of the whole id: two long telecom ids cut alike used to share a
+    file and overwrite it (v2's test run kept 33 files for 40 conversations). An id that fits
+    keeps the name `slug` gives it, so every older name stays as it was."""
+    full = re.sub(r"[^A-Za-z0-9_.-]+", "_", task_id).strip("_")
+    stem = (
+        full if len(full) <= 80 else f"{full[:71]}_{hashlib.sha1(task_id.encode()).hexdigest()[:8]}"
+    )
+    return f"{stem}.json" if trials == 1 else f"{stem}_t{trial}.json"
 
 
 def from_simulation(sim: Any, task: Any, trace_name: str) -> TaskResult:

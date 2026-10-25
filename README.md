@@ -1,8 +1,9 @@
 # tau2-loop
 
 A policy-following customer-support agent for [τ²-bench](https://github.com/sierra-research/tau2-bench)
-on four domains (airline, retail, telecom, banking), run **entirely on the Claude
-subscription** through the Claude Agent SDK, no API key — the agent on the model its
+on four domains (airline, retail, telecom, banking), run **on the Claude
+subscription** through the Claude Agent SDK, no API key (one exception: telecom v3's
+answering agent calls DeepSeek's API, see `AGENTS.md`) — the agent on the model its
 version's `agent.yaml` names (Sonnet 5 on airline since v3, Haiku 4.5 elsewhere), the
 user simulator and judge on Haiku 4.5 — with a scored, versioned, self-improving
 optimisation loop: the same mechanics as [DABStep-loop](https://github.com/nmp-dsci/DABStep-loop).

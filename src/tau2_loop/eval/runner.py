@@ -35,8 +35,8 @@ from tau2_loop.eval.results import (
     TaskResult,
     from_simulation,
     read_results,
-    slug,
     summarise,
+    trace_file,
     write_results,
 )
 from tau2_loop.llm import EFFORT, HARNESS, redact_tree, resolve_model, sdk_model
@@ -139,6 +139,21 @@ class RunMeta:
     composed_of: list[str] | None = None
     # native only: every tool call of a reply kept (s14 P0a); False on every run before it
     parallel_calls: bool = False
+    # s36: who made the agent's calls (`agent.yaml` `backend`; None, the subscription, before
+    # it), the run's DeepSeek cap and what the agent's calls cost on DeepSeek's card
+    backend: str | None = None
+    cap_usd: float | None = None
+    agent_api_usd: float | None = None
+
+    @property
+    def billing(self) -> str:
+        """The run's `billing` tag (PLATFORM.md): the agent's route, then the customer's."""
+        from tau2_loop.config import settings
+        from tau2_loop.llm import open_backend
+
+        if self.backend == open_backend.BACKEND:
+            return f"agent:{open_backend.BILLING},customer:{settings().billing}"
+        return settings().billing
 
 
 def agent_route() -> tuple[str, str | None]:
@@ -148,6 +163,15 @@ def agent_route() -> tuple[str, str | None]:
         return "in-process", None
     host = url.split("://", 1)[-1].split("/", 1)[0]
     return f"service:{host}", url
+
+
+def agent_model(version: AgentVersion) -> str:
+    """The agent's model as a run records it: `claude-sdk/<id>`, or the open backend's route."""
+    from tau2_loop.llm import open_backend
+
+    if version.config.backend == open_backend.BACKEND:
+        return open_backend.route(version.config.model)
+    return sdk_model(version.config.model)
 
 
 def new_run_id(domain: str, version: AgentVersion, split: str) -> str:
@@ -172,10 +196,10 @@ def _run_config(
 
     # tau2 writes these into tau2_results.json: provenance only, never a secret
     # (the service's bearer token is added by the factory at run time).
-    llm_agent = sdk_model(version.config.model)
+    llm_agent = agent_model(version)
     llm_args_agent: dict[str, Any] = with_effort({VERSION_KEY: version.ref}, version.config.effort)
     _, url = agent_route()
-    if url:
+    if url and not version.config.backend:
         llm_agent = SERVICE_PREFIX + resolve_model(version.config.model)
         llm_args_agent |= {"api_base": f"{url}/v1", "timeout": SERVICE_TIMEOUT_S}
     kwargs: dict[str, Any] = {
@@ -227,10 +251,12 @@ def run_eval(
     seed: int = SPLIT_SEED,
     user_model: str | None = None,
     user_effort: str | None = None,
+    cap_usd: float | None = None,
 ) -> tuple[RunMeta, list[TaskResult]]:
     """`user_effort` (s23, the person's Q7) sets the customer's effort for a side experiment; a run
     with another than its domain's (`customer`) is never a record (`loop.run._covers`), as with
-    another model. Left out, both are the domain's."""
+    another model. Left out, both are the domain's. `cap_usd` (s36) stops a `backend:
+    pydantic_ai` agent's DeepSeek calls at that many dollars: the rest of the run is unscored."""
     if domain not in DOMAINS and domain != SMOKE_DOMAIN:
         raise ValueError(f"domain must be one of {DOMAINS + (SMOKE_DOMAIN,)}, got {domain!r}")
     default_model, default_effort = customer(domain)
@@ -242,6 +268,13 @@ def run_eval(
 
         require_live()  # before a run folder exists: a refused run leaves nothing behind
     version = load_version(domain, agent)
+    if version.config.backend and agent_route()[1]:
+        raise ValueError(
+            f"{version.ref} calls DeepSeek in-process (backend {version.config.backend}); "
+            "unset AGENT_SERVICE_URL"
+        )
+    if cap_usd is not None and not version.config.backend:
+        raise ValueError("a spend cap is for an agent on backend pydantic_ai")
     ids = task_ids or split_ids(domain, split)
     run_id = new_run_id(domain, version, split if not task_ids else "custom")
     run_dir = RUNS_DIR / run_id
@@ -251,7 +284,7 @@ def run_eval(
         domain=domain,
         agent=version.name,
         fingerprint=version.fingerprint,
-        model=sdk_model(version.config.model),
+        model=agent_model(version),
         user_model=sdk_model(user_model),
         judge_model=sdk_model(JUDGE_MODEL),
         split=split,
@@ -273,6 +306,8 @@ def run_eval(
         retrieval=version.retrieval,
         sim_rules=None if dry_run else SIM_RULES,
         parallel_calls=version.config.parallel_calls,
+        backend=version.config.backend,
+        cap_usd=cap_usd,
     )
     _write_meta(run_dir, meta)
     (run_dir / "agent").mkdir(exist_ok=True)
@@ -292,9 +327,11 @@ def run_eval(
         return _finish(run_dir, meta, results, track=False)
 
     from tau2_loop.agent.factory import register
+    from tau2_loop.llm import open_backend
 
     register()
     _point_judge_at_sdk()
+    open_backend.reset(cap_usd)  # this run's DeepSeek spend only, against its own cap
 
     from tau2.evaluator.evaluator import EvaluationType
     from tau2.runner.batch import run_tasks
@@ -311,9 +348,15 @@ def run_eval(
         console_display=False,
     )
     results = []
+    if version.config.backend:
+        meta.agent_api_usd = round(open_backend.spent(), 6)
+        try:
+            _write_trajectories(run_dir, domain, version, tau2_results.simulations)
+        except Exception as e:  # noqa: BLE001 - tau2_results.json holds every message to rebuild it
+            console.print(f"[red]trajectories not written ({type(e).__name__}: {e})[/]")
     for sim in tau2_results.simulations:
         trial = int(sim.trial or 0) + 1
-        name = f"{slug(sim.task_id)}.json" if trials == 1 else f"{slug(sim.task_id)}_t{trial}.json"
+        name = trace_file(sim.task_id, trial, trials)
         (run_dir / "traces" / name).write_text(
             json.dumps(sim.model_dump(mode="json"), ensure_ascii=False, indent=1)
         )
@@ -330,6 +373,21 @@ def run_eval(
             + (f"  [red]{r.error}[/]" if r.error else "")
         )
     return _finish(run_dir, meta, results, track=track)
+
+
+def _write_trajectories(
+    run_dir: Path, domain: str, version: AgentVersion, simulations: list[Any]
+) -> None:
+    """s36: `trajectories.jsonl.gz`, one line per conversation as the agent saw it, in Pydantic
+    AI's messages with every reply's reasoning: the training source, as ConvFinQA-agent's."""
+    from tau2.registry import registry
+
+    from tau2_loop.agent.factory import system_prompt_for
+    from tau2_loop.llm import open_backend
+
+    prompt = system_prompt_for(version, registry.get_env_constructor(domain)().get_policy())
+    rows = [open_backend.trajectory(prompt, sim) for sim in simulations]
+    open_backend.write_trajectories(run_dir / open_backend.TRAJECTORIES, rows)
 
 
 def _finish(
@@ -359,7 +417,7 @@ def _finish(
 
 
 def extend_run(
-    base_run_id: str, concurrency: int = 3, note: str = ""
+    base_run_id: str, concurrency: int = 3, note: str = "", cap_usd: float | None = None
 ) -> tuple[RunMeta, list[TaskResult]]:
     """Bring a scored run up to its split's current tasks without replaying what it scored: play
     only the tasks the split has gained (a custom run of them), then join the two into one run of
@@ -399,6 +457,7 @@ def extend_run(
         f"to {base_run_id}",
         user_model=base.user_model,
         user_effort=base.user_effort or USER_EFFORT,
+        cap_usd=cap_usd,
     )
     return compose_runs(base_run_id, ext.run_id)
 
@@ -422,6 +481,7 @@ def compose_runs(base_run_id: str, ext_run_id: str) -> tuple[RunMeta, list[TaskR
         "user_effort",
         "retrieval",
         "sim_rules",
+        "backend",
     )
     differ = [k for k in same if getattr(base, k) != getattr(ext, k)]
     if differ:
@@ -456,6 +516,15 @@ def compose_runs(base_run_id: str, ext_run_id: str) -> tuple[RunMeta, list[TaskR
         "simulation_index": None,
     }
     (run_dir / "tau2_results.json").write_text(json.dumps(joined, ensure_ascii=False))
+    if base.backend:
+        from tau2_loop.llm import open_backend
+
+        traj = [
+            row
+            for r in (base_run_id, ext_run_id)
+            for row in open_backend.read_trajectories(RUNS_DIR / r / open_backend.TRAJECTORIES)
+        ]
+        open_backend.write_trajectories(run_dir / open_backend.TRAJECTORIES, traj)
     order = {t: i for i, t in enumerate(ids)}
     rows = sorted(base_rows + ext_rows, key=lambda r: (order[r.task_id], r.trial))
     write_results(run_dir / "results.jsonl", rows)
@@ -473,6 +542,10 @@ def compose_runs(base_run_id: str, ext_run_id: str) -> tuple[RunMeta, list[TaskR
             else f"{base.code_sha}+{ext.code_sha}",
             "summary": asdict(summary),
             "mlflow_run_id": None,  # each part is logged as it was played
+            "cap_usd": None,
+            "agent_api_usd": round((base.agent_api_usd or 0) + (ext.agent_api_usd or 0), 6)
+            if base.backend
+            else None,
             "note": f"{base_run_id} ({len(base.task_ids)} tasks) joined with {ext_run_id} "
             f"({len(ext.task_ids)} tasks): split v{split_version(base.domain)}",
             "composed_of": [base_run_id, ext_run_id],

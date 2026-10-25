@@ -75,9 +75,14 @@ def fork(
         str | None,
         typer.Option(help="how find_workflow shows a job: full, or steps (no quotes or basis)"),
     ] = None,
+    backend: Annotated[
+        str | None,
+        typer.Option(help="who makes the agent's model call: pydantic_ai (DeepSeek's API, s36)"),
+    ] = None,
 ) -> None:
     """A new version with the champion's surfaces and a different model, effort, retrieval,
-    tool mode, identity note, parallel calls, workflow library, customer tools or workflow view."""
+    tool mode, identity note, parallel calls, workflow library, customer tools, workflow view or
+    backend."""
     from tau2_loop.agent.versions import fork_version
     from tau2_loop.tracking.registry import champion_name
 
@@ -101,6 +106,7 @@ def fork(
         why=why,
         customer_tools=customer_tools,
         workflow_view=workflow_view,
+        backend=backend,
     )
     console.print(
         f"agents/{domain}/{v.name}: {src}'s surfaces · model {v.config.model} · "
@@ -108,7 +114,8 @@ def fork(
         f"{v.retrieval or 'none'} · identity note {v.config.identity_note} · parallel calls "
         f"{v.config.parallel_calls} · workflows {v.config.workflows or 'none'} · "
         f"customer tools {v.config.customer_tools} · workflow view "
-        f"{v.config.workflow_view or 'full'} · fingerprint {v.fingerprint}"
+        f"{v.config.workflow_view or 'full'} · backend {v.config.backend or 'subscription'} · "
+        f"fingerprint {v.fingerprint}"
     )
 
 
@@ -376,6 +383,12 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
             help="the customer's effort (default: the domain's, `runner.customer`); a run with another is an experiment (s23)"
         ),
     ] = None,
+    cap: Annotated[
+        float | None,
+        typer.Option(
+            help="backend pydantic_ai only: stop the run's DeepSeek calls at this many US dollars (s36)"
+        ),
+    ] = None,
 ) -> None:
     """Run an agent version over a split of one domain and score it."""
     from tau2_loop.agent.versions import base_version
@@ -393,6 +406,7 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
         dry_run=dry_run,
         user_model=user_model,
         user_effort=user_effort,
+        cap_usd=cap,
     )
     console.print(f"run: runs/{meta.run_id}")
 
@@ -408,7 +422,17 @@ def score(run_id: str) -> None:
 
 
 @app.command()
-def extend(run_id: str, concurrency: int = 3, note: str = "") -> None:
+def extend(
+    run_id: str,
+    concurrency: int = 3,
+    note: str = "",
+    cap: Annotated[
+        float | None,
+        typer.Option(
+            help="backend pydantic_ai only: stop the run's DeepSeek calls at this many US dollars (s36)"
+        ),
+    ] = None,
+) -> None:
     """Play only the tasks of the run's split it has not scored (the tasks the split has gained
     since, or the rest of a run of some of them, as a smoke), and join them to it: one run of the
     whole split. A champion's train run extended this way stays its record."""
@@ -416,7 +440,7 @@ def extend(run_id: str, concurrency: int = 3, note: str = "") -> None:
     from tau2_loop.tracking.registry import promote as _promote
     from tau2_loop.tracking.registry import read_registry
 
-    meta, _ = extend_run(run_id, concurrency, note=note)
+    meta, _ = extend_run(run_id, concurrency, note=note, cap_usd=cap)
     if (read_registry(meta.domain).get("champion") or {}).get("run_id") == run_id:
         _promote(meta.run_id, kind="re-baseline")  # the same bytes on the split's new cut
         console.print(f"{meta.domain}'s champion {meta.agent} is now scored on runs/{meta.run_id}")

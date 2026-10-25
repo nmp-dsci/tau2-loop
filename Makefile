@@ -31,8 +31,8 @@ splits: ## cut each domain's base set in half, train / test (seed 300) → data/
 documents: ## index banking's knowledge base (title and size per document) → data/tasks, for Evals
 	uv run tau2loop documents
 
-fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true, PARALLEL_CALLS=true, CUSTOMER_TOOLS=true, WORKFLOWS=rN or WORKFLOW_VIEW=steps, by hand; WHY= says why, kept in its diagnosis.json
-	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(WORKFLOWS),--workflows $(WORKFLOWS)) $(if $(filter true,$(CUSTOMER_TOOLS)),--customer-tools) $(if $(WORKFLOW_VIEW),--workflow-view $(WORKFLOW_VIEW)) $(if $(WHY),--why "$(WHY)")
+fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFORT=, RETRIEVAL=, TOOL_MODE=, IDENTITY_NOTE=true, PARALLEL_CALLS=true, CUSTOMER_TOOLS=true, WORKFLOWS=rN, WORKFLOW_VIEW=steps or BACKEND=pydantic_ai (DeepSeek's API, s36), by hand; WHY= says why, kept in its diagnosis.json
+	uv run tau2loop fork --domain $(DOMAIN) $(if $(FROM),--from $(FROM)) $(if $(MODEL),--model $(MODEL)) $(if $(EFFORT),--effort $(EFFORT)) $(if $(RETRIEVAL),--retrieval $(RETRIEVAL)) $(if $(TOOL_MODE),--tool-mode $(TOOL_MODE)) $(if $(filter true,$(IDENTITY_NOTE)),--identity-note) $(if $(filter true,$(PARALLEL_CALLS)),--parallel-calls) $(if $(WORKFLOWS),--workflows $(WORKFLOWS)) $(if $(filter true,$(CUSTOMER_TOOLS)),--customer-tools) $(if $(WORKFLOW_VIEW),--workflow-view $(WORKFLOW_VIEW)) $(if $(BACKEND),--backend $(BACKEND)) $(if $(WHY),--why "$(WHY)")
 
 rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (default r2): r2 one at a time in id order, r3 with WORKERS= (default its own 4); resumable (TASKS= some, LIMIT=); SPLIT=test researches the test questions too (r3, the person's call, 8 Oct 2026)
 	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS)) --split $(SPLIT)
@@ -76,8 +76,8 @@ platform-status: ## preflight: the central MLflow must answer /health (runs befo
 smoke: platform-status ## the adapter on the mock domain (10 tasks, AGENT=v0): agent, user simulator and judge on the subscription
 	uv run tau2loop smoke --agent $(or $(AGENT),v0) --concurrency $(CONCURRENCY)
 
-eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks; USER_MODEL= the customer; USER_EFFORT= its effort, s23; NOTE= the run's note)
-	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t)) $(if $(USER_MODEL),--user-model $(USER_MODEL)) $(if $(USER_EFFORT),--user-effort $(USER_EFFORT)) $(if $(NOTE),--note "$(NOTE)")
+eval: platform-status ## run AGENT on DOMAIN's SPLIT (TRIALS=, CONCURRENCY=; TASKS="task_1 task_2" for some of its tasks; USER_MODEL= the customer; USER_EFFORT= its effort, s23; NOTE= the run's note; CAP= dollars, a DeepSeek agent's spend cap, s36)
+	uv run tau2loop eval --domain $(DOMAIN) $(if $(AGENT),--agent $(AGENT)) --split $(SPLIT) --trials $(TRIALS) --concurrency $(CONCURRENCY) $(foreach t,$(TASKS),--task $(t)) $(if $(USER_MODEL),--user-model $(USER_MODEL)) $(if $(USER_EFFORT),--user-effort $(USER_EFFORT)) $(if $(NOTE),--note "$(NOTE)") $(if $(CAP),--cap $(CAP))
 
 baselines: platform-status ## each domain's base version on its train split, one trial each: v0, or the oldest version where v0 was retired (banking, v1)
 	for d in airline retail telecom banking_knowledge; do uv run tau2loop eval --domain $$d --split train --concurrency $(CONCURRENCY) || exit 1; done
@@ -85,8 +85,8 @@ baselines: platform-status ## each domain's base version on its train split, one
 score: ## summarise RUN=<run id>
 	uv run tau2loop score $(RUN)
 
-extend: platform-status ## play only the tasks RUN=<run id>'s split has gained since, joined to it as one run of the split (a champion's train run stays its record)
-	uv run tau2loop extend $(RUN) --concurrency $(CONCURRENCY) $(if $(NOTE),--note "$(NOTE)")
+extend: platform-status ## play only the tasks RUN=<run id>'s split has gained since, joined to it as one run of the split (a champion's train run stays its record; CAP= as for eval)
+	uv run tau2loop extend $(RUN) --concurrency $(CONCURRENCY) $(if $(NOTE),--note "$(NOTE)") $(if $(CAP),--cap $(CAP))
 
 rescore: ## replay RUN=<run id> through tau2's evaluators offline and compare verdicts
 	uv run tau2loop rescore $(RUN)
