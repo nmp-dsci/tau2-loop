@@ -261,7 +261,16 @@ def test_the_committed_banking_history_leaves_the_checks_off() -> None:
         .json()["banking_knowledge"]
     )
     v = {x["version"]: x for x in h["versions"]}
-    assert [k for k, x in v.items() if x["full"]] == ["v1", "v2", "v3", "v4", "v7", "v8", "v23"]
+    assert [k for k, x in v.items() if x["full"]] == [
+        "v1",
+        "v2",
+        "v3",
+        "v4",
+        "v7",
+        "v8",
+        "v23",
+        "v30",
+    ]
     assert all(
         (x["train"]["n"], x["train"]["of"], x["test"]["n"], x["test"]["of"]) == (60, 60, 37, 37)
         for x in v.values()

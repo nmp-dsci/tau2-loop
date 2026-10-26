@@ -35,7 +35,7 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 | v27 | no | tool change | v26 | 0 of 1 played | 3 of 17 played | not gated |
 | v28 | no | workflow tools | v27 | 1 of 5 played | — | not gated |
 | v29 | no | workflow tools | v27 | 2 of 5 played | — | not gated |
-| v30 | yes | workflow tools | v27 | 49/60 | 24/37 | not gated |
+| v30 | yes | workflow tools | v27 | 49/60 | 24/37 | promoted by hand |
 
 ## v1 · on the Optimise tab
 
@@ -84,7 +84,7 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Played:** train 37 of 60 · test 12 of 37 · sonnet-5 · medium · not gated
 - **Runs:** `20261006T163602Z_banking_knowledge_v7_train`, `20261006T163559Z_banking_knowledge_v7_test`
 
-## v8 · on the Optimise tab · champion
+## v8 · on the Optimise tab
 
 - **Made:** workflow tools from v7: workflows: r1 → r3
 - **Played:** train 38 of 60 · test 21 of 37 · sonnet-5 · medium · promoted by hand
@@ -241,9 +241,9 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Why:** s32 E5 (the person's call, 21 Oct 2026): v27 reading r19's library with merge-bench option D-lean trial 1's debit dispute job in place of r19 v3; held, scored on the job's five train conversations only, as v28 was for option B
 - **Runs:** `20261020T230653Z_banking_knowledge_v29_custom`
 
-## v30 · on the Optimise tab
+## v30 · on the Optimise tab · champion
 
 - **Made:** workflow tools from v27: workflows: r19 → r20
-- **Played:** train 49 of 60 · test 24 of 37 · sonnet-5-5 · medium · not gated
+- **Played:** train 49 of 60 · test 24 of 37 · sonnet-5-5 · medium · promoted by hand
 - **Why:** s34 (the person's calls, 22 Oct 2026): v27 reading r20, the merge bench's option D2 as workflow_rag's merge, on r18's research (43 of 44 merges taken). Graded against the keys: debit dispute job 8.0 of 9 (r19 v3 5.0), PIN-lock job 4.5 of 7 (r19 v1 5.5). The gap rule kept T1's cross-account wait. The PIN-lock gate missed, and the person chose to play v30 anyway. Only the library differs from v27.
 - **Runs:** `20261026T114201Z_banking_knowledge_v30_train`, `20261026T122326Z_banking_knowledge_v30_test`

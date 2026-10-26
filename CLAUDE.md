@@ -38,18 +38,26 @@
   record `sim_rules` and the customer; the loop never compares runs across either,
   so bump `runner.SIM_RULES` when these rules change. Every run before /2 (v4's and
   v7's included) is re-played before a gate.
-- **Banking's champion is v8** (9 Oct 2026, the person's call, a `tool change`): v7 (v6's prompt
-  and workflow tools at Sonnet medium) reading workflow_rag r3's library, which holds a workflow
-  researched from each of the 60 train and 37 test questions' customer scripts. Test 14 → 21 of 37
-  against v4 (fixed 9, broke 2, McNemar p = 0.033), 12 → 21 against v7 (p = 0.006); train 38 of
-  60 against v4's 29 and v7's 37 (`20261008T134442Z`, the smoke `20261007T224313Z` extended; test
-  `20261008T134445Z`). Promoted without re-playing v4 under `tau2_loop/2` (the person's call: v4's
-  runs are `/1`, its test with the Haiku customer, and v4 has no per-question research). v4 before
-  it (5 Oct 2026, promoted by the gate): written by `make optimise` from v3 under banking's s14
-  guide, Sonnet at high effort with `parallel_calls: true`; test 6 → 14 (p = 0.004), train 12 → 29
-  (`20261004T222002Z`, test `20261004T113341Z`). v3 before that (4 Oct, the person's call): v1's
-  prompt with AllTools (`alltools_minilm`), native calls and the identity note. Loop cycles start
-  from v8; CI's gate needs the sandbox and MiniLM to re-score it (`.github/workflows/ci.yml`).
+- **Banking's champion is v30** (27 Oct 2026, the person's call, a `tool change`, s38–s39): v27
+  (v26's prompt and workflow tools with the steps view, on `claude-sonnet-5-5` at medium) reading
+  workflow_rag r20's library (the merge bench's option D2 as the merge). Played fresh on all 97 with
+  a Sonnet 5.5 customer at medium and a Haiku 5.5 judge (`USER_MODEL=claude-sonnet-5-5`,
+  `JUDGE_MODEL=claude-haiku-5-5`): train 49 of 60 (`20261026T114201Z`), test 24 of 37
+  (`20261026T122326Z`) against v8's 8 Oct 38 and 21. The gate's one-sided McNemar clears train
+  (fixed 12, broke 1, p = 0.002) but not test (fixed 7, broke 4, p = 0.27), and banking's gate reads
+  test, so the person promoted it by hand. Not like for like: v8 was not re-played (the person's
+  call), and its runs had Sonnet 5 as both agent and customer. The loop reuses a run only when its
+  customer is banking's default (`runner.USER_MODEL`, Sonnet 5 at medium; `loop.run._covers`), so
+  `make loop` or `make challenge` re-plays v30 before it compares. The 24 failures (gold 9, rounding 3,
+  library steps 9, customer 2, agent 1): `.lavish/s39_full-score-results.html`. v8 before it (9 Oct
+  2026, the person's call, a `tool change`): v7 reading workflow_rag r3; test 14 → 21 of 37 against
+  v4 (fixed 9, broke 2, p = 0.033), train 38 of 60 (`20261008T134442Z`, test `20261008T134445Z`),
+  promoted without re-playing v4 under `tau2_loop/2`. v4 before that (5 Oct 2026, promoted by the
+  gate): written by `make optimise` from v3 under banking's s14 guide, Sonnet at high effort with
+  `parallel_calls: true`; test 6 → 14 (p = 0.004), train 12 → 29 (`20261004T222002Z`, test
+  `20261004T113341Z`). v3 before that (4 Oct, the person's call): v1's prompt with AllTools
+  (`alltools_minilm`), native calls and the identity note. Loop cycles start from v30; CI's gate
+  needs the sandbox and MiniLM to re-score it (`.github/workflows/ci.yml`).
 - **Telecom's champion is v3** (26 Oct 2026, the person's call, a `model swap`, s36–s37): v2's
   prompt unchanged on `deepseek-flash` (thinking high) through Pydantic AI (`backend: pydantic_ai`,
   native tools, one call a reply), so the champion and every fork of it call DeepSeek's API under the

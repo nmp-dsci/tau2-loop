@@ -464,6 +464,7 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
     played: list[list[str]] = []
     customers: list[str] = []
     efforts: list[str] = []
+    judges: list[str | None] = []
 
     def fake_eval(
         domain: str,
@@ -476,11 +477,13 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
         user_model: str,
         user_effort: str,
         cap_usd: float | None = None,
+        judge_model: str | None = None,
     ) -> Any:
         assert cap_usd is None  # s36: a spend cap is passed on only when one is given
         played.append(list(task_ids))
         customers.append(user_model)
         efforts.append(user_effort)
+        judges.append(judge_model)
         _fake_run(runs, "20261003T000000Z_banking_knowledge_v1_custom", task_ids, {"t5"})
         return runner.load_run("20261003T000000Z_banking_knowledge_v1_custom")
 
@@ -489,6 +492,7 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
     assert played == [["t3", "t5"]]  # only what the split gained, in the split's order
     assert customers == [runner.sdk_model(runner.USER_MODEL)]  # the run's own customer
     assert efforts == [runner.USER_EFFORT]  # a run with no recorded effort ran at the default
+    assert judges == ["haiku"]  # s38: the run's own judge
     assert meta.task_ids == train and [r.task_id for r in rows] == train
     assert meta.split_version == 3 and meta.mlflow_run_id is None
     assert meta.composed_of == [
