@@ -389,6 +389,12 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
             help="backend pydantic_ai only: stop the run's DeepSeek calls at this many US dollars (s36)"
         ),
     ] = None,
+    judge_model: Annotated[
+        str | None,
+        typer.Option(
+            help="tau2's NL-assertion judge (default: `runner.JUDGE_MODEL`); recorded in run.json (s38)"
+        ),
+    ] = None,
 ) -> None:
     """Run an agent version over a split of one domain and score it."""
     from tau2_loop.agent.versions import base_version
@@ -407,6 +413,7 @@ def eval(  # noqa: A001 - the Makefile target is `eval`
         user_model=user_model,
         user_effort=user_effort,
         cap_usd=cap,
+        judge_model=judge_model,
     )
     console.print(f"run: runs/{meta.run_id}")
 

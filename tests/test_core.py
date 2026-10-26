@@ -476,6 +476,7 @@ def test_extending_a_run_plays_only_the_new_tasks_and_joins_them_into_one_run_of
         user_model: str,
         user_effort: str,
         cap_usd: float | None = None,
+        judge_model: str | None = None,
     ) -> Any:
         assert cap_usd is None  # s36: a spend cap is passed on only when one is given
         played.append(list(task_ids))

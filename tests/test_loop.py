@@ -1108,6 +1108,11 @@ BANKING_V8 = (
     "20261008T134442Z_banking_knowledge_v8_train",
     "20261008T134445Z_banking_knowledge_v8_test",
 )
+# v30 (v27 reading workflow_rag r20), champion by the person's call (27 Oct 2026): a tool change
+BANKING_V30 = (
+    "20261026T114201Z_banking_knowledge_v30_train",
+    "20261026T122326Z_banking_knowledge_v30_test",
+)
 
 
 def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> None:
@@ -1121,7 +1126,9 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
     written by `make optimise` from v3 (Sonnet at high effort, every tool call of a reply kept),
     was promoted by the gate on test: 6 → 14, fixed 8, broke 0 (5 Oct 2026). v8, v7 reading
     workflow_rag r3, was promoted by the person's call (9 Oct 2026), a tool change outside the
-    loop: test 14 → 21 against v4, its train run the smoke extended to the 60."""
+    loop: test 14 → 21 against v4, its train run the smoke extended to the 60. v30, v27 reading
+    workflow_rag r20, was promoted by the person's call (27 Oct 2026), a tool change: train 49 of 60
+    and test 24 of 37 against v8's 38 and 21, held by the gate's test reading (p = 0.27)."""
     from tau2_loop.agent.versions import base_version, lineage
     from tau2_loop.data.splits import read_split, split_ids
     from tau2_loop.loop.ledger import read_ledger
@@ -1130,7 +1137,7 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
 
     d = "banking_knowledge"
     reg = read_registry(d)
-    assert reg["champion"]["run_id"] == BANKING_V8[0] and reg["challenger"] is None
+    assert reg["champion"]["run_id"] == BANKING_V30[0] and reg["challenger"] is None
     assert [(h["agent"], h["kind"]) for h in reg["history"] if h["event"] == "promote"] == [
         ("v1", "model swap"),
         ("v1", "re-baseline"),
@@ -1139,6 +1146,11 @@ def test_banking_v1_is_scored_on_split_v3_by_extension_and_nothing_else() -> Non
         ("v3", "tool change"),
         ("v4", "gate"),
         ("v8", "tool change"),
+        ("v30", "tool change"),
+    ]
+    assert [h["run_id"] for h in reg["history"] if h["event"] == "promote"][-2:] == [
+        BANKING_V8[0],
+        BANKING_V30[0],
     ]
     e, e2, e3 = read_ledger(d)
     o3 = e3["outcome"]
