@@ -228,13 +228,13 @@ def _run_config(
     return TextRunConfig(**kwargs)
 
 
-def _point_judge_at_sdk() -> None:
+def _point_judge_at_sdk(judge_model: str = JUDGE_MODEL) -> None:
     """tau2's NL judge names its model as a module constant; route it to the subscription too."""
     import tau2.evaluator.evaluator_nl_assertions as nl
 
     from tau2_loop.agent.factory import with_effort
 
-    nl.DEFAULT_LLM_NL_ASSERTIONS = sdk_model(JUDGE_MODEL)
+    nl.DEFAULT_LLM_NL_ASSERTIONS = sdk_model(judge_model)
     nl.DEFAULT_LLM_NL_ASSERTIONS_ARGS = with_effort({}, JUDGE_EFFORT)
 
 
@@ -252,15 +252,19 @@ def run_eval(
     user_model: str | None = None,
     user_effort: str | None = None,
     cap_usd: float | None = None,
+    judge_model: str | None = None,
 ) -> tuple[RunMeta, list[TaskResult]]:
     """`user_effort` (s23, the person's Q7) sets the customer's effort for a side experiment; a run
     with another than its domain's (`customer`) is never a record (`loop.run._covers`), as with
     another model. Left out, both are the domain's. `cap_usd` (s36) stops a `backend:
-    pydantic_ai` agent's DeepSeek calls at that many dollars: the rest of the run is unscored."""
+    pydantic_ai` agent's DeepSeek calls at that many dollars: the rest of the run is unscored.
+    `judge_model` (s38) sets tau2's NL-assertion judge for this run (default `JUDGE_MODEL`); it is
+    recorded in `run.json`, and runs with different judges are never joined."""
     if domain not in DOMAINS and domain != SMOKE_DOMAIN:
         raise ValueError(f"domain must be one of {DOMAINS + (SMOKE_DOMAIN,)}, got {domain!r}")
     default_model, default_effort = customer(domain)
     user_model, user_effort = user_model or default_model, user_effort or default_effort
+    judge_model = judge_model or JUDGE_MODEL
     quiet_tau2()
     reset_hard_limit()
     if not dry_run:
@@ -286,7 +290,7 @@ def run_eval(
         fingerprint=version.fingerprint,
         model=agent_model(version),
         user_model=sdk_model(user_model),
-        judge_model=sdk_model(JUDGE_MODEL),
+        judge_model=sdk_model(judge_model),
         split=split,
         n_tasks=len(ids),
         trials=trials,
@@ -330,7 +334,7 @@ def run_eval(
     from tau2_loop.llm import open_backend
 
     register()
-    _point_judge_at_sdk()
+    _point_judge_at_sdk(judge_model)
     open_backend.reset(cap_usd)  # this run's DeepSeek spend only, against its own cap
 
     from tau2.evaluator.evaluator import EvaluationType
@@ -458,6 +462,7 @@ def extend_run(
         user_model=base.user_model,
         user_effort=base.user_effort or USER_EFFORT,
         cap_usd=cap_usd,
+        judge_model=base.judge_model,
     )
     return compose_runs(base_run_id, ext.run_id)
 
@@ -475,6 +480,7 @@ def compose_runs(base_run_id: str, ext_run_id: str) -> tuple[RunMeta, list[TaskR
         "fingerprint",
         "model",
         "user_model",
+        "judge_model",
         "split",
         "trials",
         "agent_effort",
