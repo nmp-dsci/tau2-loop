@@ -1,6 +1,6 @@
 # banking_knowledge: every answering-agent version, in build order
 
-The Optimise tab draws the 8 of 30 versions played on every task of their split: v1–v4, v7, v8, v23, v30. The other 22 (v5, v6, v9–v22, v24–v29) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
+The Optimise tab draws the 8 of 31 versions played on every task of their split: v1–v4, v7, v8, v23, v30. The other 23 (v5, v6, v9–v22, v24–v29, v31) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
 
 Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_knowledge/v*/`, `loop/banking_knowledge/ledger.jsonl`, `loop/banking_knowledge/registry.json` and the run folders, the reading `GET /api/versions` serves. Re-run it when a version is added or played; do not edit it by hand.
 
@@ -36,6 +36,7 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 | v28 | no | workflow tools | v27 | 1 of 5 played | — | not gated |
 | v29 | no | workflow tools | v27 | 2 of 5 played | — | not gated |
 | v30 | yes | workflow tools | v27 | 49/60 | 24/37 | promoted by hand |
+| v31 | no | hand edit | v30 | — | — | never played |
 
 ## v1 · on the Optimise tab
 
@@ -247,3 +248,11 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Played:** train 49 of 60 · test 24 of 37 · sonnet-5-5 · medium · promoted by hand
 - **Why:** s34 (the person's calls, 22 Oct 2026): v27 reading r20, the merge bench's option D2 as workflow_rag's merge, on r18's research (43 of 44 merges taken). Graded against the keys: debit dispute job 8.0 of 9 (r19 v3 5.0), PIN-lock job 4.5 of 7 (r19 v1 5.5). The gap rule kept T1's cross-account wait. The PIN-lock gate missed, and the person chose to play v30 anyway. Only the library differs from v27.
 - **Runs:** `20261026T114201Z_banking_knowledge_v30_train`, `20261026T122326Z_banking_knowledge_v30_test`
+
+## After v30 · 1 version left off the tab
+
+### v31
+
+- **Made:** hand edit from v30
+- **Played:** no train run · no test run · sonnet-5-5 · medium · never played
+- **Why:** s40 stage 1 (the person's call, 27 Oct 2026, .lavish/s40_optimization-loop-plan.html): the answering agent only, workflows held at r20, so a rescore measures the agent's side alone; workflow_rag's changes are stage 2, a separate run. In 063, 084 and 085 the prompt held the right rule and the agent followed the workflow's step.; r20's cash back job floors points and calls a rounded-up record overpaid, and line 7 flagged any difference; 020, 027, 017 offered disputes over rounding; doc _031 lists three tiers ($50, $500, unlimited); v27 dropped the words (H1) on a reading the tool description suggests; doc _031's tiers; v27's H1 let the disputed amount through, and the r20 debit job caps the liability at it; doc logistics_007 checks 3-4: an active dispute or a pending replacement blocks a credit limit increase; 054 filed both before reading the CLI procedure; K needs to know the customer asked for an increase
