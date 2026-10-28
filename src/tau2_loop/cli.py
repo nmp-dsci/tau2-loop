@@ -225,11 +225,15 @@ def rag_remerge(
     rag: str = "r19",
     limit: Annotated[int | None, typer.Option(help="stop after this many sessions")] = None,
     workers: Annotated[int | None, typer.Option(help="sessions merging at once")] = None,
+    task: Annotated[
+        list[str] | None, typer.Option(help="merge again only these questions' sessions")
+    ] = None,
 ) -> None:
     """Merge again, with a re-merging version's merge, every session of the version it takes drafts
-    from (s25, r19: r18's, the person's call, 15 Oct 2026). No research runs: each session's
-    research is replayed from its events and its draft and decision are reused, in the order its
-    merges reached the library. Resumable; a second build of the same version is refused."""
+    from (s25, r19: r18's, the person's call, 15 Oct 2026), or (s41, r21) only those of the
+    questions named by --task. No research runs: each session's research is replayed from its
+    events and its draft and decision are reused, in the order its merges reached the library.
+    Resumable; a second build of the same version is refused."""
     import queue as queues
     import threading
 
@@ -238,7 +242,7 @@ def rag_remerge(
 
     reset_hard_limit()
     agent = rag_agent.load(domain, rag)
-    todo = rag_agent.remerge_queue(domain, rag)
+    todo = rag_agent.remerge_queue(domain, rag, task or None)
     todo = todo[:limit] if limit else todo
     n_workers = max(1, workers or agent.workers)
     console.print(

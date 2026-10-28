@@ -2276,10 +2276,11 @@ def _replay(src: dict[str, Any], system: str, opening: str) -> Replay:
     return Replay(src["meta"]["id"], messages, draft, decision)
 
 
-def remerge_queue(domain: str, agent_name: str) -> list[str]:
+def remerge_queue(domain: str, agent_name: str, only: list[str] | None = None) -> list[str]:
     """The sessions a re-merging version (`drafts_from`) still has to merge again: every finished
     session of that version that reached its merge, in the order it took its lock (the order its
-    merges reached the library), less those this version has merged already."""
+    merges reached the library), less those this version has merged already. `only` (s41, r21)
+    keeps the sessions of those questions, and a question with no such session is refused."""
     agent = load(domain, agent_name)
     if not agent.drafts_from:
         raise RagAgentError(f"{agent_name} merges no other version's drafts")
@@ -2302,6 +2303,15 @@ def remerge_queue(domain: str, agent_name: str) -> list[str]:
             continue  # it never reached a merge: nothing to merge again
         t0 = datetime.strptime(m["started"], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC).timestamp()
         order.append((t0 + lock["t"] / 1000, m["id"]))
+    if only is not None:
+        want = set(only)
+        task_of = {m["id"]: m.get("task_id") for m in sessions(domain)}
+        missing = sorted(want - {task_of[sid] for _, sid in order})
+        if missing:
+            raise RagAgentError(
+                f"{agent.drafts_from} has no merged session for {', '.join(missing)}"
+            )
+        order = [(t, sid) for t, sid in order if task_of[sid] in want]
     return [sid for _, sid in sorted(order) if sid not in done]
 
 

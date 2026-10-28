@@ -272,6 +272,31 @@ def test_the_remerge_queue_takes_r18s_sessions_in_the_order_they_locked_and_resu
         rag_agent.remerge_queue(D, "r18")  # r18 takes no other version's drafts
 
 
+# ── s41 (r21, the person's calls, 29 Oct 2026): the five reading rules, re-merging 4 questions ──
+def test_tasks_merges_again_only_the_named_questions_sessions_and_refuses_one_never_merged(
+    library_dirs: Path,
+) -> None:
+    a = r18_session(library_dirs, "task_027", "20261013T050000Z", 9_000)
+    b = r18_session(library_dirs, "task_084", "20261013T050100Z", 1_000)
+    r18_session(library_dirs, "task_041", "20261013T050200Z", 2_000)
+    assert rag_agent.remerge_queue(D, "r21", ["task_084", "task_027"]) == [a, b]  # lock order
+    assert len(rag_agent.remerge_queue(D, "r21")) == 3  # no TASKS: every session, as before
+    with pytest.raises(rag_agent.RagAgentError, match="task_063"):
+        rag_agent.remerge_queue(D, "r21", ["task_027", "task_063"])
+
+
+def test_r21_is_r20s_merge_on_r20s_library_with_only_its_prompts_changed() -> None:
+    import dataclasses
+
+    r20, r21 = rag_agent.load(D, "r20"), rag_agent.load(D, "r21")
+    differ = {
+        f.name for f in dataclasses.fields(r21) if getattr(r21, f.name) != getattr(r20, f.name)
+    }
+    assert differ == {"name", "seed", "prompt", "merge_prompt", "stage_prompts"}
+    assert (r21.seed, r21.drafts_from) == ("r20", "r18")
+    assert [s for s, _ in r21.stage_prompts] == ["audit"]  # the one stage prompt, rewritten
+
+
 # ── s34 (r20, the person's call, 21 Oct 2026): the merge bench's option D2 as workflow_rag's merge ──
 def test_r20_is_the_benchs_d2_on_r18s_drafts_onto_r17() -> None:
     import dataclasses
