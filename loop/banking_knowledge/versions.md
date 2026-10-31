@@ -1,6 +1,6 @@
 # banking_knowledge: every answering-agent version, in build order
 
-The Optimise tab draws the 9 of 31 versions played on every task of their split: v1–v4, v7, v8, v23, v30, v31. The other 22 (v5, v6, v9–v22, v24–v29) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
+The Optimise tab draws the 9 of 32 versions played on every task of their split: v1–v4, v7, v8, v23, v30, v31. The other 23 (v5, v6, v9–v22, v24–v29, v32) were each played on part of a split, to check one change on the conversations it targeted, or never played, so a pass count of theirs cannot stand beside a full run's. They are how the optimisation went between the versions the tab draws, so they are kept here, between the versions they led to.
 
 Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_knowledge/v*/`, `loop/banking_knowledge/ledger.jsonl`, `loop/banking_knowledge/registry.json` and the run folders, the reading `GET /api/versions` serves. Re-run it when a version is added or played; do not edit it by hand.
 
@@ -37,6 +37,7 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 | v29 | no | workflow tools | v27 | 2 of 5 played | — | not gated |
 | v30 | yes | workflow tools | v27 | 49/60 | 24/37 | promoted by hand |
 | v31 | yes | hand edit | v30 | 47/60 | 23/37 | not gated |
+| v32 | no | workflow tools | v31 | 5 of 10 played | 0 of 6 played | not gated |
 
 ## v1 · on the Optimise tab
 
@@ -255,3 +256,12 @@ Written by `make versions-log DOMAIN=banking_knowledge` from `agents/banking_kno
 - **Played:** train 47 of 60 · test 23 of 37 · sonnet-5-5 · medium · not gated
 - **Why:** s40 stage 1 (the person's call, 27 Oct 2026, .lavish/s40_optimization-loop-plan.html): the answering agent only, workflows held at r20, so a rescore measures the agent's side alone; workflow_rag's changes are stage 2, a separate run. In 063, 084 and 085 the prompt held the right rule and the agent followed the workflow's step.; r20's cash back job floors points and calls a rounded-up record overpaid, and line 7 flagged any difference; 020, 027, 017 offered disputes over rounding; doc _031 lists three tiers ($50, $500, unlimited); v27 dropped the words (H1) on a reading the tool description suggests; doc _031's tiers; v27's H1 let the disputed amount through, and the r20 debit job caps the liability at it; doc logistics_007 checks 3-4: an active dispute or a pending replacement blocks a credit limit increase; 054 filed both before reading the CLI procedure; K needs to know the customer asked for an increase
 - **Runs:** `20261027T014712Z_banking_knowledge_v31_train`, `20261027T014746Z_banking_knowledge_v31_test`
+
+## After v31 · 1 version left off the tab
+
+### v32
+
+- **Made:** workflow tools from v31: workflows: r20 → r21
+- **Played:** train 5 of 10 played, of the split's 60 · test 0 of 6 played, of the split's 37 · sonnet-5-5 · medium · not gated
+- **Why:** s41 stage 2 (the person's calls, 29 Oct 2026, .lavish/s41_workflow-rag-stage2-plan.html): v31 reading workflow_rag r21, the five reading rules learned from train failures re-merged into the 7 jobs train and test share; answering agent unchanged from v31
+- **Runs:** `20261031T065300Z_banking_knowledge_v32_custom`, `20261031T065301Z_banking_knowledge_v32_custom`
