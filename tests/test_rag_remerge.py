@@ -297,6 +297,17 @@ def test_r21_is_r20s_merge_on_r20s_library_with_only_its_prompts_changed() -> No
     assert [s for s, _ in r21.stage_prompts] == ["audit"]  # the one stage prompt, rewritten
 
 
+def test_r22_is_r21_on_r21s_library_with_only_its_prompts_changed() -> None:
+    import dataclasses
+
+    r21, r22 = rag_agent.load(D, "r21"), rag_agent.load(D, "r22")
+    differ = {
+        f.name for f in dataclasses.fields(r22) if getattr(r22, f.name) != getattr(r21, f.name)
+    }
+    assert differ == {"name", "seed", "prompt", "merge_prompt", "stage_prompts"}
+    assert (r22.seed, r22.drafts_from, r22.stages) == ("r21", "r18", r21.stages)
+
+
 # ── s34 (r20, the person's call, 21 Oct 2026): the merge bench's option D2 as workflow_rag's merge ──
 def test_r20_is_the_benchs_d2_on_r18s_drafts_onto_r17() -> None:
     import dataclasses
