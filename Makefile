@@ -37,8 +37,8 @@ fork: ## a new DOMAIN version from FROM= (default the champion) on MODEL=, EFFOR
 rag-build: ## s20/s21: build a merging workflow_rag version's library, RAG= (default r2): r2 one at a time in id order, r3 with WORKERS= (default its own 4); resumable (TASKS= some, LIMIT=); SPLIT=test researches the test questions too (r3, the person's call, 8 Oct 2026)
 	uv run tau2loop rag-build --domain banking_knowledge --rag $(or $(RAG),r2) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS)) --split $(SPLIT)
 
-rag-remerge: ## s25: merge again, with RAG='s merge (default r19), every session of the version it takes drafts from (r18's): no research runs; resumable (LIMIT=, WORKERS=)
-	uv run tau2loop rag-remerge --domain banking_knowledge --rag $(or $(RAG),r19) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS))
+rag-remerge: ## s25: merge again, with RAG='s merge (default r19), every session of the version it takes drafts from (r18's), or (s41) only TASKS='s: no research runs; resumable (LIMIT=, WORKERS=)
+	uv run tau2loop rag-remerge --domain banking_knowledge --rag $(or $(RAG),r19) $(foreach t,$(TASKS),--task $(t)) $(if $(LIMIT),--limit $(LIMIT)) $(if $(WORKERS),--workers $(WORKERS))
 
 merge-bench: ## s30: replay JOB='s merges (default the debit dispute job) under merge option OPTION= (A, B, C, D, D-lean, D2), trial TRIAL= (default 1), UPTO= stops after that many merges (s31, O8): no research, a scratch library under merge_runs/; calls the model
 	uv run python -m tau2_loop.workflows.bench run --option $(OPTION) --trial $(or $(TRIAL),1) $(if $(JOB),--job $(JOB)) $(if $(UPTO),--upto $(UPTO))

@@ -76,4 +76,5 @@ def test_the_committed_banking_log_has_every_version_the_tab_leaves_off() -> Non
     h = load_history("banking_knowledge")
     off = [v["version"] for v in h["versions"] if not v["full"]]
     logged = re.findall(r"^### (v\d+)$", path("banking_knowledge").read_text(), flags=re.M)
-    assert logged == off and len(off) == 22  # v28 (s30), v29 (s32); v30 left it (s38)
+    # v28 (s30), v29 (s32); v30 left it (s38), v31 (s40), v32 and v33 (s41)
+    assert logged == off and len(off) == 24

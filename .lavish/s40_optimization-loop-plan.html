@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en" data-lavish-annotate="on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>s40 Optimisation loop plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap">
+<style>
+:root{
+  --bg:#F7F6F2; --panel:#FFFFFF; --band:#EFEEE8;
+  --ink:#1A1D1B; --ink-2:#3B403D; --muted:#4A514D; --faint:#5C635E;
+  --line:#DCDAD2; --line-2:#C7C5BC; --line-3:#8A8880;
+  --accent:#8A2B1D; --accent-ink:#FFFFFF; --accent-soft:#F5DCD7;
+  --amber:#8A5006; --amber-soft:#F6E6CF;
+  --ok:#0A6552; --ok-soft:#DFEFE8;
+  --judge:#5B3A8C; --judge-soft:#EEE9F6;
+  --agent:#235A8C; --agent-soft:#E7EFF8;
+  --user:#6E5A2E; --user-soft:#F5F0E1;
+  --sans:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,'Times New Roman',serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --t-2:0.8rem; --t-1:0.875rem; --t0:1rem; --t1:1.125rem; --t2:1.406rem; --t3:1.758rem; --t4:2.197rem;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; --s9:96px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgb(20 25 22 / .05), 0 12px 28px -18px rgb(20 25 22 / .22);
+  --dur:300ms; --ease:cubic-bezier(.2,.7,.2,1); --focus:var(--accent);
+  --w:1140px; --measure:68ch; --track-label:.08em;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#121614; --panel:#191E1B; --band:#161A18;
+  --ink:#E8EBE7; --ink-2:#C9CFC9; --muted:#AEB6B0; --faint:#98A09A;
+  --line:#28302B; --line-2:#3A443E; --line-3:#727E77;
+  --accent:#E08A7A; --accent-ink:#1A0F0C; --accent-soft:#3A1E1A;
+  --amber:#D99A4E; --amber-soft:#3A2A14;
+  --ok:#43C29A; --ok-soft:#17382C;
+  --judge:#B9A3E3; --judge-soft:#241E31;
+  --agent:#8DB8E8; --agent-soft:#172331;
+  --user:#D4BF8A; --user-soft:#26221A;
+  --shadow:0 1px 2px rgb(0 0 0 / .4), 0 12px 28px -18px rgb(0 0 0 / .65);
+  color-scheme:dark;
+}
+@media (prefers-reduced-motion: reduce){ :root{ --dur:0.01ms; } }
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink-2);font:400 var(--t0)/1.6 var(--sans)}
+a{color:var(--accent);text-underline-offset:.18em}
+a:focus-visible,button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+code,.mono{font-family:var(--mono);font-size:.92em;overflow-wrap:anywhere}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top .in{max-width:var(--w);margin:0 auto;padding:var(--s3) var(--s4);display:flex;gap:var(--s4);align-items:baseline;flex-wrap:wrap}
+header.top b{font:500 var(--t0)/1 var(--serif);color:var(--ink)}
+header.top span{font:400 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+header.top .r{margin-left:auto}
+main{max-width:var(--w);margin:0 auto;padding:var(--s7) var(--s4) var(--s9)}
+.label,.fig-title,thead th,.eyebrow{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+h1{font:400 var(--t4)/1.2 var(--serif);color:var(--ink);margin:var(--s3) 0 0;max-width:30ch;text-wrap:balance}
+h1 em{font-style:italic;font-weight:400;color:var(--accent)}
+h2{font:600 var(--t2)/1.25 var(--sans);color:var(--ink);margin:var(--s8) 0 0;text-wrap:balance}
+h3{font:600 var(--t1)/1.3 var(--sans);color:var(--ink);margin:0 0 var(--s2)}
+p{max-width:var(--measure);text-wrap:pretty}
+.lead{font:400 var(--t1)/1.55 var(--serif);color:var(--ink-2);max-width:var(--measure);margin-top:var(--s4)}
+.insight{font:400 var(--t1)/1.5 var(--serif);color:var(--ink);margin-top:var(--s4);max-width:var(--measure)}
+p.cap{font-size:var(--t-1);color:var(--muted);max-width:84ch;margin-top:var(--s3)}
+.path{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--faint);margin-top:2px;overflow-wrap:anywhere}
+nav.toc{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);margin-top:var(--s5);font:400 var(--t-1)/1.4 var(--sans)}
+.fig-title{display:block;margin-top:var(--s5)}
+.tw{overflow-x:auto;margin-top:var(--s3);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:var(--t-1)}
+thead th{text-align:left;padding:var(--s3) var(--s3);border-bottom:1px solid var(--line-2);white-space:normal;vertical-align:bottom}
+thead th.num{text-align:right}
+thead tr.grp th{border-bottom:0;padding-bottom:0;color:var(--ink-2)}
+td{padding:var(--s3);border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:0}
+th:first-child,td:first-child{padding-left:var(--s4)}
+th:last-child,td:last-child{padding-right:var(--s4)}
+td.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.sub{color:var(--ink);font-weight:500;min-width:16ch}
+td.sub.mono{font-weight:400;font-size:var(--t-1)}
+td.wrap{min-width:20ch;max-width:48ch}
+td.small,.small{font-size:var(--t-1)}
+td.split{border-left:1px solid var(--line)}
+tr.sum td{border-top:1px solid var(--line-2);font-weight:500;color:var(--ink)}
+tr.pro td{background:var(--band)}
+.muted{color:var(--faint)}
+.v-ok{color:var(--ok);font-weight:500}
+.v-no{color:var(--accent);font-weight:500}
+.v-warn{color:var(--amber);font-weight:500}
+td.num .path{text-align:right}
+/* fig 2: bars as table cells, so labels stay legible at any width */
+td.barcell{min-width:15ch;width:38%}
+.track{display:block;height:12px;border-radius:var(--r-sm);background:var(--band);overflow:hidden}
+.fill{display:block;height:100%;border-radius:var(--r-sm)}
+.fill.v7{background:var(--ink-2)}
+.fill.v4{background:var(--line-3)}
+.val{display:block;font:400 var(--t-2)/1.4 var(--mono);color:var(--ink-2);margin-top:var(--s1)}
+td.who{font:500 var(--t-1)/1.4 var(--mono);color:var(--ink);white-space:nowrap}
+tr.first td{border-bottom:0;padding-bottom:var(--s1)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);min-width:0}
+.card ul,.card ol{margin:0;padding-left:1.2em}
+.card li{margin-top:var(--s2)}
+ol.qa{padding-left:1.2em;max-width:84ch}
+ol.qa li{margin-top:var(--s3)}
+section.band{background:var(--band);margin:var(--s8) calc(-1 * var(--s4)) 0;padding:var(--s2) var(--s4) var(--s7);border-radius:var(--r)}
+section.band h2{margin-top:var(--s5)}
+section.band .tw,section.band .card{background:var(--panel)}
+@media (max-width:640px){h1{font-size:var(--t3)} main{padding-top:var(--s5)}
+/* a phone stacks each row into labelled lines (data-label), so no column is scrolled off */
+.tw.stack{overflow-x:visible}
+.tw.stack table,.tw.stack tbody,.tw.stack tr,.tw.stack td{display:block;width:auto;min-width:0;max-width:none}
+.tw.stack thead{display:none}
+.tw.stack tr{padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+.tw.stack tr:last-child{border-bottom:0}
+.tw.stack td,.tw.stack td:first-child,.tw.stack td:last-child{padding:var(--s1) 0;border:0;text-align:left;white-space:normal}
+.tw.stack td[data-label]{position:relative;padding-left:7.5rem}
+.tw.stack td[data-label]::before{content:attr(data-label);position:absolute;left:0;top:var(--s1);width:7rem;font:500 var(--t-2)/1.6 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.tw.stack td.num .path{text-align:left}
+.tw.stack tr.first{padding-bottom:0}
+.tw.stack td.barcell{width:auto}
+.tw.stack td:empty{display:none}
+}
+
+.dia{width:100%;height:auto;display:block;background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);color:var(--ink);margin-top:var(--s3)}
+.dia .nd{fill:var(--panel);stroke:var(--line-2);stroke-width:1.25}
+.dia .nd.hi{fill:var(--accent-soft);stroke:var(--accent)}
+.dia .nd.us{fill:var(--user-soft);stroke:var(--user)}
+.dia .nd.ag{fill:var(--agent-soft);stroke:var(--agent)}
+.dia .nd.ok{fill:var(--ok-soft);stroke:var(--ok)}
+.dia .nd.warn{fill:var(--amber-soft);stroke:var(--amber)}
+.dia .ed{fill:none;stroke:var(--line-3);stroke-width:1.25;marker-end:url(#arr)}
+.dia .ed.no{stroke:var(--accent)}
+.dia .ed.ok{stroke:var(--ok)}
+.dia .tx{font:500 13px var(--sans);fill:var(--ink)}
+.dia .tx.s{font:400 13px var(--sans);fill:var(--muted)}
+.dia .tx.m{font:400 13px var(--mono);fill:var(--ink-2)}
+.dia .tx.k{font:500 13px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia marker path{fill:var(--line-3)}
+.figwrap{overflow-x:auto}
+.figwrap .dia{min-width:640px}
+q.said{display:block;font:400 var(--t-1)/1.5 var(--mono);color:var(--ink);background:var(--user-soft);border-left:3px solid var(--user);border-radius:var(--r-sm);padding:var(--s2) var(--s3);quotes:none;overflow-wrap:anywhere}
+.mech{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.mech .card h3 .k{display:block;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-bottom:var(--s1)}
+.mech .card p{font-size:var(--t-1);margin:var(--s2) 0 0}
+.opt3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.opt3 .card{border-top:3px solid var(--line-2)}
+.opt3 .card.built{border-top-color:var(--ok)}
+.opt3 .card.rec{border-top-color:var(--accent)}
+.opt3 .card .tag{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.opt3 .card dl{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s1);margin:var(--s3) 0 0}
+.opt3 .card dt{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-top:var(--s2)}
+.opt3 .card dd{margin:0;color:var(--ink-2);font-size:var(--t-1)}
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0;max-width:820px;border-left:3px solid var(--accent)}
+form.q h3{margin-top:0}
+form.q label.opt{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border:1px solid var(--line);border-radius:var(--r-sm);margin-top:var(--s3);cursor:pointer;min-width:0}
+form.q label.opt:hover{border-color:var(--line-3);background:var(--band)}
+form.q label.opt input{margin-top:.3em;flex:none}
+form.q label.opt .t{min-width:0}
+form.q label.opt .t b{display:block;font-weight:600;color:var(--ink)}
+form.q label.opt .t span{font-size:var(--t-1);color:var(--muted)}
+form.q .actions{margin-top:var(--s4);display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap}
+form.q .ack{font-size:var(--t-1);color:var(--ok)}
+button.btn{font:500 var(--t-1)/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:var(--r-sm);padding:var(--s3) var(--s4);cursor:pointer;min-height:38px}
+pre.snip{font:400 var(--t-1)/1.5 var(--mono);background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4);overflow-x:auto;margin-top:var(--s3);color:var(--ink-2)}
+
+.codewrap{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);margin-top:var(--s3);overflow:hidden;min-width:0}
+.codewrap .hd{overflow-wrap:anywhere;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+.codewrap .bd{min-height:120px;overflow-x:auto}
+.codewrap pre.fallback{margin:0;padding:var(--s4);font:400 var(--t-1)/1.5 var(--mono);color:var(--ink-2);white-space:pre-wrap}
+.dia .lane{fill:var(--band)}
+.dia .sg-r{fill:var(--agent-soft);stroke:var(--agent);stroke-width:1}
+.dia .sg-d{fill:var(--judge-soft);stroke:var(--judge);stroke-width:1}
+.dia .sg-w{fill:var(--amber);stroke:var(--amber);stroke-width:1}
+.dia .sg-m{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}
+.dia .tick{stroke:var(--line);stroke-width:1}
+.dia .life{stroke:var(--line-2);stroke-width:1.25;stroke-dasharray:4 4}
+.dia .ed.warn{stroke:var(--amber)}
+.dia .tx.w{fill:var(--amber)}
+.dia .tx.a{fill:var(--accent)}
+.dia .tx.o{fill:var(--ok)}
+.dia .tx.sm{font:400 11px var(--mono);fill:var(--ink-2)}
+.rec-card{border-left:4px solid var(--ok)}
+.chip{display:inline-block;font:500 var(--t-2)/1.5 var(--mono);padding:1px var(--s2);border-radius:var(--r-sm);background:var(--band);color:var(--muted);white-space:nowrap}
+.chip.lock{background:var(--accent-soft);color:var(--accent)}
+.chip.wait{background:var(--amber-soft);color:var(--amber)}
+.chip.free{background:var(--ok-soft);color:var(--ok)}
+.mock{margin-top:var(--s3);border:1px solid var(--line-2);border-radius:var(--r);background:var(--bg);padding:var(--s4);min-width:0}
+.mock .hdr{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);align-items:baseline;justify-content:space-between}
+.mock .hdr h3{margin:0}
+.kvs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:var(--s3);margin-top:var(--s4)}
+.kvs .card{padding:var(--s4)}
+.kvs .k{display:block;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.kvs .v{display:block;font:500 var(--t2)/1.2 var(--mono);color:var(--ink);margin-top:var(--s1);font-variant-numeric:tabular-nums}
+.kvs .n{display:block;font-size:var(--t-1);color:var(--muted);margin-top:var(--s1)}
+td.barcell .track{position:relative}
+.fill.d{background:var(--ok)}
+.fill.x{background:var(--line-3)}
+.fill.s{background:var(--ink-2)}
+form.q{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s5);margin-top:var(--s4);min-width:0}
+form.q h3{margin:0 0 var(--s3)}
+
+
+.dia .seg-w{fill:var(--ink-2)} .dia .seg-b{fill:var(--line-3)} .dia .seg-a{fill:var(--line-2)}
+.dia .seg-u{fill:var(--band);stroke:var(--line-2);stroke-width:1} .dia .seg-t{fill:var(--line-3)}
+details summary{cursor:pointer;color:var(--muted);font-family:var(--mono, 'IBM Plex Mono', monospace);font-size:var(--t-2)}
+details p{margin:var(--s2) 0 0}
+.kinds{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--s4);margin-top:var(--s4)}
+p .path, li .path{display:inline}
+.kinds .card .n{font-family:'IBM Plex Mono',monospace;font-size:var(--t3)}
+
+
+.dia .gl{stroke:var(--line);stroke-width:1}
+.key{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s5);margin-top:var(--s3);font-size:var(--t-1);color:var(--ink-2)}
+.key span{white-space:nowrap}
+.key i{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:var(--s2)}
+.key i.ok{background:var(--ok-soft);box-shadow:inset 0 0 0 1.5px var(--ok)} .key i.okb{background:var(--ok-soft);box-shadow:inset 0 0 0 2.5px var(--ok)}
+.key i.hi{background:var(--accent-soft);box-shadow:inset 0 0 0 2.5px var(--accent)} .key i.nd{background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--line-2)}
+.key i.d18{border-radius:50%;background:var(--line-3)} .key i.d19{border-radius:50%;background:var(--accent)}
+.status{display:flex;flex-wrap:wrap;gap:var(--s2);margin-top:var(--s4)}
+.status span{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);padding:var(--s1) var(--s3);border-radius:var(--r-sm);background:var(--panel);box-shadow:inset 0 0 0 1px var(--line-2);color:var(--ink-2)}
+.status span.warn{box-shadow:inset 0 0 0 1px var(--amber);color:var(--amber)}
+.status span.act{box-shadow:inset 0 0 0 1px var(--accent);color:var(--accent)}
+.steps{counter-reset:st;list-style:none;padding:0;margin:var(--s4) 0 0;max-width:92ch}
+.steps>li{position:relative;padding:var(--s3) 0 var(--s3) 44px;border-top:1px solid var(--line)}
+.steps>li::before{counter-increment:st;content:counter(st);position:absolute;left:0;top:var(--s3);width:28px;height:28px;border-radius:50%;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line-2);font:500 var(--t-1)/28px var(--mono);text-align:center;color:var(--ink)}
+.steps>li b{color:var(--ink)}
+.steps>li p{margin:var(--s1) 0 0;font-size:var(--t-1)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.two .card h3 .k,.brk .card h3 .k{display:block;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-bottom:var(--s1)}
+.two .card p,.brk .card p{font-size:var(--t-1);margin:var(--s2) 0 0}
+.brk{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.brk .card{border-top:3px solid var(--line-2)}
+.brk .card.m{border-top-color:var(--accent)}
+.callout{background:var(--amber-soft);border-left:3px solid var(--amber);border-radius:var(--r-sm);padding:var(--s3) var(--s4);margin-top:var(--s4);max-width:84ch;font-size:var(--t-1);color:var(--ink)}
+.drop{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:var(--s3);margin-top:var(--s4)}
+
+ol.runsteps{list-style:none;padding:0;margin:var(--s4) 0 0;display:grid;gap:var(--s3);max-width:900px}
+ol.runsteps li{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--s4) var(--s5);display:grid;grid-template-columns:2.6rem minmax(0,1fr);gap:var(--s3);min-width:0}
+ol.runsteps .n{font:500 var(--t1)/1.3 var(--mono);color:var(--faint)}
+ol.runsteps h3{margin:0}
+ol.runsteps p{margin:var(--s2) 0 0;font-size:var(--t-1)}
+ol.runsteps ul{margin:var(--s2) 0 0;padding-left:1.2em;font-size:var(--t-1)}
+ol.runsteps ul li{display:list-item;background:none;box-shadow:none;padding:0;margin-top:var(--s1)}
+ol.runsteps pre.snip{box-shadow:none;background:var(--band);margin-top:var(--s2);padding:var(--s3)}
+fieldset{border:0;padding:0;margin:var(--s5) 0 0;min-width:0}
+fieldset:first-of-type{margin-top:var(--s3)}
+legend{font:600 var(--t1)/1.3 var(--sans);color:var(--ink);padding:0}
+legend .k{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint);margin-right:var(--s2)}
+form.q textarea{width:100%;min-height:5em;margin-top:var(--s2);font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s3)}
+form.q label.opt .rec{font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--accent);margin-left:var(--s2)}
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:var(--s4);margin-top:var(--s3)}
+.pair>div{min-width:0}
+.pair pre.snip{margin-top:var(--s2);font-size:var(--t-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.score{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.score .card b{display:block;font:500 var(--t3)/1.1 var(--mono);color:var(--ink);margin-top:var(--s2)}
+.score .card p{font-size:var(--t-1);margin:var(--s2) 0 0}
+
+
+.dia .cvk{font:500 14px var(--mono);fill:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+.dia .cvs{font:400 14px var(--sans);fill:var(--ink-2)}
+.dia .cvb{font:600 15px var(--sans);fill:var(--ink)}
+.dia .cvn{font:500 22px var(--mono);fill:var(--ink)}
+.dia .cvn.a{fill:var(--accent)} .dia .cvn.o{fill:var(--ok)} .dia .cvn.w{fill:var(--amber)}
+.figwrap .dia.flow{min-width:1040px}
+.opt3 .card.rec-c{border-top-color:var(--accent)}
+.bars{display:grid;gap:var(--s2);margin-top:var(--s3)}
+.bars .row{display:grid;grid-template-columns:minmax(0,7rem) minmax(0,1fr) 5.5rem;gap:var(--s3);align-items:center;font-size:var(--t-1)}
+.bars .row .n{font:500 var(--t-1)/1.2 var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.bars .track{height:14px}
+.fill.tr{background:var(--ink-2)} .fill.te{background:var(--accent)} .fill.cl{background:var(--line-2)}
+.chip.c-gold,.chip.c-round{background:var(--amber-soft);color:var(--amber)}
+.chip.c-job,.chip.c-agent{background:var(--accent-soft);color:var(--accent)}
+.chip.c-customer{background:var(--band);color:var(--muted)}
+.chip.c-ok{background:var(--ok-soft);color:var(--ok)}
+.tw.stack td{overflow-wrap:anywhere}
+form.q fieldset{border:0;padding:0;margin:var(--s5) 0 0;min-width:0}
+form.q legend{font-weight:600;color:var(--ink);padding:0}
+form.q legend .k{display:inline-block;min-width:2.6em;font:500 var(--t-2)/1.4 var(--mono);color:var(--faint);letter-spacing:var(--track-label);text-transform:uppercase}
+form.q textarea{width:100%;font:400 var(--t-1)/1.5 var(--sans);color:var(--ink);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:var(--s2) var(--s3);margin-top:var(--s2);min-height:5em}
+.rec{display:inline-block;margin-left:var(--s2);font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--accent)}
+.src3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:var(--s4);margin-top:var(--s4)}
+.src3 .card{border-top:3px solid var(--line-2)} .src3 .card.no{border-top-color:var(--accent)}
+.src3 .card .k{display:block;font:500 var(--t-2)/1.4 var(--mono);text-transform:uppercase;letter-spacing:var(--track-label);color:var(--faint)}
+.src3 .card p{font-size:var(--t-1);margin:var(--s2) 0 0}
+.src3 .card .said{display:block;font:400 var(--t-1)/1.5 var(--mono);color:var(--ink);background:var(--band);border-radius:var(--r-sm);padding:var(--s2) var(--s3);margin-top:var(--s2);overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<header class="top"><div class="in"><b>tau2-loop</b><span>banking_knowledge · champion v30 · the optimisation loop</span><span class="r">S40 · 27 Oct 2026 · branch optimization-loop</span></div></header>
+<main>
+<p class="eyebrow">Plan · banking_knowledge · champion v30 (v27 on Sonnet 5.5 reading workflow_rag r20) · its 97 conversations of 26 Oct re-read offline, no model called · nothing runs until your calls in §09</p>
+<h1>All 24 of v30's failures saw the workflow researched for their own question, and in 12 the fault is a step inside it: <em>the agent follows the workflow even where its prompt or a document says otherwise</em></h1>
+<p class="lead">The lookup isn't the problem. <code>find_workflow</code> showed each question its own job in 96 of 97 conversations, and in all 24 failures. In 9 failures the agent did what a wrong step said, and in 3 of those its own prompt held the right rule. 3 more are the cash back job's rounding, which goes against your s25 rule. Only 1 failure is the agent ignoring what it was told. 9 are gold answers the documents don't support, and 2 are the simulated customer. Train beats test by 17 points, 49 of 60 against 24 of 37. On one trial that isn't significant (Fisher p = 0.09). Gold flaws cause about 7 of those points and workflow steps another 7. Opus can reach at most 10 of the 24 failures, so the plan tests it with a small probe and doesn't switch. The plan runs in two separate stages, each rescored on its own. Stage 1 changes only the answering agent and holds the workflows at r20. Stage 2 then changes only workflow_rag.</p>
+<div class="status"><span class="act">own job shown · 96/97</span><span class="act">failures in a job step · 12/24</span><span>agent ignored its rules · 1/24</span><span class="warn">gold flawed · 9/24</span><span>train 49/60 · test 24/37</span><span class="warn">your calls in §09</span></div>
+<nav class="toc"><a href="#s1">where v30 stands</a><a href="#s2">retrieval</a><a href="#s3">the agent</a><a href="#s4">train vs test</a><a href="#s5">shared jobs</a><a href="#s6">guardrails</a><a href="#s7">Opus</a><a href="#s8">the plan</a><a href="#s9">your calls</a><a href="#s10">sources</a></nav>
+<section id="s1"><h2>01 · Where v30 stands — train has led test in every version since v4</h2>
+<span class="fig-title">Fig 1 · passes per split, by champion or main candidate, one trial each</span>
+<div class="bars"><div class="row"><span>v4 train</span><span class="track"><span class="fill tr" style="width:48.3%"></span></span><span class="n">29 of 60</span></div><div class="row"><span>v4 test</span><span class="track"><span class="fill te" style="width:37.8%"></span></span><span class="n">14 of 37</span></div><div class="row"><span>v8 train</span><span class="track"><span class="fill tr" style="width:63.3%"></span></span><span class="n">38 of 60</span></div><div class="row"><span>v8 test</span><span class="track"><span class="fill te" style="width:56.8%"></span></span><span class="n">21 of 37</span></div><div class="row"><span>v23 train</span><span class="track"><span class="fill tr" style="width:71.7%"></span></span><span class="n">43 of 60</span></div><div class="row"><span>v23 test</span><span class="track"><span class="fill te" style="width:54.1%"></span></span><span class="n">20 of 37</span></div><div class="row"><span>v30 train</span><span class="track"><span class="fill tr" style="width:81.7%"></span></span><span class="n">49 of 60</span></div><div class="row"><span>v30 test</span><span class="track"><span class="fill te" style="width:64.9%"></span></span><span class="n">24 of 37</span></div></div>
+<div class="tw stack"><table><thead><tr><th>version</th><th>train</th><th>test</th><th>gap, points</th><th>Fisher p (two-sided)</th></tr></thead><tbody><tr><td class="who" data-label="version">v4 · 5 Oct</td><td class="num" data-label="train">29 of 60</td><td class="num" data-label="test">14 of 37</td><td class="num" data-label="gap, points">10.5</td><td class="num" data-label="Fisher p (two-sided)">0.40</td></tr><tr><td class="who" data-label="version">v8 · 8 Oct</td><td class="num" data-label="train">38 of 60</td><td class="num" data-label="test">21 of 37</td><td class="num" data-label="gap, points">6.6</td><td class="num" data-label="Fisher p (two-sided)">0.53</td></tr><tr><td class="who" data-label="version">v23 · 11 Oct</td><td class="num" data-label="train">43 of 60</td><td class="num" data-label="test">20 of 37</td><td class="num" data-label="gap, points">17.6</td><td class="num" data-label="Fisher p (two-sided)">0.09</td></tr><tr><td class="who" data-label="version">v30 · 26 Oct</td><td class="num" data-label="train">49 of 60</td><td class="num" data-label="test">24 of 37</td><td class="num" data-label="gap, points">16.8</td><td class="num" data-label="Fisher p (two-sided)">0.09</td></tr><tr><td class="who" data-label="version">ceiling</td><td class="num" data-label="train">56 of 60</td><td class="num" data-label="test">32 of 37</td><td class="num" data-label="gap, points">6.8</td><td class="num" data-label="Fisher p (two-sided)">—</td></tr></tbody></table></div>
+<p class="cap">The ceiling is what a run that follows the documents can expect: the 9 gold-flawed tasks (4 train, 5 test) removed. v8, v23 and v30 between them passed 1 of those 9 (v8 passed <code>task_070</code>). v8's runs had a Sonnet 5 agent and customer; v23's customer was Haiku 5.5; v30's is Sonnet 5.5. Source: <span class="path">loop/banking_knowledge/versions.md · scratchpad s40/ana40.json</span></p>
+<p class="insight">The gap was there before the workflow library existed (v4). It widened as train-driven fixes landed, and on one trial it isn't yet significant.</p></section>
+<section id="s2"><h2>02 · Retrieval — the right job reached every failure</h2>
+<span class="fig-title">Fig 2 · where each of the 24 failures enters, train and test together</span>
+<div class="figwrap"><svg class="dia flow" viewBox="0 0 1080 200" role="img" aria-labelledby="f2t"><title id="f2t">Where v30's 24 failures enter: none at retrieval, 12 in a job step, 1 at the agent, 11 at grading (gold 9, customer 2)</title>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<g id="st0"><title>question</title><rect class="nd" x="40" y="40" width="168" height="70" rx="8"/><text class="cvb" x="124" y="70" text-anchor="middle">question</text><text class="cvs" x="124" y="92" text-anchor="middle">the customer&#x27;s request</text></g><path class="ed" d="M208,75 L244,75"/><g id="st1"><title>find_workflow</title><rect class="nd" x="248" y="40" width="168" height="70" rx="8"/><text class="cvb" x="332" y="70" text-anchor="middle">find_workflow</text><text class="cvs" x="332" y="92" text-anchor="middle">word match over 53 jobs</text></g><path class="ed" d="M416,75 L452,75"/><text class="cvn o" x="332" y="160" text-anchor="middle">0 of 24</text><text class="cvk" x="332" y="185" text-anchor="middle">retrieval</text><g id="st2"><title>the job&#x27;s steps</title><rect class="nd hi" x="456" y="40" width="168" height="70" rx="8"/><text class="cvb" x="540" y="70" text-anchor="middle">the job&#x27;s steps</text><text class="cvs" x="540" y="92" text-anchor="middle">what workflow_rag wrote</text></g><path class="ed" d="M624,75 L660,75"/><text class="cvn a" x="540" y="160" text-anchor="middle">12 of 24</text><text class="cvk" x="540" y="185" text-anchor="middle">job step</text><g id="st3"><title>the agent</title><rect class="nd" x="664" y="40" width="168" height="70" rx="8"/><text class="cvb" x="748" y="70" text-anchor="middle">the agent</text><text class="cvs" x="748" y="92" text-anchor="middle">follows the steps</text></g><path class="ed" d="M832,75 L868,75"/><text class="cvn " x="748" y="160" text-anchor="middle">1 of 24</text><text class="cvk" x="748" y="185" text-anchor="middle">agent</text><g id="st4"><title>customer · gold</title><rect class="nd" x="872" y="40" width="168" height="70" rx="8"/><text class="cvb" x="956" y="70" text-anchor="middle">customer · gold</text><text class="cvs" x="956" y="92" text-anchor="middle">who plays, who grades</text></g><text class="cvn w" x="956" y="160" text-anchor="middle">11 of 24</text><text class="cvk" x="956" y="185" text-anchor="middle">gold 9 · customer 2</text><text class="cvk" x="40" y="185">failures enter at</text></svg></div>
+<div class="kvs">
+<div class="card"><span class="k">own job shown</span><span class="v">96 of 97</span><span class="n">a job written by this question's own research, in some lookup</span></div>
+<div class="card"><span class="k">own job shown first</span><span class="v">79 of 97</span><span class="n">in the other 18, the first lookup was another of the customer's requests; 16 of 18 passed</span></div>
+<div class="card"><span class="k">gold's writes in the jobs shown</span><span class="v">91 of 96</span><span class="n">every write tool gold calls is named in a job the agent saw (all 24 failures)</span></div>
+<div class="card"><span class="k">request_workflow</span><span class="v">0 of 180</span><span class="n">workflow calls; every one was find_workflow</span></div>
+</div>
+<p class="cap">How the lookup works: <code>workflows/library.py</code> <code>rank()</code> scores r20's 53 jobs by the words the agent's one-line request shares with each job's name, trigger and steps. Rarer words weigh more, and a word in the job's name counts twice. It lists 8 and shows the best match in full. No model is called, so the same request always gets the same answer. "Own job" means a job that a workflow_rag session researching this very question wrote or merged into, in any rN from r1 to r20. Source: <span class="path">scratchpad s40/ana40.py over runs/20261026T114201Z_…_v30_train and …T122326Z_…_v30_test</span></p>
+<p class="insight">The library hands the agent the right procedure. What fails is inside the procedure, or in how much the agent trusts it.</p></section>
+<section id="s3"><h2>03 · The agent — it listens to the workflow first</h2>
+<span class="fig-title">Fig 3 · the 24 failures by cause (the s39 diagnosis, rounding split out of gold)</span>
+<div class="tw stack"><table><thead><tr><th>cause</th><th>train /60</th><th>test /37</th><th>all /97</th><th>what happened</th><th>fixed in (§08)</th></tr></thead><tbody><tr><td data-label="cause"><span class="chip c-job">job step</span></td><td class="num" data-label="train /60">4</td><td class="num" data-label="test /37">5</td><td class="num" data-label="all /97">9</td><td data-label="what happened">the agent did what a step said. In 3 (P1: <code>task_063</code>, <code>task_084</code>, <code>task_085</code>) its prompt said otherwise. In 5 (P2) a step is narrower than its document. In 1 (P3) a re-merge dropped a branch</td><td data-label="fixed in (§08)"><b>Stage 1</b> for the 3 P1: the prompt's rule wins, with the workflows held at r20. <b>Stage 2</b> for the 6 P2 and P3: the workflow itself, because no prompt rule contradicts those steps</td></tr><tr><td data-label="cause"><span class="chip c-round">rounding</span></td><td class="num" data-label="train /60">2</td><td class="num" data-label="test /37">1</td><td class="num" data-label="all /97">3</td><td data-label="what happened">r20's cash back job floors points and calls a rounded-up record overpaid. Your s25 rule 21 says a rounding gap is not a discrepancy, and the prompt's line 7 flags any difference</td><td data-label="fixed in (§08)"><b>Stage 1</b> tries the prompt alone: line 7 states rule 21, and the prompt now outranks the job. <b>Stage 2</b> fixes the cash back job too</td></tr><tr><td data-label="cause"><span class="chip c-agent">agent</span></td><td class="num" data-label="train /60">0</td><td class="num" data-label="test /37">1</td><td class="num" data-label="all /97">1</td><td data-label="what happened"><code>task_054</code>: it filed the dispute before reading the CLI procedure, so it broke both its prompt rule (a CLI before a dispute) and the workflow's step</td><td data-label="fixed in (§08)"><b>Stage 1</b> (G4 in checks.py)</td></tr><tr><td data-label="cause"><span class="chip c-gold">gold</span></td><td class="num" data-label="train /60">4</td><td class="num" data-label="test /37">5</td><td class="num" data-label="all /97">9</td><td data-label="what happened">gold goes against a document, or relies on a fact that neither the script nor any document gives</td><td data-label="fixed in (§08)">none; G7 keeps optimisers off the train 4</td></tr><tr><td data-label="cause"><span class="chip c-customer">customer</span></td><td class="num" data-label="train /60">1</td><td class="num" data-label="test /37">1</td><td class="num" data-label="all /97">2</td><td data-label="what happened">the simulated customer chose differently from what its script implies (<code>task_041</code>, <code>task_101</code>)</td><td data-label="fixed in (§08)">none on the agent's side</td></tr></tbody></table></div>
+<span class="fig-title">Fig 4 · three sources of truth disagree on a debit dispute's liability, and the agent takes the workflow's</span>
+<div class="src3">
+<div class="card"><span class="k">the prompt · v30 system.md line 10</span><p>A Regulation E tier. 50 when reported within 2 business days of the statement that shows the charge, and a charge since the last statement is in time.</p></div>
+<div class="card no"><span class="k">the workflow · r20 debit dispute job</span><p>Puts a report 4 days after the reviewed statement in the $500 tier, capped at the disputed amount. It also withholds provisional credit when a non-fraud customer hasn't contacted the merchant. The agent filed it this way in <code>task_084</code> and <code>task_085</code>.</p></div>
+<div class="card"><span class="k">the guardrail · v30 checks.py D2</span><p>"liability is a tier (50, 500, -1), or the disputed amount when it is under the tier". So it lets 47.5 and 100 through, and the write goes ahead.</p></div>
+</div>
+<p class="cap">Why the workflow wins: line 4 of the prompt says "If its best match is the customer's job, follow it: its steps in order", and line 9 says to add no step the procedure lacks. Nothing ranks a document or a prompt rule above a workflow step. Source: <span class="path">agents/banking_knowledge/v30/system.md · checks.py · scratchpad s38/diag_all.json</span></p>
+<p class="insight">This isn't an agent that ignores instructions (1 of 24). It obeys one source too faithfully, and that source is sometimes wrong.</p></section>
+<section id="s4"><h2>04 · Train against test — gold flaws and job steps split the gap</h2>
+<span class="fig-title">Fig 5 · failure rate per split by cause, and how many points each adds to test's deficit</span>
+<div class="tw stack"><table><thead><tr><th>cause</th><th>train</th><th>test</th><th>points of the gap</th></tr></thead><tbody><tr><td class="sub" data-label="cause">gold flawed</td><td class="num" data-label="train">4/60 · 6.7%</td><td class="num" data-label="test">5/37 · 13.5%</td><td class="num" data-label="points of the gap">+6.8</td></tr><tr><td class="sub" data-label="cause">rounding</td><td class="num" data-label="train">2/60 · 3.3%</td><td class="num" data-label="test">1/37 · 2.7%</td><td class="num" data-label="points of the gap">-0.6</td></tr><tr><td class="sub" data-label="cause">job step</td><td class="num" data-label="train">4/60 · 6.7%</td><td class="num" data-label="test">5/37 · 13.5%</td><td class="num" data-label="points of the gap">+6.8</td></tr><tr><td class="sub" data-label="cause">customer</td><td class="num" data-label="train">1/60 · 1.7%</td><td class="num" data-label="test">1/37 · 2.7%</td><td class="num" data-label="points of the gap">+1.0</td></tr><tr><td class="sub" data-label="cause">agent</td><td class="num" data-label="train">0/60 · 0.0%</td><td class="num" data-label="test">1/37 · 2.7%</td><td class="num" data-label="points of the gap">+2.7</td></tr><tr><td class="sub" data-label="cause">all failures</td><td class="num" data-label="train">11/60 · 18.3%</td><td class="num" data-label="test">13/37 · 35.1%</td><td class="num" data-label="points of the gap">+16.8</td></tr></tbody></table></div>
+<ol class="qa">
+<li><b>Is test unseen by the library?</b> No. All 37 test questions were researched from their customer scripts in r3 (8 Oct, your call), and 10 of them again in r18–r20. 37 of r20's 53 jobs hold test research, and 9 hold only test research. 7 of the 37 test conversations rely on those 9 jobs alone, and 5 of the 7 passed. A truly unseen question would get no such step, so test overstates how the library does on a new question.</li>
+<li><b>Is it overfitting?</b> Partly. From v4 to v30, train failures fell from 31 to 11 (20 of 31 fixed) and test failures from 23 to 13 (10 of 23). Every optimiser reads train failures, and the s22 defect loop (r5–r17) ran 13 sessions on train questions and 5 on test ones.</li>
+<li><b>Is it noise?</b> Some of it. One trial gives Fisher p = 0.09. Between v30's 22 Oct and 26 Oct runs, 6 of the 34 hardest tasks changed result, though the customer changed between those runs too.</li>
+<li><b>What can close it?</b> The job-step fixes reach test more than train: 3 of the 5 narrowing failures (<code>task_015</code>, <code>task_026</code>, <code>task_077</code>) and the dropped branch (<code>task_014</code>) are test. The gold flaws stay, and they leave 6.8 points between the ceilings (56 of 60 against 32 of 37).</li>
+</ol>
+<p class="insight">About 7 of the 17 points are gold flaws that no fix can close. The job-step fixes aim at the other 7.</p></section>
+<section id="s5"><h2>05 · Shared jobs — big jobs fail more; merges don't wear them</h2>
+<span class="fig-title">Fig 6 · the five jobs holding 18 of the 24 failures, by the first job each conversation was shown</span>
+<div class="tw stack"><table><thead><tr><th>job</th><th>questions merged (train + test)</th><th>steps · rules</th><th>v30 passes (train · test)</th><th>failures</th></tr></thead><tbody><tr><td class="sub mono" data-label="job"><code>filing_<wbr>a_<wbr>debit_<wbr>card_<wbr>transaction_<wbr>dispute</code></td><td class="num" data-label="questions merged (train + test)">7 + 3</td><td class="num" data-label="steps · rules">66 · 40</td><td class="num" data-label="v30 passes (train · test)">3/8 · 1/2</td><td class="small" data-label="failures">082&nbsp;<span class="chip c-gold">gold</span> 073&nbsp;<span class="chip c-job">job step</span> 086&nbsp;<span class="chip c-job">job step</span> 084&nbsp;<span class="chip c-job">job step</span> 083&nbsp;<span class="chip c-gold">gold</span> 085&nbsp;<span class="chip c-job">job step</span></td></tr><tr><td class="sub mono" data-label="job"><code>submitting_<wbr>a_<wbr>cash_<wbr>back_<wbr>dispute</code></td><td class="num" data-label="questions merged (train + test)">7 + 3</td><td class="num" data-label="steps · rules">26 · 54</td><td class="num" data-label="v30 passes (train · test)">8/10 · 3/5</td><td class="small" data-label="failures">027&nbsp;<span class="chip c-round">rounding</span> 020&nbsp;<span class="chip c-round">rounding</span> 017&nbsp;<span class="chip c-round">rounding</span> 026&nbsp;<span class="chip c-job">job step</span></td></tr><tr><td class="sub mono" data-label="job"><code>filing_<wbr>a_<wbr>credit_<wbr>card_<wbr>transaction_<wbr>dispute</code></td><td class="num" data-label="questions merged (train + test)">5 + 5</td><td class="num" data-label="steps · rules">44 · 26</td><td class="num" data-label="v30 passes (train · test)">1/3 · 2/3</td><td class="small" data-label="failures">053&nbsp;<span class="chip c-gold">gold</span> 041&nbsp;<span class="chip c-customer">customer</span> 054&nbsp;<span class="chip c-agent">agent</span></td></tr><tr><td class="sub mono" data-label="job"><code>recommend_<wbr>credit_<wbr>card_<wbr>and_<wbr>savings_<wbr>combination</code></td><td class="num" data-label="questions merged (train + test)">8 + 1</td><td class="num" data-label="steps · rules">51 · 126</td><td class="num" data-label="v30 passes (train · test)">7/9 · 1/2</td><td class="small" data-label="failures">069&nbsp;<span class="chip c-gold">gold</span> 063&nbsp;<span class="chip c-job">job step</span> 071&nbsp;<span class="chip c-gold">gold</span></td></tr><tr><td class="sub mono" data-label="job"><code>generating_<wbr>a_<wbr>credit_<wbr>card_<wbr>referral_<wbr>link</code></td><td class="num" data-label="questions merged (train + test)">0 + 3</td><td class="num" data-label="steps · rules">22 · 14</td><td class="num" data-label="v30 passes (train · test)">0/0 · 0/2</td><td class="small" data-label="failures">015&nbsp;<span class="chip c-job">job step</span> 014&nbsp;<span class="chip c-job">job step</span></td></tr></tbody></table></div>
+<p class="cap">When the first job has 40 or more steps, v30 passed 29 of 43 (67%). Under 40 steps it passed 44 of 54 (81%). The big jobs also serve the harder multi-request tasks, so size is only part of it. Later merges are not wearing jobs down. A train question's job took a median of 5 merges from other questions after its own research, and those with 5 to 9 passed 20 of 22. Failures also happen where no merge followed (<code>task_063</code>, <code>task_086</code>, <code>task_015</code>). Source: <span class="path">rag_library/banking_knowledge/r*/commits.jsonl · scratchpad s40/drift.json</span></p>
+<span class="fig-title">Fig 7 · generalise or research every time — four ways to serve a job</span>
+<div class="opt3"><div class="card"><span class="tag">A · today</span><h3>one merged library</h3><dl><dt>at answer time</dt><dd>nothing: a word match, deterministic</dd><dt>risk</dt><dd>a job carries every question&#x27;s branches. One wrong step fails every question that reaches it, as in the debit job&#x27;s 4 of 10</dd></dl></div><div class="card"><span class="tag">B · live research</span><h3>research every conversation</h3><dl><dt>at answer time</dt><dd>an Opus research session took a median 13 min and 1.1M input tokens in r3 (r18&#x27;s median was 232 min)</dd><dt>risk</dt><dd>reads only the agent&#x27;s words, not the script. Nothing is cached, so nothing can be reviewed. Fresh research isn&#x27;t the gap either: 7 of the 10 test questions re-researched in r18–r20 still fail (5 gold or customer, 2 job step)</dd></dl></div><div class="card rec-c"><span class="tag">C · recommended</span><h3>split big jobs, check every merge</h3><dl><dt>at answer time</dt><dd>nothing new: still a word match</dd><dt>change</dt><dd>the 8 jobs with 40 or more steps split by their deciding fact (dispute type, account type). Every step is code-checked at merge against its quote (§06 G2, G3)</dd><dt>risk</dt><dd>more jobs means more near-ties in the lookup. Check the own-job rate stays at 96 of 97</dd></dl></div><div class="card"><span class="tag">D · later experiment</span><h3>library plus a check at answer time</h3><dl><dt>at answer time</dt><dd>before the first write, a cheap model compares the shown job&#x27;s deciding steps with the documents for this case</dd><dt>risk</dt><dd>a model call per write. Worth it only if C leaves job-step failures behind</dd></dl></div></div>
+<p class="insight">Every question is already researched ahead of time. Smaller jobs and checked steps fix the content. Live research only adds cost.</p></section>
+<section id="s6"><h2>06 · Guardrails — fix the source, then check it in code</h2>
+<span class="fig-title">Fig 8 · seven guardrails, where each lives, and the failures it targets (train · test)</span>
+<div class="tw stack"><table><thead><tr><th>id</th><th>guardrail</th><th>stage · lives in</th><th>kind</th><th>targets</th><th>risk</th></tr></thead><tbody><tr><td class="who" data-label="id">G1</td><td data-label="guardrail"><b>Precedence.</b> A document and your own rules outrank a workflow step. When they disagree, follow the document and name the step you skipped</td><td data-label="stage · lives in">stage 1 · the prompt</td><td data-label="kind">general rule</td><td data-label="targets"><code>task_063</code>, <code>task_084</code> · <code>task_085</code></td><td data-label="risk">the agent may override a correct step it misreads</td></tr><tr><td class="who" data-label="id">G2</td><td data-label="guardrail"><b>Narrowing check.</b> A step whose condition adds a qualifier its quoted passage lacks is sent back to the auditor</td><td data-label="stage · lives in">stage 2 · workflow_rag rubric</td><td data-label="kind">code check</td><td data-label="targets"><code>task_073</code>, <code>task_086</code> · <code>task_015</code>, <code>task_026</code>, <code>task_077</code></td><td data-label="risk">false flags on derived clauses (r20's 'derived:' standard must pass)</td></tr><tr><td class="who" data-label="id">G3</td><td data-label="guardrail"><b>Branch keep.</b> A re-merge keeps every <code>if</code> branch of the job's last version, or names the passage that removes it</td><td data-label="stage · lives in">stage 2 · workflow_rag rubric</td><td data-label="kind">code check</td><td data-label="targets"><code>task_014</code></td><td data-label="risk">keeps a branch that ought to go</td></tr><tr><td class="who" data-label="id">G4</td><td data-label="guardrail"><b>Read before write.</b> The first write in a job the agent hasn't looked up this conversation is sent back once</td><td data-label="stage · lives in">stage 1 · checks.py</td><td data-label="kind">code check</td><td data-label="targets"><code>task_054</code></td><td data-label="risk">one extra turn on a correct write</td></tr><tr><td class="who" data-label="id">G5</td><td data-label="guardrail"><b>One rounding rule.</b> Rule 21 (a rounding gap is not a discrepancy) in the prompt's line 7, then in the cash back job and its points step</td><td data-label="stage · lives in">stage 1 · the prompt; stage 2 · the cash back job</td><td data-label="kind">general rule</td><td data-label="targets"><code>task_020</code>, <code>task_027</code> · <code>task_017</code></td><td data-label="risk">a true one-point error goes unflagged</td></tr><tr><td class="who" data-label="id">G6</td><td data-label="guardrail"><b>Audit checks.py against the documents.</b> D2 accepts the amount in place of the tier. Its 20-odd blocks were each written for one failure (v4–v27)</td><td data-label="stage · lives in">stage 1 · checks.py</td><td data-label="kind">code check</td><td data-label="targets"><code>task_084</code> · <code>task_085</code></td><td data-label="risk">taking a block out may re-break an old failure, so replay train first</td></tr><tr><td class="who" data-label="id">G7</td><td data-label="guardrail"><b>Don't learn from gold flaws.</b> List the 4 train tasks (<code>task_053</code>, <code>task_069</code>, <code>task_082</code>, <code>task_083</code>) so optimisers and diagnoses skip them</td><td data-label="stage · lives in">loop config, before stage 1</td><td data-label="kind">data rule</td><td data-label="targets">protects both stages</td><td data-label="risk">needs your call; the test 5 are never read anyway</td></tr></tbody></table></div>
+<p class="cap">This follows your standing rule: a rule that can be checked goes in a hook, learned from the knowledge base and replay-validated on train, and one root-cause rule comes before any per-failure block. G1 and G4 are root causes on the agent's side. G2 and G3 are root causes in workflow_rag. Each is a general reading rule or a code check, and none names a case or a gold answer. Source: <span class="path">agents/banking_knowledge/v30/checks.py docstring · rag_agents/banking_knowledge/r20/changes.json</span></p>
+<p class="insight">Stage 1 holds G1, G4, G6 and the prompt half of G5. Stage 2 holds G2, G3 and the job half of G5. So each stage's rescore measures one side only.</p></section>
+<section id="s7"><h2>07 · Sonnet 5.5 or Opus — a model can reach 10 failures at most</h2>
+<span class="fig-title">Fig 9 · could a stronger answering model, or Sonnet 5.5 at higher effort, fix it? The 24 failures</span>
+<div class="tw stack"><table><thead><tr><th>cause</th><th>of 24</th><th>a stronger agent model, or higher effort?</th></tr></thead><tbody><tr><td data-label="cause"><span class="chip c-gold">gold</span></td><td class="num" data-label="of 24">9</td><td data-label="a stronger agent model, or higher effort?">no, at any model or effort: gold goes against the documents. Across four runs of three versions (v8, v23, v30 twice), 1 of these 9 passed once (v8 on <code>task_070</code>)</td></tr><tr><td data-label="cause"><span class="chip c-customer">customer</span></td><td class="num" data-label="of 24">2</td><td data-label="a stronger agent model, or higher effort?">no: the customer's play is what varies. The same v30 at the same medium effort passed both (<code>task_041</code>, <code>task_101</code>) on 22 Oct, against a Haiku 5.5 customer at high</td></tr><tr><td data-label="cause"><span class="chip c-round">rounding</span></td><td class="num" data-label="of 24">3</td><td data-label="a stronger agent model, or higher effort?">no: the prompt and the job both say to flag the gap</td></tr><tr><td data-label="cause"><span class="chip c-job">job step</span></td><td class="num" data-label="of 24">9</td><td data-label="a stronger agent model, or higher effort?">maybe, but only if it overrides a step it was told to follow</td></tr><tr><td data-label="cause"><span class="chip c-agent">agent</span></td><td class="num" data-label="of 24">1</td><td data-label="a stronger agent model, or higher effort?">likely: it acted before reading</td></tr></tbody></table></div>
+<ol class="qa">
+<li><b>The ceiling of a swap.</b> Even if Opus fixed all 10 reachable failures, v30 would reach 53 of 60 on train and 30 of 37 on test. The fixes in §06 aim at the same 10, plus the 3 rounding ones.</li>
+<li><b>What we know.</b> No banking answering version has ever run on Opus: 22 ran on Sonnet 5 and 8 on Sonnet 5.5, and 27 of the 30 at medium effort. Sonnet 5 to 5.5 (v8 to v23, with other changes and another customer) moved train from 38 to 43 of 60 and test from 21 to 20 of 37. Opus already does the deep reading where it pays: workflow_rag's research and merges (r20's stages run Opus at high).</li>
+<li><b>The cost.</b> Opus uses more of the subscription and plays slower, and v30's Sonnet test run already took 3 h 13 min for 37 conversations. A usage limit voided v25 on 15 Oct.</li>
+<li><b>The probe.</b> Two forks of v30 (or of v31, once stage 1 is in): one on <code>claude-opus-5-5</code> at medium, and one on Sonnet 5.5 at high. They take the next free version numbers, after the stages. Each plays the 10 reachable failures twice and 10 passing tasks once: 30 conversations each, 60 in all. Switch only if Opus fixes at least 4 of 10 in both trials and breaks none of the 10 passes. 6 of the 10 are test conversations, which follows your practice since s25. The gate still reads the full test run.</li>
+</ol>
+<p class="insight">If Opus also follows the wrong steps, that proves the bottleneck is the library. If it overrides them, G1 is the cheaper way to get the same effect.</p></section>
+<section id="s8" class=band><h2>08 · The plan — the agent first, then workflow_rag, kept apart</h2>
+<ol class="runsteps"><li><span class="n">00</span><div><h3>Baseline · a second trial of v30<span class=rec>optional · §09 Q3</span></h3><p>v30 again on all 97, with the same customer and judge, so each stage is compared with pass^2 per task instead of one trial that can flip. 97 conversations. No version change.</p></div></li><li><span class="n">01</span><div><h3>Stage 1 · the answering agent only (v31; workflows held at r20)<span class=rec>first</span></h3><p>v31 = <code>make fork FROM=v30</code>. Only its <code>system.md</code> and <code>checks.py</code> change, and its <code>workflows:</code> stays r20. In the prompt: G1 precedence, plus rule 21 in line 7 (G5's prompt half). In checks.py: G4 read before write, and G6 with D2 set to the tier the prompt states. Targets <code>task_063</code>, <code>task_084</code>, <code>task_085</code>, <code>task_054</code>, <code>task_020</code>, <code>task_027</code>, <code>task_017</code> (7). Play those 7 twice, then all of train and all of test once, like for like with v30. Report v31 against v30 (fixed, broke, McNemar per split) before stage 2 starts.</p></div></li><li><span class="n">02</span><div><h3>Stage 2 · workflow_rag only (r21, read by v32)<span class=rec>after stage 1&#x27;s report</span></h3><p>r21 = r20 with G2 and G3 as rubric code checks, and rule 21 binding in the cash back job (G5's job half). It re-merges every job they flag (expected: debit dispute, cash back, referral link, card replacement, fee credits). v32 = <code>make fork FROM=v31 WORKFLOWS=r21</code>, so only the library differs from stage 1's version (from v30's, if you don't keep v31). Targets <code>task_073</code>, <code>task_086</code>, <code>task_015</code>, <code>task_026</code>, <code>task_077</code>, <code>task_014</code> (6). Play those twice, then every train conversation shown a changed job, then all of train and test once. Report v32 against v31.</p></div></li><li><span class="n">03</span><div><h3>Stage 2b · split the big jobs (r22)<span class=rec>later</span></h3><p>Optional, still workflow_rag only. The 8 jobs with 40 or more steps split by their deciding fact. No failure is targeted. Measure pass^2 and the own-job rate, which must stay at 96 of 97.</p></div></li><li><span class="n">04</span><div><h3>Separately · the Opus probe<span class=rec>§09 Q2</span></h3><p>§07: Opus and Sonnet 5.5 at high, on the 10 reachable failures plus 10 passes. 60 conversations. A model change, so it stays out of both stages' runs.</p></div></li></ol>
+<p class="cap">Each stage changes one side, so its rescore measures that side alone. Both are like for like with v30: the Sonnet 5.5 customer at medium, the Haiku 5.5 judge and <code>tau2_loop/2</code>. Targets play first, twice each, then the full splits once. Promotion stays your call, or the gate's test McNemar. Each change is a general reading rule or a code check, r21 has its <code>changes.json</code>, and each step is committed and reported before the next. Stage 1's expected gain is +3 to +6 (7 targets). Stage 2's is +2 to +5 (6 targets, 4 of them test).</p>
+<p class="insight">If both stages land, train goes from 49 to 53–56 of 60 and test from 24 to 29–32 of 37. A run that follows the documents tops out at 56 and 32.</p></section>
+<section id="s9" class=band><h2>09 · Your calls — five choices; nothing runs until you queue them</h2><form class="q" data-lavish-question="s40-calls" onsubmit="event.preventDefault();const f=new FormData(event.currentTarget);const a={stage1:f.get(&#x27;stage1&#x27;),opus:f.get(&#x27;opus&#x27;),baseline:f.get(&#x27;baseline&#x27;),customer:f.get(&#x27;customer&#x27;),gold:f.get(&#x27;gold&#x27;),notes:(f.get(&#x27;notes&#x27;)||&#x27;&#x27;).trim()};const t=&#x27;s40 decisions: &#x27;+[&#x27;stage1=&#x27;+a.stage1,&#x27;opus=&#x27;+a.opus,&#x27;baseline=&#x27;+a.baseline,&#x27;customer=&#x27;+a.customer,&#x27;gold=&#x27;+a.gold].join(&#x27;; &#x27;)+(a.notes?&#x27;; notes: &#x27;+a.notes:&#x27;&#x27;);if(window.lavish&amp;&amp;window.lavish.queuePrompt){window.lavish.queuePrompt(t+&#x27;. Stage 1 (answering agent only) first, rescored and reported, then stage 2 (workflow_rag only) as a separate run; commit each step, report each run before the next, never restart after a usage limit, no promotion without my word.&#x27;,{tag:&#x27;choice&#x27;,text:t,element:event.currentTarget,data:a});event.currentTarget.querySelector(&#x27;.ack&#x27;).textContent=&#x27;Queued. Press Send to Agent when ready.&#x27;;}else{event.currentTarget.querySelector(&#x27;.ack&#x27;).textContent=t;}">
+<h3>Queue these to start the loop.</h3>
+<fieldset><legend><span class="k">Q1</span>What stage 1 holds (the answering agent only)</legend><label class="opt"><input type="radio" name="stage1" value="all" checked><span class="t"><b>G1 + G4 + G6, with rule 21 in the prompt<span class=rec>recommended</span></b><span>7 targets; tests whether the prompt alone settles rounding</span></span></label><label class="opt"><input type="radio" name="stage1" value="no-rounding"><span class="t"><b>G1 + G4 + G6 only</b><span>4 targets; rounding waits for stage 2&#x27;s job fix</span></span></label></fieldset><fieldset><legend><span class="k">Q2</span>The Opus probe (60 conversations)</legend><label class="opt"><input type="radio" name="opus" value="after1" checked><span class="t"><b>After stage 1, on v31&#x27;s prompt<span class=rec>recommended</span></b><span>measures the model once the agent trusts the right source; keeps stage 1&#x27;s run clean</span></span></label><label class="opt"><input type="radio" name="opus" value="now"><span class="t"><b>Now, in parallel with stage 1</b><span>earlier answer; a separate run either way</span></span></label><label class="opt"><input type="radio" name="opus" value="no"><span class="t"><b>Not now</b><span>stay on Sonnet 5.5</span></span></label></fieldset><fieldset><legend><span class="k">Q3</span>A second trial of v30 as the baseline</legend><label class="opt"><input type="radio" name="baseline" value="both" checked><span class="t"><b>Both splits (97 conversations)<span class=rec>recommended</span></b><span>pass^2 per task; each stage compared against it</span></span></label><label class="opt"><input type="radio" name="baseline" value="train"><span class="t"><b>Train only (60)</b><span>cheaper; test stays one trial</span></span></label><label class="opt"><input type="radio" name="baseline" value="skip"><span class="t"><b>Skip</b><span>compare each stage with today&#x27;s one trial</span></span></label></fieldset><fieldset><legend><span class="k">Q4</span>The loop&#x27;s banking customer</legend><label class="opt"><input type="radio" name="customer" value="set" checked><span class="t"><b>Make Sonnet 5.5 at medium banking&#x27;s default<span class=rec>recommended</span></b><span>a one-line setting in runner.DOMAIN_CUSTOMER, so make loop and make challenge reuse v30&#x27;s runs</span></span></label><label class="opt"><input type="radio" name="customer" value="keep"><span class="t"><b>Keep passing USER_MODEL each run</b><span>no code change</span></span></label></fieldset><fieldset><legend><span class="k">Q5</span>The 9 gold-flawed tasks</legend><label class="opt"><input type="radio" name="gold" value="flag" checked><span class="t"><b>List them so optimisers and diagnoses skip the train 4 (G7)<span class=rec>recommended</span></b><span>they stay in every score</span></span></label><label class="opt"><input type="radio" name="gold" value="leave"><span class="t"><b>Leave as is</b><span>an optimiser may chase them</span></span></label></fieldset>
+<fieldset><legend><span class="k">notes</span>Anything else (a guardrail to drop, a task to re-read, a different order)</legend><textarea name="notes" placeholder="Optional"></textarea></fieldset>
+<div class="actions"><button class="btn" type="submit">Queue my calls</button><span class="ack" role="status" aria-live="polite"></span></div>
+</form></section>
+<section id="s10"><h2>10 · Sources — every number above is read from these</h2><div class="tw stack"><table><thead><tr><th>what</th><th>where</th></tr></thead><tbody><tr><td class="sub" data-label="what">the runs</td><td class="wrap small" data-label="where"><code>runs/20261026T114201Z_banking_knowledge_v30_train</code>, <code>runs/20261026T122326Z_banking_knowledge_v30_test</code>; v30's 22 Oct runs on the 34 (<code>…T011727Z_…_v30_custom</code>, <code>…T013338Z_…_v30_custom</code>)</td></tr><tr><td class="sub" data-label="what">retrieval and provenance</td><td class="wrap small" data-label="where">scratchpad <code>s40/ana40.py</code>: each trace's <code>raw_data.tau2_loop.workflow</code> calls, <code>workflows.library</code> (<code>entries</code>, <code>by_name</code>, <code>shown_job</code>), every <code>rag_library/banking_knowledge/r*/commits.jsonl</code> and r1–r2 sessions in <code>rag_agent_runs/</code>, gold actions from tau2's <code>tasks.json</code> (read, not edited)</td></tr><tr><td class="sub" data-label="what">causes</td><td class="wrap small" data-label="where">the s39 diagnosis (<code>.lavish/s39_full-score-results.html</code>, scratchpad <code>s38/diag_all.json</code>)</td></tr><tr><td class="sub" data-label="what">the sources of truth</td><td class="wrap small" data-label="where"><code>agents/banking_knowledge/v30/system.md</code> lines 4, 7, 9, 10; <code>checks.py</code> D2; r20's <code>filing_a_debit_card_transaction_dispute</code> and <code>submitting_a_cash_back_dispute</code> jobs; <code>rag_agents/banking_knowledge/r20/rag_agent.md</code> rule 21</td></tr><tr><td class="sub" data-label="what">costs</td><td class="wrap small" data-label="where"><code>rag_agent_runs/*_r3_*/run.json</code>, <code>*_r18_*</code>, <code>*_r20_*</code> (<code>duration_ms</code>, tokens)</td></tr><tr><td class="sub" data-label="what">this page</td><td class="wrap small" data-label="where">scratchpad <code>s40/gen40.py</code> (no model called)</td></tr></tbody></table></div></section>
+</main>
+</body>
+</html>

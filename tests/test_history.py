@@ -270,6 +270,7 @@ def test_the_committed_banking_history_leaves_the_checks_off() -> None:
         "v8",
         "v23",
         "v30",
+        "v31",
     ]
     assert all(
         (x["train"]["n"], x["train"]["of"], x["test"]["n"], x["test"]["of"]) == (60, 60, 37, 37)
